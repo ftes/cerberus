@@ -54,7 +54,7 @@ Core integration specs live in `test/core/`.
 
 ## Browser Binary Config
 
-Test runs now require these env vars:
+Test runs require these env vars:
 - `CHROME`
 - `CHROMEDRIVER`
 
@@ -65,7 +65,11 @@ Optional browser visibility env var:
 and maps `SHOW_BROWSER=true` to `config :cerberus, :browser, show_browser: true`.
 There is no PATH/default fallback for browser binaries.
 
-The repo includes a local `.env` with working defaults. Load it before running browser tests:
+The repository `.envrc` is pinned to a local Chrome for Testing runtime under
+`tmp/browser-tools` (default pinned version: `145.0.7632.117`). No system Chrome
+path is used in default project wiring.
+
+Load env vars before running browser tests:
 
 ```bash
 direnv allow
@@ -73,19 +77,24 @@ direnv allow
 
 ## WebDriver BiDi Readiness
 
-Use the built-in check script to validate local browser runtime setup:
+Use the built-in check script to install and validate local runtime setup:
 
 ```bash
 bin/check_bidi_ready.sh --install
 ```
 
-The script reads:
-- `CHROME` (required)
-- `CHROMEDRIVER` (required unless `--install` is used)
+The script will install pinned Chrome + matching ChromeDriver into
+`tmp/browser-tools`, validate version/build parity, and run a real WebDriver
+session handshake with `webSocketUrl: true`.
+
+After install, it writes `tmp/browser-tools/env.sh` with:
+- `CHROME`
+- `CHROMEDRIVER`
+- `CERBERUS_CHROME_VERSION`
 
 The script will:
-- detect your Chrome binary/version,
-- ensure ChromeDriver major version matches (and download a matching driver when `--install` is set),
+- use pinned local Chrome for Testing when `--install` is set,
+- ensure Chrome and ChromeDriver major + build versions match,
 - run a real `POST /session` handshake with `webSocketUrl: true`,
 - fail fast if `capabilities.webSocketUrl` is missing.
 
