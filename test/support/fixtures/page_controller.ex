@@ -3,6 +3,8 @@ defmodule Cerberus.Fixtures.PageController do
 
   use Phoenix.Controller, formats: [:html]
 
+  alias Cerberus.Fixtures.SandboxMessages
+
   def index(conn, _params), do: redirect(conn, to: "/articles")
 
   def articles(conn, _params) do
@@ -40,6 +42,33 @@ defmodule Cerberus.Fixtures.PageController do
           <h1>Main page</h1>
           <p id="custom-header">x-custom-header: #{custom_header}</p>
           <a href="/articles">Articles</a>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def sandbox_messages(conn, _params) do
+    messages = SandboxMessages.list_bodies()
+
+    message_items =
+      Enum.map_join(messages, "\n", fn body ->
+        ~s(<li class="sandbox-message">#{body}</li>)
+      end)
+
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Sandbox Messages</title>
+      </head>
+      <body>
+        <main>
+          <h1>Sandbox messages</h1>
+          <ul id="sandbox-messages">
+            #{message_items}
+          </ul>
         </main>
       </body>
     </html>

@@ -103,6 +103,26 @@ mix test --only conformance
 
 Core integration specs live in `test/core/`.
 
+## SQL Sandbox Conformance
+
+Cerberus test harness supports Ecto SQL sandbox setup for conformance scenarios:
+
+```elixir
+Harness.run!(context, fn session ->
+  # DB setup + assertions
+  session |> visit("/sandbox/messages")
+end, sandbox: true)
+```
+
+When `sandbox: true` is set:
+- Harness starts/stops an owner via `Ecto.Adapters.SQL.Sandbox.start_owner!/2`.
+- Harness injects encoded metadata into non-browser seeded `conn` user-agent headers.
+- Browser driver applies the same metadata as per-session user-agent override.
+
+Fixture LiveViews also read `:user_agent` connect info and call
+`Phoenix.Ecto.SQL.Sandbox.allow/2` on mount, matching Phoenix/Ecto guidance for
+LiveView processes.
+
 ## Browser Binary Config
 
 Test runs require these env vars:

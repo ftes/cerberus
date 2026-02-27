@@ -18,6 +18,7 @@ defmodule Cerberus.Fixtures.Router do
     get("/", PageController, :index)
     get("/articles", PageController, :articles)
     get("/main", PageController, :main)
+    get("/sandbox/messages", PageController, :sandbox_messages)
     get("/scoped", PageController, :scoped)
     get("/search", PageController, :search_form)
     get("/search/results", PageController, :search_results)
@@ -28,8 +29,11 @@ defmodule Cerberus.Fixtures.Router do
     get("/redirect/live", PageController, :redirect_live)
     get("/oracle/mismatch", PageController, :oracle_mismatch)
 
-    live_session :fixtures, root_layout: {Cerberus.Fixtures.Layouts, :root} do
+    live_session :fixtures,
+      root_layout: {Cerberus.Fixtures.Layouts, :root},
+      on_mount: Cerberus.Fixtures.LiveSandbox do
       live("/live/counter", CounterPageLive)
+      live("/live/sandbox/messages", SandboxMessagesLive)
       live("/live/redirects", RedirectsLive)
       live("/live/redirect-return", RedirectReturnLive)
       live("/live/selector-edge", SelectorEdgeLive)

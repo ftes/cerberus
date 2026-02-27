@@ -44,6 +44,11 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(pid, {:await_ready, opts}, 10_000)
   end
 
+  @spec set_user_agent(pid(), String.t()) :: :ok | {:error, String.t(), map()}
+  def set_user_agent(pid, user_agent) when is_pid(pid) and is_binary(user_agent) do
+    GenServer.call(pid, {:set_user_agent, user_agent}, 10_000)
+  end
+
   @spec last_readiness(pid()) :: map()
   def last_readiness(pid) when is_pid(pid) do
     GenServer.call(pid, :last_readiness)
@@ -94,6 +99,10 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
   def handle_call({:await_ready, opts}, _from, state) do
     {:reply, BrowsingContextProcess.await_ready(state.active_browsing_context_pid, opts), state}
+  end
+
+  def handle_call({:set_user_agent, user_agent}, _from, state) do
+    {:reply, set_user_agent_override(state.user_context_id, user_agent), state}
   end
 
   def handle_call(:last_readiness, _from, state) do
@@ -154,5 +163,41 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
       browsing_context_supervisor,
       {BrowsingContextProcess, user_context_id: user_context_id}
     )
+  end
+
+  defp set_user_agent_override(user_context_id, user_agent) do
+    params = %{
+      "userAgent" => user_agent,
+      "userContexts" => [user_context_id]
+    }
+
+    case BiDi.command("emulation.setUserAgentOverride", params) do
+      {:ok, _result} ->
+        :ok
+
+      {:error, emulation_reason, emulation_details} ->
+        # Chrome BiDi coverage varies by channel; fallback keeps sandbox metadata working.
+        headers = [
+          %{
+            "name" => "user-agent",
+            "value" => %{"type" => "string", "value" => user_agent}
+          }
+        ]
+
+        fallback_params = %{"headers" => headers, "userContexts" => [user_context_id]}
+
+        case BiDi.command("network.setExtraHeaders", fallback_params) do
+          {:ok, _result} ->
+            :ok
+
+          {:error, network_reason, network_details} ->
+            {:error, network_reason,
+             %{
+               emulation_reason: emulation_reason,
+               emulation_details: emulation_details,
+               network_details: network_details
+             }}
+        end
+    end
   end
 end

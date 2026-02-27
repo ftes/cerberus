@@ -10,9 +10,13 @@ defmodule Cerberus.Fixtures.Endpoint do
   ]
 
   socket("/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: [session: @session_options]],
-    longpoll: [connect_info: [session: @session_options]]
+    websocket: [connect_info: [:user_agent, session: @session_options]],
+    longpoll: [connect_info: [:user_agent, session: @session_options]]
   )
+
+  if Application.compile_env(:cerberus, :sql_sandbox, false) do
+    plug(Phoenix.Ecto.SQL.Sandbox)
+  end
 
   plug(Plug.Static,
     at: "/",

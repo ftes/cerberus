@@ -14,9 +14,11 @@ The fixture app is started from `test/test_helper.exs` and serves only local rou
 
 - `/articles` (static): visible text variants + hidden helper text + link to live counter.
 - `/main` (static): non-live destination fixture with echoed `x-custom-header`.
+- `/sandbox/messages` (static): DB-backed fixture page listing sandbox-visible rows.
 - `/scoped` (static): duplicated link text across scoped sections for `within/3` conformance.
 - `/search` and `/search/results` (static): deterministic query form flow.
 - `/live/counter` (live): deterministic counter with `Increment` button.
+- `/live/sandbox/messages` (live): DB-backed fixture with refresh click event.
 - `/redirect/static` (static redirect): redirects to `/articles`.
 - `/redirect/live` (static redirect): redirects to `/live/counter`.
 - `/live/redirects` (live): link/button navigation fixture for navigate/patch/redirect parity.

@@ -64,6 +64,8 @@ defmodule Cerberus.Driver.Browser do
           raise ArgumentError, "failed to initialize browser driver: #{inspect(reason)}"
       end
 
+    maybe_configure_sandbox_metadata!(user_context_pid, opts)
+
     %__MODULE__{
       user_context_pid: user_context_pid,
       base_url: base_url,
@@ -683,6 +685,30 @@ defmodule Cerberus.Driver.Browser do
 
       supervisor_pid ->
         DynamicSupervisor.start_child(supervisor_pid, {UserContextProcess, opts})
+    end
+  end
+
+  defp maybe_configure_sandbox_metadata!(user_context_pid, opts) do
+    case Keyword.get(opts, :sandbox_metadata) do
+      nil ->
+        :ok
+
+      metadata when is_binary(metadata) ->
+        if String.trim(metadata) == "" do
+          raise ArgumentError, ":sandbox_metadata must be a non-empty string"
+        end
+
+        case UserContextProcess.set_user_agent(user_context_pid, metadata) do
+          :ok ->
+            :ok
+
+          {:error, reason, details} ->
+            raise ArgumentError,
+                  "failed to configure browser sandbox metadata: #{reason} (#{inspect(details)})"
+        end
+
+      other ->
+        raise ArgumentError, "expected :sandbox_metadata option to be a string, got: #{inspect(other)}"
     end
   end
 

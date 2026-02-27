@@ -16,7 +16,9 @@ defmodule Cerberus.Harness do
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.Session
+  alias Ecto.Adapters.SQL.Sandbox
   alias ExUnit.AssertionError
+  alias Phoenix.Ecto.SQL.Sandbox, as: PhoenixSandbox
 
   @default_drivers [:auto, :browser]
 
@@ -52,10 +54,18 @@ defmodule Cerberus.Harness do
       |> normalize_drivers!()
 
     session_opts = Keyword.get(opts, :session_opts, [])
+    sandbox_repos = normalize_sandbox_repos(Keyword.get(opts, :sandbox, false))
 
-    drivers
-    |> Enum.map(&run_driver(&1, session_opts, scenario))
-    |> sort_results()
+    {session_opts, stop_sandbox_owner} =
+      maybe_start_sandbox_owner(context, session_opts, sandbox_repos)
+
+    try do
+      drivers
+      |> Enum.map(&run_driver(&1, session_opts, scenario))
+      |> sort_results()
+    after
+      stop_sandbox_owner.()
+    end
   end
 
   @spec run!(map(), (Session.t() -> Session.t()), keyword()) :: [result()]
@@ -166,5 +176,68 @@ defmodule Cerberus.Harness do
       end)
 
     "driver conformance failures:\n" <> lines
+  end
+
+  defp normalize_sandbox_repos(false), do: []
+  defp normalize_sandbox_repos(nil), do: []
+
+  defp normalize_sandbox_repos(true) do
+    Application.get_env(:cerberus, :ecto_repos, [])
+  end
+
+  defp normalize_sandbox_repos(repo) when is_atom(repo), do: [repo]
+  defp normalize_sandbox_repos(repos) when is_list(repos), do: repos
+
+  defp maybe_start_sandbox_owner(_context, session_opts, []), do: {session_opts, fn -> :ok end}
+
+  defp maybe_start_sandbox_owner(context, session_opts, repos) do
+    if repos == [] do
+      raise ArgumentError, "Harness.run/run! :sandbox requested but no repos are configured"
+    end
+
+    repo =
+      case repos do
+        [repo] -> repo
+        _ -> raise ArgumentError, "Harness.run/run! :sandbox currently expects exactly one repo"
+      end
+
+    owner_pid = Sandbox.start_owner!(repo, shared: !Map.get(context, :async, false))
+
+    metadata_header =
+      repo
+      |> PhoenixSandbox.metadata_for(owner_pid)
+      |> PhoenixSandbox.encode_metadata()
+
+    session_opts =
+      session_opts
+      |> with_sandbox_conn(metadata_header)
+      |> Keyword.put(:sandbox_metadata, metadata_header)
+
+    stop_owner = fn ->
+      Sandbox.stop_owner(owner_pid)
+    end
+
+    {session_opts, stop_owner}
+  end
+
+  defp with_sandbox_conn(session_opts, metadata_header) do
+    conn =
+      case Keyword.get(session_opts, :conn) do
+        nil ->
+          Phoenix.ConnTest.build_conn()
+
+        %Plug.Conn{} = conn ->
+          conn
+
+        other ->
+          raise ArgumentError, "expected :conn option to be a Plug.Conn, got: #{inspect(other)}"
+      end
+
+    conn =
+      conn
+      |> Plug.Conn.delete_req_header("user-agent")
+      |> Plug.Conn.put_req_header("user-agent", metadata_header)
+
+    Keyword.put(session_opts, :conn, conn)
   end
 end
