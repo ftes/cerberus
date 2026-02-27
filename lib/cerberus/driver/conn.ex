@@ -20,7 +20,7 @@ defmodule Cerberus.Driver.Conn do
 
   @spec ensure_conn(Plug.Conn.t() | nil) :: Plug.Conn.t()
   def ensure_conn(nil), do: build_conn()
-  def ensure_conn(conn), do: recycle(conn)
+  def ensure_conn(conn), do: recycle_preserving_headers(conn)
 
   @spec follow_get(module(), Plug.Conn.t(), String.t()) :: Plug.Conn.t()
   def follow_get(endpoint, conn, path) when is_binary(path) do
@@ -44,7 +44,7 @@ defmodule Cerberus.Driver.Conn do
     if redirects_left > 0 and redirect?(conn) do
       [location | _] = Plug.Conn.get_resp_header(conn, "location")
       next_path = normalize_location(location)
-      do_follow_get(endpoint, recycle(conn), next_path, redirects_left - 1)
+      do_follow_get(endpoint, recycle_preserving_headers(conn), next_path, redirects_left - 1)
     else
       conn
     end
@@ -68,6 +68,14 @@ defmodule Cerberus.Driver.Conn do
   defp append_query(path, ""), do: path
   defp append_query(path, nil), do: path
   defp append_query(path, query), do: path <> "?" <> query
+
+  defp recycle_preserving_headers(conn) do
+    recycled = recycle(conn)
+
+    Enum.reduce(conn.req_headers || [], recycled, fn {name, value}, acc ->
+      Plug.Conn.put_req_header(acc, name, value)
+    end)
+  end
 
   defp missing_endpoint! do
     raise ArgumentError,

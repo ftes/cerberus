@@ -108,6 +108,7 @@ defmodule Cerberus.Fixtures.PageController do
     params = merged_request_params(conn, params)
     name = Map.get(params, "name", "")
     button = Map.get(params, "form-button", "")
+    flow_token = conn |> Plug.Conn.get_req_header("x-flow-token") |> List.first() |> Kernel.||("")
 
     html(conn, """
     <!doctype html>
@@ -120,6 +121,7 @@ defmodule Cerberus.Fixtures.PageController do
         <main>
           <p id="form-data-name">name: #{name}</p>
           <p id="form-data-button">form-button: #{button}</p>
+          <p id="form-data-flow-token">x-flow-token: #{flow_token}</p>
         </main>
       </body>
     </html>
