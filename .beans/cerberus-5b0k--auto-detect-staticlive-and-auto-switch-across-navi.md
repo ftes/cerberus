@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-27T08:07:23Z
-updated_at: 2026-02-27T14:20:55Z
+updated_at: 2026-02-27T14:59:02Z
 parent: cerberus-sfku
 ---
 
@@ -33,7 +33,7 @@ Add PhoenixTest-style automatic static/live driver detection and automatic drive
 ## Done When
 - [x] API docs show no-manual-selection happy path for static/live.
 - [x] conformance harness supports `@tag drivers: [:auto, :browser]` style selection.
-- [ ] cross-driver behavior remains deterministic for fixture scenarios.
+- [x] cross-driver behavior remains deterministic for fixture scenarios.
 
 ## Notes (2026-02-27)
 
@@ -57,3 +57,9 @@ Reopened per product direction: non-browser execution should mirror PhoenixTest 
 - Added `test/core/auto_mode_test.exs` for static->live and live->static switching in `:auto` mode.
 - Updated README/docs to describe `:auto` as default non-browser behavior and note explicit `:static/:live` modes.
 - Verified focused non-browser test slices pass; full `--exclude browser` run still has existing browser parity failures in owner-form/search flows.
+
+## Progress (2026-02-27, browser parity follow-up)
+
+- Fixed cross-driver parity failures in owner-form/search scenarios by ensuring fixture pages merge query-string params via `Plug.Conn.fetch_query_params/1` before rendering echoed values.
+- Browser assertions now pass consistently on submitted/redirected GET forms.
+- Verified with full `mix test` run: 45 tests, 0 failures.

@@ -58,7 +58,11 @@ Test runs now require these env vars:
 - `CHROME`
 - `CHROMEDRIVER`
 
-`config/test.exs` reads both with `System.fetch_env!/1`.
+Optional browser visibility env var:
+- `SHOW_BROWSER` (`true`/`1`/`yes`/`on` to run headed; default is `false`)
+
+`config/test.exs` reads `CHROME` and `CHROMEDRIVER` with `System.fetch_env!/1`,
+and maps `SHOW_BROWSER=true` to `config :cerberus, :browser, show_browser: true`.
 There is no PATH/default fallback for browser binaries.
 
 The repo includes a local `.env` with working defaults. Load it before running browser tests:

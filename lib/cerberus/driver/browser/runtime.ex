@@ -298,10 +298,17 @@ defmodule Cerberus.Driver.Browser.Runtime do
   end
 
   defp chrome_args(opts, merged) do
-    headless? = Keyword.get(opts, :headless, Keyword.get(merged, :headless, true))
+    headless? = headless?(opts, merged)
     custom_args = Keyword.get(opts, :chrome_args, Keyword.get(merged, :chrome_args, []))
     defaults = if headless?, do: ["--headless=new"], else: []
     defaults ++ ["--disable-gpu", "--no-sandbox"] ++ custom_args
+  end
+
+  @doc false
+  @spec headless?(keyword(), keyword()) :: boolean()
+  def headless?(opts, merged) do
+    show_browser? = Keyword.get(opts, :show_browser, Keyword.get(merged, :show_browser, false))
+    Keyword.get(opts, :headless, Keyword.get(merged, :headless, not show_browser?))
   end
 
   defp chrome_binary!(opts, merged) do

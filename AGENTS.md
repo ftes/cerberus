@@ -1,5 +1,10 @@
 IMPORTANT: before you do anything else, run the `beans prime` command and heed its output.
 
+## Be autonomous
+Read a lot up front. Try to ask all questions up front.
+Then implement, ideally without asking again.
+Keep a log of what you did to present when you're done.
+
 ## General Guidelines
 - Keep it simple: choose the least complex approach that satisfies the requirement.
 - Deliver vertical slices end-to-end whenever possible (API + drivers + harness coverage for the slice).

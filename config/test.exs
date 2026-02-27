@@ -7,6 +7,12 @@ port =
   |> System.get_env("4101")
   |> String.to_integer()
 
+show_browser =
+  "SHOW_BROWSER"
+  |> System.get_env("false")
+  |> String.downcase()
+  |> Kernel.in(["1", "true", "yes", "on"])
+
 config :cerberus, Endpoint,
   server: true,
   http: [ip: {127, 0, 0, 1}, port: port],
@@ -18,6 +24,7 @@ config :cerberus, Endpoint,
 config :cerberus, :base_url, "http://127.0.0.1:#{port}"
 
 config :cerberus, :browser,
+  show_browser: show_browser,
   chrome_binary: System.fetch_env!("CHROME"),
   chromedriver_binary: System.fetch_env!("CHROMEDRIVER")
 

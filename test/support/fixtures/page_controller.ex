@@ -52,6 +52,7 @@ defmodule Cerberus.Fixtures.PageController do
   end
 
   def search_results(conn, params) do
+    params = merged_request_params(conn, params)
     query = Map.get(params, "q", "")
 
     html(conn, """
@@ -104,6 +105,7 @@ defmodule Cerberus.Fixtures.PageController do
   end
 
   def owner_form_result(conn, params) do
+    params = merged_request_params(conn, params)
     name = Map.get(params, "name", "")
     button = Map.get(params, "form-button", "")
 
@@ -125,10 +127,18 @@ defmodule Cerberus.Fixtures.PageController do
   end
 
   def owner_form_redirect(conn, params) do
+    params = merged_request_params(conn, params)
     query = URI.encode_query(params)
     path = "/owner-form/result"
     destination = if query == "", do: path, else: path <> "?" <> query
     redirect(conn, to: destination)
+  end
+
+  defp merged_request_params(conn, params) when is_map(params) do
+    conn
+    |> Plug.Conn.fetch_query_params()
+    |> Map.get(:query_params, %{})
+    |> Map.merge(params)
   end
 
   def oracle_mismatch(conn, _params) do

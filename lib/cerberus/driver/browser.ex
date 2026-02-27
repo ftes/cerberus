@@ -697,8 +697,8 @@ defmodule Cerberus.Driver.Browser do
     """
     (() => {
       const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
-      const isHidden = (node) => {
-        let current = node.parentElement;
+      const isElementHidden = (element) => {
+        let current = element;
         while (current) {
           if (current.hasAttribute("hidden")) return true;
           const style = window.getComputedStyle(current);
@@ -708,17 +708,28 @@ defmodule Cerberus.Driver.Browser do
         return false;
       };
 
+      const pushUnique = (list, value) => {
+        if (!list.includes(value)) list.push(value);
+      };
+
       const visible = [];
-      const hidden = [];
-      const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
-      while (walker.nextNode()) {
-        const node = walker.currentNode;
-        const value = normalize(node.nodeValue);
+      const hiddenTexts = [];
+      const root = document.body || document.documentElement;
+      const elements = root ? Array.from(root.querySelectorAll("*")) : [];
+
+      for (const element of elements) {
+        const tag = (element.tagName || "").toLowerCase();
+        if (tag === "script" || tag === "style" || tag === "noscript") continue;
+
+        const hidden = isElementHidden(element);
+        const source = hidden ? element.textContent : (element.innerText || element.textContent);
+        const value = normalize(source);
         if (!value) continue;
-        if (isHidden(node)) {
-          hidden.push(value);
+
+        if (hidden) {
+          pushUnique(hiddenTexts, value);
         } else {
-          visible.push(value);
+          pushUnique(visible, value);
         }
       }
 
@@ -726,7 +737,7 @@ defmodule Cerberus.Driver.Browser do
         path: window.location.pathname + window.location.search,
         title: document.title || "",
         visible,
-        hidden
+        hidden: hiddenTexts
       });
     })()
     """
