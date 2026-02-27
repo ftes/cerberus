@@ -9,6 +9,7 @@ defmodule Cerberus.Driver.Live do
   alias Cerberus.Driver.Html
   alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.Locator
+  alias Cerberus.OpenBrowser
   alias Cerberus.Query
   alias Cerberus.Session
 
@@ -55,6 +56,14 @@ defmodule Cerberus.Driver.Live do
 
   @spec close_tab(t()) :: t()
   def close_tab(%__MODULE__{} = session), do: session
+
+  @impl true
+  def open_browser(%__MODULE__{} = session, open_fun) when is_function(open_fun, 1) do
+    html = snapshot_html(session)
+    path = OpenBrowser.write_snapshot!(html, endpoint_url(session.endpoint))
+    _ = open_fun.(path)
+    session
+  end
 
   @impl true
   def visit(%__MODULE__{} = session, path, _opts) do
@@ -479,6 +488,15 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp with_latest_html(session), do: session
+
+  defp snapshot_html(%__MODULE__{view: view}) when not is_nil(view), do: render(view)
+  defp snapshot_html(%__MODULE__{html: html}) when is_binary(html), do: html
+
+  defp endpoint_url(endpoint) when is_atom(endpoint) do
+    endpoint.url()
+  rescue
+    _ -> nil
+  end
 
   defp update_session(%__MODULE__{} = session, op, observed) do
     %{session | last_result: %{op: op, observed: observed}}

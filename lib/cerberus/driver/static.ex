@@ -7,6 +7,7 @@ defmodule Cerberus.Driver.Static do
   alias Cerberus.Driver.Html
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Locator
+  alias Cerberus.OpenBrowser
   alias Cerberus.Query
   alias Cerberus.Session
 
@@ -51,6 +52,14 @@ defmodule Cerberus.Driver.Static do
 
   @spec close_tab(t()) :: t()
   def close_tab(%__MODULE__{} = session), do: session
+
+  @impl true
+  def open_browser(%__MODULE__{} = session, open_fun) when is_function(open_fun, 1) do
+    html = snapshot_html(session)
+    path = OpenBrowser.write_snapshot!(html, endpoint_url(session.endpoint))
+    _ = open_fun.(path)
+    session
+  end
 
   @impl true
   def visit(%__MODULE__{} = session, path, _opts) do
@@ -333,6 +342,16 @@ defmodule Cerberus.Driver.Static do
       other ->
         raise ArgumentError, "expected :conn option to be a Plug.Conn, got: #{inspect(other)}"
     end
+  end
+
+  defp snapshot_html(%__MODULE__{html: html}) when is_binary(html) and html != "", do: html
+  defp snapshot_html(%__MODULE__{conn: %{resp_body: html}}) when is_binary(html), do: html
+  defp snapshot_html(%__MODULE__{}), do: ""
+
+  defp endpoint_url(endpoint) when is_atom(endpoint) do
+    endpoint.url()
+  rescue
+    _ -> nil
   end
 
   defp build_submit_target(action, fallback_path, params) do

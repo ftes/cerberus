@@ -25,6 +25,7 @@ defmodule Cerberus.Driver.Browser do
 
   alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.Locator
+  alias Cerberus.OpenBrowser
   alias Cerberus.Query
   alias Cerberus.Session
 
@@ -157,6 +158,23 @@ defmodule Cerberus.Driver.Browser do
 
       {:error, reason, details} ->
         raise ArgumentError, "failed to close browser tab: #{reason} (#{inspect(details)})"
+    end
+  end
+
+  @impl true
+  def open_browser(%__MODULE__{} = session, open_fun) when is_function(open_fun, 1) do
+    state = state!(session)
+
+    case eval_json(state, browser_html_expression()) do
+      {:ok, payload} ->
+        html = Map.get(payload, "html", "")
+        url = Map.get(payload, "url")
+        path = OpenBrowser.write_snapshot!(html, snapshot_base_url(state.base_url, url))
+        _ = open_fun.(path)
+        session
+
+      {:error, reason, details} ->
+        raise ArgumentError, "failed to collect browser HTML snapshot: #{reason} (#{inspect(details)})"
     end
   end
 
@@ -772,6 +790,39 @@ defmodule Cerberus.Driver.Browser do
       base_uri |> URI.merge(path_or_url) |> to_string()
     end
   end
+
+  defp browser_html_expression do
+    """
+    (() => {
+      const doc = document.documentElement;
+      const html = doc ? doc.outerHTML : "";
+      const doctype = document.doctype ? `<!DOCTYPE ${document.doctype.name}>` : "<!DOCTYPE html>";
+      return JSON.stringify({ html: doctype + html, url: window.location.href });
+    })()
+    """
+  end
+
+  defp snapshot_base_url(default_base_url, url) when is_binary(url) do
+    uri = URI.parse(url)
+
+    if is_binary(uri.scheme) and is_binary(uri.host) do
+      port_suffix =
+        case uri.port do
+          nil -> ""
+          80 when uri.scheme == "http" -> ""
+          443 when uri.scheme == "https" -> ""
+          port -> ":" <> Integer.to_string(port)
+        end
+
+      uri.scheme <> "://" <> uri.host <> port_suffix
+    else
+      default_base_url
+    end
+  rescue
+    _ -> default_base_url
+  end
+
+  defp snapshot_base_url(default_base_url, _url), do: default_base_url
 
   defp start_user_context(opts) do
     case Process.whereis(@user_context_supervisor) do

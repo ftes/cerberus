@@ -95,6 +95,14 @@ end)
 |> assert_path("/live/counter")
 ```
 
+Open browser snapshot example:
+
+```elixir
+session(:static)
+|> visit("/articles")
+|> open_browser()
+```
+
 Supported sigil:
 - `~l` for text locators.
 - `~l` modifiers:
@@ -219,6 +227,10 @@ Dependencies: `curl`, `jq`, `unzip`.
 - `open_tab/1` creates another tab in the same user state in all drivers:
   browser maps this to a new `browsingContext` in the same `userContext`;
   live/static map this to a recycled `Plug.Conn` so cookies/session are shared.
+- `open_browser/1` is a debug helper that snapshots current page HTML to a temp
+  file and opens it via system browser command. For tests, `open_browser/2`
+  accepts a callback (`fn path -> ... end`) so callers can inspect snapshots
+  without launching a browser.
 - `unwrap/2` mirrors PhoenixTest escape-hatch semantics for static/live:
   static callbacks receive a `Plug.Conn` and must return a `Plug.Conn`;
   live callbacks receive the underlying LiveView and may return render output

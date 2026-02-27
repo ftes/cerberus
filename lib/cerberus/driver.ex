@@ -23,6 +23,7 @@ defmodule Cerberus.Driver do
   @type assert_opts :: Options.assert_opts()
 
   @callback new_session(keyword()) :: session_t()
+  @callback open_browser(session_t(), (String.t() -> any())) :: session_t()
   @callback visit(session_t(), String.t(), keyword()) :: session_t()
   @callback click(session_t(), Locator.t(), click_opts()) :: op_ok() | op_error()
   @callback fill_in(session_t(), Locator.t(), fill_in_value(), fill_in_opts()) ::

@@ -17,6 +17,7 @@ defmodule Cerberus do
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.Locator
+  alias Cerberus.OpenBrowser
   alias Cerberus.Options
   alias Cerberus.Path
   alias Cerberus.Session
@@ -104,6 +105,19 @@ defmodule Cerberus do
       })
 
     session
+  end
+
+  @spec open_browser(arg) :: arg when arg: var
+  def open_browser(session), do: open_browser(session, &OpenBrowser.open_with_system_cmd/1)
+
+  @doc false
+  @spec open_browser(arg, (String.t() -> term())) :: arg when arg: var
+  def open_browser(session, open_fun) when is_function(open_fun, 1) do
+    driver_module!(session).open_browser(session, open_fun)
+  end
+
+  def open_browser(_session, _open_fun) do
+    raise ArgumentError, "open_browser/2 expects a callback with arity 1"
   end
 
   @spec text(String.t() | Regex.t()) :: keyword()

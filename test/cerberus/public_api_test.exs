@@ -187,6 +187,38 @@ defmodule Cerberus.PublicApiTest do
     assert reloaded.current_path == "/articles"
   end
 
+  test "open_browser creates an HTML snapshot for static sessions" do
+    session =
+      :static
+      |> session()
+      |> visit("/articles")
+      |> open_browser(fn path ->
+        send(self(), {:open_browser_snapshot, path})
+      end)
+
+    assert session.current_path == "/articles"
+    assert_receive {:open_browser_snapshot, path}
+    assert File.exists?(path)
+    assert File.read!(path) =~ "Articles"
+    File.rm(path)
+  end
+
+  test "open_browser creates an HTML snapshot for live sessions" do
+    session =
+      :live
+      |> session()
+      |> visit("/live/counter")
+      |> open_browser(fn path ->
+        send(self(), {:open_browser_snapshot, path})
+      end)
+
+    assert session.current_path == "/live/counter"
+    assert_receive {:open_browser_snapshot, path}
+    assert File.exists?(path)
+    assert File.read!(path) =~ "Count: 0"
+    File.rm(path)
+  end
+
   test "assert_path and refute_path support query matching" do
     assert is_struct(
              :static
@@ -306,6 +338,23 @@ defmodule Cerberus.PublicApiTest do
     assert tab_id != ""
   end
 
+  @tag browser: true
+  test "open_browser creates an HTML snapshot for browser sessions" do
+    session =
+      :browser
+      |> session()
+      |> visit("/articles")
+      |> open_browser(fn path ->
+        send(self(), {:open_browser_snapshot, path})
+      end)
+
+    assert session.current_path == "/articles"
+    assert_receive {:open_browser_snapshot, path}
+    assert File.exists?(path)
+    assert File.read!(path) =~ "Articles"
+    File.rm(path)
+  end
+
   test "unwrap rejects invalid callback arity" do
     assert_raise ArgumentError, ~r/callback with arity 1/, fn ->
       :static
@@ -329,6 +378,15 @@ defmodule Cerberus.PublicApiTest do
       :live
       |> session()
       |> unwrap(fn view -> view end)
+    end
+  end
+
+  test "open_browser rejects invalid callback arity" do
+    assert_raise ArgumentError, ~r/callback with arity 1/, fn ->
+      :static
+      |> session()
+      |> visit("/articles")
+      |> open_browser(fn -> :ok end)
     end
   end
 end
