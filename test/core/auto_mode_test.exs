@@ -34,7 +34,7 @@ defmodule Cerberus.CoreAutoModeTest do
       session = visit(session, "/live/redirects")
       assert Session.driver_kind(session) == :live
 
-      session = click_button(session, text: ~r/^Navigate to Articles$/)
+      session = click_button(session, "Redirect to Articles", exact: true)
       assert session.current_path == "/articles"
       assert Session.driver_kind(session) == :static
       assert session.last_result.observed.transition.reason == :live_redirect
@@ -44,7 +44,7 @@ defmodule Cerberus.CoreAutoModeTest do
       session = visit(session, "/live/redirects")
       assert Session.driver_kind(session) == :live
 
-      session = click_button(session, text: ~r/^Hard Redirect to Articles$/)
+      session = click_button(session, "Hard Redirect to Articles", exact: true)
       assert session.current_path == "/articles"
       assert Session.driver_kind(session) == :static
       assert session.last_result.observed.transition.reason == :redirect

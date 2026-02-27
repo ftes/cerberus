@@ -36,7 +36,7 @@ defmodule Cerberus.Driver.Html do
   end
 
   @spec find_button(String.t(), String.t() | Regex.t(), keyword()) ::
-          {:ok, %{text: String.t()}} | :error
+          {:ok, %{text: String.t(), selector: String.t() | nil}} | :error
   def find_button(html, expected, opts) when is_binary(html) do
     case parse_document(html) do
       {:ok, lazy_html} ->
@@ -193,11 +193,93 @@ defmodule Cerberus.Driver.Html do
       text = node_text(node)
 
       if Query.match_text?(text, expected, opts) do
-        {:ok, build_fun.(node, text)}
+        mapped =
+          node
+          |> build_fun.(text)
+          |> maybe_put_unique_selector(lazy_html, node)
+
+        {:ok, mapped}
       else
         false
       end
     end)
+  end
+
+  defp maybe_put_unique_selector(%{} = mapped, lazy_html, node) do
+    case unique_selector(lazy_html, node) do
+      nil -> mapped
+      selector -> Map.put(mapped, :selector, selector)
+    end
+  end
+
+  defp unique_selector(lazy_html, node) do
+    tag = node_tag(node)
+    attrs = node_attrs(node)
+    id = attrs["id"]
+    attr_selector = attrs_selector(attrs)
+
+    candidates =
+      [
+        if(is_binary(id) and id != "", do: ~s([id="#{css_attr_escape(id)}"])),
+        if(attr_selector != "", do: "#{tag}#{attr_selector}"),
+        tag
+      ]
+      |> Enum.filter(&is_binary/1)
+      |> Enum.uniq()
+
+    Enum.find(candidates, &selector_unique?(lazy_html, &1))
+  end
+
+  defp selector_unique?(lazy_html, selector) do
+    lazy_html
+    |> LazyHTML.query(selector)
+    |> Enum.count() == 1
+  rescue
+    _ -> false
+  end
+
+  defp node_tag(node) do
+    case LazyHTML.to_tree(node) do
+      [{tag, _attrs, _children} | _] -> to_string(tag)
+      _ -> "*"
+    end
+  end
+
+  defp node_attrs(node) do
+    case LazyHTML.to_tree(node) do
+      [{_tag, attrs, _children} | _] when is_list(attrs) ->
+        Enum.reduce(attrs, %{}, fn
+          {name, value}, acc ->
+            Map.put(acc, to_string(name), value_to_string(value))
+
+          _, acc ->
+            acc
+        end)
+
+      _ ->
+        %{}
+    end
+  end
+
+  defp value_to_string(nil), do: ""
+  defp value_to_string(true), do: ""
+  defp value_to_string(value), do: to_string(value)
+
+  defp attrs_selector(attrs) when map_size(attrs) == 0, do: ""
+
+  defp attrs_selector(attrs) do
+    attrs
+    |> Enum.sort_by(fn {name, _value} -> name end)
+    |> Enum.map_join("", fn
+      {name, ""} -> "[#{name}]"
+      {name, value} -> ~s([#{name}="#{css_attr_escape(value)}"])
+    end)
+  end
+
+  defp css_attr_escape(value) do
+    value
+    |> String.replace("\\", "\\\\")
+    |> String.replace("\"", "\\\"")
   end
 
   defp collect(nodes, hidden_parent?, acc) when is_list(nodes) do

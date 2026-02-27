@@ -42,7 +42,7 @@ defmodule Cerberus.Fixtures.RedirectsLive do
     ~H"""
     <main>
       <h1>Live Redirects</h1>
-      <button phx-click="to_articles">Navigate to Articles</button>
+      <button phx-click="to_articles">Redirect to Articles</button>
       <button phx-click="to_counter">Redirect to Counter</button>
       <button phx-click="patch_self">Patch link</button>
       <button phx-click="to_counter_with_query">Button with push navigation</button>

@@ -11,6 +11,7 @@ Keep a log of what you did to present when you're done.
 - Deliver vertical slices end-to-end whenever possible (API + drivers + harness coverage for the slice).
 - Prefer the browser-oracle harness approach to validate HTML/browser behavior and catch static/live semantic drift.
 - Update docs when behavior, API semantics, architecture, or harness strategy changes.
+- Run `mix format` after each logical change set (and before tests/precommit), since precommit checks formatting and does not rewrite files.
 - Commit in small increments and run `mix precommit` before each commit.
 - Browser runtime policy:
   - Use a single shared browser process.

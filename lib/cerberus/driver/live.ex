@@ -3,7 +3,7 @@ defmodule Cerberus.Driver.Live do
 
   @behaviour Cerberus.Driver
 
-  import Phoenix.LiveViewTest, only: [element: 3, render: 1, render_click: 1]
+  import Phoenix.LiveViewTest, only: [element: 2, element: 3, render: 1, render_click: 1]
 
   alias Cerberus.Driver.Conn
   alias Cerberus.Driver.Html
@@ -273,7 +273,7 @@ defmodule Cerberus.Driver.Live do
   defp click_live_button(session, button) do
     result =
       session.view
-      |> element("button", button.text)
+      |> live_button_element(button)
       |> render_click()
 
     case result do
@@ -327,6 +327,14 @@ defmodule Cerberus.Driver.Live do
 
         {:error, session, observed, "unexpected live click result"}
     end
+  end
+
+  defp live_button_element(view, %{selector: selector}) when is_binary(selector) and selector != "" do
+    element(view, selector)
+  end
+
+  defp live_button_element(view, button) do
+    element(view, "button", button.text)
   end
 
   defp redirected_result(session, button, to, reason) do

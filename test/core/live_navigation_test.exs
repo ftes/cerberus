@@ -21,7 +21,7 @@ defmodule Cerberus.CoreLiveNavigationTest do
     Harness.run!(context, fn session ->
       session
       |> visit("/live/redirects")
-      |> click(text: "Navigate to Articles")
+      |> click(text: "Redirect to Articles")
       |> assert_has(text: "Articles")
       |> visit("/live/redirects")
       |> click(text: "Redirect to Counter")

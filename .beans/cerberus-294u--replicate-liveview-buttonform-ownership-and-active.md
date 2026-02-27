@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-27T11:31:31Z
-updated_at: 2026-02-27T12:18:34Z
+updated_at: 2026-02-27T15:33:47Z
 parent: cerberus-zqpu
 ---
 
@@ -53,3 +53,9 @@ end
 - [ ] Submit buttons clear active form state and include button payload semantics.
 - [ ] `button[form=...]` owner-form behavior is covered in integration tests.
 - [ ] Redirect + header preservation cases are added for button-driven submit paths.
+
+## Progress (2026-02-27, deterministic live button targeting)
+
+- Live driver now resolves button locators in Cerberus first, synthesizes a deterministic CSS selector from the matched element attributes, and then calls LiveViewTest via selector (element(view, selector)) instead of text-only lookup.
+- This removes the immediate ambiguity ceiling where overlapping labels (for example, Redirect to Articles vs Hard Redirect to Articles) could select multiple buttons during the LiveViewTest handoff.
+- Added regression coverage in core auto/live navigation tests with overlapping labels and exact: true locators to validate the new behavior.
