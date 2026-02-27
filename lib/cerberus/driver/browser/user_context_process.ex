@@ -44,6 +44,31 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(pid, {:await_ready, opts}, 10_000)
   end
 
+  @spec open_tab(pid()) :: {:ok, String.t()} | {:error, String.t(), map()}
+  def open_tab(pid) when is_pid(pid) do
+    GenServer.call(pid, :open_tab, 10_000)
+  end
+
+  @spec switch_tab(pid(), String.t()) :: :ok | {:error, String.t(), map()}
+  def switch_tab(pid, tab_id) when is_pid(pid) and is_binary(tab_id) do
+    GenServer.call(pid, {:switch_tab, tab_id}, 10_000)
+  end
+
+  @spec close_tab(pid(), String.t()) :: :ok | {:error, String.t(), map()}
+  def close_tab(pid, tab_id) when is_pid(pid) and is_binary(tab_id) do
+    GenServer.call(pid, {:close_tab, tab_id}, 10_000)
+  end
+
+  @spec tabs(pid()) :: [String.t()]
+  def tabs(pid) when is_pid(pid) do
+    GenServer.call(pid, :tabs)
+  end
+
+  @spec active_tab(pid()) :: String.t() | nil
+  def active_tab(pid) when is_pid(pid) do
+    GenServer.call(pid, :active_tab)
+  end
+
   @spec set_user_agent(pid(), String.t()) :: :ok | {:error, String.t(), map()}
   def set_user_agent(pid, user_agent) when is_pid(pid) and is_binary(user_agent) do
     GenServer.call(pid, {:set_user_agent, user_agent}, 10_000)
@@ -63,7 +88,8 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
          {:ok, user_context_id} <- create_user_context(),
          {:ok, browsing_context_pid} <-
            start_browsing_context(browsing_context_supervisor, user_context_id) do
-      browsing_context_ref = Process.monitor(browsing_context_pid)
+      {:ok, first_tab_id, browsing_contexts} =
+        add_browsing_context(%{}, browsing_context_pid)
 
       {:ok,
        %{
@@ -72,8 +98,8 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
          base_url: Runtime.base_url(),
          user_context_id: user_context_id,
          browsing_context_supervisor: browsing_context_supervisor,
-         active_browsing_context_pid: browsing_context_pid,
-         active_browsing_context_ref: browsing_context_ref
+         browsing_contexts: browsing_contexts,
+         active_browsing_context_id: first_tab_id
        }}
     else
       {:error, reason} ->
@@ -90,15 +116,60 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   end
 
   def handle_call({:navigate, url}, _from, state) do
-    {:reply, BrowsingContextProcess.navigate(state.active_browsing_context_pid, url), state}
+    {:reply, BrowsingContextProcess.navigate(active_browsing_context_pid!(state), url), state}
   end
 
   def handle_call({:evaluate, expression}, _from, state) do
-    {:reply, BrowsingContextProcess.evaluate(state.active_browsing_context_pid, expression), state}
+    {:reply, BrowsingContextProcess.evaluate(active_browsing_context_pid!(state), expression), state}
   end
 
   def handle_call({:await_ready, opts}, _from, state) do
-    {:reply, BrowsingContextProcess.await_ready(state.active_browsing_context_pid, opts), state}
+    {:reply, BrowsingContextProcess.await_ready(active_browsing_context_pid!(state), opts), state}
+  end
+
+  def handle_call(:open_tab, _from, state) do
+    with {:ok, browsing_context_pid} <-
+           start_browsing_context(state.browsing_context_supervisor, state.user_context_id),
+         {:ok, tab_id, browsing_contexts} <- add_browsing_context(state.browsing_contexts, browsing_context_pid) do
+      {:reply, {:ok, tab_id}, %{state | browsing_contexts: browsing_contexts, active_browsing_context_id: tab_id}}
+    else
+      {:error, reason} ->
+        {:reply, {:error, inspect(reason), %{}}, state}
+    end
+  end
+
+  def handle_call({:switch_tab, tab_id}, _from, state) do
+    if Map.has_key?(state.browsing_contexts, tab_id) do
+      {:reply, :ok, %{state | active_browsing_context_id: tab_id}}
+    else
+      {:reply, {:error, "unknown tab", %{tab_id: tab_id}}, state}
+    end
+  end
+
+  def handle_call({:close_tab, tab_id}, _from, state) do
+    case Map.fetch(state.browsing_contexts, tab_id) do
+      :error ->
+        {:reply, {:error, "unknown tab", %{tab_id: tab_id}}, state}
+
+      {:ok, _entry} when map_size(state.browsing_contexts) == 1 ->
+        {:reply, {:error, "cannot close last tab", %{tab_id: tab_id}}, state}
+
+      {:ok, entry} ->
+        Process.demonitor(entry.ref, [:flush])
+        _ = DynamicSupervisor.terminate_child(state.browsing_context_supervisor, entry.pid)
+        browsing_contexts = Map.delete(state.browsing_contexts, tab_id)
+        active_tab_id = choose_next_active_tab_id(state.active_browsing_context_id, tab_id, browsing_contexts)
+        {:reply, :ok, %{state | browsing_contexts: browsing_contexts, active_browsing_context_id: active_tab_id}}
+    end
+  end
+
+  def handle_call(:tabs, _from, state) do
+    tabs = state.browsing_contexts |> Map.keys() |> Enum.sort()
+    {:reply, tabs, state}
+  end
+
+  def handle_call(:active_tab, _from, state) do
+    {:reply, state.active_browsing_context_id, state}
   end
 
   def handle_call({:set_user_agent, user_agent}, _from, state) do
@@ -106,21 +177,29 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   end
 
   def handle_call(:last_readiness, _from, state) do
-    {:reply, BrowsingContextProcess.last_readiness(state.active_browsing_context_pid), state}
+    {:reply, BrowsingContextProcess.last_readiness(active_browsing_context_pid!(state)), state}
   end
 
   @impl true
-  def handle_info({:DOWN, ref, :process, _pid, reason}, %{active_browsing_context_ref: ref} = state) do
-    {:stop, {:browsing_context_down, reason}, state}
-  end
-
   def handle_info({:DOWN, ref, :process, _pid, _reason}, %{owner_ref: ref} = state) do
     # Owner/test process finished; tear down userContext as a normal shutdown.
     {:stop, :normal, state}
   end
 
-  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
-    {:noreply, state}
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
+    case pop_browsing_context_by_ref(state.browsing_contexts, ref) do
+      {:ok, down_tab_id, browsing_contexts} ->
+        active_tab_id = choose_next_active_tab_id(state.active_browsing_context_id, down_tab_id, browsing_contexts)
+
+        if is_nil(active_tab_id) do
+          {:stop, {:browsing_context_down, reason}, state}
+        else
+          {:noreply, %{state | browsing_contexts: browsing_contexts, active_browsing_context_id: active_tab_id}}
+        end
+
+      :error ->
+        {:noreply, state}
+    end
   end
 
   def handle_info(_message, state) do
@@ -163,6 +242,48 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
       browsing_context_supervisor,
       {BrowsingContextProcess, user_context_id: user_context_id}
     )
+  end
+
+  defp add_browsing_context(browsing_contexts, browsing_context_pid) do
+    tab_id = BrowsingContextProcess.id(browsing_context_pid)
+    ref = Process.monitor(browsing_context_pid)
+    {:ok, tab_id, Map.put(browsing_contexts, tab_id, %{pid: browsing_context_pid, ref: ref})}
+  end
+
+  defp pop_browsing_context_by_ref(browsing_contexts, ref) do
+    case Enum.find(browsing_contexts, fn {_tab_id, entry} -> entry.ref == ref end) do
+      nil ->
+        :error
+
+      {tab_id, _entry} ->
+        {:ok, tab_id, Map.delete(browsing_contexts, tab_id)}
+    end
+  end
+
+  defp choose_next_active_tab_id(active_tab_id, closed_tab_id, browsing_contexts) do
+    cond do
+      active_tab_id != closed_tab_id and Map.has_key?(browsing_contexts, active_tab_id) ->
+        active_tab_id
+
+      map_size(browsing_contexts) == 0 ->
+        nil
+
+      true ->
+        browsing_contexts
+        |> Map.keys()
+        |> Enum.sort()
+        |> List.first()
+    end
+  end
+
+  defp active_browsing_context_pid!(state) do
+    case Map.fetch(state.browsing_contexts, state.active_browsing_context_id) do
+      {:ok, entry} ->
+        entry.pid
+
+      :error ->
+        raise "active browsing context is unavailable"
+    end
   end
 
   defp set_user_agent_override(user_context_id, user_agent) do

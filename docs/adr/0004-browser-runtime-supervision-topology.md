@@ -38,6 +38,7 @@ Cerberus.Driver.Browser.Supervisor (rest_for_one)
 Positive:
 - Browser and BiDi setup cost is amortized across tests.
 - Test isolation remains explicit through per-test `userContext`.
+- `UserContextProcess` can manage multiple `browsingContext` tabs per user context with deterministic active-tab switching for multi-tab integration coverage.
 - Event handling can evolve at `browsingContext` granularity without changing global transport.
 
 Negative:
