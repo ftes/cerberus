@@ -18,6 +18,11 @@ defmodule Cerberus.Fixtures.SelectorEdgeLive do
   end
 
   @impl true
+  def handle_event("select_confirm", _params, socket) do
+    {:noreply, assign(socket, :selected, "confirmed")}
+  end
+
+  @impl true
   def render(assigns) do
     ~H"""
     <main>
@@ -34,6 +39,12 @@ defmodule Cerberus.Fixtures.SelectorEdgeLive do
       <section id="secondary-actions">
         <button phx-click="select_secondary" class="action secondary" data-kind="secondary">
           Apply
+        </button>
+      </section>
+
+      <section id="confirm-actions">
+        <button phx-click="select_confirm" data-confirm={"Are you sure?\nMore text"}>
+          Create
         </button>
       </section>
     </main>

@@ -457,9 +457,15 @@ defmodule Cerberus.Driver.Html do
 
   defp css_attr_escape(value) do
     value
-    |> String.replace("\\", "\\\\")
-    |> String.replace("\"", "\\\"")
+    |> String.to_charlist()
+    |> Enum.map_join(&css_attr_char_escape/1)
   end
+
+  defp css_attr_char_escape(?\\), do: "\\\\"
+  defp css_attr_char_escape(?"), do: "\\\""
+  defp css_attr_char_escape(char) when char in [?\n, ?\r, ?\t, ?\f], do: "\\#{Integer.to_string(char, 16)} "
+
+  defp css_attr_char_escape(char), do: <<char::utf8>>
 
   defp collect(nodes, hidden_parent?, acc) when is_list(nodes) do
     Enum.reduce(nodes, acc, fn node, acc ->

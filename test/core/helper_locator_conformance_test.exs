@@ -79,6 +79,20 @@ defmodule Cerberus.CoreHelperLocatorConformanceTest do
 
   @tag browser: true
   @tag drivers: [:live, :browser]
+  test "click_button handles multiline data-confirm attributes", context do
+    Harness.run!(
+      context,
+      fn session ->
+        session
+        |> visit("/live/selector-edge")
+        |> click_button(button("Create"), exact: true)
+        |> assert_has(text("Selected: confirmed"), exact: true)
+      end
+    )
+  end
+
+  @tag browser: true
+  @tag drivers: [:live, :browser]
   test "role link helper navigates from live route consistently", context do
     Harness.run!(
       context,
