@@ -1,10 +1,11 @@
 ---
 # cerberus-htzz
 title: Replicate LiveViewWatcher lifecycle event behavior
-status: todo
+status: completed
 type: task
+priority: normal
 created_at: 2026-02-27T11:31:31Z
-updated_at: 2026-02-27T11:31:31Z
+updated_at: 2026-02-27T19:16:53Z
 parent: cerberus-zqpu
 ---
 
@@ -39,6 +40,17 @@ end
 ```
 
 ## Done When
-- [ ] Watcher emits deterministic messages for died/redirected views.
-- [ ] Existing view metadata is preserved on repeated watch calls.
-- [ ] Multiple concurrent watched views are supported and tested.
+- [x] Watcher emits deterministic messages for died/redirected views.
+- [x] Existing view metadata is preserved on repeated watch calls.
+- [x] Multiple concurrent watched views are supported and tested.
+
+## Summary of Changes
+- Added dedicated watcher lifecycle tests in `test/cerberus/live_view_watcher_test.exs` modeled after PhoenixTest coverage.
+- Verified deterministic watcher messages for both live view death and redirect shutdown events.
+- Verified repeated `watch_view/2` calls preserve existing internal metadata (`live_view_ref`) for already tracked views.
+- Verified concurrent multi-view tracking in a single watcher process.
+
+## Validation
+- `mix test test/cerberus/live_view_watcher_test.exs test/cerberus/live_view_timeout_test.exs`
+- `mix test test/core/live_navigation_test.exs test/core/live_link_navigation_test.exs`
+- `mix precommit` (Credo passes; Dialyzer still reports existing baseline project warnings)
