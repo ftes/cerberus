@@ -1,11 +1,11 @@
 ---
 # cerberus-rxqy
 title: Browser-only extensions parity slice
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-27T11:00:49Z
-updated_at: 2026-02-27T19:47:00Z
+updated_at: 2026-02-27T21:18:54Z
 parent: cerberus-zqpu
 ---
 
