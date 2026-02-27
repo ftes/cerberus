@@ -19,4 +19,11 @@ defmodule Cerberus.Session do
 
   @spec last_result(t()) :: last_result()
   def last_result(%{last_result: last_result}), do: last_result
+
+  @spec transition(t()) :: map() | nil
+  def transition(%{last_result: %{observed: observed}}) when is_map(observed) do
+    observed[:transition] || observed["transition"]
+  end
+
+  def transition(_session), do: nil
 end

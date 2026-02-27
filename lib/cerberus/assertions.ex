@@ -16,9 +16,9 @@ defmodule Cerberus.Assertions do
       {:ok, session, _observed} ->
         session
 
-      {:error, _session, observed, reason} ->
+      {:error, failed_session, observed, reason} ->
         raise AssertionError,
-          message: format_error("click", locator_input, opts, reason, observed)
+          message: format_error("click", locator_input, opts, reason, observed, failed_session)
     end
   end
 
@@ -32,9 +32,9 @@ defmodule Cerberus.Assertions do
       {:ok, session, _observed} ->
         session
 
-      {:error, _session, observed, reason} ->
+      {:error, failed_session, observed, reason} ->
         raise AssertionError,
-          message: format_error("fill_in", locator_input, opts, reason, observed)
+          message: format_error("fill_in", locator_input, opts, reason, observed, failed_session)
     end
   end
 
@@ -48,9 +48,9 @@ defmodule Cerberus.Assertions do
       {:ok, session, _observed} ->
         session
 
-      {:error, _session, observed, reason} ->
+      {:error, failed_session, observed, reason} ->
         raise AssertionError,
-          message: format_error("submit", locator_input, opts, reason, observed)
+          message: format_error("submit", locator_input, opts, reason, observed, failed_session)
     end
   end
 
@@ -65,7 +65,8 @@ defmodule Cerberus.Assertions do
           :none,
           opts,
           "#{operation} is not implemented for #{inspect(driver_kind)} driver in this slice",
-          %{driver: driver_kind}
+          %{driver: driver_kind},
+          session
         )
   end
 
@@ -79,9 +80,9 @@ defmodule Cerberus.Assertions do
       {:ok, session, _observed} ->
         session
 
-      {:error, _session, observed, reason} ->
+      {:error, failed_session, observed, reason} ->
         raise AssertionError,
-          message: format_error("assert_has", locator_input, opts, reason, observed)
+          message: format_error("assert_has", locator_input, opts, reason, observed, failed_session)
     end
   end
 
@@ -95,18 +96,27 @@ defmodule Cerberus.Assertions do
       {:ok, session, _observed} ->
         session
 
-      {:error, _session, observed, reason} ->
+      {:error, failed_session, observed, reason} ->
         raise AssertionError,
-          message: format_error("refute_has", locator_input, opts, reason, observed)
+          message: format_error("refute_has", locator_input, opts, reason, observed, failed_session)
     end
   end
 
-  defp format_error(op, locator, opts, reason, observed) do
+  defp format_error(op, locator, opts, reason, observed, session) do
+    transition = observed_transition(observed) || Session.transition(session)
+
     """
     #{op} failed: #{reason}
     locator: #{inspect(locator)}
     opts: #{inspect(opts)}
+    transition: #{inspect(transition)}
     observed: #{inspect(observed)}
     """
   end
+
+  defp observed_transition(observed) when is_map(observed) do
+    observed[:transition] || observed["transition"]
+  end
+
+  defp observed_transition(_observed), do: nil
 end

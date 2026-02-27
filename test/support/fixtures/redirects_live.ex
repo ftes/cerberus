@@ -33,14 +33,20 @@ defmodule Cerberus.Fixtures.RedirectsLive do
   end
 
   @impl true
+  def handle_event("hard_redirect_to_articles", _params, socket) do
+    {:noreply, redirect(socket, to: "/articles")}
+  end
+
+  @impl true
   def render(assigns) do
     ~H"""
     <main>
       <h1>Live Redirects</h1>
-      <button phx-click="to_articles">Redirect to Articles</button>
+      <button phx-click="to_articles">Navigate to Articles</button>
       <button phx-click="to_counter">Redirect to Counter</button>
       <button phx-click="patch_self">Patch link</button>
       <button phx-click="to_counter_with_query">Button with push navigation</button>
+      <button phx-click="hard_redirect_to_articles">Hard Redirect to Articles</button>
     </main>
     """
   end

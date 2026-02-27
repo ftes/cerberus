@@ -10,6 +10,7 @@ defmodule Cerberus.MixProject do
       start_permanent: Mix.env() == :prod,
       cli: cli(),
       aliases: aliases(),
+      dialyzer: [plt_add_apps: [:ex_unit]],
       deps: deps(),
       description: description(),
       docs: docs(),
@@ -35,6 +36,7 @@ defmodule Cerberus.MixProject do
       {:nimble_options, "~> 1.1"},
       {:styler, "~> 1.10", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:plug_cowboy, "~> 2.7", only: :test},
       {:ex_doc, "~> 0.38", only: :dev, runtime: false}
     ]
@@ -42,13 +44,17 @@ defmodule Cerberus.MixProject do
 
   defp aliases do
     [
-      precommit: ["format --check-formatted", "credo --strict", "cmd env MIX_ENV=test mix test"]
+      precommit: [
+        "format --check-formatted",
+        "credo --strict",
+        "dialyzer"
+      ]
     ]
   end
 
   defp cli do
     [
-      preferred_envs: [precommit: :test]
+      preferred_envs: [dialyzer: :test, precommit: :test]
     ]
   end
 
