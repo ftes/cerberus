@@ -22,6 +22,7 @@ defmodule Cerberus.Fixtures.Router do
     get("/scoped", PageController, :scoped)
     get("/search", PageController, :search_form)
     get("/search/results", PageController, :search_results)
+    get("/browser/extensions", PageController, :browser_extensions)
     get("/session/user", PageController, :session_user)
     get("/session/user/:value", PageController, :set_session_user)
     get("/owner-form", PageController, :owner_form)

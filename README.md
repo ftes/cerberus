@@ -112,6 +112,23 @@ session(:browser)
 |> screenshot(full_page: true)
 ```
 
+Browser-only extensions example:
+
+```elixir
+alias Cerberus.Browser
+
+session =
+  session(:browser)
+  |> visit("/browser/extensions")
+  |> Browser.type("hello", selector: "#keyboard-input")
+  |> Browser.press("Enter", selector: "#press-input")
+  |> Browser.with_dialog(fn session ->
+    click(session, button("Open Confirm Dialog"))
+  end)
+
+cookie = Browser.cookie(session, "_my_cookie")
+```
+
 Supported sigil:
 - `~l` for text locators.
 - `~l` modifiers:
@@ -248,6 +265,10 @@ Dependencies: `curl`, `jq`, `unzip`.
   (`browsingContext.captureScreenshot`) and writes to `:path` (or a temp file by
   default). `full_page: true` captures the full document instead of just the
   viewport.
+- `Cerberus.Browser` exposes browser-only helpers for screenshot, keyboard
+  (`type`/`press`), drag, dialog capture (`with_dialog`), JS evaluation
+  (`evaluate_js`), and cookie inspection/mutation (`cookies`, `cookie`,
+  `session_cookie`, `add_cookie`).
 - `unwrap/2` mirrors PhoenixTest escape-hatch semantics for static/live:
   static callbacks receive a `Plug.Conn` and must return a `Plug.Conn`;
   live callbacks receive the underlying LiveView and may return render output

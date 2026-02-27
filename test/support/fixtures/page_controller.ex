@@ -148,6 +148,95 @@ defmodule Cerberus.Fixtures.PageController do
     """)
   end
 
+  def browser_extensions(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Browser Extensions</title>
+      </head>
+      <body>
+        <main>
+          <h1>Browser Extensions</h1>
+
+          <section>
+            <h2>Keyboard</h2>
+            <label for="keyboard-input">Keyboard input</label>
+            <input id="keyboard-input" type="text" value="" />
+            <p id="keyboard-value">Keyboard value: </p>
+          </section>
+
+          <section>
+            <h2>Press</h2>
+            <form id="press-form">
+              <label for="press-input">Press input</label>
+              <input id="press-input" type="text" value="" />
+            </form>
+            <p id="press-result">Press result: pending</p>
+          </section>
+
+          <section>
+            <h2>Dialog</h2>
+            <button id="confirm-dialog" type="button">Open Confirm Dialog</button>
+            <p id="dialog-result">Dialog result: pending</p>
+          </section>
+
+          <section>
+            <h2>Drag</h2>
+            <div id="drag-source" draggable="true">Drag source</div>
+            <div id="drop-target">Drop target</div>
+            <p id="drag-result">Drag result: pending</p>
+          </section>
+        </main>
+
+        <script>
+          (() => {
+            const keyboardInput = document.getElementById("keyboard-input");
+            const keyboardValue = document.getElementById("keyboard-value");
+            const pressForm = document.getElementById("press-form");
+            const pressResult = document.getElementById("press-result");
+            const dialogButton = document.getElementById("confirm-dialog");
+            const dialogResult = document.getElementById("dialog-result");
+            const dragSource = document.getElementById("drag-source");
+            const dropTarget = document.getElementById("drop-target");
+            const dragResult = document.getElementById("drag-result");
+
+            keyboardInput.addEventListener("input", () => {
+              keyboardValue.textContent = "Keyboard value: " + keyboardInput.value;
+            });
+
+            pressForm.addEventListener("submit", (event) => {
+              event.preventDefault();
+              pressResult.textContent = "Press result: submitted";
+            });
+
+            dialogButton.addEventListener("click", () => {
+              const accepted = window.confirm("Delete item?");
+              dialogResult.textContent = accepted
+                ? "Dialog result: confirmed"
+                : "Dialog result: cancelled";
+            });
+
+            dragSource.addEventListener("dragstart", (event) => {
+              event.dataTransfer.setData("text/plain", "drag-source");
+            });
+
+            dropTarget.addEventListener("dragover", (event) => {
+              event.preventDefault();
+            });
+
+            dropTarget.addEventListener("drop", (event) => {
+              event.preventDefault();
+              dragResult.textContent = "Drag result: dropped";
+            });
+          })();
+        </script>
+      </body>
+    </html>
+    """)
+  end
+
   def session_user(conn, _params) do
     value = Plug.Conn.get_session(conn, :session_user) || "unset"
 
