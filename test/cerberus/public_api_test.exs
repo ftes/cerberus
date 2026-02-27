@@ -37,6 +37,35 @@ defmodule Cerberus.PublicApiTest do
            )
   end
 
+  test "helper locators work with click/assert/fill_in flows" do
+    session =
+      :static
+      |> session()
+      |> visit("/articles")
+      |> click(link("Counter"))
+      |> assert_has(role(:button, name: "Increment"))
+      |> click(button("Increment"))
+      |> assert_has(text("Count: 1"))
+
+    assert session.current_path == "/live/counter"
+
+    assert is_struct(
+             :static
+             |> session()
+             |> visit("/search")
+             |> fill_in(label("Search term"), "phoenix")
+           )
+  end
+
+  test "testid helper is explicit about unsupported operations in this slice" do
+    assert_raise InvalidLocatorError, ~r/testid locators are not yet supported/, fn ->
+      :static
+      |> session()
+      |> visit("/articles")
+      |> assert_has(testid("articles-title"))
+    end
+  end
+
   test "unsupported driver is rejected" do
     assert_raise ArgumentError, ~r/unsupported driver/, fn ->
       session(:unknown)

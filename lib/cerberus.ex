@@ -27,6 +27,26 @@ defmodule Cerberus do
     driver_module!(driver).new_session(opts)
   end
 
+  @spec text(String.t() | Regex.t()) :: keyword()
+  def text(value), do: [text: value]
+
+  @spec link(String.t() | Regex.t()) :: keyword()
+  def link(value), do: [link: value]
+
+  @spec button(String.t() | Regex.t()) :: keyword()
+  def button(value), do: [button: value]
+
+  @spec label(String.t() | Regex.t()) :: keyword()
+  def label(value), do: [label: value]
+
+  @spec role(String.t() | atom(), keyword()) :: keyword()
+  def role(role, opts \\ []) when is_list(opts) do
+    [role: role, name: Keyword.get(opts, :name)]
+  end
+
+  @spec testid(String.t()) :: keyword()
+  def testid(value) when is_binary(value), do: [testid: value]
+
   @spec sigil_l(String.t(), charlist()) :: Locator.t()
   def sigil_l(value, []), do: Locator.text_sigil(value)
 

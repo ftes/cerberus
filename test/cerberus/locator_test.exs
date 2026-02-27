@@ -44,4 +44,27 @@ defmodule Cerberus.LocatorTest do
       ~l/Saved/i
     end
   end
+
+  test "normalizes helper keyword locators" do
+    assert %Locator{kind: :link, value: "Counter"} = Locator.normalize(link: "Counter")
+    assert %Locator{kind: :button, value: "Save"} = Locator.normalize(button: "Save")
+    assert %Locator{kind: :label, value: "Search term"} = Locator.normalize(label: "Search term")
+    assert %Locator{kind: :testid, value: "submit-btn"} = Locator.normalize(testid: "submit-btn")
+  end
+
+  test "normalizes role locator to operation-specific kind" do
+    assert %Locator{kind: :button, value: "Increment"} = Locator.normalize(role: :button, name: "Increment")
+    assert %Locator{kind: :link, value: "Counter"} = Locator.normalize(role: "link", name: "Counter")
+    assert %Locator{kind: :label, value: "Search term"} = Locator.normalize(role: :textbox, name: "Search term")
+  end
+
+  test "role locator requires supported role and name" do
+    assert_raise InvalidLocatorError, ~r/unsupported :role/, fn ->
+      Locator.normalize(role: :dialog, name: "Modal")
+    end
+
+    assert_raise InvalidLocatorError, ~r/:name must be a string or regex/, fn ->
+      Locator.normalize(role: :button)
+    end
+  end
 end

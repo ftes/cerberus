@@ -31,8 +31,25 @@ session(:static)
 |> refute_has(~l"500 Internal Server Error")
 ```
 
+Helper locator flow:
+
+```elixir
+session(:live)
+|> visit("/live/counter")
+|> click(role(:button, name: "Increment"))
+|> assert_has(text("Count: 1"), exact: true)
+```
+
 Supported sigil:
 - `~l` for text locators.
+
+Helper locator constructors:
+- `text("...")`
+- `link("...")`
+- `button("...")`
+- `label("...")`
+- `role(:button, name: "...")` (supported roles in this slice: `:button`, `:link`, `:textbox`, `:searchbox`, `:combobox`)
+- `testid("...")` (reserved helper; not yet supported by operations in this slice)
 
 ## Conformance Harness
 

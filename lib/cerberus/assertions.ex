@@ -1,6 +1,7 @@
 defmodule Cerberus.Assertions do
   @moduledoc false
 
+  alias Cerberus.InvalidLocatorError
   alias Cerberus.Locator
   alias Cerberus.Options
   alias Cerberus.Session
@@ -8,8 +9,8 @@ defmodule Cerberus.Assertions do
 
   @spec click(arg, term(), Options.click_opts()) :: arg when arg: var
   def click(session, locator_input, opts \\ []) do
+    {locator, opts} = normalize_click_locator(locator_input, opts)
     opts = Options.validate_click!(opts)
-    locator = Locator.normalize(locator_input)
     driver = Cerberus.driver_module!(session)
 
     case driver.click(session, locator, opts) do
@@ -24,8 +25,8 @@ defmodule Cerberus.Assertions do
 
   @spec fill_in(arg, term(), Options.fill_in_value(), Options.fill_in_opts()) :: arg when arg: var
   def fill_in(session, locator_input, value, opts \\ []) when is_list(opts) do
+    locator = normalize_fill_in_locator(locator_input)
     opts = Options.validate_fill_in!(opts)
-    locator = Locator.normalize(locator_input)
     driver = Cerberus.driver_module!(session)
 
     case driver.fill_in(session, locator, to_string(value), opts) do
@@ -40,8 +41,8 @@ defmodule Cerberus.Assertions do
 
   @spec submit(arg, term(), Options.submit_opts()) :: arg when arg: var
   def submit(session, locator_input, opts \\ []) do
+    locator = normalize_submit_locator(locator_input)
     opts = Options.validate_submit!(opts)
-    locator = Locator.normalize(locator_input)
     driver = Cerberus.driver_module!(session)
 
     case driver.submit(session, locator, opts) do
@@ -72,8 +73,8 @@ defmodule Cerberus.Assertions do
 
   @spec assert_has(arg, term(), Options.assert_opts()) :: arg when arg: var
   def assert_has(session, locator_input, opts \\ []) do
+    locator = normalize_assert_locator(locator_input)
     opts = Options.validate_assert!(opts, "assert_has/3")
-    locator = Locator.normalize(locator_input)
     driver = Cerberus.driver_module!(session)
 
     case driver.assert_has(session, locator, opts) do
@@ -88,8 +89,8 @@ defmodule Cerberus.Assertions do
 
   @spec refute_has(arg, term(), Options.assert_opts()) :: arg when arg: var
   def refute_has(session, locator_input, opts \\ []) do
+    locator = normalize_assert_locator(locator_input)
     opts = Options.validate_assert!(opts, "refute_has/3")
-    locator = Locator.normalize(locator_input)
     driver = Cerberus.driver_module!(session)
 
     case driver.refute_has(session, locator, opts) do
@@ -119,4 +120,84 @@ defmodule Cerberus.Assertions do
   end
 
   defp observed_transition(_observed), do: nil
+
+  defp normalize_click_locator(locator_input, opts) do
+    locator = Locator.normalize(locator_input)
+
+    case locator do
+      %Locator{kind: :text} ->
+        {locator, opts}
+
+      %Locator{kind: :label, value: value} ->
+        {%Locator{kind: :text, value: value}, opts}
+
+      %Locator{kind: :link, value: value} ->
+        {%Locator{kind: :text, value: value}, Keyword.put(opts, :kind, :link)}
+
+      %Locator{kind: :button, value: value} ->
+        {%Locator{kind: :text, value: value}, Keyword.put(opts, :kind, :button)}
+
+      %Locator{kind: :testid} ->
+        raise InvalidLocatorError, locator: locator_input, message: "testid locators are not yet supported for click/3"
+    end
+  end
+
+  defp normalize_fill_in_locator(locator_input) do
+    locator = Locator.normalize(locator_input)
+
+    case locator do
+      %Locator{kind: :text} ->
+        locator
+
+      %Locator{kind: :label, value: value} ->
+        %Locator{kind: :text, value: value}
+
+      %Locator{kind: :link} ->
+        raise InvalidLocatorError, locator: locator_input, message: "link locators are not supported for fill_in/4"
+
+      %Locator{kind: :button} ->
+        raise InvalidLocatorError, locator: locator_input, message: "button locators are not supported for fill_in/4"
+
+      %Locator{kind: :testid} ->
+        raise InvalidLocatorError, locator: locator_input, message: "testid locators are not yet supported for fill_in/4"
+    end
+  end
+
+  defp normalize_submit_locator(locator_input) do
+    locator = Locator.normalize(locator_input)
+
+    case locator do
+      %Locator{kind: :text} ->
+        locator
+
+      %Locator{kind: :button, value: value} ->
+        %Locator{kind: :text, value: value}
+
+      %Locator{kind: :label} ->
+        raise InvalidLocatorError, locator: locator_input, message: "label locators are not supported for submit/3"
+
+      %Locator{kind: :link} ->
+        raise InvalidLocatorError, locator: locator_input, message: "link locators are not supported for submit/3"
+
+      %Locator{kind: :testid} ->
+        raise InvalidLocatorError, locator: locator_input, message: "testid locators are not yet supported for submit/3"
+    end
+  end
+
+  defp normalize_assert_locator(locator_input) do
+    locator = Locator.normalize(locator_input)
+
+    case locator do
+      %Locator{kind: :text} ->
+        locator
+
+      %Locator{kind: kind, value: value} when kind in [:label, :link, :button] ->
+        %Locator{kind: :text, value: value}
+
+      %Locator{kind: :testid} ->
+        raise InvalidLocatorError,
+          locator: locator_input,
+          message: "testid locators are not yet supported for assert_has/3 or refute_has/3"
+    end
+  end
 end
