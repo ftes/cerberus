@@ -1,10 +1,11 @@
 ---
 # cerberus-7ak7
 title: Replicate LiveViewTimeout retry and redirect-resilience behavior
-status: todo
+status: completed
 type: task
+priority: normal
 created_at: 2026-02-27T11:31:31Z
-updated_at: 2026-02-27T11:31:31Z
+updated_at: 2026-02-27T19:15:01Z
 parent: cerberus-zqpu
 ---
 
@@ -45,6 +46,17 @@ end
 ```
 
 ## Done When
-- [ ] Timeout loop retries failed assertions/actions until timeout.
-- [ ] Redirect notifications from watcher are applied during retries.
-- [ ] Dead-view fallback attempts redirect using provided redirect resolver.
+- [x] Timeout loop retries failed assertions/actions until timeout.
+- [x] Redirect notifications from watcher are applied during retries.
+- [x] Dead-view fallback attempts redirect using provided redirect resolver.
+
+## Summary of Changes
+- Added `Cerberus.LiveViewTimeout` to provide retry-aware `with_timeout/4` logic for live sessions, including watcher-driven redirect handling and dead-view redirect fallback.
+- Added `Cerberus.LiveViewWatcher` to monitor one or more live view PIDs and emit deterministic watcher messages (`:live_view_redirected`, `:live_view_died`).
+- Added `Cerberus.Driver.Live.follow_redirect/2` as a small helper used by timeout handling to re-enter normal visit flow after redirects.
+- Added focused tests in `test/cerberus/live_view_timeout_test.exs` covering retry loops, watcher-driven redirect application, and fallback redirect behavior when the live view dies.
+
+## Validation
+- `mix test test/cerberus/live_view_timeout_test.exs`
+- `mix test test/cerberus/live_view_timeout_test.exs test/core/live_navigation_test.exs test/core/live_link_navigation_test.exs`
+- `mix precommit` (Credo passes; Dialyzer still reports existing baseline project warnings)

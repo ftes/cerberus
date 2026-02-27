@@ -78,6 +78,12 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
+  @doc false
+  @spec follow_redirect(Session.t(), String.t()) :: Session.t()
+  def follow_redirect(%__MODULE__{} = session, to) when is_binary(to) do
+    visit(session, to, [])
+  end
+
   @impl true
   def click(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
     session = with_latest_html(session)
