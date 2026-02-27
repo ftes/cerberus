@@ -15,6 +15,7 @@ defmodule Cerberus do
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.Static, as: StaticSession
+  alias Cerberus.Locator
   alias Cerberus.Options
   alias Cerberus.Session
 
@@ -24,6 +25,16 @@ defmodule Cerberus do
   def session(driver, opts \\ []) do
     driver_module!(driver).new_session(opts)
   end
+
+  @spec sigil_t(String.t(), charlist()) :: Locator.t()
+  def sigil_t(value, []), do: Locator.text_sigil(value)
+  def sigil_t(value, modifiers), do: Locator.regex_sigil(value, modifiers, :t)
+
+  @spec sigil_l(String.t(), charlist()) :: Locator.t()
+  def sigil_l(value, modifiers), do: sigil_t(value, modifiers)
+
+  @spec sigil_L(String.t(), charlist()) :: Locator.t()
+  def sigil_L(value, modifiers), do: Locator.regex_sigil(value, modifiers, :L)
 
   @spec visit(arg, String.t(), keyword()) :: arg when arg: var
   def visit(session, path, opts \\ []) when is_binary(path) do

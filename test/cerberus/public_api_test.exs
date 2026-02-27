@@ -28,6 +28,15 @@ defmodule Cerberus.PublicApiTest do
     end
   end
 
+  test "assert_has accepts text sigil locator" do
+    assert is_struct(
+             :static
+             |> session()
+             |> visit("/articles")
+             |> assert_has(~l"Articles")
+           )
+  end
+
   test "unsupported driver is rejected" do
     assert_raise ArgumentError, ~r/unsupported driver/, fn ->
       session(:unknown)

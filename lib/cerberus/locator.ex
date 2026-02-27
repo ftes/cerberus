@@ -3,6 +3,8 @@ defmodule Cerberus.Locator do
 
   alias Cerberus.InvalidLocatorError
 
+  @regex_modifiers ~c"imsuxfU"
+
   @enforce_keys [:kind, :value]
   defstruct [:kind, :value]
 
@@ -28,6 +30,33 @@ defmodule Cerberus.Locator do
   end
 
   def normalize(locator), do: raise(InvalidLocatorError, locator: locator)
+
+  @spec text_sigil(String.t()) :: t()
+  def text_sigil(value) when is_binary(value), do: %__MODULE__{kind: :text, value: value}
+
+  @spec regex_sigil(String.t(), charlist(), atom()) :: t()
+  def regex_sigil(value, modifiers, sigil) when is_binary(value) and is_list(modifiers) and is_atom(sigil) do
+    invalid = Enum.reject(modifiers, &(&1 in @regex_modifiers))
+
+    if invalid != [] do
+      raise InvalidLocatorError,
+        locator: {sigil, value, modifiers},
+        message:
+          "invalid locator sigil ~#{sigil}: unsupported modifier(s) #{inspect(List.to_string(invalid))}; allowed modifiers: #{List.to_string(@regex_modifiers)}"
+    end
+
+    flags = List.to_string(modifiers)
+
+    case Regex.compile(value, flags) do
+      {:ok, regex} ->
+        %__MODULE__{kind: :text, value: regex}
+
+      {:error, reason} ->
+        raise InvalidLocatorError,
+          locator: {sigil, value, modifiers},
+          message: "invalid locator sigil ~#{sigil}: #{inspect(reason)}"
+    end
+  end
 
   defp normalize_map(locator_map, original) do
     text = Map.get(locator_map, :text, Map.get(locator_map, "text", :__missing__))

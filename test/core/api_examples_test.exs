@@ -14,8 +14,9 @@ defmodule Cerberus.CoreApiExamplesTest do
       fn session ->
         session
         |> visit("/articles")
-        |> assert_has(text: "Articles")
-        |> refute_has(text: "500 Internal Server Error")
+        |> assert_has(~l"Articles")
+        |> assert_has(~L/articles index/i)
+        |> refute_has(~l"500 Internal Server Error")
       end
     )
   end
@@ -52,7 +53,7 @@ defmodule Cerberus.CoreApiExamplesTest do
   defp counter_increment_flow(session) do
     session
     |> visit("/live/counter")
-    |> click(text: "Increment")
+    |> click(~l"Increment")
     |> assert_has([text: "Count: 1"], exact: true)
   end
 end

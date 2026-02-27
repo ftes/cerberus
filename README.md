@@ -21,6 +21,20 @@ session(:auto)
 |> assert_has([text: "Count: 1"], exact: true)
 ```
 
+Sigil locator examples:
+
+```elixir
+session(:static)
+|> visit("/articles")
+|> assert_has(~l"Articles")
+|> assert_has(~L/articles index/i)
+|> refute_has(~l"500 Internal Server Error")
+```
+
+Supported sigil aliases:
+- `~l` / `~t` for text locators.
+- `~L` for regex text locators.
+
 ## Conformance Harness
 
 Use ExUnit tags to select applicable drivers per scenario:
