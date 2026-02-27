@@ -187,3 +187,17 @@ Dependencies: `curl`, `jq`, `unzip`.
 - Fixture LiveView browser bootstrap lives in `assets/js/app.js`; run `mix assets.build` to sync `priv/static/assets/app.js`.
 - Browser worker topology and restart semantics are documented in `docs/adr/0004-browser-runtime-supervision-topology.md`.
 - Internal deterministic fixture routes are documented in `docs/fixtures.md`.
+
+## Migration Task
+
+Cerberus includes a migration task to help convert PhoenixTest usage:
+
+```bash
+mix igniter.cerberus.migrate_phoenix_test
+mix igniter.cerberus.migrate_phoenix_test --write test/my_app_web/features
+```
+
+Behavior:
+- Dry-run by default with `git diff --no-index` preview output.
+- Rewrites safe module references (`PhoenixTest` -> `Cerberus`) where deterministic.
+- Emits warnings for patterns requiring manual migration (for example `PhoenixTest.Playwright` and `conn |> visit(...)` flows).
