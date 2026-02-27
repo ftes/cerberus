@@ -1,10 +1,11 @@
 ---
 # cerberus-ng1c
 title: connect_params are dropped across LiveView navigation
-status: todo
+status: in-progress
 type: bug
+priority: normal
 created_at: 2026-02-27T21:48:15Z
-updated_at: 2026-02-27T21:48:15Z
+updated_at: 2026-02-27T22:35:41Z
 parent: cerberus-zqpu
 ---
 
@@ -33,3 +34,7 @@ Expected Cerberus parity checks:
 - [ ] Add failing conformance tests for live navigation transitions
 - [ ] Fix conn/session recycling path to preserve connect params where appropriate
 - [ ] Validate static/live/browser expectations and document caveats
+
+## Triage Note
+This candidate comes from an upstream phoenix_test issue or PR and may already work in Cerberus.
+If current Cerberus behavior already matches the expected semantics, add or keep the conformance test coverage and close this bean as done (no behavior change required).

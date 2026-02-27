@@ -5,7 +5,7 @@ status: completed
 type: bug
 priority: normal
 created_at: 2026-02-27T21:48:20Z
-updated_at: 2026-02-27T22:30:21Z
+updated_at: 2026-02-27T22:35:41Z
 parent: cerberus-zqpu
 ---
 
@@ -47,3 +47,7 @@ Expected Cerberus parity checks:
 - Hardened CSS attribute escaping in `Cerberus.Driver.Html` to escape control characters (`\n`, `\r`, `\t`, `\f`) as CSS escapes when generating unique selectors.
 - Added a focused Html unit test validating newline escaping and selector queryability.
 - Validated behavior with targeted harness tests for live/browser parity.
+
+## Triage Note
+This candidate comes from an upstream phoenix_test issue or PR and may already work in Cerberus.
+If current Cerberus behavior already matches the expected semantics, add or keep the conformance test coverage and close this bean as done (no behavior change required).

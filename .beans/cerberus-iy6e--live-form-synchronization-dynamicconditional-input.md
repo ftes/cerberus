@@ -3,8 +3,9 @@
 title: 'Live form synchronization: dynamic/conditional inputs and dispatch(change)'
 status: todo
 type: bug
+priority: normal
 created_at: 2026-02-27T21:48:03Z
-updated_at: 2026-02-27T21:48:03Z
+updated_at: 2026-02-27T22:35:41Z
 parent: cerberus-zqpu
 ---
 
@@ -57,3 +58,7 @@ Expected Cerberus parity checks:
 - [ ] Add failing browser-oracle conformance tests for stale-field submission
 - [ ] Align active_form/form_data pruning + dispatch(change) handling
 - [ ] Validate fixes across static/live/browser drivers
+
+## Triage Note
+This candidate comes from an upstream phoenix_test issue or PR and may already work in Cerberus.
+If current Cerberus behavior already matches the expected semantics, add or keep the conformance test coverage and close this bean as done (no behavior change required).

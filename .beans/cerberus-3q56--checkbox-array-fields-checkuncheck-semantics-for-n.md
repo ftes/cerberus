@@ -5,7 +5,7 @@ status: completed
 type: bug
 priority: normal
 created_at: 2026-02-27T21:47:54Z
-updated_at: 2026-02-27T22:20:18Z
+updated_at: 2026-02-27T22:35:41Z
 parent: cerberus-zqpu
 ---
 
@@ -47,3 +47,7 @@ Expected Cerberus parity checks:
   - Live route: `/live/checkbox-array`.
 - Added cross-driver conformance harness tests in `test/core/checkbox_array_conformance_test.exs` for both `check` and `uncheck` flows across `:live/:browser` and `:static/:browser` matrices.
 - Added public API tests for check/uncheck label shorthand and explicit locator validation.
+
+## Triage Note
+This candidate comes from an upstream phoenix_test issue or PR and may already work in Cerberus.
+If current Cerberus behavior already matches the expected semantics, add or keep the conformance test coverage and close this bean as done (no behavior change required).

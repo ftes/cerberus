@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-02-27T21:46:13Z
-updated_at: 2026-02-27T21:48:49Z
+updated_at: 2026-02-27T22:35:52Z
 parent: cerberus-zqpu
 ---
 
@@ -30,3 +30,12 @@ Created beans:
 - cerberus-yrpa: sub-100ms timeout granularity for async assertions (`#281`)
 
 Each bean includes upstream links plus embedded repro/failing snippets (from issue text or PR test additions) and a concrete implementation checklist.
+
+## Follow-up (2026-02-27)
+- [x] Add explicit triage note to each mined bug bean: upstream issue may already work in Cerberus.
+- [x] Clarify resolution rule in each bean: if behavior already works, add/keep conformance test and mark done.
+
+## Summary of Changes (Follow-up)
+- Added a Triage Note section to all beans created from the upstream mining pass: cerberus-54ud, cerberus-mz94, cerberus-3q56, cerberus-iy6e, cerberus-ng1c, cerberus-inh8, cerberus-yrpa.
+- Each note now states that upstream issue/PR candidates may already work in Cerberus.
+- Each note now includes the resolution rule: if behavior already works, add or keep conformance test coverage and close as done without extra behavior changes.
