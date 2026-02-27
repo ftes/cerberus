@@ -1,4 +1,5 @@
 IMPORTANT: before you do anything else, run the `beans prime` command and heed its output.
+Don't include backticks when using beans CLI (shell expansion).
 
 ## Be autonomous
 Read a lot up front. Try to ask all questions up front.
