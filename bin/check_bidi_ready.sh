@@ -17,6 +17,10 @@ Checks WebDriver BiDi readiness for Cerberus:
 - optionally installs a Chrome-matching ChromeDriver from Chrome for Testing,
 - performs a WebDriver session handshake with `webSocketUrl: true`.
 
+Environment:
+  CHROME         Required path to Chrome binary.
+  CHROMEDRIVER   Required path to ChromeDriver binary (unless --install is used).
+
 Options:
   --install     Download and use a Chrome-matching ChromeDriver when needed.
   --port PORT   Local ChromeDriver HTTP port (default: 9515).
@@ -40,29 +44,15 @@ platform() {
 }
 
 chrome_binary() {
-  if [[ -n "${CERBERUS_CHROME_BINARY:-}" ]]; then
-    [[ -x "$CERBERUS_CHROME_BINARY" ]] || fail "CERBERUS_CHROME_BINARY is not executable: $CERBERUS_CHROME_BINARY"
-    echo "$CERBERUS_CHROME_BINARY"
+  local configured="${CHROME:-}"
+
+  if [[ -n "$configured" ]]; then
+    [[ -x "$configured" ]] || fail "CHROME is not executable: $configured"
+    echo "$configured"
     return
   fi
 
-  local candidates=(
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
-    "$(command -v google-chrome 2>/dev/null || true)"
-    "$(command -v chromium 2>/dev/null || true)"
-    "$(command -v chromium-browser 2>/dev/null || true)"
-  )
-
-  local candidate
-  for candidate in "${candidates[@]}"; do
-    if [[ -n "$candidate" && -x "$candidate" ]]; then
-      echo "$candidate"
-      return
-    fi
-  done
-
-  fail "could not find a Chrome binary. Set CERBERUS_CHROME_BINARY."
+  fail "could not find a Chrome binary. Set CHROME."
 }
 
 version_of() {
@@ -114,34 +104,6 @@ download_matching_driver() {
   echo "$driver"
 }
 
-find_local_matching_driver() {
-  local chrome_major="$1"
-  local best_driver=""
-  local best_version=""
-  local driver
-  local version
-  local major
-
-  shopt -s nullglob
-  for driver in "$TOOLS_DIR"/chromedriver-*/chromedriver-*/chromedriver; do
-    [[ -x "$driver" ]] || continue
-    version="$(version_of "$driver")"
-    [[ -n "$version" ]] || continue
-    major="$(major_of "$version")"
-    [[ "$major" == "$chrome_major" ]] || continue
-
-    if [[ -z "$best_version" ]] || [[ "$(printf '%s\n%s\n' "$best_version" "$version" | sort -V | tail -n1)" == "$version" ]]; then
-      best_driver="$driver"
-      best_version="$version"
-    fi
-  done
-  shopt -u nullglob
-
-  if [[ -n "$best_driver" ]]; then
-    echo "$best_driver"
-  fi
-}
-
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --install)
@@ -168,21 +130,13 @@ CHROME_VERSION="$(version_of "$CHROME_BIN")"
 CHROME_MAJOR="$(major_of "$CHROME_VERSION")"
 PLATFORM_KEY="$(platform)"
 
-CHROMEDRIVER_BIN="${CERBERUS_CHROMEDRIVER:-}"
-
-if [[ -z "$CHROMEDRIVER_BIN" ]]; then
-  CHROMEDRIVER_BIN="$(find_local_matching_driver "$CHROME_MAJOR")"
-fi
-
-if [[ -z "$CHROMEDRIVER_BIN" ]]; then
-  CHROMEDRIVER_BIN="$(command -v chromedriver 2>/dev/null || true)"
-fi
+CHROMEDRIVER_BIN="${CHROMEDRIVER:-}"
 
 if [[ -z "$CHROMEDRIVER_BIN" || ! -x "$CHROMEDRIVER_BIN" ]]; then
   if [[ "$INSTALL" -eq 1 ]]; then
     CHROMEDRIVER_BIN="$(download_matching_driver "$CHROME_VERSION" "$PLATFORM_KEY")"
   else
-    fail "chromedriver not found. Re-run with --install or set CERBERUS_CHROMEDRIVER."
+    fail "chromedriver not found. Re-run with --install or set CHROMEDRIVER."
   fi
 fi
 

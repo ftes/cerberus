@@ -96,8 +96,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
     :ok
   end
 
-  defp ensure_runtime_session(%{runtime_session: runtime_session} = state)
-       when is_map(runtime_session) do
+  defp ensure_runtime_session(%{runtime_session: runtime_session} = state) when is_map(runtime_session) do
     {:ok, runtime_session, state}
   end
 
@@ -146,7 +145,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
   end
 
   defp start_managed_service(opts) do
-    binary = chromedriver_binary!(opts) |> Path.expand()
+    binary = opts |> chromedriver_binary!() |> Path.expand()
     port = Keyword.get(opts, :chromedriver_port) || random_port!()
     args = [to_charlist("--port=#{port}")]
 
@@ -241,10 +240,9 @@ defmodule Cerberus.Driver.Browser.Runtime do
           {to_charlist(url), []}
 
         :post ->
-          body = Jason.encode!(payload || %{})
+          body = JSON.encode!(payload || %{})
 
-          {to_charlist(url), [{~c"content-type", ~c"application/json"}], ~c"application/json",
-           body}
+          {to_charlist(url), [{~c"content-type", ~c"application/json"}], ~c"application/json", body}
       end
 
     case :httpc.request(method, request, [timeout: @status_timeout], body_format: :binary) do
@@ -259,14 +257,13 @@ defmodule Cerberus.Driver.Browser.Runtime do
   defp decode_body(status, ""), do: {:ok, status, %{}}
 
   defp decode_body(status, body) when is_binary(body) do
-    case Jason.decode(body) do
+    case JSON.decode(body) do
       {:ok, json} -> {:ok, status, json}
       {:error, _} -> {:ok, status, %{"raw" => body}}
     end
   end
 
-  defp maybe_delete_session(%{url: service_url}, session_id)
-       when is_binary(service_url) and is_binary(session_id) do
+  defp maybe_delete_session(%{url: service_url}, session_id) when is_binary(service_url) and is_binary(session_id) do
     _ = http_json(:delete, service_url <> "/session/" <> session_id, nil)
     :ok
   end
@@ -288,20 +285,16 @@ defmodule Cerberus.Driver.Browser.Runtime do
   end
 
   defp browser_opts(opts) do
-    Application.get_env(:cerberus, :browser, [])
+    :cerberus
+    |> Application.get_env(:browser, [])
     |> Keyword.merge(Keyword.get(opts, :browser, []))
   end
 
   defp chrome_options(opts) do
     merged = browser_opts(opts)
     args = chrome_args(opts, merged)
-
-    options = %{"args" => args}
-
-    case chrome_binary(opts, merged) do
-      nil -> options
-      binary -> Map.put(options, "binary", binary)
-    end
+    binary = chrome_binary!(opts, merged)
+    %{"args" => args, "binary" => binary}
   end
 
   defp chrome_args(opts, merged) do
@@ -311,25 +304,27 @@ defmodule Cerberus.Driver.Browser.Runtime do
     defaults ++ ["--disable-gpu", "--no-sandbox"] ++ custom_args
   end
 
-  defp chrome_binary(opts, merged) do
-    Keyword.get(opts, :chrome_binary) ||
-      Keyword.get(merged, :chrome_binary) ||
-      System.get_env("CERBERUS_CHROME_BINARY") ||
-      default_chrome_binary()
-  end
-
-  defp chromedriver_binary!(opts) do
-    binary =
-      Keyword.get(opts, :chromedriver_binary) ||
-        browser_opts(opts)[:chromedriver_binary] ||
-        System.get_env("CERBERUS_CHROMEDRIVER") ||
-        System.find_executable("chromedriver")
+  defp chrome_binary!(opts, merged) do
+    binary = Keyword.get(opts, :chrome_binary) || Keyword.get(merged, :chrome_binary)
 
     if is_binary(binary) and File.exists?(binary) do
       binary
     else
       raise ArgumentError,
-            "chromedriver binary not found; set CERBERUS_CHROMEDRIVER or :cerberus, :browser chromedriver_binary"
+            "chrome binary not configured; set :cerberus, :browser chrome_binary (or pass :chrome_binary)"
+    end
+  end
+
+  defp chromedriver_binary!(opts) do
+    binary =
+      Keyword.get(opts, :chromedriver_binary) ||
+        browser_opts(opts)[:chromedriver_binary]
+
+    if is_binary(binary) and File.exists?(binary) do
+      binary
+    else
+      raise ArgumentError,
+            "chromedriver binary not configured; set :cerberus, :browser chromedriver_binary (or pass :chromedriver_binary)"
     end
   end
 
@@ -338,20 +333,6 @@ defmodule Cerberus.Driver.Browser.Runtime do
     {:ok, port} = :inet.port(socket)
     :gen_tcp.close(socket)
     port
-  end
-
-  defp default_chrome_binary do
-    candidates = [
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-      "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
-      System.find_executable("google-chrome"),
-      System.find_executable("chromium"),
-      System.find_executable("chromium-browser")
-    ]
-
-    Enum.find(candidates, fn candidate ->
-      is_binary(candidate) and File.exists?(candidate)
-    end)
   end
 
   defp ensure_http_stack! do

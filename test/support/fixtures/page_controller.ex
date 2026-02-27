@@ -3,9 +3,7 @@ defmodule Cerberus.Fixtures.PageController do
 
   use Phoenix.Controller, formats: [:html]
 
-  alias Cerberus.Fixtures
-
-  def index(conn, _params), do: redirect(conn, to: Fixtures.articles_path())
+  def index(conn, _params), do: redirect(conn, to: "/articles")
 
   def articles(conn, _params) do
     html(conn, """
@@ -17,18 +15,121 @@ defmodule Cerberus.Fixtures.PageController do
       </head>
       <body>
         <main>
-          <h1>#{Fixtures.articles_title()}</h1>
-          <p>#{Fixtures.articles_summary()}</p>
-          <p style="display:none">#{Fixtures.hidden_helper_text()}</p>
-          <a href="#{Fixtures.counter_path()}">#{Fixtures.counter_link()}</a>
+          <h1>Articles</h1>
+          <p>This is an articles index page</p>
+          <p style="display:none">Hidden helper text</p>
+          <a href="/live/counter">Counter</a>
         </main>
       </body>
     </html>
     """)
   end
 
-  def redirect_static(conn, _params), do: redirect(conn, to: Fixtures.articles_path())
-  def redirect_live(conn, _params), do: redirect(conn, to: Fixtures.counter_path())
+  def redirect_static(conn, _params), do: redirect(conn, to: "/articles")
+  def redirect_live(conn, _params), do: redirect(conn, to: "/live/counter")
+
+  def search_form(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Search Form</title>
+      </head>
+      <body>
+        <main>
+          <h1>Search</h1>
+          <a href="/articles">Articles</a>
+          <form action="/search/results" method="get">
+            <label for="search_q">Search term</label>
+            <input id="search_q" name="q" type="text" value="" />
+            <button type="submit">Run Search</button>
+          </form>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def search_results(conn, params) do
+    query = Map.get(params, "q", "")
+
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Search Results</title>
+      </head>
+      <body>
+        <main>
+          <p>Search query: #{query}</p>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def owner_form(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Owner Form</title>
+      </head>
+      <body>
+        <main>
+          <form id="owner-form" action="/owner-form/result" method="get">
+            <label for="owner_name">Name</label>
+            <input id="owner_name" name="name" form="owner-form" type="text" value="" />
+          </form>
+          <button type="button" form="owner-form">Reset</button>
+          <button type="submit" form="owner-form" name="form-button" value="save-owner-form">
+            Save Owner Form
+          </button>
+          <button
+            type="submit"
+            form="owner-form"
+            formaction="/owner-form/redirect"
+            name="form-button"
+            value="save-owner-form-redirect"
+          >
+            Save Owner Form Redirect
+          </button>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def owner_form_result(conn, params) do
+    name = Map.get(params, "name", "")
+    button = Map.get(params, "form-button", "")
+
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Owner Form Result</title>
+      </head>
+      <body>
+        <main>
+          <p id="form-data-name">name: #{name}</p>
+          <p id="form-data-button">form-button: #{button}</p>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def owner_form_redirect(conn, params) do
+    query = URI.encode_query(params)
+    path = "/owner-form/result"
+    destination = if query == "", do: path, else: path <> "?" <> query
+    redirect(conn, to: destination)
+  end
 
   def oracle_mismatch(conn, _params) do
     html(conn, """
@@ -40,7 +141,7 @@ defmodule Cerberus.Fixtures.PageController do
       </head>
       <body>
         <main>
-          <p>#{Fixtures.oracle_static_marker()}</p>
+          <p>Oracle mismatch static fixture marker</p>
         </main>
       </body>
     </html>

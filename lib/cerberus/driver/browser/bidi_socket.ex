@@ -43,8 +43,7 @@ defmodule Cerberus.Driver.Browser.BiDiSocket do
   end
 
   @impl true
-  def handle_call({:ensure_connected, _url}, _from, %{socket: socket} = state)
-      when is_pid(socket) do
+  def handle_call({:ensure_connected, _url}, _from, %{socket: socket} = state) when is_pid(socket) do
     if Process.alive?(socket) do
       {:reply, {:ok, socket}, state}
     else
@@ -62,8 +61,7 @@ defmodule Cerberus.Driver.Browser.BiDiSocket do
     end
   end
 
-  def handle_call({:send_text, payload}, _from, %{socket: socket} = state)
-      when is_pid(socket) do
+  def handle_call({:send_text, payload}, _from, %{socket: socket} = state) when is_pid(socket) do
     if Process.alive?(socket) do
       :ok = WS.send_text(socket, payload)
       {:reply, :ok, state}
@@ -95,10 +93,7 @@ defmodule Cerberus.Driver.Browser.BiDiSocket do
   end
 
   @impl true
-  def handle_info(
-        {:DOWN, monitor_ref, :process, socket, _reason},
-        %{monitor_ref: monitor_ref, socket: socket} = state
-      ) do
+  def handle_info({:DOWN, monitor_ref, :process, socket, _reason}, %{monitor_ref: monitor_ref, socket: socket} = state) do
     {:noreply, clear_state(state)}
   end
 

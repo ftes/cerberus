@@ -10,7 +10,10 @@ defmodule Cerberus.MixProject do
       start_permanent: Mix.env() == :prod,
       cli: cli(),
       aliases: aliases(),
-      deps: deps()
+      deps: deps(),
+      description: description(),
+      docs: docs(),
+      package: package()
     ]
   end
 
@@ -27,23 +30,44 @@ defmodule Cerberus.MixProject do
       {:phoenix, "~> 1.7"},
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_view, "~> 1.0"},
-      {:jason, "~> 1.4"},
       {:websockex, "~> 0.4.3"},
-      {:floki, "~> 0.38"},
-      {:lazy_html, ">= 0.1.0", only: :test},
-      {:plug_cowboy, "~> 2.7", only: :test}
+      {:lazy_html, ">= 0.1.0"},
+      {:nimble_options, "~> 1.1"},
+      {:styler, "~> 1.10", only: [:dev, :test], runtime: false},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:plug_cowboy, "~> 2.7", only: :test},
+      {:ex_doc, "~> 0.38", only: :dev, runtime: false}
     ]
   end
 
   defp aliases do
     [
-      precommit: ["format --check-formatted", "test"]
+      precommit: ["format --check-formatted", "credo --strict", "cmd env MIX_ENV=test mix test"]
     ]
   end
 
   defp cli do
     [
       preferred_envs: [precommit: :test]
+    ]
+  end
+
+  defp docs do
+    [
+      main: "readme",
+      extras: ["README.md"]
+    ]
+  end
+
+  defp description do
+    "Experimental Phoenix test harness with one API across static, LiveView, and browser drivers."
+  end
+
+  defp package do
+    [
+      name: "fluffy",
+      licenses: ["MIT"],
+      files: ~w(lib priv mix.exs README* LICENSE* docs)
     ]
   end
 

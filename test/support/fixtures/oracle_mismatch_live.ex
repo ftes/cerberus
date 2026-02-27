@@ -2,8 +2,6 @@ defmodule Cerberus.Fixtures.OracleMismatchLive do
   @moduledoc false
   use Phoenix.LiveView
 
-  alias Cerberus.Fixtures
-
   @impl true
   def mount(_params, _session, socket) do
     {:ok, socket}
@@ -13,7 +11,7 @@ defmodule Cerberus.Fixtures.OracleMismatchLive do
   def render(assigns) do
     ~H"""
     <main>
-      <p><%= Fixtures.oracle_live_marker() %></p>
+      <p>Oracle mismatch live fixture marker</p>
     </main>
     """
   end

@@ -5,9 +5,12 @@ defmodule Cerberus.Driver.Html do
 
   @spec texts(String.t(), true | false | :any) :: [String.t()]
   def texts(html, visibility \\ true) when is_binary(html) do
-    case Floki.parse_document(html) do
-      {:ok, nodes} ->
-        {visible, hidden} = collect(nodes, false, {[], []})
+    case parse_document(html) do
+      {:ok, lazy_html} ->
+        {visible, hidden} =
+          lazy_html
+          |> LazyHTML.to_tree()
+          |> collect(false, {[], []})
 
         case visibility do
           true -> visible
@@ -23,42 +26,178 @@ defmodule Cerberus.Driver.Html do
   @spec find_link(String.t(), String.t() | Regex.t(), keyword()) ::
           {:ok, %{text: String.t(), href: String.t()}} | :error
   def find_link(html, expected, opts) when is_binary(html) do
-    with {:ok, nodes} <- Floki.parse_document(html) do
-      nodes
-      |> Floki.find("a[href]")
-      |> Enum.find_value(:error, fn node ->
-        text = node_text(node)
+    case parse_document(html) do
+      {:ok, lazy_html} ->
+        find_link_in_doc(lazy_html, expected, opts)
 
-        if Query.match_text?(text, expected, opts) do
-          href = Floki.attribute(node, "href") |> List.first()
-          {:ok, %{text: text, href: href}}
-        else
-          false
-        end
-      end)
-    else
-      _ -> :error
+      _ ->
+        :error
     end
   end
 
   @spec find_button(String.t(), String.t() | Regex.t(), keyword()) ::
           {:ok, %{text: String.t()}} | :error
   def find_button(html, expected, opts) when is_binary(html) do
-    with {:ok, nodes} <- Floki.parse_document(html) do
-      nodes
-      |> Floki.find("button")
-      |> Enum.find_value(:error, fn node ->
-        text = node_text(node)
+    case parse_document(html) do
+      {:ok, lazy_html} ->
+        find_button_in_doc(lazy_html, expected, opts)
 
-        if Query.match_text?(text, expected, opts) do
-          {:ok, %{text: text}}
-        else
-          false
-        end
-      end)
-    else
-      _ -> :error
+      _ ->
+        :error
     end
+  end
+
+  @spec find_form_field(String.t(), String.t() | Regex.t(), keyword()) ::
+          {:ok, %{label: String.t(), name: String.t(), id: String.t() | nil, form: String.t() | nil}} | :error
+  def find_form_field(html, expected, opts) when is_binary(html) do
+    case parse_document(html) do
+      {:ok, lazy_html} ->
+        find_form_field_in_doc(lazy_html, expected, opts)
+
+      _ ->
+        :error
+    end
+  end
+
+  @spec find_submit_button(String.t(), String.t() | Regex.t(), keyword()) ::
+          {:ok,
+           %{
+             text: String.t(),
+             action: String.t() | nil,
+             method: String.t() | nil,
+             form: String.t() | nil,
+             button_name: String.t() | nil,
+             button_value: String.t() | nil
+           }}
+          | :error
+  def find_submit_button(html, expected, opts) when is_binary(html) do
+    case parse_document(html) do
+      {:ok, lazy_html} ->
+        find_submit_button_in_doc(lazy_html, expected, opts)
+
+      _ ->
+        :error
+    end
+  end
+
+  defp find_link_in_doc(lazy_html, expected, opts) do
+    find_first_matching(lazy_html, "a[href]", expected, opts, fn node, text ->
+      %{text: text, href: attr(node, "href")}
+    end)
+  end
+
+  defp find_button_in_doc(lazy_html, expected, opts) do
+    find_first_matching(lazy_html, "button", expected, opts, fn _node, text ->
+      %{text: text}
+    end)
+  end
+
+  defp find_form_field_in_doc(lazy_html, expected, opts) do
+    lazy_html
+    |> LazyHTML.query("label")
+    |> Enum.find_value(:error, fn label_node ->
+      label_text = node_text(label_node)
+
+      with true <- Query.match_text?(label_text, expected, opts),
+           {:ok, %{name: name} = field} <- field_for_label(lazy_html, label_node),
+           true <- is_binary(name) and name != "" do
+        {:ok, %{label: label_text, name: name, id: field.id, form: field.form}}
+      else
+        _ -> false
+      end
+    end)
+  end
+
+  defp find_submit_button_in_doc(lazy_html, expected, opts) do
+    case find_submit_button_in_forms(lazy_html, expected, opts) do
+      {:ok, _button} = ok ->
+        ok
+
+      :error ->
+        find_submit_button_in_owner_form(lazy_html, expected, opts)
+    end
+  end
+
+  defp find_submit_button_in_forms(lazy_html, expected, opts) do
+    lazy_html
+    |> LazyHTML.query("form")
+    |> Enum.reduce_while(:error, fn form_node, _acc ->
+      case find_submit_button_in_form(form_node, expected, opts) do
+        {:ok, _button} = ok -> {:halt, ok}
+        :error -> {:cont, :error}
+      end
+    end)
+  end
+
+  defp find_submit_button_in_form(form_node, expected, opts) do
+    form = attr(form_node, "id")
+    action = attr(form_node, "action")
+    method = attr(form_node, "method")
+    form_meta = %{form: form, action: action, method: method}
+
+    form_node
+    |> LazyHTML.query("button")
+    |> Enum.find_value(:error, fn button_node ->
+      build_submit_button(button_node, form_meta, expected, opts)
+    end)
+  end
+
+  defp find_submit_button_in_owner_form(lazy_html, expected, opts) do
+    lazy_html
+    |> LazyHTML.query("button[form]")
+    |> Enum.find_value(:error, fn button_node ->
+      owner_form = attr(button_node, "form")
+
+      with true <- is_binary(owner_form) and owner_form != "",
+           form_node when not is_nil(form_node) <- form_by_id(lazy_html, owner_form) do
+        action = attr(form_node, "action")
+        method = attr(form_node, "method")
+        form_meta = %{form: owner_form, action: action, method: method}
+        build_submit_button(button_node, form_meta, expected, opts)
+      else
+        _ -> false
+      end
+    end)
+  end
+
+  defp build_submit_button(button_node, form_meta, expected, opts) do
+    text = node_text(button_node)
+    type = attr(button_node, "type") || "submit"
+
+    if submit_button_match?(type, text, expected, opts) do
+      action = attr(button_node, "formaction") || form_meta.action
+      method = attr(button_node, "formmethod") || form_meta.method
+
+      {:ok,
+       %{
+         text: text,
+         action: action,
+         method: method,
+         form: form_meta.form,
+         button_name: attr(button_node, "name"),
+         button_value: attr(button_node, "value")
+       }}
+    else
+      false
+    end
+  end
+
+  defp submit_button_match?(type, text, expected, opts) do
+    type in ["submit", ""] and Query.match_text?(text, expected, opts)
+  end
+
+  defp find_first_matching(lazy_html, selector, expected, opts, build_fun) do
+    lazy_html
+    |> LazyHTML.query(selector)
+    |> Enum.find_value(:error, fn node ->
+      text = node_text(node)
+
+      if Query.match_text?(text, expected, opts) do
+        {:ok, build_fun.(node, text)}
+      else
+        false
+      end
+    end)
   end
 
   defp collect(nodes, hidden_parent?, acc) when is_list(nodes) do
@@ -116,8 +255,49 @@ defmodule Cerberus.Driver.Html do
 
   defp node_text(node) do
     node
-    |> Floki.text()
+    |> LazyHTML.text()
     |> String.replace("\u00A0", " ")
     |> String.trim()
+  end
+
+  defp field_for_label(lazy_html, label_node) do
+    case attr(label_node, "for") do
+      nil ->
+        label_node
+        |> LazyHTML.query("input,textarea,select")
+        |> Enum.find_value(:error, fn node -> field_node_to_map(node) end)
+
+      id ->
+        lazy_html
+        |> LazyHTML.query("[id='#{id}']")
+        |> Enum.find_value(:error, fn node -> field_node_to_map(node) end)
+    end
+  end
+
+  defp field_node_to_map(node) do
+    name = attr(node, "name")
+    id = attr(node, "id")
+    form = attr(node, "form")
+    {:ok, %{name: name, id: id, form: form}}
+  end
+
+  defp attr(node, name) do
+    node
+    |> LazyHTML.attribute(name)
+    |> List.first()
+  end
+
+  defp parse_document(html) when is_binary(html) do
+    {:ok, LazyHTML.from_document(html)}
+  rescue
+    _ -> :error
+  end
+
+  defp form_by_id(lazy_html, id) do
+    lazy_html
+    |> LazyHTML.query("form")
+    |> Enum.find(fn form_node ->
+      attr(form_node, "id") == id
+    end)
   end
 end

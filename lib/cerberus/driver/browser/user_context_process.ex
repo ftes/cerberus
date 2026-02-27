@@ -39,6 +39,16 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(pid, {:evaluate, expression}, 10_000)
   end
 
+  @spec await_ready(pid(), keyword()) :: {:ok, map()} | {:error, String.t(), map()}
+  def await_ready(pid, opts \\ []) when is_pid(pid) and is_list(opts) do
+    GenServer.call(pid, {:await_ready, opts}, 10_000)
+  end
+
+  @spec last_readiness(pid()) :: map()
+  def last_readiness(pid) when is_pid(pid) do
+    GenServer.call(pid, :last_readiness)
+  end
+
   @impl true
   def init(opts) do
     owner = Keyword.fetch!(opts, :owner)
@@ -79,15 +89,19 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   end
 
   def handle_call({:evaluate, expression}, _from, state) do
-    {:reply, BrowsingContextProcess.evaluate(state.active_browsing_context_pid, expression),
-     state}
+    {:reply, BrowsingContextProcess.evaluate(state.active_browsing_context_pid, expression), state}
+  end
+
+  def handle_call({:await_ready, opts}, _from, state) do
+    {:reply, BrowsingContextProcess.await_ready(state.active_browsing_context_pid, opts), state}
+  end
+
+  def handle_call(:last_readiness, _from, state) do
+    {:reply, BrowsingContextProcess.last_readiness(state.active_browsing_context_pid), state}
   end
 
   @impl true
-  def handle_info(
-        {:DOWN, ref, :process, _pid, reason},
-        %{active_browsing_context_ref: ref} = state
-      ) do
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{active_browsing_context_ref: ref} = state) do
     {:stop, {:browsing_context_down, reason}, state}
   end
 

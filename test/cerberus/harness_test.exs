@@ -47,6 +47,22 @@ defmodule Cerberus.HarnessTest do
     end
   end
 
+  test "run rejects drivers opt override and requires tag/context selection" do
+    context = %{drivers: [:static]}
+
+    assert_raise ArgumentError, ~r/no longer supports :drivers opt/, fn ->
+      Harness.run(
+        context,
+        fn session ->
+          session
+          |> visit("/articles")
+          |> assert_has(text: "Articles")
+        end,
+        drivers: [:browser]
+      )
+    end
+  end
+
   test "sort_results sorts by operation and driver" do
     unsorted = [
       %{driver: :live, operation: :refute_has},

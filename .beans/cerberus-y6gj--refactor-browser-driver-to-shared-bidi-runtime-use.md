@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-02-27T09:50:55Z
-updated_at: 2026-02-27T10:34:57Z
+updated_at: 2026-02-27T10:56:29Z
 parent: cerberus-sfku
 ---
 
@@ -63,3 +63,18 @@ Refactor browser driver internals to match the decided architecture:
 - Fixed ChromeDriver version-selection behavior in test boot: test_helper now chooses a driver whose major version matches the selected Chrome binary, instead of picking the lexicographically latest cached driver.
 
 - Updated bin/check_bidi_ready.sh to prefer a locally cached matching ChromeDriver under tmp/browser-tools before PATH chromedriver; this removes false major-mismatch failures when PATH points to a different major.
+
+- Decision: no Chrome/ChromeDriver version check at runtime startup; rely on configured binaries, with optional preflight via bin/check_bidi_ready.sh.
+
+- Simplified test runtime binary configuration: moved browser binary settings out of test_helper into config/test.exs, with CHROME and CHROMEDRIVER required via System.fetch_env!.
+- Added config/config.exs and config/dev.exs to support environment-specific config loading.
+- Added .env with CHROME and CHROMEDRIVER defaults and updated README with source .env workflow.
+- Updated bin/check_bidi_ready.sh to accept CHROME and CHROMEDRIVER env vars (while keeping CERBERUS_* fallback).
+
+- Added .envrc to load .env via direnv (source_env .env) and updated README setup to use direnv allow for browser binary envs.
+
+- Updated .envrc to use explicit export CHROME=... and export CHROMEDRIVER=... so direnv always exports both variables directly.
+
+- Enforced strict browser binary config in runtime: removed CERBERUS_* / PATH / default binary fallbacks; browser startup now requires explicit :browser chrome_binary and chromedriver_binary config (or explicit session opts).
+- Enforced strict env contract in check_bidi_ready.sh: CHROME is required and CHROMEDRIVER is required unless --install is provided; removed fallback discovery paths.
+- Updated README and script help text to document strict no-fallback behavior.

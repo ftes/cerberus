@@ -17,6 +17,11 @@ defmodule Cerberus.Fixtures.Router do
 
     get("/", PageController, :index)
     get("/articles", PageController, :articles)
+    get("/search", PageController, :search_form)
+    get("/search/results", PageController, :search_results)
+    get("/owner-form", PageController, :owner_form)
+    get("/owner-form/result", PageController, :owner_form_result)
+    get("/owner-form/redirect", PageController, :owner_form_redirect)
     get("/redirect/static", PageController, :redirect_static)
     get("/redirect/live", PageController, :redirect_live)
     get("/oracle/mismatch", PageController, :oracle_mismatch)

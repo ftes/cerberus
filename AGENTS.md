@@ -10,3 +10,6 @@ IMPORTANT: before you do anything else, run the `beans prime` command and heed i
   - Use a single shared browser process.
   - Use a single shared BiDi connection (per worker/runtime) and multiplex messages by command id.
   - Use an isolated browser context per test for state isolation (not just separate tabs).
+  - Run browser-tagged tests outside the Codex sandbox (escalated permissions), since Chrome startup can fail inside the sandbox.
+- If in doubt about static/live driver behavior, check PhoenixTest static and live driver implementations for reference patterns.
+- If in doubt about browser driver behavior, use Cuprite as the primary implementation reference; use Playwright JS as the secondary reference.

@@ -52,6 +52,21 @@ mix test --only conformance
 
 Core integration specs live in `test/core/`.
 
+## Browser Binary Config
+
+Test runs now require these env vars:
+- `CHROME`
+- `CHROMEDRIVER`
+
+`config/test.exs` reads both with `System.fetch_env!/1`.
+There is no PATH/default fallback for browser binaries.
+
+The repo includes a local `.env` with working defaults. Load it before running browser tests:
+
+```bash
+direnv allow
+```
+
 ## WebDriver BiDi Readiness
 
 Use the built-in check script to validate local browser runtime setup:
@@ -59,6 +74,10 @@ Use the built-in check script to validate local browser runtime setup:
 ```bash
 bin/check_bidi_ready.sh --install
 ```
+
+The script reads:
+- `CHROME` (required)
+- `CHROMEDRIVER` (required unless `--install` is used)
 
 The script will:
 - detect your Chrome binary/version,

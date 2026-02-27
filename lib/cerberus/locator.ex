@@ -32,16 +32,15 @@ defmodule Cerberus.Locator do
   defp normalize_map(locator_map, original) do
     text = Map.get(locator_map, :text, Map.get(locator_map, "text", :__missing__))
 
-    unless text != :__missing__ and (is_binary(text) or is_struct(text, Regex)) do
+    if !(text != :__missing__ and (is_binary(text) or is_struct(text, Regex))) do
       raise InvalidLocatorError,
         locator: original,
-        message:
-          "invalid locator #{inspect(original)}; :text must be a string or regex for slice 1"
+        message: "invalid locator #{inspect(original)}; :text must be a string or regex for slice 1"
     end
 
     allowed_keys = MapSet.new([:text, "text"])
 
-    case Map.keys(locator_map) |> Enum.reject(&MapSet.member?(allowed_keys, &1)) do
+    case locator_map |> Map.keys() |> Enum.reject(&MapSet.member?(allowed_keys, &1)) do
       [] ->
         %__MODULE__{kind: :text, value: text}
 

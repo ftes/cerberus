@@ -1,0 +1,71 @@
+defmodule Cerberus.CoreFormActionsTest do
+  use ExUnit.Case, async: true
+
+  import Cerberus
+
+  alias Cerberus.Harness
+
+  @moduletag :conformance
+
+  @tag drivers: [:static, :browser]
+  test "click_link, fill_in, and submit are consistent across static and browser drivers",
+       context do
+    Harness.run!(
+      context,
+      fn session ->
+        session
+        |> visit("/search")
+        |> click_link(text: "Articles")
+        |> assert_has([text: "Articles"], exact: true)
+        |> visit("/search")
+        |> fill_in([text: "Search term"], "phoenix")
+        |> submit(text: "Run Search")
+        |> assert_has([text: "Search query: phoenix"], exact: true)
+      end
+    )
+  end
+
+  @tag browser: true
+  @tag drivers: [:live, :browser]
+  test "click_button works on live counter flow for live and browser drivers", context do
+    Harness.run!(
+      context,
+      fn session ->
+        session
+        |> visit("/live/counter")
+        |> click_button(text: "Increment")
+        |> assert_has([text: "Count: 1"], exact: true)
+      end
+    )
+  end
+
+  @tag drivers: [:live]
+  test "fill_in and submit return explicit unsupported errors on live routes for live driver",
+       context do
+    fill_results =
+      Harness.run(
+        context,
+        fn session ->
+          session
+          |> visit("/live/counter")
+          |> fill_in([text: "Search term"], "x")
+        end
+      )
+
+    assert [%{status: :error, message: fill_message}] = fill_results
+    assert fill_message =~ "does not yet support fill_in on live routes"
+
+    submit_results =
+      Harness.run(
+        context,
+        fn session ->
+          session
+          |> visit("/live/counter")
+          |> submit(text: "Run Search")
+        end
+      )
+
+    assert [%{status: :error, message: submit_message}] = submit_results
+    assert submit_message =~ "does not yet support submit on live routes"
+  end
+end

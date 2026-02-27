@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-27T08:07:23Z
-updated_at: 2026-02-27T10:20:05Z
+updated_at: 2026-02-27T12:43:28Z
 parent: cerberus-sfku
 ---
 
@@ -40,3 +40,11 @@ Add PhoenixTest-style automatic static/live driver detection and automatic drive
 - Keep one harness runner (`Cerberus.Harness`) and gate scenarios via driver tags, rather than splitting harness implementations.
 - Reuse shared fixture markup primitives for baseline assertions so static/live/browser validate the same DOM contract.
 - Keep live-only behavior coverage as extension scenarios (subset driver matrix), while baseline scenarios stay cross-driver.
+
+## Reasons for Scrapping
+
+Explicit driver matrices are preferred over automatic static/live switching. We will keep driver choice explicit in tests and split conformance suites into static+browser and live+browser groups instead of introducing :auto mode.
+
+## Reopened (2026-02-27)
+
+Reopened per product direction: non-browser execution should mirror PhoenixTest behavior by auto-detecting static vs live on first visit and re-evaluating mode after each interaction/navigation transition.

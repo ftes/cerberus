@@ -11,7 +11,8 @@ defmodule Cerberus.Driver.Browser.BiDi do
   @type state :: %{
           next_id: pos_integer(),
           pending: %{optional(pos_integer()) => %{from: GenServer.from(), timer: reference()}},
-          socket: pid() | nil
+          socket: pid() | nil,
+          subscribers: %{optional(pid()) => reference()}
         }
 
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -20,15 +21,13 @@ defmodule Cerberus.Driver.Browser.BiDi do
   end
 
   @spec command(String.t(), map(), keyword()) :: {:ok, map()} | {:error, String.t(), map()}
-  def command(method, params \\ %{}, opts \\ [])
-      when is_binary(method) and is_map(params) and is_list(opts) do
+  def command(method, params \\ %{}, opts \\ []) when is_binary(method) and is_map(params) and is_list(opts) do
     command(__MODULE__, method, params, opts)
   end
 
   @spec command(GenServer.server(), String.t(), map(), keyword()) ::
           {:ok, map()} | {:error, String.t(), map()}
-  def command(pid, method, params, opts)
-      when is_binary(method) and is_map(params) do
+  def command(pid, method, params, opts) when is_binary(method) and is_map(params) do
     timeout = Keyword.get(opts, :timeout, @default_command_timeout)
     GenServer.call(pid, {:command, method, params, timeout}, timeout + 1_000)
   end
@@ -38,12 +37,32 @@ defmodule Cerberus.Driver.Browser.BiDi do
     GenServer.stop(pid, :normal)
   end
 
-  @impl true
-  def init(_opts) do
-    {:ok, %{next_id: 1, pending: %{}, socket: nil}}
+  @spec subscribe(pid()) :: :ok | {:error, term()}
+  def subscribe(subscriber) when is_pid(subscriber) do
+    GenServer.call(__MODULE__, {:subscribe, subscriber})
+  end
+
+  @spec unsubscribe(pid()) :: :ok
+  def unsubscribe(subscriber) when is_pid(subscriber) do
+    GenServer.call(__MODULE__, {:unsubscribe, subscriber})
   end
 
   @impl true
+  def init(_opts) do
+    {:ok, %{next_id: 1, pending: %{}, socket: nil, subscribers: %{}}}
+  end
+
+  @impl true
+  def handle_call({:subscribe, subscriber}, _from, state) do
+    state = put_subscriber(state, subscriber)
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:unsubscribe, subscriber}, _from, state) do
+    state = drop_subscriber(state, subscriber)
+    {:reply, :ok, state}
+  end
+
   def handle_call({:command, method, params, timeout}, from, state) do
     with {:ok, web_socket_url} <- Runtime.web_socket_url(),
          {:ok, socket} <- BiDiSocket.ensure_connected(web_socket_url),
@@ -51,8 +70,7 @@ defmodule Cerberus.Driver.Browser.BiDi do
       {:noreply, next_state}
     else
       {:error, reason} ->
-        {:reply, {:error, "failed to dispatch bidi command", %{"reason" => inspect(reason)}},
-         state}
+        {:reply, {:error, "failed to dispatch bidi command", %{"reason" => inspect(reason)}}, state}
 
       {:error, reason, details} ->
         {:reply, {:error, reason, details}, state}
@@ -64,19 +82,21 @@ defmodule Cerberus.Driver.Browser.BiDi do
   end
 
   @impl true
-  def handle_info({:cerberus_bidi_frame, socket, payload}, %{socket: socket} = state)
-      when is_binary(payload) do
-    case Jason.decode(payload) do
+  def handle_info({:cerberus_bidi_frame, socket, payload}, %{socket: socket} = state) when is_binary(payload) do
+    case JSON.decode(payload) do
       {:ok, %{"id" => id} = response} ->
         {:noreply, resolve_pending(state, id, response)}
+
+      {:ok, %{"method" => _method} = event} ->
+        broadcast_event(state, event)
+        {:noreply, state}
 
       _ ->
         {:noreply, state}
     end
   end
 
-  def handle_info({:cerberus_bidi_disconnected, socket, reason}, %{socket: socket} = state)
-      when is_pid(socket) do
+  def handle_info({:cerberus_bidi_disconnected, socket, reason}, %{socket: socket} = state) when is_pid(socket) do
     BiDiSocket.clear(socket)
     pending = Map.values(state.pending)
 
@@ -96,6 +116,16 @@ defmodule Cerberus.Driver.Browser.BiDi do
       {entry, pending} ->
         GenServer.reply(entry.from, {:error, "bidi command timeout", %{"id" => id}})
         {:noreply, %{state | pending: pending}}
+    end
+  end
+
+  def handle_info({:DOWN, ref, :process, pid, _reason}, state) do
+    case Map.get(state.subscribers, pid) do
+      ^ref ->
+        {:noreply, %{state | subscribers: Map.delete(state.subscribers, pid)}}
+
+      _ ->
+        {:noreply, state}
     end
   end
 
@@ -128,7 +158,7 @@ defmodule Cerberus.Driver.Browser.BiDi do
 
   defp send_command(state, socket, method, params, timeout, from) do
     id = state.next_id
-    message = Jason.encode!(%{"id" => id, "method" => method, "params" => params})
+    message = JSON.encode!(%{"id" => id, "method" => method, "params" => params})
 
     case BiDiSocket.send_text(message) do
       :ok ->
@@ -161,5 +191,33 @@ defmodule Cerberus.Driver.Browser.BiDi do
   defp reply_and_cancel(entry, reply) do
     Process.cancel_timer(entry.timer)
     GenServer.reply(entry.from, reply)
+  end
+
+  defp put_subscriber(state, subscriber) do
+    case Map.get(state.subscribers, subscriber) do
+      nil ->
+        ref = Process.monitor(subscriber)
+        %{state | subscribers: Map.put(state.subscribers, subscriber, ref)}
+
+      _ref ->
+        state
+    end
+  end
+
+  defp drop_subscriber(state, subscriber) do
+    case Map.pop(state.subscribers, subscriber) do
+      {nil, _subscribers} ->
+        state
+
+      {ref, subscribers} ->
+        Process.demonitor(ref, [:flush])
+        %{state | subscribers: subscribers}
+    end
+  end
+
+  defp broadcast_event(state, event) do
+    Enum.each(Map.keys(state.subscribers), fn subscriber ->
+      send(subscriber, {:cerberus_bidi_event, event})
+    end)
   end
 end

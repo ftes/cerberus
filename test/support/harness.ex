@@ -12,9 +12,8 @@ defmodule Cerberus.Harness do
   - return normalized result maps for reporting and assertions.
   """
 
-  alias ExUnit.AssertionError
-
   alias Cerberus.Session
+  alias ExUnit.AssertionError
 
   @default_drivers [:static, :live, :browser]
 
@@ -33,22 +32,20 @@ defmodule Cerberus.Harness do
             message: String.t() | nil
           }
 
-  @spec drivers(map() | keyword()) :: [driver_kind()]
-  def drivers(context_or_opts \\ []) do
-    case context_or_opts do
-      %{} = context ->
-        Map.get(context, :drivers, @default_drivers)
+  @spec drivers(map()) :: [driver_kind()]
+  def drivers(context \\ %{})
 
-      opts when is_list(opts) ->
-        Keyword.get(opts, :drivers, @default_drivers)
-    end
+  def drivers(%{} = context) do
+    Map.get(context, :drivers, @default_drivers)
   end
 
-  @spec run(map() | keyword(), (Session.t() -> term()), keyword()) :: [result()]
-  def run(context_or_opts, scenario, opts \\ []) when is_function(scenario, 1) do
+  @spec run(map(), (Session.t() -> term()), keyword()) :: [result()]
+  def run(%{} = context, scenario, opts \\ []) when is_function(scenario, 1) do
+    reject_driver_override!(opts)
+
     drivers =
-      opts
-      |> Keyword.get(:drivers, drivers(context_or_opts))
+      context
+      |> drivers()
       |> normalize_drivers!()
 
     session_opts = Keyword.get(opts, :session_opts, [])
@@ -58,9 +55,9 @@ defmodule Cerberus.Harness do
     |> sort_results()
   end
 
-  @spec run!(map() | keyword(), (Session.t() -> Session.t()), keyword()) :: [result()]
-  def run!(context_or_opts, scenario, opts \\ []) when is_function(scenario, 1) do
-    results = run(context_or_opts, scenario, opts)
+  @spec run!(map(), (Session.t() -> Session.t()), keyword()) :: [result()]
+  def run!(%{} = context, scenario, opts \\ []) when is_function(scenario, 1) do
+    results = run(context, scenario, opts)
 
     failures = Enum.filter(results, &(&1.status == :error))
 
@@ -138,13 +135,18 @@ defmodule Cerberus.Harness do
     end)
   end
 
+  defp reject_driver_override!(opts) do
+    if Keyword.has_key?(opts, :drivers) do
+      raise ArgumentError,
+            "Harness.run/run! no longer supports :drivers opt; use @tag/@moduletag drivers in ExUnit context"
+    end
+  end
+
   defp format_failures(failures) do
     lines =
-      failures
-      |> Enum.map(fn failure ->
+      Enum.map_join(failures, "\n", fn failure ->
         "[#{failure.driver}] #{failure.message || "scenario failed"}"
       end)
-      |> Enum.join("\n")
 
     "driver conformance failures:\n" <> lines
   end

@@ -1,10 +1,11 @@
 ---
 # cerberus-okj5
 title: Implement browser-oracle mismatch classification and reports
-status: todo
+status: scrapped
 type: task
+priority: normal
 created_at: 2026-02-27T07:41:41Z
-updated_at: 2026-02-27T07:41:41Z
+updated_at: 2026-02-27T10:58:14Z
 parent: cerberus-syh3
 ---
 
@@ -26,3 +27,7 @@ Implement comparison layer that treats browser outcome as oracle for selected co
 ## Done When
 - [ ] at least 1 intentional mismatch fixture is correctly classified.
 - [ ] report includes reproducible scenario id + locator + options.
+
+## Reasons for Scrapping
+
+The team decided not to build mismatch classification/reporting right now. We will use direct test failures as the feedback loop and fix issues as they appear, which keeps the harness simpler and avoids maintaining an extra reporting layer.
