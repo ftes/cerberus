@@ -41,7 +41,7 @@ defmodule Cerberus.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:plug_cowboy, "~> 2.7", only: :test},
-      {:ex_doc, "~> 0.38", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.38", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -50,7 +50,8 @@ defmodule Cerberus.MixProject do
       precommit: [
         "format --check-formatted",
         "credo --strict",
-        "dialyzer"
+        "dialyzer",
+        "docs --warnings-as-errors --formatter html"
       ]
     ]
   end
@@ -81,6 +82,9 @@ defmodule Cerberus.MixProject do
     [
       name: "fluffy",
       licenses: ["MIT"],
+      links: %{
+        "GitHub" => "https://github.com/ftes/cerberus"
+      },
       files: ~w(lib priv mix.exs README* LICENSE* docs)
     ]
   end

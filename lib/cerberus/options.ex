@@ -1,5 +1,10 @@
 defmodule Cerberus.Options do
-  @moduledoc false
+  @moduledoc """
+  Shared option and option-schema types used by Cerberus public APIs and drivers.
+
+  This module centralizes validation and normalized defaults for operation
+  option lists (`click`, `fill_in`, `assert_has`, `submit`, and related helpers).
+  """
 
   @type click_kind :: :any | :link | :button
   @type visibility_filter :: boolean() | :any
