@@ -122,6 +122,15 @@ defmodule Cerberus.PublicApiTest do
     end
   end
 
+  test "assert_has timeout option must be non-negative integer" do
+    assert_raise ArgumentError, ~r/invalid options/, fn ->
+      :static
+      |> session()
+      |> visit("/articles")
+      |> assert_has(text("Articles"), timeout: -1)
+    end
+  end
+
   test "reload_page revisits the current path" do
     session =
       :static

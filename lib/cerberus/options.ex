@@ -15,7 +15,8 @@ defmodule Cerberus.Options do
   @type assert_opts :: [
           visible: visibility_filter(),
           exact: boolean(),
-          normalize_ws: boolean()
+          normalize_ws: boolean(),
+          timeout: non_neg_integer()
         ]
 
   @type fill_in_opts :: [
@@ -54,7 +55,12 @@ defmodule Cerberus.Options do
       doc: "Chooses visible text only, hidden only, or both."
     ],
     exact: [type: :boolean, default: false, doc: "Enables exact text matching."],
-    normalize_ws: [type: :boolean, default: true, doc: "Normalizes whitespace before matching."]
+    normalize_ws: [type: :boolean, default: true, doc: "Normalizes whitespace before matching."],
+    timeout: [
+      type: :non_neg_integer,
+      default: 0,
+      doc: "Retries text assertions for up to this many milliseconds."
+    ]
   ]
 
   @fill_in_opts_schema [

@@ -39,6 +39,10 @@ defmodule Cerberus.LiveViewTimeout do
     end
   end
 
+  def with_timeout(session, _timeout, action, _fetch_redirect_info) when is_function(action) do
+    action.(session)
+  end
+
   defp handle_watched_messages_with_timeout(session, timeout, action, fetch_redirect_info) when timeout <= 0 do
     action.(session)
   catch

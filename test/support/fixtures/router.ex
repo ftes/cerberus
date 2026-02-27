@@ -33,6 +33,8 @@ defmodule Cerberus.Fixtures.Router do
       root_layout: {Cerberus.Fixtures.Layouts, :root},
       on_mount: Cerberus.Fixtures.LiveSandbox do
       live("/live/counter", CounterPageLive)
+      live("/live/async_page", AsyncPageLive)
+      live("/live/async_page_2", AsyncPage2Live)
       live("/live/sandbox/messages", SandboxMessagesLive)
       live("/live/redirects", RedirectsLive)
       live("/live/redirect-return", RedirectReturnLive)

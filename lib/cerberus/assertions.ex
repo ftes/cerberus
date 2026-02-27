@@ -2,6 +2,7 @@ defmodule Cerberus.Assertions do
   @moduledoc false
 
   alias Cerberus.InvalidLocatorError
+  alias Cerberus.LiveViewTimeout
   alias Cerberus.Locator
   alias Cerberus.Options
   alias Cerberus.Path
@@ -76,31 +77,42 @@ defmodule Cerberus.Assertions do
   def assert_has(session, locator_input, opts \\ []) do
     {locator, opts} = normalize_assert_locator(locator_input, opts)
     opts = Options.validate_assert!(opts, "assert_has/3")
-    driver = Cerberus.driver_module!(session)
+    {timeout, driver_opts} = Keyword.pop(opts, :timeout, 0)
 
-    case driver.assert_has(session, locator, opts) do
-      {:ok, session, _observed} ->
-        session
-
-      {:error, failed_session, observed, reason} ->
-        raise AssertionError,
-          message: format_error("assert_has", locator_input, opts, reason, observed, failed_session)
-    end
+    LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
+      run_assertion!(timed_session, :assert_has, locator, locator_input, driver_opts, opts)
+    end)
   end
 
   @spec refute_has(arg, term(), Options.assert_opts()) :: arg when arg: var
   def refute_has(session, locator_input, opts \\ []) do
     {locator, opts} = normalize_assert_locator(locator_input, opts)
     opts = Options.validate_assert!(opts, "refute_has/3")
+    {timeout, driver_opts} = Keyword.pop(opts, :timeout, 0)
+
+    LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
+      run_assertion!(timed_session, :refute_has, locator, locator_input, driver_opts, opts)
+    end)
+  end
+
+  defp run_assertion!(session, op, locator, locator_input, driver_opts, message_opts) do
     driver = Cerberus.driver_module!(session)
 
-    case driver.refute_has(session, locator, opts) do
+    case apply(driver, op, [session, locator, driver_opts]) do
       {:ok, session, _observed} ->
         session
 
       {:error, failed_session, observed, reason} ->
         raise AssertionError,
-          message: format_error("refute_has", locator_input, opts, reason, observed, failed_session)
+          message:
+            format_error(
+              Atom.to_string(op),
+              locator_input,
+              message_opts,
+              reason,
+              observed,
+              failed_session
+            )
     end
   end
 
