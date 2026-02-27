@@ -175,6 +175,7 @@ Dependencies: `curl`, `jq`, `unzip`.
 
 - `:auto` uses `Phoenix.LiveViewTest` and `Phoenix.ConnTest` to auto-detect static/live on each interaction.
 - `:browser` uses WebDriver BiDi with a shared runtime/connection plus per-test `userContext` isolation.
+- Live-driver `click_button` treats `phx-click` raw events and JS `push`/`navigate`/`patch` bindings as actionable; `dispatch`-only bindings are intentionally excluded from server-actionable resolution.
 - Fixture LiveView browser bootstrap lives in `assets/js/app.js`; run `mix assets.build` to sync `priv/static/assets/app.js`.
 - Browser worker topology and restart semantics are documented in `docs/adr/0004-browser-runtime-supervision-topology.md`.
 - Internal deterministic fixture routes are documented in `docs/fixtures.md`.

@@ -2,6 +2,8 @@ defmodule Cerberus.Fixtures.RedirectsLive do
   @moduledoc false
   use Phoenix.LiveView
 
+  alias Phoenix.LiveView.JS
+
   @impl true
   def mount(_params, _session, socket) do
     {:ok, assign(socket, details: false, flash_message: nil)}
@@ -60,6 +62,13 @@ defmodule Cerberus.Fixtures.RedirectsLive do
       <button phx-click="patch_self">Patch link</button>
       <button phx-click="to_counter_with_query">Button with push navigation</button>
       <button phx-click="hard_redirect_to_articles">Hard Redirect to Articles</button>
+      <button phx-click={JS.push("to_counter_with_query")}>JS Push to Counter</button>
+      <button phx-click={JS.navigate("/live/counter?foo=bar")}>JS Navigate to Counter</button>
+      <button phx-click={JS.patch("/live/redirects?details=true&foo=js_patch")}>JS Patch Details</button>
+      <button phx-click={JS.dispatch("change") |> JS.push("to_counter_with_query")}>
+        JS Dispatch + Push
+      </button>
+      <button phx-click={JS.dispatch("change")}>JS Dispatch only</button>
     </main>
     """
   end

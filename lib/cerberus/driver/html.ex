@@ -1,6 +1,7 @@
 defmodule Cerberus.Driver.Html do
   @moduledoc false
 
+  alias Cerberus.LiveViewBindings
   alias Cerberus.Query
 
   @spec texts(String.t(), true | false | :any, String.t() | nil) :: [String.t()]
@@ -54,6 +55,18 @@ defmodule Cerberus.Driver.Html do
     case parse_document(html) do
       {:ok, lazy_html} ->
         find_button_in_doc(lazy_html, expected, opts, scope)
+
+      _ ->
+        :error
+    end
+  end
+
+  @spec find_live_clickable_button(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
+          {:ok, %{text: String.t(), selector: String.t() | nil}} | :error
+  def find_live_clickable_button(html, expected, opts, scope \\ nil) when is_binary(html) do
+    case parse_document(html) do
+      {:ok, lazy_html} ->
+        find_live_clickable_button_in_doc(lazy_html, expected, opts, scope)
 
       _ ->
         :error
@@ -122,6 +135,22 @@ defmodule Cerberus.Driver.Html do
         %{text: text}
       end,
       &button_node?/1
+    )
+  end
+
+  defp find_live_clickable_button_in_doc(lazy_html, expected, opts, scope) do
+    query_selector = selector_opt(opts) || "button[phx-click]"
+
+    find_first_matching(
+      lazy_html,
+      query_selector,
+      expected,
+      opts,
+      scope,
+      fn _node, text ->
+        %{text: text}
+      end,
+      &live_clickable_button_node?/1
     )
   end
 
@@ -503,6 +532,13 @@ defmodule Cerberus.Driver.Html do
   end
 
   defp button_node?(node), do: node_tag(node) == "button"
+
+  defp live_clickable_button_node?(node) do
+    button_node?(node) and
+      node
+      |> attr("phx-click")
+      |> LiveViewBindings.phx_click?()
+  end
 
   defp same_node?(left, right) do
     left_id = attr(left, "id")

@@ -486,7 +486,11 @@ defmodule Cerberus.Driver.Live do
 
   defp find_clickable_button(_session, _expected, _opts, :link), do: :error
 
-  defp find_clickable_button(session, expected, opts, _kind) do
+  defp find_clickable_button(%{mode: :live} = session, expected, opts, _kind) do
+    Html.find_live_clickable_button(session.html, expected, opts, Session.scope(session))
+  end
+
+  defp find_clickable_button(%{mode: :static} = session, expected, opts, _kind) do
     Html.find_button(session.html, expected, opts, Session.scope(session))
   end
 
