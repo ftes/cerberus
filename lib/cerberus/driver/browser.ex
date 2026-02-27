@@ -486,11 +486,11 @@ defmodule Cerberus.Driver.Browser do
 
   defp submit_button(session, state, button, selector) do
     index = button["index"] || 0
-    expression = submit_target_expression(index, Session.scope(state), selector)
+    expression = button_click_expression(index, Session.scope(state), selector)
 
     case eval_json(state, expression) do
-      {:ok, %{"ok" => true, "url" => url}} ->
-        navigate_submit_target(session, state, button, url)
+      {:ok, %{"ok" => true}} ->
+        submit_after_eval(session, state, button)
 
       {:ok, result} ->
         reason = Map.get(result, "reason", "submit_target_failed")
@@ -503,32 +503,40 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp navigate_submit_target(session, state, button, url) do
-    case navigate_browser(state, url) do
-      {:ok, _} ->
-        submit_snapshot_result(session, state, button)
+  defp submit_after_eval(session, state, button) do
+    case await_driver_ready(state) do
+      {:ok, readiness} ->
+        submit_snapshot_result(session, state, button, readiness)
 
-      {:error, reason, details} ->
-        observed = %{action: :submit, clicked: button["text"], path: state.current_path, details: details}
-        {:error, session, observed, "browser submit navigation failed: #{reason}"}
+      {:error, reason, readiness} ->
+        observed = %{action: :submit, clicked: button["text"], path: state.current_path, readiness: readiness}
+        {:error, session, observed, readiness_error(reason, readiness)}
     end
   end
 
-  defp submit_snapshot_result(session, state, button) do
-    case with_snapshot(state) do
+  defp submit_snapshot_result(session, state, button, readiness) do
+    case snapshot_with_retry(state) do
       {next_state, snapshot} ->
         observed = %{
           action: :submit,
           clicked: button["text"],
           path: snapshot.path,
           title: snapshot.title,
-          texts: snapshot.visible ++ snapshot.hidden
+          texts: snapshot.visible ++ snapshot.hidden,
+          readiness: readiness
         }
 
         {:ok, update_session(session, next_state, :submit, observed), observed}
 
       {:error, reason, details} ->
-        observed = %{action: :submit, clicked: button["text"], path: state.current_path, details: details}
+        observed = %{
+          action: :submit,
+          clicked: button["text"],
+          path: state.current_path,
+          details: details,
+          readiness: readiness
+        }
+
         {:error, session, observed, "failed to inspect page after submit: #{reason}"}
     end
   end
@@ -1505,100 +1513,6 @@ defmodule Cerberus.Driver.Browser do
       return JSON.stringify({
         ok: true,
         path: window.location.pathname + window.location.search
-      });
-    })()
-    """
-  end
-
-  defp submit_target_expression(index, scope, selector) do
-    encoded_scope = JSON.encode!(scope)
-    encoded_selector = JSON.encode!(selector)
-
-    """
-    (() => {
-      const scopeSelector = #{encoded_scope};
-      const elementSelector = #{encoded_selector};
-      const defaultRoot = document.body || document.documentElement;
-      let roots = defaultRoot ? [defaultRoot] : [];
-
-      if (scopeSelector) {
-        try {
-          roots = Array.from(document.querySelectorAll(scopeSelector));
-        } catch (_error) {
-          roots = [];
-        }
-      }
-
-      const queryWithinRoots = (selector) => {
-        const seen = new Set();
-        const matches = [];
-
-        for (const root of roots) {
-          if (root.matches && root.matches(selector) && !seen.has(root)) {
-            seen.add(root);
-            matches.push(root);
-          }
-
-          for (const element of root.querySelectorAll(selector)) {
-            if (!seen.has(element)) {
-              seen.add(element);
-              matches.push(element);
-            }
-          }
-        }
-
-        return matches;
-      };
-
-      const selectorMatches = (element) => {
-        if (!elementSelector) return true;
-        try {
-          return element.matches(elementSelector);
-        } catch (_error) {
-          return false;
-        }
-      };
-
-      const buttons = queryWithinRoots("button").filter(selectorMatches);
-      const button = buttons[#{index}];
-
-      if (!button) {
-        return JSON.stringify({ ok: false, reason: "button_not_found" });
-      }
-
-      const form = button.form;
-      if (!form) {
-        return JSON.stringify({ ok: false, reason: "button_has_no_form" });
-      }
-
-      const method = (button.getAttribute("formmethod") || form.getAttribute("method") || "get").toLowerCase();
-      if (method !== "get") {
-        return JSON.stringify({ ok: false, reason: "unsupported_method", method });
-      }
-
-      const action = button.getAttribute("formaction") || form.getAttribute("action") || window.location.pathname;
-      const target = new URL(action, window.location.href);
-
-      let formData;
-      try {
-        formData = new FormData(form, button);
-      } catch (_error) {
-        formData = new FormData(form);
-        const type = (button.getAttribute("type") || "submit").toLowerCase();
-        const name = button.getAttribute("name");
-        if ((type === "submit" || type === "") && name) {
-          formData.append(name, button.getAttribute("value") || "");
-        }
-      }
-
-      const params = new URLSearchParams(formData);
-      const query = params.toString();
-      target.search = query;
-
-      return JSON.stringify({
-        ok: true,
-        url: target.toString(),
-        path: target.pathname + target.search
       });
     })()
     """

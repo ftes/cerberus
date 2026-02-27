@@ -238,14 +238,20 @@ defmodule Cerberus.Driver.Live do
 
     case route_kind(session) do
       :live ->
-        observed = %{
-          action: :submit,
-          path: session.current_path,
-          mode: route_kind(session),
-          transition: Session.transition(session)
-        }
+        case Html.find_submit_button(session.html, expected, opts, Session.scope(session)) do
+          {:ok, button} ->
+            do_live_submit(session, button)
 
-        {:error, session, observed, "live driver does not yet support submit on live routes"}
+          :error ->
+            observed = %{
+              action: :submit,
+              path: session.current_path,
+              mode: route_kind(session),
+              transition: Session.transition(session)
+            }
+
+            {:error, session, observed, "no submit button matched locator"}
+        end
 
       :static ->
         case Html.find_submit_button(session.html, expected, opts, Session.scope(session)) do
@@ -321,20 +327,7 @@ defmodule Cerberus.Driver.Live do
 
     case result do
       rendered when is_binary(rendered) ->
-        path = maybe_live_patch_path(session.view, session.current_path)
-        updated = %{session | html: rendered, current_path: path}
-        transition = transition(route_kind(session), :live, :click, session.current_path, path)
-
-        observed = %{
-          action: :button,
-          clicked: button.text,
-          path: path,
-          mode: :live,
-          texts: Html.texts(rendered, :any, Session.scope(updated)),
-          transition: transition
-        }
-
-        {:ok, update_session(updated, :click, observed), observed}
+        click_live_button_rendered(session, button, rendered, :click)
 
       {:error, {:live_redirect, %{to: to}}} ->
         redirected_result(session, button, to, :live_redirect)
@@ -344,19 +337,8 @@ defmodule Cerberus.Driver.Live do
 
       {:error, {:live_patch, %{to: to}}} ->
         rendered = render(session.view)
-        updated = %{session | html: rendered, current_path: to}
-        transition = transition(route_kind(session), :live, :live_patch, session.current_path, to)
-
-        observed = %{
-          action: :button,
-          clicked: button.text,
-          path: to,
-          mode: :live,
-          texts: Html.texts(rendered, :any, Session.scope(updated)),
-          transition: transition
-        }
-
-        {:ok, update_session(updated, :click, observed), observed}
+        path = to_request_path(to, session.current_path)
+        click_live_button_rendered(session, button, rendered, :live_patch, path)
 
       other ->
         observed = %{
@@ -370,6 +352,38 @@ defmodule Cerberus.Driver.Live do
 
         {:error, session, observed, "unexpected live click result"}
     end
+  end
+
+  defp click_live_button_rendered(session, button, rendered, reason, path_override \\ nil) do
+    case apply_live_rendered_result(session, rendered, reason, path_override) do
+      {:ok, updated, transition} ->
+        observed = %{
+          action: :button,
+          clicked: button.text,
+          path: Session.current_path(updated),
+          mode: Session.driver_kind(updated),
+          texts: Html.texts(updated.html, :any, Session.scope(updated)),
+          transition: transition
+        }
+
+        {:ok, update_last_result(updated, :click, observed), observed}
+
+      {:error, failed_session, reason, details} ->
+        click_live_button_error(session, button, failed_session, reason, details)
+    end
+  end
+
+  defp click_live_button_error(session, button, failed_session, reason, details) do
+    observed = %{
+      action: :button,
+      clicked: button.text,
+      path: session.current_path,
+      mode: route_kind(session),
+      details: details,
+      transition: Session.transition(session)
+    }
+
+    {:error, failed_session, observed, reason}
   end
 
   defp click_live_link(session, link) do
@@ -863,6 +877,183 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
+  defp do_live_submit(session, button) do
+    form_payload = submit_form_payload(session, button)
+    additional = button_payload_map(button)
+
+    if button[:form_phx_submit] do
+      do_live_phx_submit(session, button, form_payload, additional)
+    else
+      params = Map.merge(form_payload, additional)
+      do_live_action_submit(session, button, params)
+    end
+  end
+
+  defp do_live_phx_submit(session, button, form_payload, additional) do
+    form_selector = submit_form_selector(button)
+
+    if is_binary(form_selector) and form_selector != "" do
+      result =
+        session.view
+        |> Phoenix.LiveViewTest.form(form_selector, form_payload)
+        |> Phoenix.LiveViewTest.render_submit(additional)
+
+      resolve_live_submit_result(session, result, button, Map.merge(form_payload, additional))
+    else
+      observed = %{
+        action: :submit,
+        clicked: button.text,
+        path: session.current_path,
+        mode: route_kind(session),
+        transition: Session.transition(session)
+      }
+
+      {:error, session, observed, "live submit requires a resolvable form selector"}
+    end
+  end
+
+  defp do_live_action_submit(session, button, params) do
+    method = normalize_submit_method(button.method)
+    result = follow_form_request(session, method, button.action, params)
+
+    case result do
+      {:ok, updated, transition} ->
+        observed = %{
+          action: :submit,
+          clicked: button.text,
+          path: Session.current_path(updated),
+          method: method,
+          mode: Session.driver_kind(updated),
+          params: params,
+          transition: transition
+        }
+
+        cleared_form_data = clear_submitted_form(session.form_data, button.form)
+        {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
+
+      {:error, failed_session, reason, details} ->
+        observed = %{
+          action: :submit,
+          clicked: button.text,
+          path: session.current_path,
+          mode: route_kind(session),
+          details: details,
+          transition: Session.transition(session)
+        }
+
+        {:error, failed_session, observed, reason}
+    end
+  end
+
+  defp resolve_live_submit_result(session, rendered, button, submitted_params) when is_binary(rendered) do
+    case apply_live_rendered_result(session, rendered, :submit) do
+      {:ok, updated, transition} ->
+        observed = %{
+          action: :submit,
+          clicked: button.text,
+          path: Session.current_path(updated),
+          method: normalize_submit_method(button.method),
+          mode: Session.driver_kind(updated),
+          params: submitted_params,
+          transition: transition
+        }
+
+        cleared_form_data = clear_submitted_form(session.form_data, button.form)
+        {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
+
+      {:error, failed_session, reason, details} ->
+        observed = %{
+          action: :submit,
+          clicked: button.text,
+          path: session.current_path,
+          mode: route_kind(session),
+          details: details,
+          transition: Session.transition(session)
+        }
+
+        {:error, failed_session, observed, reason}
+    end
+  end
+
+  defp resolve_live_submit_result(session, {:error, {:live_redirect, %{to: to}}}, button, submitted_params) do
+    submitted_redirect_result(session, button, to, submitted_params, :live_redirect)
+  end
+
+  defp resolve_live_submit_result(session, {:error, {:redirect, %{to: to}}}, button, submitted_params) do
+    submitted_redirect_result(session, button, to, submitted_params, :redirect)
+  end
+
+  defp resolve_live_submit_result(session, {:error, {:live_patch, %{to: to}}}, button, submitted_params) do
+    rendered = render(session.view)
+    path = to_request_path(to, session.current_path)
+
+    case apply_live_rendered_result(session, rendered, :live_patch, path) do
+      {:ok, updated, transition} ->
+        observed = %{
+          action: :submit,
+          clicked: button.text,
+          path: Session.current_path(updated),
+          method: normalize_submit_method(button.method),
+          mode: Session.driver_kind(updated),
+          params: submitted_params,
+          transition: transition
+        }
+
+        cleared_form_data = clear_submitted_form(session.form_data, button.form)
+        {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
+
+      {:error, failed_session, reason, details} ->
+        observed = %{
+          action: :submit,
+          clicked: button.text,
+          path: session.current_path,
+          mode: route_kind(session),
+          details: details,
+          transition: Session.transition(session)
+        }
+
+        {:error, failed_session, observed, reason}
+    end
+  end
+
+  defp resolve_live_submit_result(session, other, _button, _submitted_params) do
+    observed = %{
+      action: :submit,
+      path: session.current_path,
+      mode: route_kind(session),
+      result: other,
+      transition: Session.transition(session)
+    }
+
+    {:error, session, observed, "unexpected live submit result"}
+  end
+
+  defp submitted_redirect_result(session, button, to, submitted_params, reason) do
+    updated = visit(session, to, [])
+
+    transition =
+      transition(
+        route_kind(session),
+        Session.driver_kind(updated),
+        reason,
+        session.current_path,
+        Session.current_path(updated)
+      )
+
+    observed = %{
+      action: :submit,
+      clicked: button.text,
+      path: Session.current_path(updated),
+      method: normalize_submit_method(button.method),
+      mode: Session.driver_kind(updated),
+      params: submitted_params,
+      transition: transition
+    }
+
+    cleared_form_data = clear_submitted_form(session.form_data, button.form)
+    {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
+  end
+
   defp do_live_fill_in(session, expected, value, opts) do
     case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
       {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
@@ -983,10 +1174,13 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp resolve_live_change_result(session, rendered, target) when is_binary(rendered) do
-    path = maybe_live_patch_path(session.view, session.current_path)
-    updated = %{session | html: rendered, current_path: path}
-    transition = transition(route_kind(session), :live, :fill_in, session.current_path, path)
-    {:ok, updated, %{triggered: true, target: target, transition: transition}}
+    case apply_live_rendered_result(session, rendered, :fill_in) do
+      {:ok, updated, transition} ->
+        {:ok, updated, %{triggered: true, target: target, transition: transition}}
+
+      {:error, failed_session, reason, details} ->
+        {:error, failed_session, reason, details}
+    end
   end
 
   defp resolve_live_change_result(session, {:error, {:live_redirect, %{to: to}}}, target) do
@@ -1022,13 +1216,189 @@ defmodule Cerberus.Driver.Live do
   defp resolve_live_change_result(session, {:error, {:live_patch, %{to: to}}}, target) do
     rendered = render(session.view)
     path = to_request_path(to, session.current_path)
-    updated = %{session | html: rendered, current_path: path}
-    transition = transition(route_kind(session), :live, :live_patch, session.current_path, path)
-    {:ok, updated, %{triggered: true, target: target, transition: transition}}
+
+    case apply_live_rendered_result(session, rendered, :live_patch, path) do
+      {:ok, updated, transition} ->
+        {:ok, updated, %{triggered: true, target: target, transition: transition}}
+
+      {:error, failed_session, reason, details} ->
+        {:error, failed_session, reason, details}
+    end
   end
 
   defp resolve_live_change_result(session, other, _target) do
     {:error, session, "unexpected live change result", %{result: other}}
+  end
+
+  defp apply_live_rendered_result(session, rendered, reason, path_override \\ nil) do
+    case maybe_follow_trigger_action(session, rendered) do
+      :no_trigger ->
+        path = path_override || maybe_live_patch_path(session.view, session.current_path)
+        updated = %{session | html: rendered, current_path: path}
+        transition = transition(route_kind(session), :live, reason, session.current_path, path)
+        {:ok, updated, transition}
+
+      {:ok, updated} ->
+        transition =
+          transition(
+            route_kind(session),
+            Session.driver_kind(updated),
+            reason,
+            session.current_path,
+            Session.current_path(updated)
+          )
+
+        {:ok, updated, transition}
+
+      {:error, reason, details} ->
+        {:error, session, reason, details}
+    end
+  end
+
+  defp maybe_follow_trigger_action(session, rendered) do
+    case Html.trigger_action_forms(rendered) do
+      [] ->
+        :no_trigger
+
+      [form] ->
+        trigger_action_submit(session, form)
+
+      forms ->
+        {:error, "Found multiple forms with phx-trigger-action.", %{forms: forms}}
+    end
+  end
+
+  defp trigger_action_submit(session, form) do
+    params = trigger_action_submit_payload(session, form)
+    method = normalize_submit_method(form[:method])
+    action = form[:action]
+
+    case follow_form_request(session, method, action, params) do
+      {:ok, updated, _transition} ->
+        cleared_form_data = clear_submitted_form(session.form_data, form[:form])
+        {:ok, %{updated | form_data: cleared_form_data}}
+
+      {:error, _failed_session, reason, details} ->
+        {:error, reason, details}
+    end
+  end
+
+  defp trigger_action_submit_payload(session, form) do
+    active = params_for_form(session.form_data, form[:form])
+    defaults = Map.get(form, :defaults, %{})
+    defaults |> Map.merge(active) |> decode_query_params()
+  end
+
+  defp follow_form_request(session, method, action, params) do
+    method = normalize_submit_method(method)
+    request_path = submit_request_path(method, action, session.current_path, params)
+    request_params = if method == "get", do: %{}, else: params
+
+    conn =
+      session.conn
+      |> Conn.ensure_conn()
+      |> then(&Conn.follow_request(session.endpoint, &1, method, request_path, request_params))
+
+    updated = session_from_conn(session, conn, request_path)
+
+    transition =
+      transition(
+        route_kind(session),
+        Session.driver_kind(updated),
+        :submit,
+        session.current_path,
+        Session.current_path(updated)
+      )
+
+    {:ok, updated, transition}
+  rescue
+    error ->
+      {:error, session, Exception.message(error), %{method: method, action: action, params: params}}
+  end
+
+  defp submit_request_path("get", action, fallback_path, params) do
+    build_submit_target(action, fallback_path, params)
+  end
+
+  defp submit_request_path(_method, action, fallback_path, _params) do
+    action_path(action, fallback_path)
+  end
+
+  defp session_from_conn(session, conn, fallback_path) do
+    current_path = Conn.current_path(conn, fallback_path)
+
+    case try_live(conn) do
+      {:ok, view, html} ->
+        %{
+          session
+          | conn: conn,
+            view: view,
+            html: html,
+            current_path: current_path
+        }
+
+      :error ->
+        %StaticSession{
+          endpoint: session.endpoint,
+          conn: conn,
+          html: conn.resp_body || "",
+          form_data: session.form_data,
+          scope: session.scope,
+          current_path: current_path,
+          last_result: session.last_result
+        }
+    end
+  end
+
+  defp normalize_submit_method(value) when is_binary(value) do
+    value
+    |> String.trim()
+    |> String.downcase()
+    |> case do
+      "" -> "get"
+      "post" -> "post"
+      "put" -> "put"
+      "patch" -> "patch"
+      "delete" -> "delete"
+      _ -> "get"
+    end
+  end
+
+  defp normalize_submit_method(value) when is_atom(value) do
+    value |> to_string() |> normalize_submit_method()
+  end
+
+  defp normalize_submit_method(_), do: "get"
+
+  defp submit_form_payload(session, button) do
+    defaults = submit_form_defaults(session, button)
+    active = params_for_form(session.form_data, button.form)
+    defaults |> Map.merge(active) |> decode_query_params()
+  end
+
+  defp submit_form_defaults(session, button) do
+    case submit_form_selector(button) do
+      selector when is_binary(selector) and selector != "" ->
+        Html.form_defaults(session.html, selector, Session.scope(session))
+
+      _ ->
+        %{}
+    end
+  end
+
+  defp submit_form_selector(%{form_selector: selector}) when is_binary(selector) and selector != "", do: selector
+
+  defp submit_form_selector(%{form: form}) when is_binary(form) and form != "" do
+    ~s(form[id="#{form}"])
+  end
+
+  defp submit_form_selector(_), do: nil
+
+  defp button_payload_map(button) do
+    case button_payload(button) do
+      nil -> %{}
+      {name, value} -> %{name => value}
+    end
   end
 
   defp form_payload_for_change(session, field) do
@@ -1172,14 +1542,18 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp params_for_submit(form_data, button) do
-    %{active_form: active_form, values: values} = normalize_form_data(form_data)
-    key = form_key(button.form, active_form)
-    params = Map.get(values, key, %{})
+    params = params_for_form(form_data, button.form)
 
     case button_payload(button) do
       nil -> params
       {name, value} -> Map.put(params, name, value)
     end
+  end
+
+  defp params_for_form(form_data, form) do
+    %{active_form: active_form, values: values} = normalize_form_data(form_data)
+    key = form_key(form, active_form)
+    Map.get(values, key, %{})
   end
 
   defp clear_submitted_form(form_data, form) do

@@ -327,6 +327,37 @@ defmodule Cerberus.Fixtures.PageController do
     redirect(conn, to: destination)
   end
 
+  def trigger_action_result(conn, params) do
+    params = merged_request_params(conn, params)
+    trigger_hidden = Map.get(params, "trigger_action_hidden_input", "")
+    trigger_input = Map.get(params, "trigger_action_input", "")
+    patch_value = Map.get(params, "patch_and_trigger_action", "")
+    message = Map.get(params, "message", "")
+    multi_hidden = Map.get(params, "multi_hidden", "")
+
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Trigger Action Result</title>
+      </head>
+      <body>
+        <main>
+          <p id="request-method">method: #{conn.method}</p>
+          <div id="form-data">
+            <p>trigger_action_hidden_input: #{trigger_hidden}</p>
+            <p>trigger_action_input: #{trigger_input}</p>
+            <p>patch_and_trigger_action: #{patch_value}</p>
+            <p>message: #{message}</p>
+            <p>multi_hidden: #{multi_hidden}</p>
+          </div>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
   defp merged_request_params(conn, params) when is_map(params) do
     conn
     |> Plug.Conn.fetch_query_params()

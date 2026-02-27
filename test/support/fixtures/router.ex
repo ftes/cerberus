@@ -12,6 +12,19 @@ defmodule Cerberus.Fixtures.Router do
     plug(:put_secure_browser_headers)
   end
 
+  pipeline :browser_no_csrf do
+    plug(:accepts, ["html"])
+    plug(:fetch_session)
+    plug(:fetch_live_flash)
+    plug(:put_secure_browser_headers)
+  end
+
+  scope "/", Cerberus.Fixtures do
+    pipe_through(:browser_no_csrf)
+
+    post("/trigger-action/result", PageController, :trigger_action_result)
+  end
+
   scope "/", Cerberus.Fixtures do
     pipe_through(:browser)
 
@@ -42,6 +55,7 @@ defmodule Cerberus.Fixtures.Router do
       live("/live/redirects", RedirectsLive)
       live("/live/redirect-return", RedirectReturnLive)
       live("/live/form-change", FormChangeLive)
+      live("/live/trigger-action", TriggerActionLive)
       live("/live/selector-edge", SelectorEdgeLive)
       live("/live/uploads", UploadLive)
       live("/live/nested", NestedLive)

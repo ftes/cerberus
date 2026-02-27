@@ -101,6 +101,17 @@ defmodule Cerberus.Driver.Html do
     end
   end
 
+  @spec trigger_action_forms(String.t()) :: [map()]
+  def trigger_action_forms(html) when is_binary(html) do
+    case parse_document(html) do
+      {:ok, lazy_html} ->
+        trigger_action_forms_in_doc(lazy_html)
+
+      _ ->
+        []
+    end
+  end
+
   @spec find_submit_button(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
           {:ok,
            %{
@@ -108,6 +119,8 @@ defmodule Cerberus.Driver.Html do
              action: String.t() | nil,
              method: String.t() | nil,
              form: String.t() | nil,
+             form_selector: String.t() | nil,
+             form_phx_submit: boolean(),
              button_name: String.t() | nil,
              button_value: String.t() | nil
            }}
@@ -201,10 +214,7 @@ defmodule Cerberus.Driver.Html do
   end
 
   defp find_submit_button_in_form(root_node, form_node, expected, opts, selector) do
-    form = attr(form_node, "id")
-    action = attr(form_node, "action")
-    method = attr(form_node, "method")
-    form_meta = %{form: form, action: action, method: method}
+    form_meta = form_meta_from_form_node(root_node, form_node)
 
     form_node
     |> LazyHTML.query("button")
@@ -221,9 +231,7 @@ defmodule Cerberus.Driver.Html do
 
       with true <- is_binary(owner_form) and owner_form != "",
            form_node when not is_nil(form_node) <- form_by_id(root_node, owner_form) do
-        action = attr(form_node, "action")
-        method = attr(form_node, "method")
-        form_meta = %{form: owner_form, action: action, method: method}
+        form_meta = form_meta_from_form_node(root_node, form_node, owner_form)
         build_submit_button(button_node, form_meta, expected, opts, root_node, selector)
       else
         _ -> false
@@ -246,12 +254,52 @@ defmodule Cerberus.Driver.Html do
          action: action,
          method: method,
          form: form_meta.form,
+         form_selector: form_meta.form_selector,
+         form_phx_submit: form_meta.form_phx_submit,
          button_name: attr(button_node, "name"),
          button_value: attr(button_node, "value")
        }}
     else
       false
     end
+  end
+
+  defp form_meta_from_form_node(root_node, form_node, form_id_override \\ nil) do
+    form_id =
+      case form_id_override do
+        value when is_binary(value) and value != "" -> value
+        _ -> attr(form_node, "id")
+      end
+
+    %{
+      form: form_id,
+      action: attr(form_node, "action"),
+      method: attr(form_node, "method"),
+      form_selector: form_selector(root_node, form_node, form_id),
+      form_phx_submit: form_node |> attr("phx-submit") |> phx_submit_binding?()
+    }
+  end
+
+  defp trigger_action_forms_in_doc(root_node) do
+    root_node
+    |> safe_query("form")
+    |> Enum.flat_map(fn form_node ->
+      if form_node |> attr("phx-trigger-action") |> trigger_action_enabled?() do
+        form_id = attr(form_node, "id")
+
+        [
+          %{
+            form: form_id,
+            form_selector: form_selector(root_node, form_node, form_id),
+            action: attr(form_node, "action"),
+            method: attr(form_node, "method"),
+            defaults: collect_form_defaults(form_node)
+          }
+        ]
+      else
+        []
+      end
+    end)
   end
 
   defp submit_button_match?(type, text, expected, opts) do
@@ -672,6 +720,28 @@ defmodule Cerberus.Driver.Html do
   end
 
   defp phx_change_binding?(_value), do: false
+
+  defp phx_submit_binding?(value) when is_binary(value) do
+    String.trim(value) != ""
+  end
+
+  defp phx_submit_binding?(_value), do: false
+
+  defp trigger_action_enabled?(nil), do: false
+
+  defp trigger_action_enabled?(value) when is_binary(value) do
+    value
+    |> String.trim()
+    |> String.downcase()
+    |> case do
+      "" -> true
+      "false" -> false
+      "0" -> false
+      _ -> true
+    end
+  end
+
+  defp trigger_action_enabled?(_value), do: true
 
   defp attr_or_nil(nil, _name), do: nil
   defp attr_or_nil(node, name), do: attr(node, name)

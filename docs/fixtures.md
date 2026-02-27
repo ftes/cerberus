@@ -26,6 +26,8 @@ The fixture app is started from `test/test_helper.exs` and serves only local rou
 - `/live/redirects` (live): link/button navigation fixture for navigate/patch/redirect parity, including `phx-click` JS command variants (`push`, `navigate`, `patch`, mixed pipelines, dispatch-only).
 - `/live/redirect-return` (live): immediate live redirect-back fixture with flash.
 - `/live/form-change` (live): `phx-change` fixture for `_target` payload semantics, no-change forms, and hidden-input ordering checks.
+- `/live/trigger-action` (live): `phx-trigger-action` fixture for static POST handoff, patch sequencing, dynamic forms, and ambiguity handling.
+- `/trigger-action/result` (static POST): deterministic sink page echoing trigger-action payloads and HTTP method.
 - `/live/selector-edge` (live): duplicate button-label fixture for selector disambiguation checks.
 - `/live/nested` (live): nested LiveView fixture for scoped `within/3` stack + child-isolation conformance.
 - `/oracle/mismatch` (static): mismatch marker fixture for browser-oracle diff tests.

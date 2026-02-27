@@ -42,6 +42,14 @@ defmodule Cerberus.Driver.Conn do
     do_follow_get(endpoint, conn, path, @max_redirects)
   end
 
+  @spec follow_request(module(), Plug.Conn.t(), atom() | String.t(), String.t(), map()) :: Plug.Conn.t()
+  def follow_request(endpoint, conn, method, path, params \\ %{})
+
+  def follow_request(endpoint, conn, method, path, params) when is_binary(path) and is_map(params) do
+    method = normalize_method(method)
+    do_follow_request(endpoint, conn, method, path, params, @max_redirects)
+  end
+
   @spec current_path(Plug.Conn.t(), String.t() | nil) :: String.t() | nil
   def current_path(conn, fallback \\ nil) do
     case conn.request_path do
@@ -65,7 +73,50 @@ defmodule Cerberus.Driver.Conn do
     end
   end
 
+  defp do_follow_request(endpoint, conn, method, path, params, redirects_left) do
+    conn = dispatch(conn, endpoint, method, path, params)
+
+    if redirects_left > 0 and redirect?(conn) do
+      [location | _] = Plug.Conn.get_resp_header(conn, "location")
+      next_path = normalize_location(location)
+      next_method = redirect_method(conn.status, method)
+      next_params = if next_method == :get, do: %{}, else: params
+
+      do_follow_request(
+        endpoint,
+        recycle_preserving_headers(conn),
+        next_method,
+        next_path,
+        next_params,
+        redirects_left - 1
+      )
+    else
+      conn
+    end
+  end
+
   defp redirect?(conn), do: conn.status in 300..399
+
+  defp normalize_method(method) when is_atom(method) and method in [:get, :post, :put, :patch, :delete], do: method
+
+  defp normalize_method(method) when is_binary(method) do
+    method
+    |> String.trim()
+    |> String.downcase()
+    |> case do
+      "get" -> :get
+      "post" -> :post
+      "put" -> :put
+      "patch" -> :patch
+      "delete" -> :delete
+      _ -> :get
+    end
+  end
+
+  defp normalize_method(_), do: :get
+
+  defp redirect_method(status, method) when status in [307, 308], do: method
+  defp redirect_method(_status, _method), do: :get
 
   defp normalize_location(location) do
     case URI.parse(location) do
