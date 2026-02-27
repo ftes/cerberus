@@ -1,10 +1,11 @@
 ---
 # cerberus-84yj
 title: Replicate LiveView link navigation oddities from phoenix_test
-status: todo
+status: completed
 type: task
+priority: normal
 created_at: 2026-02-27T11:31:31Z
-updated_at: 2026-02-27T11:31:31Z
+updated_at: 2026-02-27T18:24:00Z
 parent: cerberus-zqpu
 ---
 
@@ -43,6 +44,13 @@ end
 ```
 
 ## Done When
-- [ ] Cerberus click-link flow handles live navigate, patch, and non-live transitions.
-- [ ] Flash/assertion parity is covered for navigate-then-redirect behavior.
-- [ ] Header preservation is validated in integration coverage.
+- [x] Cerberus click-link flow handles live navigate, patch, and non-live transitions.
+- [x] Flash/assertion parity is covered for navigate-then-redirect behavior.
+- [x] Header preservation is validated in integration coverage.
+
+## Summary of Changes
+- Added live-link parity fixtures on /live/redirects for navigate, patch, redirect-back, and non-live transitions.
+- Added /main static fixture page that echoes x-custom-header and added conformance coverage for header preservation with seeded conn session opts.
+- Updated live driver link click handling to attempt LiveView render_click first (with redirect/patch handling) and fallback to href visit when needed.
+- Added cross-driver conformance tests in test/core/live_link_navigation_test.exs for live+browser navigation parity and live-only header preservation.
+- Updated fixture docs route surface for the new navigation fixtures.

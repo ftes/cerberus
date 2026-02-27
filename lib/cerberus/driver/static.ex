@@ -31,7 +31,8 @@ defmodule Cerberus.Driver.Static do
   @impl true
   def new_session(opts \\ []) do
     %__MODULE__{
-      endpoint: Conn.endpoint!(opts)
+      endpoint: Conn.endpoint!(opts),
+      conn: initial_conn(opts)
     }
   end
 
@@ -304,6 +305,19 @@ defmodule Cerberus.Driver.Static do
     end
   rescue
     _ -> :error
+  end
+
+  defp initial_conn(opts) do
+    case Keyword.get(opts, :conn) do
+      nil ->
+        nil
+
+      %Plug.Conn{} = conn ->
+        conn
+
+      other ->
+        raise ArgumentError, "expected :conn option to be a Plug.Conn, got: #{inspect(other)}"
+    end
   end
 
   defp build_submit_target(action, fallback_path, params) do

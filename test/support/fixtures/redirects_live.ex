@@ -4,12 +4,14 @@ defmodule Cerberus.Fixtures.RedirectsLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, socket}
+    {:ok, assign(socket, details: false, flash_message: nil)}
   end
 
   @impl true
-  def handle_params(_params, _uri, socket) do
-    {:noreply, socket}
+  def handle_params(params, _uri, socket) do
+    details? = params["details"] == "true"
+    flash_message = if params["navigated_back"] == "true", do: "Navigated back!"
+    {:noreply, assign(socket, details: details?, flash_message: flash_message)}
   end
 
   @impl true
@@ -42,6 +44,17 @@ defmodule Cerberus.Fixtures.RedirectsLive do
     ~H"""
     <main>
       <h1>Live Redirects</h1>
+      <div id="flash-group"><%= @flash_message %></div>
+
+      <%= if @details do %>
+        <h2>Live Redirects Details</h2>
+      <% end %>
+
+      <.link navigate="/live/counter">Navigate link</.link>
+      <.link navigate="/live/redirect-return">Navigate (and redirect back) link</.link>
+      <.link patch="/live/redirects?details=true&foo=bar">Patch link</.link>
+      <a href="/main">Navigate to non-liveview</a>
+
       <button phx-click="to_articles">Redirect to Articles</button>
       <button phx-click="to_counter">Redirect to Counter</button>
       <button phx-click="patch_self">Patch link</button>

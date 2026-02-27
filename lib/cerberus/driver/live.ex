@@ -37,7 +37,8 @@ defmodule Cerberus.Driver.Live do
   @impl true
   def new_session(opts \\ []) do
     %__MODULE__{
-      endpoint: Conn.endpoint!(opts)
+      endpoint: Conn.endpoint!(opts),
+      conn: initial_conn(opts)
     }
   end
 
@@ -87,27 +88,11 @@ defmodule Cerberus.Driver.Live do
 
     case find_clickable_link(session, expected, opts, kind) do
       {:ok, link} when is_binary(link.href) ->
-        updated = visit(session, link.href, [])
-
-        transition =
-          transition(
-            session.mode,
-            Session.driver_kind(updated),
-            :click,
-            session.current_path,
-            Session.current_path(updated)
-          )
-
-        observed = %{
-          action: :link,
-          path: Session.current_path(updated),
-          mode: Session.driver_kind(updated),
-          clicked: link.text,
-          texts: Html.texts(updated.html, :any, Session.scope(updated)),
-          transition: transition
-        }
-
-        {:ok, update_last_result(updated, :click, observed), observed}
+        if session.mode == :live and session.view != nil do
+          click_live_link(session, link)
+        else
+          click_link_via_visit(session, link, :click)
+        end
 
       :error ->
         case find_clickable_button(session, expected, opts, kind) do
@@ -333,37 +318,114 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp live_button_element(view, %{selector: selector}, scope) when is_binary(selector) and selector != "" do
-    selector =
-      if is_binary(scope) and scope != "" do
-        "#{scope} #{selector}"
-      else
-        selector
-      end
+  defp click_live_link(session, link) do
+    result = maybe_render_click_link(session, link)
 
-    element(view, selector)
+    case result do
+      rendered when is_binary(rendered) ->
+        path = maybe_live_patch_path(session.view, session.current_path)
+        updated = %{session | html: rendered, current_path: path}
+        transition = transition(session.mode, :live, :click, session.current_path, path)
+
+        observed = %{
+          action: :link,
+          clicked: link.text,
+          path: path,
+          mode: :live,
+          texts: Html.texts(rendered, :any, Session.scope(updated)),
+          transition: transition
+        }
+
+        {:ok, update_session(updated, :click, observed), observed}
+
+      {:error, {:live_redirect, %{to: to}}} ->
+        redirected_result(session, link, to, :live_redirect, :link)
+
+      {:error, {:redirect, %{to: to}}} ->
+        redirected_result(session, link, to, :redirect, :link)
+
+      {:error, {:live_patch, %{to: to}}} ->
+        rendered = render(session.view)
+        path = to_request_path(to, session.current_path)
+        updated = %{session | html: rendered, current_path: path}
+        transition = transition(session.mode, :live, :live_patch, session.current_path, path)
+
+        observed = %{
+          action: :link,
+          clicked: link.text,
+          path: path,
+          mode: :live,
+          texts: Html.texts(rendered, :any, Session.scope(updated)),
+          transition: transition
+        }
+
+        {:ok, update_session(updated, :click, observed), observed}
+
+      {:error, :live_click_unsupported} ->
+        click_link_via_visit(session, link, :click)
+
+      _other ->
+        click_link_via_visit(session, link, :click)
+    end
+  end
+
+  defp click_link_via_visit(session, link, reason) do
+    updated = visit(session, link.href, [])
+
+    transition =
+      transition(
+        session.mode,
+        Session.driver_kind(updated),
+        reason,
+        session.current_path,
+        Session.current_path(updated)
+      )
+
+    observed = %{
+      action: :link,
+      path: Session.current_path(updated),
+      mode: Session.driver_kind(updated),
+      clicked: link.text,
+      texts: Html.texts(updated.html, :any, Session.scope(updated)),
+      transition: transition
+    }
+
+    {:ok, update_last_result(updated, :click, observed), observed}
+  end
+
+  defp maybe_render_click_link(session, link) do
+    session.view
+    |> live_link_element(link, Session.scope(session))
+    |> render_click()
+  rescue
+    _ -> {:error, :live_click_unsupported}
+  end
+
+  defp live_button_element(view, %{selector: selector}, scope) when is_binary(selector) and selector != "" do
+    element(view, scoped_selector(selector, scope))
   end
 
   defp live_button_element(view, button, scope) do
-    selector =
-      if is_binary(scope) and scope != "" do
-        "#{scope} button"
-      else
-        "button"
-      end
-
-    element(view, selector, button.text)
+    element(view, scoped_selector("button", scope), button.text)
   end
 
-  defp redirected_result(session, button, to, reason) do
+  defp live_link_element(view, %{selector: selector}, scope) when is_binary(selector) and selector != "" do
+    element(view, scoped_selector(selector, scope))
+  end
+
+  defp live_link_element(view, link, scope) do
+    element(view, scoped_selector("a", scope), link.text)
+  end
+
+  defp redirected_result(session, clicked, to, reason, action \\ :button) do
     updated = visit(session, to, [])
 
     transition =
       transition(session.mode, Session.driver_kind(updated), reason, session.current_path, Session.current_path(updated))
 
     observed = %{
-      action: :button,
-      clicked: button.text,
+      action: action,
+      clicked: clicked.text,
       path: Session.current_path(updated),
       mode: Session.driver_kind(updated),
       texts: Html.texts(updated.html, :any, Session.scope(updated)),
@@ -373,6 +435,9 @@ defmodule Cerberus.Driver.Live do
     {:ok, update_last_result(updated, :click, observed), observed}
   end
 
+  defp scoped_selector(selector, scope) when is_binary(scope) and scope != "", do: "#{scope} #{selector}"
+  defp scoped_selector(selector, _scope), do: selector
+
   defp try_live(conn) do
     case Phoenix.LiveViewTest.__live__(conn, nil, []) do
       {:ok, view, html} -> {:ok, view, html}
@@ -380,6 +445,19 @@ defmodule Cerberus.Driver.Live do
     end
   rescue
     _ -> :error
+  end
+
+  defp initial_conn(opts) do
+    case Keyword.get(opts, :conn) do
+      nil ->
+        nil
+
+      %Plug.Conn{} = conn ->
+        conn
+
+      other ->
+        raise ArgumentError, "expected :conn option to be a Plug.Conn, got: #{inspect(other)}"
+    end
   end
 
   defp with_latest_html(%__MODULE__{mode: :live, view: view} = session) when not is_nil(view) do

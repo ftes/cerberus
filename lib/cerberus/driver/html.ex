@@ -31,7 +31,13 @@ defmodule Cerberus.Driver.Html do
   end
 
   @spec find_link(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
-          {:ok, %{text: String.t(), href: String.t()}} | :error
+          {:ok,
+           %{
+             required(:text) => String.t(),
+             required(:href) => String.t(),
+             optional(:selector) => String.t()
+           }}
+          | :error
   def find_link(html, expected, opts, scope \\ nil) when is_binary(html) do
     case parse_document(html) do
       {:ok, lazy_html} ->

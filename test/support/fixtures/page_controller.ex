@@ -25,6 +25,27 @@ defmodule Cerberus.Fixtures.PageController do
     """)
   end
 
+  def main(conn, _params) do
+    custom_header = conn |> Plug.Conn.get_req_header("x-custom-header") |> List.first() |> Kernel.||("")
+
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Main Page</title>
+      </head>
+      <body>
+        <main>
+          <h1>Main page</h1>
+          <p id="custom-header">x-custom-header: #{custom_header}</p>
+          <a href="/articles">Articles</a>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
   def redirect_static(conn, _params), do: redirect(conn, to: "/articles")
   def redirect_live(conn, _params), do: redirect(conn, to: "/live/counter")
 
