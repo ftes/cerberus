@@ -9,27 +9,29 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
   @moduletag drivers: [:static, :browser]
 
   test "non-submit controls do not clear active form values before submit", context do
-    Enum.each(context.drivers, fn driver ->
+    Harness.run!(
+      context,
+      fn session ->
+        driver_module = Cerberus.driver_module!(session)
+        reset_locator = Cerberus.Locator.normalize(text: "Reset")
+        save_locator = Cerberus.Locator.normalize(text: "Save Owner Form")
+
       session =
-        driver
-        |> session()
+        session
         |> visit("/owner-form")
         |> fill_in([text: "Name"], "Aragorn")
 
-      driver_module = Cerberus.driver_module!(driver)
-      reset_locator = Cerberus.Locator.normalize(text: "Reset")
-      save_locator = Cerberus.Locator.normalize(text: "Save Owner Form")
+        assert {:error, session_after_reset, _observed, _reason} =
+                 driver_module.submit(session, reset_locator, [])
 
-      assert {:error, session_after_reset, _observed, _reason} =
-               driver_module.submit(session, reset_locator, [])
+        assert {:ok, submitted_session, _observed} =
+                 driver_module.submit(session_after_reset, save_locator, [])
 
-      assert {:ok, submitted_session, _observed} =
-               driver_module.submit(session_after_reset, save_locator, [])
-
-      submitted_session
-      |> assert_has([text: "name: Aragorn"], exact: true)
-      |> assert_has([text: "form-button: save-owner-form"], exact: true)
-    end)
+        submitted_session
+        |> assert_has([text: "name: Aragorn"], exact: true)
+        |> assert_has([text: "form-button: save-owner-form"], exact: true)
+      end
+    )
   end
 
   test "owner-form submit includes button payload across drivers", context do
