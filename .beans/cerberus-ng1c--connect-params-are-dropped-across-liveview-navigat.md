@@ -1,11 +1,11 @@
 ---
 # cerberus-ng1c
 title: connect_params are dropped across LiveView navigation
-status: in-progress
+status: completed
 type: bug
 priority: normal
 created_at: 2026-02-27T21:48:15Z
-updated_at: 2026-02-27T22:35:41Z
+updated_at: 2026-02-27T22:37:40Z
 parent: cerberus-zqpu
 ---
 
@@ -30,11 +30,19 @@ Expected Cerberus parity checks:
 - current_path updates do not regress when preserving connection metadata
 
 ## Todo
-- [ ] Add fixture that asserts connect_params before and after live navigation
-- [ ] Add failing conformance tests for live navigation transitions
-- [ ] Fix conn/session recycling path to preserve connect params where appropriate
-- [ ] Validate static/live/browser expectations and document caveats
+- [x] Add fixture that asserts connect_params before and after live navigation
+- [x] Add failing conformance tests for live navigation transitions
+- [x] Fix conn/session recycling path to preserve connect params where appropriate
+- [x] Validate static/live/browser expectations and document caveats
 
 ## Triage Note
 This candidate comes from an upstream phoenix_test issue or PR and may already work in Cerberus.
 If current Cerberus behavior already matches the expected semantics, add or keep the conformance test coverage and close this bean as done (no behavior change required).
+
+## Summary of Changes
+
+- Reproduced the root cause in Cerberus: conn recycling dropped `conn.private[:live_view_connect_params]`, which can clear LiveView connect params between requests/navigations.
+- Preserved LiveView connect params in `Cerberus.Driver.Conn` during `ensure_conn/1` recycle and `fork_user_conn/1` construction.
+- Added fixture visibility for connect params on `/live/redirects` and `/live/counter` via `connect timezone: ...` text.
+- Added a live-driver regression test asserting timezone connect params persist before and after `click_link` live navigation.
+- Validation/caveat: this behavior is specific to LiveViewTest-backed flows (`:live` driver). `:browser` does not use seeded Plug conn connect params, and `:static` does not establish LiveView socket connect params.

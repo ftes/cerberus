@@ -4,6 +4,7 @@ defmodule Cerberus.Driver.Conn do
   import Phoenix.ConnTest, only: [build_conn: 0, dispatch: 5, recycle: 1]
 
   @max_redirects 5
+  @private_keys_to_preserve [:live_view_connect_params]
 
   @spec endpoint!(struct() | keyword()) :: module()
   def endpoint!(%{endpoint: endpoint}) when is_atom(endpoint) do
@@ -35,6 +36,7 @@ defmodule Cerberus.Driver.Conn do
     |> Enum.reduce(build_conn(), fn {name, value}, acc ->
       Plug.Conn.put_req_header(acc, name, value)
     end)
+    |> preserve_private(conn)
   end
 
   @spec follow_get(module(), Plug.Conn.t(), String.t()) :: Plug.Conn.t()
@@ -138,8 +140,23 @@ defmodule Cerberus.Driver.Conn do
   defp recycle_preserving_headers(conn) do
     recycled = recycle(conn)
 
-    Enum.reduce(conn.req_headers, recycled, fn {name, value}, acc ->
+    recycled
+    |> preserve_headers(conn.req_headers)
+    |> preserve_private(conn)
+  end
+
+  defp preserve_headers(conn, headers) do
+    Enum.reduce(headers, conn, fn {name, value}, acc ->
       Plug.Conn.put_req_header(acc, name, value)
+    end)
+  end
+
+  defp preserve_private(conn, source_conn) do
+    Enum.reduce(@private_keys_to_preserve, conn, fn key, acc ->
+      case source_conn.private[key] do
+        nil -> acc
+        value -> Plug.Conn.put_private(acc, key, value)
+      end
     end)
   end
 

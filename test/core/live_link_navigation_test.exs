@@ -65,4 +65,26 @@ defmodule Cerberus.CoreLiveLinkNavigationTest do
       session_opts: [conn: seed_conn]
     )
   end
+
+  @tag drivers: [:live]
+  test "live click_link preserves connect_params across live navigation", context do
+    seed_conn = Phoenix.LiveViewTest.put_connect_params(build_conn(), %{"timezone" => "Europe/Berlin"})
+
+    Harness.run!(
+      context,
+      fn session ->
+        session
+        |> visit("/live/redirects")
+        |> assert_has(text("connect timezone: Europe/Berlin"), exact: true)
+        |> click_link(link("Navigate link"), exact: true)
+        |> assert_path("/live/counter")
+        |> assert_has(text("connect timezone: Europe/Berlin"), exact: true)
+        |> then(fn updated_session ->
+          assert updated_session.conn.private[:live_view_connect_params] == %{"timezone" => "Europe/Berlin"}
+          updated_session
+        end)
+      end,
+      session_opts: [conn: seed_conn]
+    )
+  end
 end
