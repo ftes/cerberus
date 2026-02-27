@@ -140,7 +140,7 @@ Helper locator constructors:
 - `text("...")`
 - `link("...")`
 - `button("...")`
-- `label("...")` (explicit form-field lookup by associated label text; this is distinct from generic text matching)
+- `label("...")` (form-field lookup by associated label text for `fill_in`/`upload`; in `assert_has`/`refute_has` it is treated as text matching)
 - `css("...")`
 - `role(:button, name: "...")` (supported roles in this slice: `:button`, `:link`, `:textbox`, `:searchbox`, `:combobox`)
 - `testid("...")` (reserved helper; not yet supported by operations in this slice)

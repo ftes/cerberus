@@ -289,11 +289,8 @@ defmodule Cerberus.Assertions do
       %Locator{kind: :text} ->
         {locator, opts}
 
-      %Locator{kind: :label} ->
-        raise InvalidLocatorError,
-          locator: locator_input,
-          message:
-            "label locators target form-field lookup and are not supported for assert_has/3 or refute_has/3; use text(...) for generic text assertions"
+      %Locator{kind: :label, value: value} ->
+        {%Locator{kind: :text, value: value}, opts}
 
       %Locator{kind: kind, value: value} when kind in [:link, :button] ->
         {%Locator{kind: :text, value: value}, opts}
