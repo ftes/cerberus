@@ -19,6 +19,7 @@ defmodule Cerberus.Driver.Live do
           view: term() | nil,
           html: String.t(),
           form_data: map(),
+          scope: String.t() | nil,
           current_path: String.t() | nil,
           last_result: Session.last_result()
         }
@@ -29,6 +30,7 @@ defmodule Cerberus.Driver.Live do
             view: nil,
             html: "",
             form_data: %{active_form: nil, values: %{}},
+            scope: nil,
             current_path: nil,
             last_result: nil
 
@@ -57,6 +59,7 @@ defmodule Cerberus.Driver.Live do
             mode: :live,
             view: view,
             html: html,
+            scope: session.scope,
             current_path: current_path,
             last_result: %{op: :visit, observed: %{path: current_path, mode: :live, transition: transition}}
         }
@@ -70,6 +73,7 @@ defmodule Cerberus.Driver.Live do
           conn: conn,
           html: html,
           form_data: session.form_data,
+          scope: session.scope,
           current_path: current_path,
           last_result: %{op: :visit, observed: %{path: current_path, mode: :static, transition: transition}}
         }
@@ -99,7 +103,7 @@ defmodule Cerberus.Driver.Live do
           path: Session.current_path(updated),
           mode: Session.driver_kind(updated),
           clicked: link.text,
-          texts: Html.texts(updated.html, :any),
+          texts: Html.texts(updated.html, :any, Session.scope(updated)),
           transition: transition
         }
 
@@ -126,7 +130,7 @@ defmodule Cerberus.Driver.Live do
               action: :click,
               path: session.current_path,
               mode: session.mode,
-              texts: Html.texts(session.html, :any),
+              texts: Html.texts(session.html, :any, Session.scope(session)),
               transition: Session.transition(session)
             }
 
@@ -151,7 +155,7 @@ defmodule Cerberus.Driver.Live do
         {:error, session, observed, "live driver does not yet support fill_in on live routes"}
 
       :static ->
-        case Html.find_form_field(session.html, expected, opts) do
+        case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
           {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
             updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
 
@@ -205,7 +209,7 @@ defmodule Cerberus.Driver.Live do
         {:error, session, observed, "live driver does not yet support submit on live routes"}
 
       :static ->
-        case Html.find_submit_button(session.html, expected, opts) do
+        case Html.find_submit_button(session.html, expected, opts, Session.scope(session)) do
           {:ok, button} ->
             do_submit(session, button)
 
@@ -226,7 +230,7 @@ defmodule Cerberus.Driver.Live do
   def assert_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
     session = with_latest_html(session)
     visible = Keyword.get(opts, :visible, true)
-    texts = Html.texts(session.html, visible)
+    texts = Html.texts(session.html, visible, Session.scope(session))
     matched = Enum.filter(texts, &Query.match_text?(&1, expected, opts))
 
     observed = %{
@@ -250,7 +254,7 @@ defmodule Cerberus.Driver.Live do
   def refute_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
     session = with_latest_html(session)
     visible = Keyword.get(opts, :visible, true)
-    texts = Html.texts(session.html, visible)
+    texts = Html.texts(session.html, visible, Session.scope(session))
     matched = Enum.filter(texts, &Query.match_text?(&1, expected, opts))
 
     observed = %{
@@ -273,7 +277,7 @@ defmodule Cerberus.Driver.Live do
   defp click_live_button(session, button) do
     result =
       session.view
-      |> live_button_element(button)
+      |> live_button_element(button, Session.scope(session))
       |> render_click()
 
     case result do
@@ -287,7 +291,7 @@ defmodule Cerberus.Driver.Live do
           clicked: button.text,
           path: path,
           mode: :live,
-          texts: Html.texts(rendered, :any),
+          texts: Html.texts(rendered, :any, Session.scope(updated)),
           transition: transition
         }
 
@@ -309,7 +313,7 @@ defmodule Cerberus.Driver.Live do
           clicked: button.text,
           path: to,
           mode: :live,
-          texts: Html.texts(rendered, :any),
+          texts: Html.texts(rendered, :any, Session.scope(updated)),
           transition: transition
         }
 
@@ -329,12 +333,26 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp live_button_element(view, %{selector: selector}) when is_binary(selector) and selector != "" do
+  defp live_button_element(view, %{selector: selector}, scope) when is_binary(selector) and selector != "" do
+    selector =
+      if is_binary(scope) and scope != "" do
+        "#{scope} #{selector}"
+      else
+        selector
+      end
+
     element(view, selector)
   end
 
-  defp live_button_element(view, button) do
-    element(view, "button", button.text)
+  defp live_button_element(view, button, scope) do
+    selector =
+      if is_binary(scope) and scope != "" do
+        "#{scope} button"
+      else
+        "button"
+      end
+
+    element(view, selector, button.text)
   end
 
   defp redirected_result(session, button, to, reason) do
@@ -348,7 +366,7 @@ defmodule Cerberus.Driver.Live do
       clicked: button.text,
       path: Session.current_path(updated),
       mode: Session.driver_kind(updated),
-      texts: Html.texts(updated.html, :any),
+      texts: Html.texts(updated.html, :any, Session.scope(updated)),
       transition: transition
     }
 
@@ -384,11 +402,15 @@ defmodule Cerberus.Driver.Live do
 
   defp find_clickable_link(_session, _expected, _opts, :button), do: :error
 
-  defp find_clickable_link(session, expected, opts, _kind), do: Html.find_link(session.html, expected, opts)
+  defp find_clickable_link(session, expected, opts, _kind) do
+    Html.find_link(session.html, expected, opts, Session.scope(session))
+  end
 
   defp find_clickable_button(_session, _expected, _opts, :link), do: :error
 
-  defp find_clickable_button(session, expected, opts, _kind), do: Html.find_button(session.html, expected, opts)
+  defp find_clickable_button(session, expected, opts, _kind) do
+    Html.find_button(session.html, expected, opts, Session.scope(session))
+  end
 
   defp click_button_error(:button), do: "live driver can only click buttons on live routes for click_button"
   defp click_button_error(_kind), do: "live driver can only click buttons on live routes"

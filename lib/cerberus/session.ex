@@ -17,6 +17,13 @@ defmodule Cerberus.Session do
   @spec current_path(t()) :: String.t() | nil
   def current_path(%{current_path: current_path}), do: current_path
 
+  @spec scope(t()) :: String.t() | nil
+  def scope(%{scope: scope}), do: scope
+  def scope(_session), do: nil
+
+  @spec with_scope(t(), String.t() | nil) :: t()
+  def with_scope(session, scope) when is_binary(scope) or is_nil(scope), do: Map.put(session, :scope, scope)
+
   @spec last_result(t()) :: last_result()
   def last_result(%{last_result: last_result}), do: last_result
 

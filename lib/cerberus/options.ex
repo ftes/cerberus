@@ -27,6 +27,12 @@ defmodule Cerberus.Options do
           normalize_ws: boolean()
         ]
 
+  @type path_query :: map() | keyword() | nil
+  @type path_opts :: [
+          exact: boolean(),
+          query: path_query()
+        ]
+
   @click_opts_schema [
     kind: [
       type: {:in, [:any, :link, :button]},
@@ -69,6 +75,15 @@ defmodule Cerberus.Options do
     ]
   ]
 
+  @path_opts_schema [
+    exact: [type: :boolean, default: true, doc: "Requires an exact path match unless disabled."],
+    query: [
+      type: :any,
+      default: nil,
+      doc: "Optionally validates query params as a subset map/keyword."
+    ]
+  ]
+
   @spec click_schema() :: keyword()
   def click_schema, do: @click_opts_schema
 
@@ -81,6 +96,9 @@ defmodule Cerberus.Options do
   @spec submit_schema() :: keyword()
   def submit_schema, do: @submit_opts_schema
 
+  @spec path_schema() :: keyword()
+  def path_schema, do: @path_opts_schema
+
   @spec validate_click!(keyword()) :: click_opts()
   def validate_click!(opts), do: validate!(opts, @click_opts_schema, "click/3")
 
@@ -92,6 +110,30 @@ defmodule Cerberus.Options do
 
   @spec validate_submit!(keyword()) :: submit_opts()
   def validate_submit!(opts), do: validate!(opts, @submit_opts_schema, "submit/3")
+
+  @spec validate_path!(keyword(), String.t()) :: path_opts()
+  def validate_path!(opts, op_name) do
+    validated = validate!(opts, @path_opts_schema, op_name)
+    query = Keyword.get(validated, :query)
+
+    cond do
+      is_nil(query) ->
+        validated
+
+      is_map(query) ->
+        validated
+
+      Keyword.keyword?(query) ->
+        validated
+
+      is_list(query) and Enum.all?(query, &match?({_, _}, &1)) ->
+        validated
+
+      true ->
+        raise ArgumentError,
+              "#{op_name} invalid options: :query must be a map, keyword list, or nil"
+    end
+  end
 
   defp validate!(opts, schema, op_name) do
     case NimbleOptions.validate(opts, schema) do

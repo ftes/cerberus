@@ -13,6 +13,8 @@ The fixture app is started from `test/test_helper.exs` and serves only local rou
 ## Routes
 
 - `/articles` (static): visible text variants + hidden helper text + link to live counter.
+- `/scoped` (static): duplicated link text across scoped sections for `within/3` conformance.
+- `/search` and `/search/results` (static): deterministic query form flow.
 - `/live/counter` (live): deterministic counter with `Increment` button.
 - `/redirect/static` (static redirect): redirects to `/articles`.
 - `/redirect/live` (static redirect): redirects to `/live/counter`.

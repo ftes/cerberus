@@ -25,13 +25,17 @@ defmodule Cerberus.Fixtures.SelectorEdgeLive do
       <p id="selected-result">Selected: <%= @selected %></p>
       <a href="/articles">Articles</a>
 
-      <button phx-click="select_primary" class="action primary" data-kind={"p\"a\\th"}>
-        Apply
-      </button>
+      <section id="primary-actions">
+        <button phx-click="select_primary" class="action primary" data-kind={"p\"a\\th"}>
+          Apply
+        </button>
+      </section>
 
-      <button phx-click="select_secondary" class="action secondary" data-kind="secondary">
-        Apply
-      </button>
+      <section id="secondary-actions">
+        <button phx-click="select_secondary" class="action secondary" data-kind="secondary">
+          Apply
+        </button>
+      </section>
     </main>
     """
   end

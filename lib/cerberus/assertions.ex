@@ -4,6 +4,7 @@ defmodule Cerberus.Assertions do
   alias Cerberus.InvalidLocatorError
   alias Cerberus.Locator
   alias Cerberus.Options
+  alias Cerberus.Path
   alias Cerberus.Session
   alias ExUnit.AssertionError
 
@@ -105,11 +106,15 @@ defmodule Cerberus.Assertions do
 
   defp format_error(op, locator, opts, reason, observed, session) do
     transition = observed_transition(observed) || Session.transition(session)
+    scope = Session.scope(session)
+    current_path = session |> Session.current_path() |> Path.normalize()
 
     """
     #{op} failed: #{reason}
     locator: #{inspect(locator)}
     opts: #{inspect(opts)}
+    current_path: #{inspect(current_path)}
+    scope: #{inspect(scope)}
     transition: #{inspect(transition)}
     observed: #{inspect(observed)}
     """

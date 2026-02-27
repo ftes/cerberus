@@ -37,6 +37,7 @@ defmodule Cerberus.Driver.Browser do
           base_url: String.t(),
           ready_timeout_ms: pos_integer(),
           ready_quiet_ms: pos_integer(),
+          scope: String.t() | nil,
           current_path: String.t() | nil,
           last_result: Session.last_result()
         }
@@ -45,6 +46,7 @@ defmodule Cerberus.Driver.Browser do
             base_url: nil,
             ready_timeout_ms: @default_ready_timeout_ms,
             ready_quiet_ms: @default_ready_quiet_ms,
+            scope: nil,
             current_path: nil,
             last_result: nil
 
@@ -246,7 +248,7 @@ defmodule Cerberus.Driver.Browser do
 
   defp submit_button(session, state, button) do
     index = button["index"] || 0
-    expression = submit_target_expression(index)
+    expression = submit_target_expression(index, Session.scope(state))
 
     case eval_json(state.user_context_pid, expression) do
       {:ok, %{"ok" => true, "url" => url}} ->
@@ -295,7 +297,7 @@ defmodule Cerberus.Driver.Browser do
 
   defp fill_field(session, state, field, value) do
     index = field["index"] || 0
-    expression = field_set_expression(index, value)
+    expression = field_set_expression(index, value, Session.scope(state))
 
     case eval_json(state.user_context_pid, expression) do
       {:ok, result} ->
@@ -384,7 +386,7 @@ defmodule Cerberus.Driver.Browser do
 
   defp click_button(session, state, button) do
     index = button["index"] || 0
-    expression = button_click_expression(index)
+    expression = button_click_expression(index, Session.scope(state))
 
     case eval_json(state.user_context_pid, expression) do
       {:ok, _result} ->
@@ -397,15 +399,15 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp clickables(state) do
-    eval_json(state.user_context_pid, clickables_expression())
+    eval_json(state.user_context_pid, clickables_expression(Session.scope(state)))
   end
 
   defp form_fields(state) do
-    eval_json(state.user_context_pid, form_fields_expression())
+    eval_json(state.user_context_pid, form_fields_expression(Session.scope(state)))
   end
 
   defp with_snapshot(state) do
-    case eval_json(state.user_context_pid, snapshot_expression()) do
+    case eval_json(state.user_context_pid, snapshot_expression(Session.scope(state))) do
       {:ok, snapshot} ->
         snapshot = %{
           path: snapshot["path"],
@@ -646,6 +648,7 @@ defmodule Cerberus.Driver.Browser do
         base_url: state.base_url,
         ready_timeout_ms: state.ready_timeout_ms,
         ready_quiet_ms: state.ready_quiet_ms,
+        scope: session.scope,
         current_path: state.current_path,
         last_result: %{op: op, observed: observed}
     }
@@ -693,10 +696,14 @@ defmodule Cerberus.Driver.Browser do
   defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
   defp normalize_positive_integer(_value, default), do: default
 
-  defp snapshot_expression do
+  defp snapshot_expression(scope) do
+    encoded_scope = JSON.encode!(scope)
+
     """
     (() => {
       const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
+      const scopeSelector = #{encoded_scope};
+
       const isElementHidden = (element) => {
         let current = element;
         while (current) {
@@ -714,8 +721,22 @@ defmodule Cerberus.Driver.Browser do
 
       const visible = [];
       const hiddenTexts = [];
-      const root = document.body || document.documentElement;
-      const elements = root ? Array.from(root.querySelectorAll("*")) : [];
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const elements = [];
+      for (const root of roots) {
+        if (!root) continue;
+        elements.push(root, ...Array.from(root.querySelectorAll("*")));
+      }
 
       for (const element of elements) {
         const tag = (element.tagName || "").toLowerCase();
@@ -743,18 +764,53 @@ defmodule Cerberus.Driver.Browser do
     """
   end
 
-  defp clickables_expression do
+  defp clickables_expression(scope) do
+    encoded_scope = JSON.encode!(scope)
+
     """
     (() => {
       const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
-      const links = Array.from(document.querySelectorAll("a[href]")).map((element, index) => ({
+      const scopeSelector = #{encoded_scope};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const links = queryWithinRoots("a[href]").map((element, index) => ({
         index,
         text: normalize(element.textContent),
         href: element.getAttribute("href") || "",
         resolvedHref: element.href || ""
       }));
 
-      const buttons = Array.from(document.querySelectorAll("button")).map((element, index) => ({
+      const buttons = queryWithinRoots("button").map((element, index) => ({
         index,
         text: normalize(element.textContent),
         type: (element.getAttribute("type") || "submit").toLowerCase(),
@@ -771,18 +827,53 @@ defmodule Cerberus.Driver.Browser do
     """
   end
 
-  defp form_fields_expression do
+  defp form_fields_expression(scope) do
+    encoded_scope = JSON.encode!(scope)
+
     """
     (() => {
       const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
+      const scopeSelector = #{encoded_scope};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
       const labels = new Map();
 
-      Array.from(document.querySelectorAll("label[for]")).forEach((label) => {
+      queryWithinRoots("label[for]").forEach((label) => {
         const id = label.getAttribute("for");
         if (id) labels.set(id, normalize(label.textContent));
       });
 
-      const fields = Array.from(document.querySelectorAll("input, textarea, select"))
+      const fields = queryWithinRoots("input, textarea, select")
         .filter((element) => {
           const type = (element.getAttribute("type") || "").toLowerCase();
           return type !== "hidden" && type !== "submit" && type !== "button";
@@ -802,12 +893,46 @@ defmodule Cerberus.Driver.Browser do
     """
   end
 
-  defp field_set_expression(index, value) do
+  defp field_set_expression(index, value, scope) do
     encoded_value = JSON.encode!(to_string(value))
+    encoded_scope = JSON.encode!(scope)
 
     """
     (() => {
-      const fields = Array.from(document.querySelectorAll("input, textarea, select"))
+      const scopeSelector = #{encoded_scope};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const fields = queryWithinRoots("input, textarea, select")
         .filter((element) => {
           const type = (element.getAttribute("type") || "").toLowerCase();
           return type !== "hidden" && type !== "submit" && type !== "button";
@@ -831,10 +956,45 @@ defmodule Cerberus.Driver.Browser do
     """
   end
 
-  defp submit_target_expression(index) do
+  defp submit_target_expression(index, scope) do
+    encoded_scope = JSON.encode!(scope)
+
     """
     (() => {
-      const buttons = Array.from(document.querySelectorAll("button"));
+      const scopeSelector = #{encoded_scope};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const buttons = queryWithinRoots("button");
       const button = buttons[#{index}];
 
       if (!button) {
@@ -879,10 +1039,45 @@ defmodule Cerberus.Driver.Browser do
     """
   end
 
-  defp button_click_expression(index) do
+  defp button_click_expression(index, scope) do
+    encoded_scope = JSON.encode!(scope)
+
     """
     (() => {
-      const buttons = Array.from(document.querySelectorAll("button"));
+      const scopeSelector = #{encoded_scope};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const buttons = queryWithinRoots("button");
       const button = buttons[#{index}];
 
       if (!button) {

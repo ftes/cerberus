@@ -15,6 +15,7 @@ defmodule Cerberus.Driver.Static do
           conn: Plug.Conn.t() | nil,
           html: String.t(),
           form_data: map(),
+          scope: String.t() | nil,
           current_path: String.t() | nil,
           last_result: Session.last_result()
         }
@@ -23,6 +24,7 @@ defmodule Cerberus.Driver.Static do
             conn: nil,
             html: "",
             form_data: %{active_form: nil, values: %{}},
+            scope: nil,
             current_path: nil,
             last_result: nil
 
@@ -51,6 +53,7 @@ defmodule Cerberus.Driver.Static do
           view: view,
           html: html,
           form_data: session.form_data,
+          scope: session.scope,
           current_path: current_path,
           last_result: %{op: :visit, observed: %{path: current_path, mode: :live, transition: transition}}
         }
@@ -85,7 +88,7 @@ defmodule Cerberus.Driver.Static do
           path: Session.current_path(updated),
           mode: Session.driver_kind(updated),
           clicked: link.text,
-          texts: Html.texts(updated.html, :any),
+          texts: Html.texts(updated.html, :any, Session.scope(updated)),
           transition: transition
         }
 
@@ -107,7 +110,7 @@ defmodule Cerberus.Driver.Static do
             observed = %{
               action: :click,
               path: session.current_path,
-              texts: Html.texts(session.html, :any),
+              texts: Html.texts(session.html, :any, Session.scope(session)),
               transition: Session.transition(session)
             }
 
@@ -118,7 +121,7 @@ defmodule Cerberus.Driver.Static do
 
   @impl true
   def fill_in(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, value, opts) do
-    case Html.find_form_field(session.html, expected, opts) do
+    case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
       {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
         updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
 
@@ -144,7 +147,7 @@ defmodule Cerberus.Driver.Static do
 
   @impl true
   def submit(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
-    case Html.find_submit_button(session.html, expected, opts) do
+    case Html.find_submit_button(session.html, expected, opts, Session.scope(session)) do
       {:ok, button} ->
         do_submit(session, button)
 
@@ -157,7 +160,7 @@ defmodule Cerberus.Driver.Static do
   @impl true
   def assert_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
     visible = Keyword.get(opts, :visible, true)
-    texts = Html.texts(session.html, visible)
+    texts = Html.texts(session.html, visible, Session.scope(session))
     matched = Enum.filter(texts, &Query.match_text?(&1, expected, opts))
 
     observed = %{
@@ -179,7 +182,7 @@ defmodule Cerberus.Driver.Static do
   @impl true
   def refute_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
     visible = Keyword.get(opts, :visible, true)
-    texts = Html.texts(session.html, visible)
+    texts = Html.texts(session.html, visible, Session.scope(session))
     matched = Enum.filter(texts, &Query.match_text?(&1, expected, opts))
 
     observed = %{
@@ -212,11 +215,15 @@ defmodule Cerberus.Driver.Static do
 
   defp find_clickable_link(_session, _expected, _opts, :button), do: :error
 
-  defp find_clickable_link(session, expected, opts, _kind), do: Html.find_link(session.html, expected, opts)
+  defp find_clickable_link(session, expected, opts, _kind) do
+    Html.find_link(session.html, expected, opts, Session.scope(session))
+  end
 
   defp find_clickable_button(_session, _expected, _opts, :link), do: :error
 
-  defp find_clickable_button(session, expected, opts, _kind), do: Html.find_button(session.html, expected, opts)
+  defp find_clickable_button(session, expected, opts, _kind) do
+    Html.find_button(session.html, expected, opts, Session.scope(session))
+  end
 
   defp click_button_error(:button), do: "static driver does not support button clicks"
   defp click_button_error(_kind), do: "static driver does not support dynamic button clicks"

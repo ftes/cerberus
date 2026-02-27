@@ -28,6 +28,33 @@ defmodule Cerberus.Fixtures.PageController do
   def redirect_static(conn, _params), do: redirect(conn, to: "/articles")
   def redirect_live(conn, _params), do: redirect(conn, to: "/live/counter")
 
+  def scoped(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Scoped Page</title>
+      </head>
+      <body>
+        <main>
+          <section id="primary-panel">
+            <h2>Primary Panel</h2>
+            <p>Status: primary</p>
+            <a href="/articles">Open</a>
+          </section>
+
+          <section id="secondary-panel">
+            <h2>Secondary Panel</h2>
+            <p>Status: secondary</p>
+            <a href="/search">Open</a>
+          </section>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
   def search_form(conn, _params) do
     html(conn, """
     <!doctype html>

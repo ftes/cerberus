@@ -8,7 +8,8 @@ Cerberus is an experimental Phoenix test harness with one API across:
 v0 currently ships a first vertical slice:
 - session-first API (`session |> visit |> click |> assert_has/refute_has`),
 - text locators (`"text"`, `~r/regex/`, `[text: ...]`),
-- one-shot assertions with deterministic fixture-backed adapters.
+- one-shot assertions with deterministic fixture-backed adapters,
+- path assertions (`assert_path` / `refute_path`) and scoped flows via `within/3`.
 
 ## API Example
 
@@ -38,6 +39,19 @@ session(:live)
 |> visit("/live/counter")
 |> click(role(:button, name: "Increment"))
 |> assert_has(text("Count: 1"), exact: true)
+```
+
+Path and scoped flow example:
+
+```elixir
+session(:auto)
+|> visit("/scoped")
+|> within("#secondary-panel", fn scoped ->
+  scoped
+  |> assert_has(text("Status: secondary"), exact: true)
+  |> click(link("Open"))
+end)
+|> assert_path("/search")
 ```
 
 Supported sigil:
