@@ -108,8 +108,8 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
   test "can run against committed PhoenixTest fixture files", %{tmp_dir: tmp_dir} do
     fixture_dir = Path.expand("../../support/fixtures/migration_source", __DIR__)
-    live_source = Path.join(fixture_dir, "live_test.exs")
-    static_source = Path.join(fixture_dir, "static_test.exs")
+    live_source = Path.join(fixture_dir, "live_fixture.exs")
+    static_source = Path.join(fixture_dir, "static_fixture.exs")
     live_copy = Path.join(tmp_dir, "live_test.exs")
     static_copy = Path.join(tmp_dir, "static_test.exs")
 
