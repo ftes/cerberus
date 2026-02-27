@@ -29,6 +29,7 @@ defmodule Cerberus.Fixtures.Router do
     live_session :fixtures, root_layout: {Cerberus.Fixtures.Layouts, :root} do
       live("/live/counter", CounterPageLive)
       live("/live/redirects", RedirectsLive)
+      live("/live/selector-edge", SelectorEdgeLive)
       live("/live/oracle/mismatch", OracleMismatchLive)
     end
   end

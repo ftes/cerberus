@@ -17,6 +17,7 @@ The fixture app is started from `test/test_helper.exs` and serves only local rou
 - `/redirect/static` (static redirect): redirects to `/articles`.
 - `/redirect/live` (static redirect): redirects to `/live/counter`.
 - `/live/redirects` (live): live redirects via buttons to `/articles` and `/live/counter`.
+- `/live/selector-edge` (live): duplicate button-label fixture for selector disambiguation checks.
 - `/oracle/mismatch` (static): mismatch marker fixture for browser-oracle diff tests.
 - `/live/oracle/mismatch` (live): mismatch marker fixture for browser-oracle diff tests.
 
