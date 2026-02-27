@@ -1,3 +1,5 @@
+alias Cerberus.Fixtures.Endpoint
+
 ExUnit.start()
 
 {:ok, _} =
@@ -9,4 +11,5 @@ ExUnit.start()
     strategy: :one_for_one
   )
 
-{:ok, _} = Cerberus.Fixtures.Endpoint.start_link()
+{:ok, _} = Endpoint.start_link()
+Application.put_env(:cerberus, :base_url, Endpoint.url())
