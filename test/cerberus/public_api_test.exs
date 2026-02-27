@@ -15,9 +15,53 @@ defmodule Cerberus.PublicApiTest do
     assert %StaticSession{} = session(:auto)
   end
 
+  test "open_user/open_tab/switch_tab API works for non-browser sessions" do
+    primary =
+      :static
+      |> session()
+      |> visit("/session/user/alice")
+      |> assert_has(text("Session user: alice"), exact: true)
+
+    tab =
+      primary
+      |> open_tab()
+      |> visit("/session/user")
+      |> assert_has(text("Session user: alice"), exact: true)
+
+    isolated_user =
+      primary
+      |> open_user()
+      |> visit("/session/user")
+      |> assert_has(text("Session user: unset"), exact: true)
+
+    switched = switch_tab(tab, primary)
+    assert switched.current_path == "/session/user"
+
+    closed = close_tab(tab)
+    assert closed.current_path == "/session/user"
+    assert isolated_user.current_path == "/session/user"
+  end
+
   @tag browser: true
   test "session constructor returns a browser session" do
     assert %BrowserSession{} = session(:browser)
+  end
+
+  @tag browser: true
+  test "switch_tab rejects mixed browser and non-browser sessions" do
+    browser_tab =
+      :browser
+      |> session()
+      |> visit("/articles")
+
+    static_tab =
+      :static
+      |> session()
+      |> visit("/articles")
+
+    assert_raise ArgumentError, ~r/cannot switch browser tab to a non-browser session/, fn ->
+      switch_tab(browser_tab, static_tab)
+    end
   end
 
   test "assert_has with unsupported locator raises InvalidLocatorError" do

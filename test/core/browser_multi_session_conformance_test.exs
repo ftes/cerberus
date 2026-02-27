@@ -8,41 +8,43 @@ defmodule Cerberus.CoreBrowserMultiSessionConformanceTest do
   @moduletag :conformance
   @moduletag browser: true
 
-  test "browser user context supports deterministic open/switch/close tab workflows" do
-    session =
+  test "browser open_tab/switch_tab/close_tab workflows are deterministic" do
+    primary =
       :browser
       |> session()
       |> visit("/articles")
       |> assert_has(text("Articles"), exact: true)
 
-    user_context_pid = session.user_context_pid
-    primary_tab = UserContextProcess.active_tab(user_context_pid)
+    primary_tab = primary.tab_id
     assert is_binary(primary_tab)
-    assert UserContextProcess.tabs(user_context_pid) == [primary_tab]
+    assert UserContextProcess.tabs(primary.user_context_pid) == [primary_tab]
 
-    assert {:ok, secondary_tab} = UserContextProcess.open_tab(user_context_pid)
-    assert secondary_tab != primary_tab
-    assert UserContextProcess.active_tab(user_context_pid) == secondary_tab
-    assert Enum.sort(UserContextProcess.tabs(user_context_pid)) == Enum.sort([primary_tab, secondary_tab])
-
-    session =
-      session
+    secondary =
+      primary
+      |> open_tab()
       |> visit("/live/counter")
       |> click(button("Increment"))
       |> assert_has(text("Count: 1"), exact: true)
 
-    assert :ok = UserContextProcess.switch_tab(user_context_pid, primary_tab)
+    assert secondary.tab_id != primary_tab
+    assert Enum.sort(UserContextProcess.tabs(primary.user_context_pid)) == Enum.sort([primary_tab, secondary.tab_id])
 
-    session =
-      session
+    primary =
+      secondary
+      |> switch_tab(primary)
       |> assert_has(text("Articles"), exact: true)
       |> assert_path("/articles")
 
-    assert :ok = UserContextProcess.close_tab(user_context_pid, secondary_tab)
-    assert UserContextProcess.tabs(user_context_pid) == [primary_tab]
-    assert UserContextProcess.active_tab(user_context_pid) == primary_tab
-    assert {:error, "cannot close last tab", _details} = UserContextProcess.close_tab(user_context_pid, primary_tab)
-    assert session.current_path == "/articles"
+    closed = close_tab(secondary)
+    assert closed.tab_id == primary_tab
+    assert UserContextProcess.tabs(primary.user_context_pid) == [primary_tab]
+    assert UserContextProcess.active_tab(primary.user_context_pid) == primary_tab
+
+    assert_raise ArgumentError, ~r/cannot close last tab/, fn ->
+      close_tab(primary)
+    end
+
+    assert primary.current_path == "/articles"
   end
 
   test "parallel browser sessions remain isolated under concurrent actions" do

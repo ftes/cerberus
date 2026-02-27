@@ -148,6 +148,31 @@ defmodule Cerberus.Fixtures.PageController do
     """)
   end
 
+  def session_user(conn, _params) do
+    value = Plug.Conn.get_session(conn, :session_user) || "unset"
+
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Session User</title>
+      </head>
+      <body>
+        <main>
+          <p>Session user: #{value}</p>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def set_session_user(conn, %{"value" => value}) do
+    conn
+    |> Plug.Conn.put_session(:session_user, value)
+    |> redirect(to: "/session/user")
+  end
+
   def owner_form(conn, _params) do
     html(conn, """
     <!doctype html>

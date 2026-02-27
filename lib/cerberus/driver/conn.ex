@@ -22,6 +22,21 @@ defmodule Cerberus.Driver.Conn do
   def ensure_conn(nil), do: build_conn()
   def ensure_conn(conn), do: recycle_preserving_headers(conn)
 
+  @spec fork_tab_conn(Plug.Conn.t() | nil) :: Plug.Conn.t() | nil
+  def fork_tab_conn(nil), do: nil
+  def fork_tab_conn(conn), do: ensure_conn(conn)
+
+  @spec fork_user_conn(Plug.Conn.t() | nil) :: Plug.Conn.t() | nil
+  def fork_user_conn(nil), do: nil
+
+  def fork_user_conn(conn) do
+    conn.req_headers
+    |> Enum.reject(fn {name, _value} -> String.downcase(name) == "cookie" end)
+    |> Enum.reduce(build_conn(), fn {name, value}, acc ->
+      Plug.Conn.put_req_header(acc, name, value)
+    end)
+  end
+
   @spec follow_get(module(), Plug.Conn.t(), String.t()) :: Plug.Conn.t()
   def follow_get(endpoint, conn, path) when is_binary(path) do
     do_follow_get(endpoint, conn, path, @max_redirects)

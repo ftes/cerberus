@@ -36,6 +36,22 @@ defmodule Cerberus.Driver.Static do
     }
   end
 
+  @spec open_user(t()) :: t()
+  def open_user(%__MODULE__{} = session) do
+    new_session(endpoint: session.endpoint, conn: Conn.fork_user_conn(session.conn))
+  end
+
+  @spec open_tab(t()) :: t()
+  def open_tab(%__MODULE__{} = session) do
+    new_session(endpoint: session.endpoint, conn: Conn.fork_tab_conn(session.conn))
+  end
+
+  @spec switch_tab(t(), Session.t()) :: Session.t()
+  def switch_tab(%__MODULE__{}, target_session), do: target_session
+
+  @spec close_tab(t()) :: t()
+  def close_tab(%__MODULE__{} = session), do: session
+
   @impl true
   def visit(%__MODULE__{} = session, path, _opts) do
     conn = Conn.ensure_conn(session.conn)

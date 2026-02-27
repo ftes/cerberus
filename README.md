@@ -64,6 +64,24 @@ end)
 |> assert_path("/search")
 ```
 
+Multi-user/multi-tab example:
+
+```elixir
+primary =
+  session(:browser)
+  |> visit("/session/user/alice")
+
+tab2 =
+  primary
+  |> open_tab()
+  |> visit("/session/user")
+
+user2 =
+  primary
+  |> open_user()
+  |> visit("/session/user")
+```
+
 Supported sigil:
 - `~l` for text locators.
 - `~l` modifiers:
@@ -183,6 +201,10 @@ Dependencies: `curl`, `jq`, `unzip`.
 
 - `:auto` uses `Phoenix.LiveViewTest` and `Phoenix.ConnTest` to auto-detect static/live on each interaction.
 - `:browser` uses WebDriver BiDi with a shared runtime/connection plus per-test `userContext` isolation.
+- `open_user/1` creates isolated user state in all drivers.
+- `open_tab/1` creates another tab in the same user state in all drivers:
+  browser maps this to a new `browsingContext` in the same `userContext`;
+  live/static map this to a recycled `Plug.Conn` so cookies/session are shared.
 - Live-driver `click_button` treats `phx-click` raw events and JS `push`/`navigate`/`patch` bindings as actionable; `dispatch`-only bindings are intentionally excluded from server-actionable resolution.
 - Fixture LiveView browser bootstrap lives in `assets/js/app.js`; run `mix assets.build` to sync `priv/static/assets/app.js`.
 - Browser worker topology and restart semantics are documented in `docs/adr/0004-browser-runtime-supervision-topology.md`.

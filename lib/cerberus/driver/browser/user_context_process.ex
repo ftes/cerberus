@@ -34,14 +34,29 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(pid, {:navigate, url}, 10_000)
   end
 
+  @spec navigate(pid(), String.t(), String.t() | nil) :: {:ok, map()} | {:error, String.t(), map()}
+  def navigate(pid, url, tab_id) when is_pid(pid) and is_binary(url) do
+    GenServer.call(pid, {:navigate_tab, tab_id, url}, 10_000)
+  end
+
   @spec evaluate(pid(), String.t()) :: {:ok, map()} | {:error, String.t(), map()}
   def evaluate(pid, expression) when is_pid(pid) and is_binary(expression) do
     GenServer.call(pid, {:evaluate, expression}, 10_000)
   end
 
+  @spec evaluate(pid(), String.t(), String.t() | nil) :: {:ok, map()} | {:error, String.t(), map()}
+  def evaluate(pid, expression, tab_id) when is_pid(pid) and is_binary(expression) do
+    GenServer.call(pid, {:evaluate_tab, tab_id, expression}, 10_000)
+  end
+
   @spec await_ready(pid(), keyword()) :: {:ok, map()} | {:error, String.t(), map()}
   def await_ready(pid, opts \\ []) when is_pid(pid) and is_list(opts) do
     GenServer.call(pid, {:await_ready, opts}, 10_000)
+  end
+
+  @spec await_ready(pid(), keyword(), String.t() | nil) :: {:ok, map()} | {:error, String.t(), map()}
+  def await_ready(pid, opts, tab_id) when is_pid(pid) and is_list(opts) do
+    GenServer.call(pid, {:await_ready_tab, tab_id, opts}, 10_000)
   end
 
   @spec open_tab(pid()) :: {:ok, String.t()} | {:error, String.t(), map()}
@@ -77,6 +92,11 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   @spec last_readiness(pid()) :: map()
   def last_readiness(pid) when is_pid(pid) do
     GenServer.call(pid, :last_readiness)
+  end
+
+  @spec last_readiness(pid(), String.t() | nil) :: map()
+  def last_readiness(pid, tab_id) when is_pid(pid) do
+    GenServer.call(pid, {:last_readiness_tab, tab_id})
   end
 
   @impl true
@@ -119,12 +139,42 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     {:reply, BrowsingContextProcess.navigate(active_browsing_context_pid!(state), url), state}
   end
 
+  def handle_call({:navigate_tab, tab_id, url}, _from, state) do
+    case browsing_context_pid(state, tab_id) do
+      {:ok, pid} ->
+        {:reply, BrowsingContextProcess.navigate(pid, url), state}
+
+      {:error, reason, details} ->
+        {:reply, {:error, reason, details}, state}
+    end
+  end
+
   def handle_call({:evaluate, expression}, _from, state) do
     {:reply, BrowsingContextProcess.evaluate(active_browsing_context_pid!(state), expression), state}
   end
 
+  def handle_call({:evaluate_tab, tab_id, expression}, _from, state) do
+    case browsing_context_pid(state, tab_id) do
+      {:ok, pid} ->
+        {:reply, BrowsingContextProcess.evaluate(pid, expression), state}
+
+      {:error, reason, details} ->
+        {:reply, {:error, reason, details}, state}
+    end
+  end
+
   def handle_call({:await_ready, opts}, _from, state) do
     {:reply, BrowsingContextProcess.await_ready(active_browsing_context_pid!(state), opts), state}
+  end
+
+  def handle_call({:await_ready_tab, tab_id, opts}, _from, state) do
+    case browsing_context_pid(state, tab_id) do
+      {:ok, pid} ->
+        {:reply, BrowsingContextProcess.await_ready(pid, opts), state}
+
+      {:error, reason, details} ->
+        {:reply, {:error, reason, details}, state}
+    end
   end
 
   def handle_call(:open_tab, _from, state) do
@@ -178,6 +228,16 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
   def handle_call(:last_readiness, _from, state) do
     {:reply, BrowsingContextProcess.last_readiness(active_browsing_context_pid!(state)), state}
+  end
+
+  def handle_call({:last_readiness_tab, tab_id}, _from, state) do
+    case browsing_context_pid(state, tab_id) do
+      {:ok, pid} ->
+        {:reply, BrowsingContextProcess.last_readiness(pid), state}
+
+      {:error, _reason, _details} ->
+        {:reply, %{}, state}
+    end
   end
 
   @impl true
@@ -283,6 +343,15 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
       :error ->
         raise "active browsing context is unavailable"
+    end
+  end
+
+  defp browsing_context_pid(state, nil), do: {:ok, active_browsing_context_pid!(state)}
+
+  defp browsing_context_pid(state, tab_id) when is_binary(tab_id) do
+    case Map.fetch(state.browsing_contexts, tab_id) do
+      {:ok, entry} -> {:ok, entry.pid}
+      :error -> {:error, "unknown tab", %{tab_id: tab_id}}
     end
   end
 

@@ -28,6 +28,50 @@ defmodule Cerberus do
     driver_module!(driver).new_session(opts)
   end
 
+  @spec open_user(arg) :: arg when arg: var
+  def open_user(%BrowserSession{} = session), do: BrowserSession.open_user(session)
+  def open_user(%StaticSession{} = session), do: StaticSession.open_user(session)
+  def open_user(%LiveSession{} = session), do: LiveSession.open_user(session)
+
+  @spec open_tab(arg) :: arg when arg: var
+  def open_tab(%BrowserSession{} = session), do: BrowserSession.open_tab(session)
+  def open_tab(%StaticSession{} = session), do: StaticSession.open_tab(session)
+  def open_tab(%LiveSession{} = session), do: LiveSession.open_tab(session)
+
+  @spec switch_tab(Session.t(), Session.t()) :: Session.t()
+  def switch_tab(%BrowserSession{} = session, %BrowserSession{} = target_session) do
+    BrowserSession.switch_tab(session, target_session)
+  end
+
+  def switch_tab(%BrowserSession{}, _target_session) do
+    raise ArgumentError, "cannot switch browser tab to a non-browser session"
+  end
+
+  def switch_tab(%StaticSession{} = session, %StaticSession{} = target_session) do
+    ensure_same_endpoint!(session, target_session)
+    StaticSession.switch_tab(session, target_session)
+  end
+
+  def switch_tab(%StaticSession{} = session, %LiveSession{} = target_session) do
+    ensure_same_endpoint!(session, target_session)
+    StaticSession.switch_tab(session, target_session)
+  end
+
+  def switch_tab(%LiveSession{} = session, %StaticSession{} = target_session) do
+    ensure_same_endpoint!(session, target_session)
+    LiveSession.switch_tab(session, target_session)
+  end
+
+  def switch_tab(%LiveSession{} = session, %LiveSession{} = target_session) do
+    ensure_same_endpoint!(session, target_session)
+    LiveSession.switch_tab(session, target_session)
+  end
+
+  @spec close_tab(arg) :: arg when arg: var
+  def close_tab(%BrowserSession{} = session), do: BrowserSession.close_tab(session)
+  def close_tab(%StaticSession{} = session), do: StaticSession.close_tab(session)
+  def close_tab(%LiveSession{} = session), do: LiveSession.close_tab(session)
+
   @spec text(String.t() | Regex.t()) :: keyword()
   def text(value), do: [text: value]
 
@@ -215,6 +259,12 @@ defmodule Cerberus do
 
   defp update_last_result(%{last_result: _} = session, op, observed) do
     %{session | last_result: %{op: op, observed: observed}}
+  end
+
+  defp ensure_same_endpoint!(%{endpoint: endpoint}, %{endpoint: endpoint}), do: :ok
+
+  defp ensure_same_endpoint!(_session, _target_session) do
+    raise ArgumentError, "cannot switch tab across sessions with different endpoints"
   end
 
   defp format_path_error(op, observed) do

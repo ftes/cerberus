@@ -34,18 +34,22 @@ defmodule Cerberus.Driver.Browser do
 
   @type t :: %__MODULE__{
           user_context_pid: pid(),
+          tab_id: String.t(),
           base_url: String.t(),
           ready_timeout_ms: pos_integer(),
           ready_quiet_ms: pos_integer(),
+          sandbox_metadata: String.t() | nil,
           scope: String.t() | nil,
           current_path: String.t() | nil,
           last_result: Session.last_result()
         }
 
   defstruct user_context_pid: nil,
+            tab_id: nil,
             base_url: nil,
             ready_timeout_ms: @default_ready_timeout_ms,
             ready_quiet_ms: @default_ready_quiet_ms,
+            sandbox_metadata: nil,
             scope: nil,
             current_path: nil,
             last_result: nil
@@ -66,12 +70,94 @@ defmodule Cerberus.Driver.Browser do
 
     maybe_configure_sandbox_metadata!(user_context_pid, opts)
 
+    tab_id =
+      case UserContextProcess.active_tab(user_context_pid) do
+        value when is_binary(value) -> value
+        _ -> raise ArgumentError, "failed to initialize browser driver: missing active tab"
+      end
+
     %__MODULE__{
       user_context_pid: user_context_pid,
+      tab_id: tab_id,
       base_url: base_url,
       ready_timeout_ms: ready_timeout_ms(opts),
-      ready_quiet_ms: ready_quiet_ms(opts)
+      ready_quiet_ms: ready_quiet_ms(opts),
+      sandbox_metadata: Keyword.get(opts, :sandbox_metadata)
     }
+  end
+
+  @spec open_user(t()) :: t()
+  def open_user(%__MODULE__{} = session) do
+    opts = [
+      ready_timeout_ms: session.ready_timeout_ms,
+      ready_quiet_ms: session.ready_quiet_ms
+    ]
+
+    opts =
+      case session.sandbox_metadata do
+        metadata when is_binary(metadata) and metadata != "" ->
+          Keyword.put(opts, :sandbox_metadata, metadata)
+
+        _ ->
+          opts
+      end
+
+    new_session(opts)
+  end
+
+  @spec open_tab(t()) :: t()
+  def open_tab(%__MODULE__{} = session) do
+    case UserContextProcess.open_tab(session.user_context_pid) do
+      {:ok, tab_id} ->
+        %{
+          session
+          | tab_id: tab_id,
+            scope: nil,
+            current_path: nil,
+            last_result: nil
+        }
+
+      {:error, reason, details} ->
+        raise ArgumentError, "failed to open browser tab: #{reason} (#{inspect(details)})"
+    end
+  end
+
+  @spec switch_tab(t(), t()) :: t()
+  def switch_tab(%__MODULE__{} = session, %__MODULE__{} = target_session) do
+    if session.user_context_pid != target_session.user_context_pid do
+      raise ArgumentError, "cannot switch tab across different browser users; use open_user/1 for isolation"
+    end
+
+    case UserContextProcess.switch_tab(session.user_context_pid, target_session.tab_id) do
+      :ok ->
+        target_session
+
+      {:error, reason, details} ->
+        raise ArgumentError, "failed to switch browser tab: #{reason} (#{inspect(details)})"
+    end
+  end
+
+  @spec close_tab(t()) :: t()
+  def close_tab(%__MODULE__{} = session) do
+    case UserContextProcess.close_tab(session.user_context_pid, session.tab_id) do
+      :ok ->
+        next_tab_id = UserContextProcess.active_tab(session.user_context_pid)
+
+        if is_binary(next_tab_id) do
+          %{
+            session
+            | tab_id: next_tab_id,
+              scope: nil,
+              current_path: nil,
+              last_result: nil
+          }
+        else
+          raise ArgumentError, "failed to close browser tab: no active tab selected"
+        end
+
+      {:error, reason, details} ->
+        raise ArgumentError, "failed to close browser tab: #{reason} (#{inspect(details)})"
+    end
   end
 
   @impl true
@@ -79,7 +165,7 @@ defmodule Cerberus.Driver.Browser do
     state = state!(session)
     url = to_absolute_url(state.base_url, path)
 
-    case UserContextProcess.navigate(state.user_context_pid, url) do
+    case navigate_browser(state, url) do
       {:ok, _} ->
         case with_snapshot(state) do
           {state, snapshot} ->
@@ -255,7 +341,7 @@ defmodule Cerberus.Driver.Browser do
     index = button["index"] || 0
     expression = submit_target_expression(index, Session.scope(state), selector)
 
-    case eval_json(state.user_context_pid, expression) do
+    case eval_json(state, expression) do
       {:ok, %{"ok" => true, "url" => url}} ->
         navigate_submit_target(session, state, button, url)
 
@@ -271,7 +357,7 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp navigate_submit_target(session, state, button, url) do
-    case UserContextProcess.navigate(state.user_context_pid, url) do
+    case navigate_browser(state, url) do
       {:ok, _} ->
         submit_snapshot_result(session, state, button)
 
@@ -304,7 +390,7 @@ defmodule Cerberus.Driver.Browser do
     index = field["index"] || 0
     expression = field_set_expression(index, value, Session.scope(state), selector)
 
-    case eval_json(state.user_context_pid, expression) do
+    case eval_json(state, expression) do
       {:ok, result} ->
         fill_field_result(session, state, field, value, result)
 
@@ -347,7 +433,7 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp navigate_link(session, state, link, url) do
-    case UserContextProcess.navigate(state.user_context_pid, url) do
+    case navigate_browser(state, url) do
       {:ok, _} ->
         link_snapshot_result(session, state, link)
 
@@ -393,7 +479,7 @@ defmodule Cerberus.Driver.Browser do
     index = button["index"] || 0
     expression = button_click_expression(index, Session.scope(state), selector)
 
-    case eval_json(state.user_context_pid, expression) do
+    case eval_json(state, expression) do
       {:ok, _result} ->
         click_button_after_eval(session, state, button)
 
@@ -404,15 +490,15 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp clickables(state, selector) do
-    eval_json(state.user_context_pid, clickables_expression(Session.scope(state), selector))
+    eval_json(state, clickables_expression(Session.scope(state), selector))
   end
 
   defp form_fields(state, selector) do
-    eval_json(state.user_context_pid, form_fields_expression(Session.scope(state), selector))
+    eval_json(state, form_fields_expression(Session.scope(state), selector))
   end
 
   defp with_snapshot(state) do
-    case eval_json(state.user_context_pid, snapshot_expression(Session.scope(state))) do
+    case eval_json(state, snapshot_expression(Session.scope(state))) do
       {:ok, snapshot} ->
         snapshot = %{
           path: snapshot["path"],
@@ -428,8 +514,12 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp eval_json(user_context_pid, expression) do
-    with {:ok, result} <- UserContextProcess.evaluate(user_context_pid, expression),
+  defp navigate_browser(state, url) do
+    UserContextProcess.navigate(state.user_context_pid, url, state.tab_id)
+  end
+
+  defp eval_json(state, expression) do
+    with {:ok, result} <- UserContextProcess.evaluate(state.user_context_pid, expression, state.tab_id),
          {:ok, json} <- decode_remote_json(result) do
       {:ok, json}
     else
@@ -471,7 +561,7 @@ defmodule Cerberus.Driver.Browser do
   defp await_driver_ready(state) do
     opts = [timeout_ms: state.ready_timeout_ms, quiet_ms: state.ready_quiet_ms]
 
-    case UserContextProcess.await_ready(state.user_context_pid, opts) do
+    case UserContextProcess.await_ready(state.user_context_pid, opts, state.tab_id) do
       {:ok, readiness} ->
         {:ok, readiness}
 
@@ -610,7 +700,7 @@ defmodule Cerberus.Driver.Browser do
 
   defp merge_last_readiness(state, details) do
     readiness =
-      case UserContextProcess.last_readiness(state.user_context_pid) do
+      case UserContextProcess.last_readiness(state.user_context_pid, state.tab_id) do
         %{} = last when map_size(last) > 0 -> last
         _ -> %{}
       end
@@ -643,16 +733,22 @@ defmodule Cerberus.Driver.Browser do
   defp select_texts(snapshot, false), do: snapshot.hidden
   defp select_texts(snapshot, :any), do: snapshot.visible ++ snapshot.hidden
 
-  defp state!(%__MODULE__{user_context_pid: user_context_pid} = state) when is_pid(user_context_pid), do: state
+  defp state!(%__MODULE__{user_context_pid: user_context_pid, tab_id: tab_id} = state)
+       when is_pid(user_context_pid) and is_binary(tab_id) do
+    state
+  end
+
   defp state!(_), do: raise(ArgumentError, "browser driver state is not initialized")
 
   defp update_session(%__MODULE__{} = session, %{} = state, op, observed) do
     %{
       session
       | user_context_pid: state.user_context_pid,
+        tab_id: state.tab_id,
         base_url: state.base_url,
         ready_timeout_ms: state.ready_timeout_ms,
         ready_quiet_ms: state.ready_quiet_ms,
+        sandbox_metadata: state.sandbox_metadata,
         scope: session.scope,
         current_path: state.current_path,
         last_result: %{op: op, observed: observed}
