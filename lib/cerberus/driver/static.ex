@@ -50,7 +50,6 @@ defmodule Cerberus.Driver.Static do
         %LiveSession{
           endpoint: session.endpoint,
           conn: conn,
-          mode: :live,
           view: view,
           html: html,
           form_data: session.form_data,

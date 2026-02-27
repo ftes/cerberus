@@ -15,7 +15,6 @@ defmodule Cerberus.Driver.Live do
   @type t :: %__MODULE__{
           endpoint: module(),
           conn: Plug.Conn.t() | nil,
-          mode: :static | :live,
           view: term() | nil,
           html: String.t(),
           form_data: map(),
@@ -26,7 +25,6 @@ defmodule Cerberus.Driver.Live do
 
   defstruct endpoint: nil,
             conn: nil,
-            mode: :static,
             view: nil,
             html: "",
             form_data: %{active_form: nil, values: %{}},
@@ -47,7 +45,7 @@ defmodule Cerberus.Driver.Live do
     conn = Conn.ensure_conn(session.conn)
     conn = Conn.follow_get(session.endpoint, conn, path)
     current_path = Conn.current_path(conn, path)
-    from_driver = session.mode
+    from_driver = route_kind(session)
     from_path = session.current_path
 
     case try_live(conn) do
@@ -57,7 +55,6 @@ defmodule Cerberus.Driver.Live do
         %{
           session
           | conn: conn,
-            mode: :live,
             view: view,
             html: html,
             scope: session.scope,
@@ -88,7 +85,7 @@ defmodule Cerberus.Driver.Live do
 
     case find_clickable_link(session, expected, opts, kind) do
       {:ok, link} when is_binary(link.href) ->
-        if session.mode == :live and session.view != nil do
+        if live_route?(session) do
           click_live_link(session, link)
         else
           click_link_via_visit(session, link, :click)
@@ -96,25 +93,14 @@ defmodule Cerberus.Driver.Live do
 
       :error ->
         case find_clickable_button(session, expected, opts, kind) do
-          {:ok, button} when session.mode == :live and session.view != nil ->
-            click_live_button(session, button)
-
           {:ok, button} ->
-            observed = %{
-              action: :button,
-              clicked: button.text,
-              path: session.current_path,
-              mode: session.mode,
-              transition: Session.transition(session)
-            }
-
-            {:error, session, observed, click_button_error(kind)}
+            click_or_error_for_button(session, button, kind)
 
           :error ->
             observed = %{
               action: :click,
               path: session.current_path,
-              mode: session.mode,
+              mode: route_kind(session),
               texts: Html.texts(session.html, :any, Session.scope(session)),
               transition: Session.transition(session)
             }
@@ -128,12 +114,12 @@ defmodule Cerberus.Driver.Live do
   def fill_in(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, value, opts) do
     session = with_latest_html(session)
 
-    case session.mode do
+    case route_kind(session) do
       :live ->
         observed = %{
           action: :fill_in,
           path: session.current_path,
-          mode: session.mode,
+          mode: route_kind(session),
           transition: Session.transition(session)
         }
 
@@ -147,7 +133,7 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :fill_in,
               path: session.current_path,
-              mode: session.mode,
+              mode: route_kind(session),
               field: field,
               value: value,
               transition: Session.transition(session)
@@ -159,7 +145,7 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :fill_in,
               path: session.current_path,
-              mode: session.mode,
+              mode: route_kind(session),
               transition: Session.transition(session)
             }
 
@@ -169,7 +155,7 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :fill_in,
               path: session.current_path,
-              mode: session.mode,
+              mode: route_kind(session),
               transition: Session.transition(session)
             }
 
@@ -182,12 +168,12 @@ defmodule Cerberus.Driver.Live do
   def submit(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
     session = with_latest_html(session)
 
-    case session.mode do
+    case route_kind(session) do
       :live ->
         observed = %{
           action: :submit,
           path: session.current_path,
-          mode: session.mode,
+          mode: route_kind(session),
           transition: Session.transition(session)
         }
 
@@ -202,7 +188,7 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :submit,
               path: session.current_path,
-              mode: session.mode,
+              mode: route_kind(session),
               transition: Session.transition(session)
             }
 
@@ -220,7 +206,7 @@ defmodule Cerberus.Driver.Live do
 
     observed = %{
       path: session.current_path,
-      mode: session.mode,
+      mode: route_kind(session),
       visible: visible,
       texts: texts,
       matched: matched,
@@ -244,7 +230,7 @@ defmodule Cerberus.Driver.Live do
 
     observed = %{
       path: session.current_path,
-      mode: session.mode,
+      mode: route_kind(session),
       visible: visible,
       texts: texts,
       matched: matched,
@@ -269,7 +255,7 @@ defmodule Cerberus.Driver.Live do
       rendered when is_binary(rendered) ->
         path = maybe_live_patch_path(session.view, session.current_path)
         updated = %{session | html: rendered, current_path: path}
-        transition = transition(session.mode, :live, :click, session.current_path, path)
+        transition = transition(route_kind(session), :live, :click, session.current_path, path)
 
         observed = %{
           action: :button,
@@ -291,7 +277,7 @@ defmodule Cerberus.Driver.Live do
       {:error, {:live_patch, %{to: to}}} ->
         rendered = render(session.view)
         updated = %{session | html: rendered, current_path: to}
-        transition = transition(session.mode, :live, :live_patch, session.current_path, to)
+        transition = transition(route_kind(session), :live, :live_patch, session.current_path, to)
 
         observed = %{
           action: :button,
@@ -309,7 +295,7 @@ defmodule Cerberus.Driver.Live do
           action: :button,
           clicked: button.text,
           path: session.current_path,
-          mode: session.mode,
+          mode: route_kind(session),
           result: other,
           transition: Session.transition(session)
         }
@@ -325,7 +311,7 @@ defmodule Cerberus.Driver.Live do
       rendered when is_binary(rendered) ->
         path = maybe_live_patch_path(session.view, session.current_path)
         updated = %{session | html: rendered, current_path: path}
-        transition = transition(session.mode, :live, :click, session.current_path, path)
+        transition = transition(route_kind(session), :live, :click, session.current_path, path)
 
         observed = %{
           action: :link,
@@ -348,7 +334,7 @@ defmodule Cerberus.Driver.Live do
         rendered = render(session.view)
         path = to_request_path(to, session.current_path)
         updated = %{session | html: rendered, current_path: path}
-        transition = transition(session.mode, :live, :live_patch, session.current_path, path)
+        transition = transition(route_kind(session), :live, :live_patch, session.current_path, path)
 
         observed = %{
           action: :link,
@@ -374,7 +360,7 @@ defmodule Cerberus.Driver.Live do
 
     transition =
       transition(
-        session.mode,
+        route_kind(session),
         Session.driver_kind(updated),
         reason,
         session.current_path,
@@ -421,7 +407,13 @@ defmodule Cerberus.Driver.Live do
     updated = visit(session, to, [])
 
     transition =
-      transition(session.mode, Session.driver_kind(updated), reason, session.current_path, Session.current_path(updated))
+      transition(
+        route_kind(session),
+        Session.driver_kind(updated),
+        reason,
+        session.current_path,
+        Session.current_path(updated)
+      )
 
     observed = %{
       action: action,
@@ -460,7 +452,7 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp with_latest_html(%__MODULE__{mode: :live, view: view} = session) when not is_nil(view) do
+  defp with_latest_html(%__MODULE__{view: view} = session) when not is_nil(view) do
     %{session | html: render(view)}
   end
 
@@ -486,11 +478,11 @@ defmodule Cerberus.Driver.Live do
 
   defp find_clickable_button(_session, _expected, _opts, :link), do: :error
 
-  defp find_clickable_button(%{mode: :live} = session, expected, opts, _kind) do
+  defp find_clickable_button(%{view: view} = session, expected, opts, _kind) when not is_nil(view) do
     Html.find_live_clickable_button(session.html, expected, opts, Session.scope(session))
   end
 
-  defp find_clickable_button(%{mode: :static} = session, expected, opts, _kind) do
+  defp find_clickable_button(%__MODULE__{} = session, expected, opts, _kind) do
     Html.find_button(session.html, expected, opts, Session.scope(session))
   end
 
@@ -500,6 +492,22 @@ defmodule Cerberus.Driver.Live do
   defp no_clickable_error(:link), do: "no link matched locator"
   defp no_clickable_error(:button), do: "no button matched locator"
   defp no_clickable_error(_kind), do: "no clickable element matched locator"
+
+  defp click_or_error_for_button(session, button, kind) do
+    if live_route?(session) do
+      click_live_button(session, button)
+    else
+      observed = %{
+        action: :button,
+        clicked: button.text,
+        path: session.current_path,
+        mode: route_kind(session),
+        transition: Session.transition(session)
+      }
+
+      {:error, session, observed, click_button_error(kind)}
+    end
+  end
 
   defp do_submit(session, button) do
     method =
@@ -524,7 +532,7 @@ defmodule Cerberus.Driver.Live do
 
       transition =
         transition(
-          session.mode,
+          route_kind(session),
           Session.driver_kind(updated),
           :submit,
           session.current_path,
@@ -548,7 +556,7 @@ defmodule Cerberus.Driver.Live do
         action: :submit,
         clicked: button.text,
         path: session.current_path,
-        mode: session.mode,
+        mode: route_kind(session),
         transition: Session.transition(session)
       }
 
@@ -668,6 +676,13 @@ defmodule Cerberus.Driver.Live do
       {name, value} when is_binary(name) and name != "" -> {name, value || ""}
       _ -> nil
     end
+  end
+
+  defp live_route?(%__MODULE__{view: view}) when not is_nil(view), do: true
+  defp live_route?(%__MODULE__{}), do: false
+
+  defp route_kind(%__MODULE__{} = session) do
+    if live_route?(session), do: :live, else: :static
   end
 
   defp transition(from_driver, to_driver, reason, from_path, to_path) do
