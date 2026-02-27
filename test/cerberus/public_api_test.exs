@@ -219,6 +219,28 @@ defmodule Cerberus.PublicApiTest do
     File.rm(path)
   end
 
+  test "screenshot is explicit unsupported for static and live sessions" do
+    static_error =
+      assert_raise AssertionError, fn ->
+        :static
+        |> session()
+        |> visit("/articles")
+        |> screenshot()
+      end
+
+    assert static_error.message =~ "screenshot is not implemented for :static driver"
+
+    live_error =
+      assert_raise AssertionError, fn ->
+        :live
+        |> session()
+        |> visit("/live/counter")
+        |> screenshot(path: "tmp/ignored.png")
+      end
+
+    assert live_error.message =~ "screenshot is not implemented for :live driver"
+  end
+
   test "assert_path and refute_path support query matching" do
     assert is_struct(
              :static
@@ -355,6 +377,39 @@ defmodule Cerberus.PublicApiTest do
     File.rm(path)
   end
 
+  @tag browser: true
+  test "screenshot captures browser PNG output to a requested path" do
+    path = Path.join(System.tmp_dir!(), "cerberus-screenshot-#{System.unique_integer([:positive])}.png")
+
+    session =
+      :browser
+      |> session()
+      |> visit("/articles")
+      |> screenshot(path)
+
+    assert session.current_path == "/articles"
+    assert File.exists?(path)
+
+    png = File.read!(path)
+    assert byte_size(png) > 0
+    assert :binary.part(png, 0, 8) == <<137, 80, 78, 71, 13, 10, 26, 10>>
+    File.rm(path)
+  end
+
+  @tag browser: true
+  test "screenshot defaults to a temp PNG path and records it in last_result" do
+    session =
+      :browser
+      |> session()
+      |> visit("/articles")
+      |> screenshot()
+
+    assert %{op: :screenshot, observed: %{path: path, full_page: false}} = session.last_result
+    assert File.exists?(path)
+    assert String.ends_with?(path, ".png")
+    File.rm(path)
+  end
+
   test "unwrap rejects invalid callback arity" do
     assert_raise ArgumentError, ~r/callback with arity 1/, fn ->
       :static
@@ -387,6 +442,16 @@ defmodule Cerberus.PublicApiTest do
       |> session()
       |> visit("/articles")
       |> open_browser(fn -> :ok end)
+    end
+  end
+
+  @tag browser: true
+  test "screenshot rejects invalid options" do
+    assert_raise ArgumentError, ~r/:path must be a non-empty string path/, fn ->
+      :browser
+      |> session()
+      |> visit("/articles")
+      |> screenshot(path: "")
     end
   end
 end

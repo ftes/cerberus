@@ -120,6 +120,33 @@ defmodule Cerberus do
     raise ArgumentError, "open_browser/2 expects a callback with arity 1"
   end
 
+  @spec screenshot(arg) :: arg when arg: var
+  def screenshot(session), do: screenshot(session, [])
+
+  @spec screenshot(arg, String.t() | Options.screenshot_opts()) :: arg when arg: var
+  def screenshot(%BrowserSession{} = session, path) when is_binary(path) do
+    opts = Options.validate_screenshot!(path: path)
+    BrowserSession.screenshot(session, opts)
+  end
+
+  def screenshot(%BrowserSession{} = session, opts) when is_list(opts) do
+    opts = Options.validate_screenshot!(opts)
+    BrowserSession.screenshot(session, opts)
+  end
+
+  def screenshot(session, path) when is_binary(path) do
+    Assertions.unsupported(session, :screenshot, path: path)
+  end
+
+  def screenshot(session, opts) when is_list(opts) do
+    opts = Options.validate_screenshot!(opts)
+    Assertions.unsupported(session, :screenshot, opts)
+  end
+
+  def screenshot(_session, _opts) do
+    raise ArgumentError, "screenshot/2 expects a path string or keyword options"
+  end
+
   @spec text(String.t() | Regex.t()) :: keyword()
   def text(value), do: [text: value]
 

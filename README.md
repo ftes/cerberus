@@ -103,6 +103,15 @@ session(:static)
 |> open_browser()
 ```
 
+Browser screenshot example:
+
+```elixir
+session(:browser)
+|> visit("/articles")
+|> screenshot("tmp/articles.png")
+|> screenshot(full_page: true)
+```
+
 Supported sigil:
 - `~l` for text locators.
 - `~l` modifiers:
@@ -231,6 +240,10 @@ Dependencies: `curl`, `jq`, `unzip`.
   file and opens it via system browser command. For tests, `open_browser/2`
   accepts a callback (`fn path -> ... end`) so callers can inspect snapshots
   without launching a browser.
+- `screenshot/1,2` is browser-only. It captures a PNG with WebDriver BiDi
+  (`browsingContext.captureScreenshot`) and writes to `:path` (or a temp file by
+  default). `full_page: true` captures the full document instead of just the
+  viewport.
 - `unwrap/2` mirrors PhoenixTest escape-hatch semantics for static/live:
   static callbacks receive a `Plug.Conn` and must return a `Plug.Conn`;
   live callbacks receive the underlying LiveView and may return render output

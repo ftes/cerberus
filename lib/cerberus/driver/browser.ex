@@ -23,9 +23,11 @@ defmodule Cerberus.Driver.Browser do
 
   @behaviour Cerberus.Driver
 
+  alias Cerberus.Driver.Browser.BiDi
   alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
+  alias Cerberus.Options
   alias Cerberus.Query
   alias Cerberus.Session
 
@@ -175,6 +177,25 @@ defmodule Cerberus.Driver.Browser do
 
       {:error, reason, details} ->
         raise ArgumentError, "failed to collect browser HTML snapshot: #{reason} (#{inspect(details)})"
+    end
+  end
+
+  @spec screenshot(t(), Options.screenshot_opts()) :: t()
+  def screenshot(%__MODULE__{} = session, opts \\ []) when is_list(opts) do
+    state = state!(session)
+    path = screenshot_path(opts)
+    full_page = Keyword.get(opts, :full_page, false)
+
+    case capture_screenshot(state.tab_id, full_page) do
+      {:ok, %{"data" => data}} when is_binary(data) ->
+        write_screenshot!(path, data)
+        update_last_result(session, :screenshot, %{path: path, full_page: full_page})
+
+      {:ok, payload} ->
+        raise ArgumentError, "failed to capture browser screenshot: unexpected payload #{inspect(payload)}"
+
+      {:error, reason, details} ->
+        raise ArgumentError, "failed to capture browser screenshot: #{reason} (#{inspect(details)})"
     end
   end
 
@@ -823,6 +844,38 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp snapshot_base_url(default_base_url, _url), do: default_base_url
+
+  defp capture_screenshot(context_id, full_page) do
+    params = maybe_full_page_origin(%{"context" => context_id}, full_page)
+
+    BiDi.command("browsingContext.captureScreenshot", params)
+  end
+
+  defp maybe_full_page_origin(params, true), do: Map.put(params, "origin", "document")
+  defp maybe_full_page_origin(params, _full_page), do: params
+
+  defp write_screenshot!(path, encoded_data) when is_binary(path) and is_binary(encoded_data) do
+    File.mkdir_p!(Path.dirname(path))
+
+    case Base.decode64(encoded_data) do
+      {:ok, data} ->
+        File.write!(path, data)
+
+      :error ->
+        raise ArgumentError, "failed to decode browser screenshot payload"
+    end
+  end
+
+  defp default_screenshot_path do
+    Path.join([System.tmp_dir!(), "cerberus-screenshot#{System.unique_integer([:monotonic])}.png"])
+  end
+
+  defp screenshot_path(opts) do
+    case Keyword.get(opts, :path) do
+      nil -> default_screenshot_path()
+      path -> path
+    end
+  end
 
   defp start_user_context(opts) do
     case Process.whereis(@user_context_supervisor) do

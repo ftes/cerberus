@@ -31,6 +31,11 @@ defmodule Cerberus.Options do
           normalize_ws: boolean()
         ]
 
+  @type screenshot_opts :: [
+          path: String.t() | nil,
+          full_page: boolean()
+        ]
+
   @type path_query :: map() | keyword() | nil
   @type path_opts :: [
           exact: boolean(),
@@ -100,6 +105,11 @@ defmodule Cerberus.Options do
     ]
   ]
 
+  @screenshot_opts_schema [
+    path: [type: :any, default: nil, doc: "Optional file path for the screenshot output."],
+    full_page: [type: :boolean, default: false, doc: "Captures the full document instead of only the viewport."]
+  ]
+
   @spec click_schema() :: keyword()
   def click_schema, do: @click_opts_schema
 
@@ -114,6 +124,9 @@ defmodule Cerberus.Options do
 
   @spec path_schema() :: keyword()
   def path_schema, do: @path_opts_schema
+
+  @spec screenshot_schema() :: keyword()
+  def screenshot_schema, do: @screenshot_opts_schema
 
   @spec validate_click!(keyword()) :: click_opts()
   def validate_click!(opts), do: opts |> validate!(@click_opts_schema, "click/3") |> validate_selector!("click/3")
@@ -151,6 +164,13 @@ defmodule Cerberus.Options do
     end
   end
 
+  @spec validate_screenshot!(keyword()) :: screenshot_opts()
+  def validate_screenshot!(opts) do
+    opts
+    |> validate!(@screenshot_opts_schema, "screenshot/2")
+    |> validate_path_string!("screenshot/2", :path)
+  end
+
   defp validate!(opts, schema, op_name) do
     case NimbleOptions.validate(opts, schema) do
       {:ok, validated} ->
@@ -175,6 +195,23 @@ defmodule Cerberus.Options do
 
       _other ->
         raise ArgumentError, "#{op_name} invalid options: :selector must be a non-empty CSS selector string"
+    end
+  end
+
+  defp validate_path_string!(opts, op_name, key) do
+    case Keyword.get(opts, key) do
+      nil ->
+        opts
+
+      path when is_binary(path) ->
+        if String.trim(path) == "" do
+          raise ArgumentError, "#{op_name} invalid options: :#{key} must be a non-empty string path"
+        else
+          opts
+        end
+
+      _other ->
+        raise ArgumentError, "#{op_name} invalid options: :#{key} must be a non-empty string path"
     end
   end
 end
