@@ -15,7 +15,6 @@ defmodule Cerberus do
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.Static, as: StaticSession
-  alias Cerberus.InvalidLocatorError
   alias Cerberus.Locator
   alias Cerberus.Options
   alias Cerberus.Path
@@ -41,6 +40,9 @@ defmodule Cerberus do
   @spec label(String.t() | Regex.t()) :: keyword()
   def label(value), do: [label: value]
 
+  @spec css(String.t()) :: keyword()
+  def css(value) when is_binary(value), do: [css: value]
+
   @spec role(String.t() | atom(), keyword()) :: keyword()
   def role(role, opts \\ []) when is_list(opts) do
     [role: role, name: Keyword.get(opts, :name)]
@@ -50,13 +52,7 @@ defmodule Cerberus do
   def testid(value) when is_binary(value), do: [testid: value]
 
   @spec sigil_l(String.t(), charlist()) :: Locator.t()
-  def sigil_l(value, []), do: Locator.text_sigil(value)
-
-  def sigil_l(value, modifiers) when is_list(modifiers) do
-    raise InvalidLocatorError,
-      locator: {:l, value, modifiers},
-      message: "invalid locator sigil ~l: modifiers are not supported; use ~l\"text\""
-  end
+  def sigil_l(value, modifiers) when is_list(modifiers), do: Locator.sigil(value, modifiers)
 
   @spec visit(arg, String.t(), keyword()) :: arg when arg: var
   def visit(session, path, opts \\ []) when is_binary(path) do

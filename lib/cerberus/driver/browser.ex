@@ -96,11 +96,12 @@ defmodule Cerberus.Driver.Browser do
   @impl true
   def click(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
     state = state!(session)
+    selector = Keyword.get(opts, :selector)
 
     with_driver_ready(session, state, :click, fn ready_state ->
-      case clickables(ready_state) do
+      case clickables(ready_state, selector) do
         {:ok, clickables_data} ->
-          do_click(session, ready_state, clickables_data, expected, opts)
+          do_click(session, ready_state, clickables_data, expected, opts, selector)
 
         {:error, reason, details} ->
           observed = %{path: ready_state.current_path, details: details}
@@ -112,11 +113,12 @@ defmodule Cerberus.Driver.Browser do
   @impl true
   def fill_in(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, value, opts) do
     state = state!(session)
+    selector = Keyword.get(opts, :selector)
 
     with_driver_ready(session, state, :fill_in, fn ready_state ->
-      case form_fields(ready_state) do
+      case form_fields(ready_state, selector) do
         {:ok, fields_data} ->
-          do_fill_in(session, ready_state, fields_data, expected, value, opts)
+          do_fill_in(session, ready_state, fields_data, expected, value, opts, selector)
 
         {:error, reason, details} ->
           observed = %{path: ready_state.current_path, details: details}
@@ -128,11 +130,12 @@ defmodule Cerberus.Driver.Browser do
   @impl true
   def submit(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
     state = state!(session)
+    selector = Keyword.get(opts, :selector)
 
     with_driver_ready(session, state, :submit, fn ready_state ->
-      case clickables(ready_state) do
+      case clickables(ready_state, selector) do
         {:ok, clickables_data} ->
-          do_submit(session, ready_state, clickables_data, expected, opts)
+          do_submit(session, ready_state, clickables_data, expected, opts, selector)
 
         {:error, reason, details} ->
           observed = %{path: ready_state.current_path, details: details}
@@ -175,7 +178,7 @@ defmodule Cerberus.Driver.Browser do
     end)
   end
 
-  defp do_click(session, state, clickables_data, expected, opts) do
+  defp do_click(session, state, clickables_data, expected, opts, selector) do
     kind = Keyword.get(opts, :kind, :any)
     links = Map.get(clickables_data, "links", [])
     buttons = Map.get(clickables_data, "buttons", [])
@@ -199,14 +202,14 @@ defmodule Cerberus.Driver.Browser do
         observed = %{action: :click, path: state.current_path, clickables: clickables_data}
         {:error, session, observed, no_clickable_error(kind)}
       else
-        click_button(session, state, button)
+        click_button(session, state, button, selector)
       end
     else
       click_link(session, state, link)
     end
   end
 
-  defp do_submit(session, state, clickables_data, expected, opts) do
+  defp do_submit(session, state, clickables_data, expected, opts, selector) do
     buttons =
       clickables_data
       |> Map.get("buttons", [])
@@ -218,11 +221,11 @@ defmodule Cerberus.Driver.Browser do
         {:error, session, observed, "no submit button matched locator"}
 
       button ->
-        submit_button(session, state, button)
+        submit_button(session, state, button, selector)
     end
   end
 
-  defp do_fill_in(session, state, fields_data, expected, value, opts) do
+  defp do_fill_in(session, state, fields_data, expected, value, opts, selector) do
     fields = Map.get(fields_data, "fields", [])
 
     case find_matching_by_label(fields, expected, opts) do
@@ -231,7 +234,7 @@ defmodule Cerberus.Driver.Browser do
         {:error, session, observed, "no form field matched locator"}
 
       field ->
-        fill_field(session, state, field, value)
+        fill_field(session, state, field, value, selector)
     end
   end
 
@@ -246,9 +249,9 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp submit_button(session, state, button) do
+  defp submit_button(session, state, button, selector) do
     index = button["index"] || 0
-    expression = submit_target_expression(index, Session.scope(state))
+    expression = submit_target_expression(index, Session.scope(state), selector)
 
     case eval_json(state.user_context_pid, expression) do
       {:ok, %{"ok" => true, "url" => url}} ->
@@ -295,9 +298,9 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp fill_field(session, state, field, value) do
+  defp fill_field(session, state, field, value, selector) do
     index = field["index"] || 0
-    expression = field_set_expression(index, value, Session.scope(state))
+    expression = field_set_expression(index, value, Session.scope(state), selector)
 
     case eval_json(state.user_context_pid, expression) do
       {:ok, result} ->
@@ -384,9 +387,9 @@ defmodule Cerberus.Driver.Browser do
     type in ["submit", ""]
   end
 
-  defp click_button(session, state, button) do
+  defp click_button(session, state, button, selector) do
     index = button["index"] || 0
-    expression = button_click_expression(index, Session.scope(state))
+    expression = button_click_expression(index, Session.scope(state), selector)
 
     case eval_json(state.user_context_pid, expression) do
       {:ok, _result} ->
@@ -398,12 +401,12 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp clickables(state) do
-    eval_json(state.user_context_pid, clickables_expression(Session.scope(state)))
+  defp clickables(state, selector) do
+    eval_json(state.user_context_pid, clickables_expression(Session.scope(state), selector))
   end
 
-  defp form_fields(state) do
-    eval_json(state.user_context_pid, form_fields_expression(Session.scope(state)))
+  defp form_fields(state, selector) do
+    eval_json(state.user_context_pid, form_fields_expression(Session.scope(state), selector))
   end
 
   defp with_snapshot(state) do
@@ -764,13 +767,15 @@ defmodule Cerberus.Driver.Browser do
     """
   end
 
-  defp clickables_expression(scope) do
+  defp clickables_expression(scope, selector) do
     encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
 
     """
     (() => {
       const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
       const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
       const defaultRoot = document.body || document.documentElement;
       let roots = defaultRoot ? [defaultRoot] : [];
 
@@ -803,14 +808,27 @@ defmodule Cerberus.Driver.Browser do
         return matches;
       };
 
-      const links = queryWithinRoots("a[href]").map((element, index) => ({
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
+      const links = queryWithinRoots("a[href]")
+        .filter(selectorMatches)
+        .map((element, index) => ({
         index,
         text: normalize(element.textContent),
         href: element.getAttribute("href") || "",
         resolvedHref: element.href || ""
       }));
 
-      const buttons = queryWithinRoots("button").map((element, index) => ({
+      const buttons = queryWithinRoots("button")
+        .filter(selectorMatches)
+        .map((element, index) => ({
         index,
         text: normalize(element.textContent),
         type: (element.getAttribute("type") || "submit").toLowerCase(),
@@ -827,13 +845,15 @@ defmodule Cerberus.Driver.Browser do
     """
   end
 
-  defp form_fields_expression(scope) do
+  defp form_fields_expression(scope, selector) do
     encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
 
     """
     (() => {
       const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
       const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
       const defaultRoot = document.body || document.documentElement;
       let roots = defaultRoot ? [defaultRoot] : [];
 
@@ -873,10 +893,19 @@ defmodule Cerberus.Driver.Browser do
         if (id) labels.set(id, normalize(label.textContent));
       });
 
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
       const fields = queryWithinRoots("input, textarea, select")
         .filter((element) => {
           const type = (element.getAttribute("type") || "").toLowerCase();
-          return type !== "hidden" && type !== "submit" && type !== "button";
+          return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
         })
         .map((element, index) => ({
           index,
@@ -893,13 +922,15 @@ defmodule Cerberus.Driver.Browser do
     """
   end
 
-  defp field_set_expression(index, value, scope) do
+  defp field_set_expression(index, value, scope, selector) do
     encoded_value = JSON.encode!(to_string(value))
     encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
 
     """
     (() => {
       const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
       const defaultRoot = document.body || document.documentElement;
       let roots = defaultRoot ? [defaultRoot] : [];
 
@@ -932,10 +963,19 @@ defmodule Cerberus.Driver.Browser do
         return matches;
       };
 
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
       const fields = queryWithinRoots("input, textarea, select")
         .filter((element) => {
           const type = (element.getAttribute("type") || "").toLowerCase();
-          return type !== "hidden" && type !== "submit" && type !== "button";
+          return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
         });
 
       const field = fields[#{index}];
@@ -956,12 +996,14 @@ defmodule Cerberus.Driver.Browser do
     """
   end
 
-  defp submit_target_expression(index, scope) do
+  defp submit_target_expression(index, scope, selector) do
     encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
 
     """
     (() => {
       const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
       const defaultRoot = document.body || document.documentElement;
       let roots = defaultRoot ? [defaultRoot] : [];
 
@@ -994,7 +1036,16 @@ defmodule Cerberus.Driver.Browser do
         return matches;
       };
 
-      const buttons = queryWithinRoots("button");
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
+      const buttons = queryWithinRoots("button").filter(selectorMatches);
       const button = buttons[#{index}];
 
       if (!button) {
@@ -1039,12 +1090,14 @@ defmodule Cerberus.Driver.Browser do
     """
   end
 
-  defp button_click_expression(index, scope) do
+  defp button_click_expression(index, scope, selector) do
     encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
 
     """
     (() => {
       const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
       const defaultRoot = document.body || document.documentElement;
       let roots = defaultRoot ? [defaultRoot] : [];
 
@@ -1077,7 +1130,16 @@ defmodule Cerberus.Driver.Browser do
         return matches;
       };
 
-      const buttons = queryWithinRoots("button");
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
+      const buttons = queryWithinRoots("button").filter(selectorMatches);
       const button = buttons[#{index}];
 
       if (!button) {

@@ -28,8 +28,10 @@ Sigil locator examples:
 session(:static)
 |> visit("/articles")
 |> assert_has(~l"Articles")
-|> assert_has(~l"This is an articles index page")
+|> assert_has(~l"This is an articles index page"e)
 |> refute_has(~l"500 Internal Server Error")
+|> click(~l"link:Counter"r)
+|> assert_has(~l"button:Increment"re)
 ```
 
 Helper locator flow:
@@ -56,12 +58,17 @@ end)
 
 Supported sigil:
 - `~l` for text locators.
+- `~l` modifiers:
+  - `e` / `i` for exact/inexact text matching defaults.
+  - `r` for role-style locators using `ROLE:NAME` text (for example `~l"button:Save"r`, `~l"textbox:Search term"r`).
+  - `c` for CSS selector locators (for example `~l"#search_q"c`, `~l"button[type='submit']"c`).
 
 Helper locator constructors:
 - `text("...")`
 - `link("...")`
 - `button("...")`
-- `label("...")`
+- `label("...")` (explicit form-field lookup by associated label text; this is distinct from generic text matching)
+- `css("...")`
 - `role(:button, name: "...")` (supported roles in this slice: `:button`, `:link`, `:textbox`, `:searchbox`, `:combobox`)
 - `testid("...")` (reserved helper; not yet supported by operations in this slice)
 

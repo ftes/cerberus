@@ -94,15 +94,35 @@ defmodule Cerberus.Driver.Html do
   end
 
   defp find_link_in_doc(lazy_html, expected, opts, scope) do
-    find_first_matching(lazy_html, "a[href]", expected, opts, scope, fn node, text ->
-      %{text: text, href: attr(node, "href")}
-    end)
+    query_selector = selector_opt(opts) || "a[href]"
+
+    find_first_matching(
+      lazy_html,
+      query_selector,
+      expected,
+      opts,
+      scope,
+      fn node, text ->
+        %{text: text, href: attr(node, "href")}
+      end,
+      &link_node?/1
+    )
   end
 
   defp find_button_in_doc(lazy_html, expected, opts, scope) do
-    find_first_matching(lazy_html, "button", expected, opts, scope, fn _node, text ->
-      %{text: text}
-    end)
+    query_selector = selector_opt(opts) || "button"
+
+    find_first_matching(
+      lazy_html,
+      query_selector,
+      expected,
+      opts,
+      scope,
+      fn _node, text ->
+        %{text: text}
+      end,
+      &button_node?/1
+    )
   end
 
   defp find_form_field_in_doc(lazy_html, expected, opts, scope) do
@@ -112,28 +132,30 @@ defmodule Cerberus.Driver.Html do
   end
 
   defp find_submit_button_in_doc(lazy_html, expected, opts, scope) do
+    selector = selector_opt(opts)
+
     lazy_html
     |> scoped_nodes(scope)
     |> Enum.find_value(:error, fn root_node ->
-      case find_submit_button_in_forms(root_node, expected, opts) do
+      case find_submit_button_in_forms(root_node, expected, opts, selector) do
         {:ok, _button} = ok -> ok
-        :error -> find_submit_button_in_owner_form(root_node, expected, opts)
+        :error -> find_submit_button_in_owner_form(root_node, expected, opts, selector)
       end
     end)
   end
 
-  defp find_submit_button_in_forms(root_node, expected, opts) do
+  defp find_submit_button_in_forms(root_node, expected, opts, selector) do
     root_node
     |> safe_query("form")
     |> Enum.reduce_while(:error, fn form_node, _acc ->
-      case find_submit_button_in_form(form_node, expected, opts) do
+      case find_submit_button_in_form(root_node, form_node, expected, opts, selector) do
         {:ok, _button} = ok -> {:halt, ok}
         :error -> {:cont, :error}
       end
     end)
   end
 
-  defp find_submit_button_in_form(form_node, expected, opts) do
+  defp find_submit_button_in_form(root_node, form_node, expected, opts, selector) do
     form = attr(form_node, "id")
     action = attr(form_node, "action")
     method = attr(form_node, "method")
@@ -142,11 +164,11 @@ defmodule Cerberus.Driver.Html do
     form_node
     |> LazyHTML.query("button")
     |> Enum.find_value(:error, fn button_node ->
-      build_submit_button(button_node, form_meta, expected, opts)
+      build_submit_button(button_node, form_meta, expected, opts, root_node, selector)
     end)
   end
 
-  defp find_submit_button_in_owner_form(root_node, expected, opts) do
+  defp find_submit_button_in_owner_form(root_node, expected, opts, selector) do
     root_node
     |> safe_query("button[form]")
     |> Enum.find_value(:error, fn button_node ->
@@ -157,18 +179,19 @@ defmodule Cerberus.Driver.Html do
         action = attr(form_node, "action")
         method = attr(form_node, "method")
         form_meta = %{form: owner_form, action: action, method: method}
-        build_submit_button(button_node, form_meta, expected, opts)
+        build_submit_button(button_node, form_meta, expected, opts, root_node, selector)
       else
         _ -> false
       end
     end)
   end
 
-  defp build_submit_button(button_node, form_meta, expected, opts) do
+  defp build_submit_button(button_node, form_meta, expected, opts, root_node, selector) do
     text = node_text(button_node)
     type = attr(button_node, "type") || "submit"
 
-    if submit_button_match?(type, text, expected, opts) do
+    if submit_button_match?(type, text, expected, opts) and
+         node_matches_selector?(root_node, button_node, selector) do
       action = attr(button_node, "formaction") || form_meta.action
       method = attr(button_node, "formmethod") || form_meta.method
 
@@ -190,44 +213,52 @@ defmodule Cerberus.Driver.Html do
     type in ["submit", ""] and Query.match_text?(text, expected, opts)
   end
 
-  defp find_first_matching(lazy_html, selector, expected, opts, scope, build_fun) do
+  defp find_first_matching(lazy_html, selector, expected, opts, scope, build_fun, node_predicate) do
     lazy_html
     |> scoped_nodes(scope)
     |> Enum.find_value(:error, fn root_node ->
-      find_first_matching_in_root(root_node, lazy_html, selector, expected, opts, build_fun)
+      find_first_matching_in_root(root_node, lazy_html, selector, expected, opts, build_fun, node_predicate)
     end)
   end
 
   defp find_form_field_in_root(root_node, expected, opts) do
+    selector = selector_opt(opts)
+
     root_node
     |> safe_query("label")
-    |> Enum.find_value(false, fn label_node -> maybe_form_field_match(label_node, root_node, expected, opts) end)
+    |> Enum.find_value(false, fn label_node ->
+      maybe_form_field_match(label_node, root_node, expected, opts, selector)
+    end)
   end
 
-  defp maybe_form_field_match(label_node, root_node, expected, opts) do
+  defp maybe_form_field_match(label_node, root_node, expected, opts, selector) do
     label_text = node_text(label_node)
 
     with true <- Query.match_text?(label_text, expected, opts),
          {:ok, %{name: name} = field} <- field_for_label(root_node, label_node),
          true <- is_binary(name) and name != "" do
-      {:ok, %{label: label_text, name: name, id: field.id, form: field.form}}
+      if field_matches_selector?(root_node, field, selector) do
+        {:ok, %{label: label_text, name: name, id: field.id, form: field.form}}
+      else
+        false
+      end
     else
       _ -> false
     end
   end
 
-  defp find_first_matching_in_root(root_node, lazy_html, selector, expected, opts, build_fun) do
+  defp find_first_matching_in_root(root_node, lazy_html, selector, expected, opts, build_fun, node_predicate) do
     root_node
     |> safe_query(selector)
     |> Enum.find_value(false, fn node ->
-      maybe_matching_node(node, lazy_html, expected, opts, build_fun)
+      maybe_matching_node(node, lazy_html, expected, opts, build_fun, node_predicate)
     end)
   end
 
-  defp maybe_matching_node(node, lazy_html, expected, opts, build_fun) do
+  defp maybe_matching_node(node, lazy_html, expected, opts, build_fun, node_predicate) do
     text = node_text(node)
 
-    if Query.match_text?(text, expected, opts) do
+    if node_predicate.(node) and Query.match_text?(text, expected, opts) do
       mapped =
         node
         |> build_fun.(text)
@@ -428,5 +459,60 @@ defmodule Cerberus.Driver.Html do
     LazyHTML.query(node, selector)
   rescue
     _ -> []
+  end
+
+  defp selector_opt(opts) do
+    case Keyword.get(opts, :selector) do
+      selector when is_binary(selector) and selector != "" -> selector
+      _ -> nil
+    end
+  end
+
+  defp node_matches_selector?(_root_node, _node, nil), do: true
+
+  defp node_matches_selector?(root_node, node, selector) do
+    root_node
+    |> safe_query(selector)
+    |> Enum.any?(&same_node?(&1, node))
+  end
+
+  defp field_matches_selector?(_root_node, _field, nil), do: true
+
+  defp field_matches_selector?(root_node, field, selector) do
+    root_node
+    |> safe_query(selector)
+    |> Enum.any?(fn node ->
+      node_id = attr(node, "id")
+      node_name = attr(node, "name")
+
+      cond do
+        is_binary(field.id) and field.id != "" ->
+          node_id == field.id
+
+        is_binary(field.name) and field.name != "" ->
+          node_name == field.name
+
+        true ->
+          false
+      end
+    end)
+  end
+
+  defp link_node?(node) do
+    node_tag(node) == "a" and is_binary(attr(node, "href"))
+  end
+
+  defp button_node?(node), do: node_tag(node) == "button"
+
+  defp same_node?(left, right) do
+    left_id = attr(left, "id")
+    right_id = attr(right, "id")
+
+    if is_binary(left_id) and left_id != "" and is_binary(right_id) and right_id != "" do
+      left_id == right_id
+    else
+      node_tag(left) == node_tag(right) and node_text(left) == node_text(right) and
+        node_attrs(left) == node_attrs(right)
+    end
   end
 end

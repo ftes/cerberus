@@ -38,6 +38,37 @@ defmodule Cerberus.PublicApiTest do
            )
   end
 
+  test "sigil modifiers support role and css locator flows" do
+    session =
+      :static
+      |> session()
+      |> visit("/articles")
+      |> click(~l"link:Counter"r)
+      |> assert_has(~l"button:Increment"re)
+      |> visit("/search")
+      |> fill_in(~l"#search_q"c, "phoenix")
+      |> submit(~l"button[type='submit']"c)
+      |> assert_has(~l"Search query: phoenix"e)
+
+    assert session.current_path == "/search/results?q=phoenix"
+  end
+
+  test "label locators are explicit to fill_in and are rejected for click/assert" do
+    assert_raise InvalidLocatorError, ~r/label locators target form-field lookup/, fn ->
+      :static
+      |> session()
+      |> visit("/search")
+      |> click(label("Search term"))
+    end
+
+    assert_raise InvalidLocatorError, ~r/label locators target form-field lookup/, fn ->
+      :static
+      |> session()
+      |> visit("/search")
+      |> assert_has(label("Search term"))
+    end
+  end
+
   test "helper locators work with click/assert/fill_in flows" do
     session =
       :static

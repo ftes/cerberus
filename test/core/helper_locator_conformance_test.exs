@@ -30,6 +30,23 @@ defmodule Cerberus.CoreHelperLocatorConformanceTest do
     )
   end
 
+  @tag drivers: [:static, :browser]
+  test "sigil modifiers are consistent across static and browser for role/css/exact flows", context do
+    Harness.run!(
+      context,
+      fn session ->
+        session
+        |> visit("/articles")
+        |> click(~l"link:Counter"r)
+        |> assert_has(~l"button:Increment"re)
+        |> visit("/search")
+        |> fill_in(~l"#search_q"c, "elixir")
+        |> submit(~l"button[type='submit']"c)
+        |> assert_has(~l"Search query: elixir"e)
+      end
+    )
+  end
+
   @tag browser: true
   @tag drivers: [:live, :browser]
   test "duplicate live button labels are disambiguated for render_click conversion", context do
@@ -42,6 +59,20 @@ defmodule Cerberus.CoreHelperLocatorConformanceTest do
         |> assert_has(text("Selected: primary"), exact: true)
         |> click(role(:button, name: "Apply"))
         |> assert_has(text("Selected: primary"), exact: true)
+      end
+    )
+  end
+
+  @tag browser: true
+  @tag drivers: [:live, :browser]
+  test "css sigil selector disambiguates duplicate live button labels", context do
+    Harness.run!(
+      context,
+      fn session ->
+        session
+        |> visit("/live/selector-edge")
+        |> click(~l"#secondary-actions button"c)
+        |> assert_has(text("Selected: secondary"), exact: true)
       end
     )
   end

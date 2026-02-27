@@ -4,10 +4,14 @@ defmodule Cerberus.Locator do
   alias Cerberus.InvalidLocatorError
 
   @enforce_keys [:kind, :value]
-  defstruct [:kind, :value]
+  defstruct [:kind, :value, opts: []]
 
-  @type locator_kind :: :text | :label | :link | :button | :testid
-  @type t :: %__MODULE__{kind: locator_kind(), value: String.t() | Regex.t()}
+  @type locator_kind :: :text | :label | :link | :button | :testid | :css
+  @type t :: %__MODULE__{
+          kind: locator_kind(),
+          value: String.t() | Regex.t(),
+          opts: keyword()
+        }
 
   @spec normalize(term()) :: t()
   def normalize(%__MODULE__{} = locator), do: locator
@@ -33,6 +37,34 @@ defmodule Cerberus.Locator do
   @spec text_sigil(String.t()) :: t()
   def text_sigil(value) when is_binary(value), do: %__MODULE__{kind: :text, value: value}
 
+  @spec sigil(String.t(), charlist()) :: t()
+  def sigil(value, modifiers) when is_binary(value) and is_list(modifiers) do
+    sigil_opts = parse_sigil_modifiers!(value, modifiers)
+
+    base_locator =
+      case sigil_opts.kind do
+        :text ->
+          %__MODULE__{kind: :text, value: value}
+
+        :css ->
+          ensure_css_selector_value!(:css, value, {:l, value, modifiers})
+          %__MODULE__{kind: :css, value: value}
+
+        :role ->
+          role_name = sigil_opts.role
+          role_kind = role_to_kind!(role_name, {:l, value, modifiers})
+          %__MODULE__{kind: role_kind, value: parse_role_name!(value, {:l, value, modifiers})}
+      end
+
+    exact_opt =
+      case sigil_opts.exact do
+        :unset -> []
+        exact -> [exact: exact]
+      end
+
+    %{base_locator | opts: exact_opt}
+  end
+
   defp normalize_map(locator_map, original) do
     kinds = [
       {:text, key_value(locator_map, :text)},
@@ -40,6 +72,7 @@ defmodule Cerberus.Locator do
       {:link, key_value(locator_map, :link)},
       {:button, key_value(locator_map, :button)},
       {:role, key_value(locator_map, :role)},
+      {:css, key_value(locator_map, :css)},
       {:testid, key_value(locator_map, :testid)}
     ]
 
@@ -53,7 +86,7 @@ defmodule Cerberus.Locator do
         raise InvalidLocatorError,
           locator: original,
           message:
-            "invalid locator #{inspect(original)}; expected one of :text, :label, :link, :button, :role, or :testid"
+            "invalid locator #{inspect(original)}; expected one of :text, :label, :link, :button, :role, :css, or :testid"
 
       [kind] ->
         normalize_kind(kind, locator_map, original)
@@ -68,37 +101,44 @@ defmodule Cerberus.Locator do
   defp normalize_kind(:text, locator_map, original) do
     text = key_value(locator_map, :text)
     ensure_text_value!(:text, text, original)
-    ensure_only_keys!(locator_map, original, [:text])
-    %__MODULE__{kind: :text, value: text}
+    ensure_only_keys!(locator_map, original, [:text, :exact, :selector])
+    %__MODULE__{kind: :text, value: text, opts: locator_opts(locator_map, original)}
   end
 
   defp normalize_kind(:label, locator_map, original) do
     label = key_value(locator_map, :label)
     ensure_text_value!(:label, label, original)
-    ensure_only_keys!(locator_map, original, [:label])
-    %__MODULE__{kind: :label, value: label}
+    ensure_only_keys!(locator_map, original, [:label, :exact, :selector])
+    %__MODULE__{kind: :label, value: label, opts: locator_opts(locator_map, original)}
   end
 
   defp normalize_kind(:link, locator_map, original) do
     link = key_value(locator_map, :link)
     ensure_text_value!(:link, link, original)
-    ensure_only_keys!(locator_map, original, [:link])
-    %__MODULE__{kind: :link, value: link}
+    ensure_only_keys!(locator_map, original, [:link, :exact, :selector])
+    %__MODULE__{kind: :link, value: link, opts: locator_opts(locator_map, original)}
   end
 
   defp normalize_kind(:button, locator_map, original) do
     button = key_value(locator_map, :button)
     ensure_text_value!(:button, button, original)
-    ensure_only_keys!(locator_map, original, [:button])
-    %__MODULE__{kind: :button, value: button}
+    ensure_only_keys!(locator_map, original, [:button, :exact, :selector])
+    %__MODULE__{kind: :button, value: button, opts: locator_opts(locator_map, original)}
+  end
+
+  defp normalize_kind(:css, locator_map, original) do
+    css = key_value(locator_map, :css)
+    ensure_css_selector_value!(:css, css, original)
+    ensure_only_keys!(locator_map, original, [:css, :exact])
+    %__MODULE__{kind: :css, value: css, opts: locator_opts(locator_map, original)}
   end
 
   defp normalize_kind(:testid, locator_map, original) do
     testid = key_value(locator_map, :testid)
 
     if is_binary(testid) and testid != "" do
-      ensure_only_keys!(locator_map, original, [:testid])
-      %__MODULE__{kind: :testid, value: testid}
+      ensure_only_keys!(locator_map, original, [:testid, :exact])
+      %__MODULE__{kind: :testid, value: testid, opts: locator_opts(locator_map, original)}
     else
       raise InvalidLocatorError,
         locator: original,
@@ -110,11 +150,11 @@ defmodule Cerberus.Locator do
     role = key_value(locator_map, :role)
     name = key_value(locator_map, :name)
 
-    ensure_only_keys!(locator_map, original, [:role, :name])
+    ensure_only_keys!(locator_map, original, [:role, :name, :exact, :selector])
     ensure_text_value!(:name, name, original)
     role_name = normalize_role_name!(role, original)
     role_kind = role_to_kind!(role_name, original)
-    %__MODULE__{kind: role_kind, value: name}
+    %__MODULE__{kind: role_kind, value: name, opts: locator_opts(locator_map, original)}
   end
 
   defp key_value(locator_map, key) when is_atom(key) do
@@ -128,6 +168,58 @@ defmodule Cerberus.Locator do
       raise InvalidLocatorError,
         locator: original,
         message: "invalid locator #{inspect(original)}; #{inspect(name)} must be a string or regex"
+    end
+  end
+
+  defp ensure_css_selector_value!(name, value, original) do
+    if is_binary(value) and String.trim(value) != "" do
+      :ok
+    else
+      raise InvalidLocatorError,
+        locator: original,
+        message: "invalid locator #{inspect(original)}; #{inspect(name)} must be a non-empty CSS selector string"
+    end
+  end
+
+  defp locator_opts(locator_map, original) do
+    []
+    |> maybe_put_exact(locator_map, original)
+    |> maybe_put_selector(locator_map, original)
+  end
+
+  defp maybe_put_exact(opts, locator_map, original) do
+    case key_value(locator_map, :exact) do
+      :__missing__ ->
+        opts
+
+      exact when is_boolean(exact) ->
+        Keyword.put(opts, :exact, exact)
+
+      _other ->
+        raise InvalidLocatorError,
+          locator: original,
+          message: "invalid locator #{inspect(original)}; :exact must be a boolean"
+    end
+  end
+
+  defp maybe_put_selector(opts, locator_map, original) do
+    case key_value(locator_map, :selector) do
+      :__missing__ ->
+        opts
+
+      selector when is_binary(selector) ->
+        if String.trim(selector) == "" do
+          raise InvalidLocatorError,
+            locator: original,
+            message: "invalid locator #{inspect(original)}; :selector must be a non-empty CSS selector string"
+        else
+          Keyword.put(opts, :selector, selector)
+        end
+
+      _other ->
+        raise InvalidLocatorError,
+          locator: original,
+          message: "invalid locator #{inspect(original)}; :selector must be a non-empty CSS selector string"
     end
   end
 
@@ -173,5 +265,81 @@ defmodule Cerberus.Locator do
     raise InvalidLocatorError,
       locator: original,
       message: "unsupported :role #{inspect(role_name)} in #{inspect(original)}"
+  end
+
+  defp parse_sigil_modifiers!(value, modifiers) do
+    Enum.reduce(modifiers, %{kind: :text, role: nil, exact: :unset}, fn modifier, acc ->
+      case modifier do
+        ?r ->
+          role = parse_role_prefix!(value, {:l, value, modifiers})
+          put_sigil_kind!(acc, :role, role, {:l, value, modifiers})
+
+        ?c ->
+          put_sigil_kind!(acc, :css, nil, {:l, value, modifiers})
+
+        ?e ->
+          put_sigil_exact!(acc, true, {:l, value, modifiers})
+
+        ?i ->
+          put_sigil_exact!(acc, false, {:l, value, modifiers})
+
+        other ->
+          raise InvalidLocatorError,
+            locator: {:l, value, modifiers},
+            message: "invalid locator sigil ~l: unsupported modifier #{inspect(<<other>>)}"
+      end
+    end)
+  end
+
+  defp put_sigil_kind!(%{kind: current} = acc, kind, role, _original) when current in [:text, kind] do
+    %{acc | kind: kind, role: role || acc.role}
+  end
+
+  defp put_sigil_kind!(_acc, _kind, _role, original) do
+    raise InvalidLocatorError,
+      locator: original,
+      message: "invalid locator sigil ~l: use at most one locator-kind modifier (r or c)"
+  end
+
+  defp put_sigil_exact!(%{exact: :unset} = acc, exact, _original), do: %{acc | exact: exact}
+  defp put_sigil_exact!(%{exact: exact} = acc, exact, _original), do: acc
+
+  defp put_sigil_exact!(_acc, _exact, original) do
+    raise InvalidLocatorError,
+      locator: original,
+      message: "invalid locator sigil ~l: modifiers e and i are mutually exclusive"
+  end
+
+  defp parse_role_prefix!(value, original) do
+    case String.split(value, ":", parts: 2) do
+      [raw_role, raw_name] ->
+        role = String.downcase(String.trim(raw_role))
+        name = String.trim(raw_name)
+
+        if role != "" and name != "" do
+          role
+        else
+          raise InvalidLocatorError,
+            locator: original,
+            message: "invalid locator sigil ~l: role modifier expects ROLE:NAME text, e.g. ~l\"button:Save\"r"
+        end
+
+      _ ->
+        raise InvalidLocatorError,
+          locator: original,
+          message: "invalid locator sigil ~l: role modifier expects ROLE:NAME text, e.g. ~l\"button:Save\"r"
+    end
+  end
+
+  defp parse_role_name!(value, original) do
+    case String.split(value, ":", parts: 2) do
+      [_role, raw_name] ->
+        String.trim(raw_name)
+
+      _ ->
+        raise InvalidLocatorError,
+          locator: original,
+          message: "invalid locator sigil ~l: role modifier expects ROLE:NAME text, e.g. ~l\"button:Save\"r"
+    end
   end
 end

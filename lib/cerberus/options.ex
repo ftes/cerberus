@@ -7,6 +7,7 @@ defmodule Cerberus.Options do
 
   @type click_opts :: [
           kind: click_kind(),
+          selector: String.t() | nil,
           exact: boolean(),
           normalize_ws: boolean()
         ]
@@ -18,11 +19,13 @@ defmodule Cerberus.Options do
         ]
 
   @type fill_in_opts :: [
+          selector: String.t() | nil,
           exact: boolean(),
           normalize_ws: boolean()
         ]
 
   @type submit_opts :: [
+          selector: String.t() | nil,
           exact: boolean(),
           normalize_ws: boolean()
         ]
@@ -39,6 +42,7 @@ defmodule Cerberus.Options do
       default: :any,
       doc: "Limits click matching to links, buttons, or both."
     ],
+    selector: [type: :any, default: nil, doc: "Limits matching to elements that satisfy the CSS selector."],
     exact: [type: :boolean, default: false, doc: "Enables exact text matching."],
     normalize_ws: [type: :boolean, default: true, doc: "Normalizes whitespace before matching."]
   ]
@@ -54,6 +58,7 @@ defmodule Cerberus.Options do
   ]
 
   @fill_in_opts_schema [
+    selector: [type: :any, default: nil, doc: "Limits field lookup to elements that satisfy the CSS selector."],
     exact: [type: :boolean, default: false, doc: "Enables exact text matching for label lookup."],
     normalize_ws: [
       type: :boolean,
@@ -63,6 +68,11 @@ defmodule Cerberus.Options do
   ]
 
   @submit_opts_schema [
+    selector: [
+      type: :any,
+      default: nil,
+      doc: "Limits submit control lookup to elements that satisfy the CSS selector."
+    ],
     exact: [
       type: :boolean,
       default: false,
@@ -100,16 +110,16 @@ defmodule Cerberus.Options do
   def path_schema, do: @path_opts_schema
 
   @spec validate_click!(keyword()) :: click_opts()
-  def validate_click!(opts), do: validate!(opts, @click_opts_schema, "click/3")
+  def validate_click!(opts), do: opts |> validate!(@click_opts_schema, "click/3") |> validate_selector!("click/3")
 
   @spec validate_assert!(keyword(), String.t()) :: assert_opts()
   def validate_assert!(opts, op_name), do: validate!(opts, @assert_opts_schema, op_name)
 
   @spec validate_fill_in!(keyword()) :: fill_in_opts()
-  def validate_fill_in!(opts), do: validate!(opts, @fill_in_opts_schema, "fill_in/4")
+  def validate_fill_in!(opts), do: opts |> validate!(@fill_in_opts_schema, "fill_in/4") |> validate_selector!("fill_in/4")
 
   @spec validate_submit!(keyword()) :: submit_opts()
-  def validate_submit!(opts), do: validate!(opts, @submit_opts_schema, "submit/3")
+  def validate_submit!(opts), do: opts |> validate!(@submit_opts_schema, "submit/3") |> validate_selector!("submit/3")
 
   @spec validate_path!(keyword(), String.t()) :: path_opts()
   def validate_path!(opts, op_name) do
@@ -142,6 +152,23 @@ defmodule Cerberus.Options do
 
       {:error, %NimbleOptions.ValidationError{} = error} ->
         raise ArgumentError, "#{op_name} invalid options: #{Exception.message(error)}"
+    end
+  end
+
+  defp validate_selector!(opts, op_name) do
+    case Keyword.get(opts, :selector) do
+      nil ->
+        opts
+
+      selector when is_binary(selector) ->
+        if String.trim(selector) == "" do
+          raise ArgumentError, "#{op_name} invalid options: :selector must be a non-empty CSS selector string"
+        else
+          opts
+        end
+
+      _other ->
+        raise ArgumentError, "#{op_name} invalid options: :selector must be a non-empty CSS selector string"
     end
   end
 end

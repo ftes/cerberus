@@ -26,7 +26,7 @@ defmodule Cerberus.Assertions do
 
   @spec fill_in(arg, term(), Options.fill_in_value(), Options.fill_in_opts()) :: arg when arg: var
   def fill_in(session, locator_input, value, opts \\ []) when is_list(opts) do
-    locator = normalize_fill_in_locator(locator_input)
+    {locator, opts} = normalize_fill_in_locator(locator_input, opts)
     opts = Options.validate_fill_in!(opts)
     driver = Cerberus.driver_module!(session)
 
@@ -42,7 +42,7 @@ defmodule Cerberus.Assertions do
 
   @spec submit(arg, term(), Options.submit_opts()) :: arg when arg: var
   def submit(session, locator_input, opts \\ []) do
-    locator = normalize_submit_locator(locator_input)
+    {locator, opts} = normalize_submit_locator(locator_input, opts)
     opts = Options.validate_submit!(opts)
     driver = Cerberus.driver_module!(session)
 
@@ -74,7 +74,7 @@ defmodule Cerberus.Assertions do
 
   @spec assert_has(arg, term(), Options.assert_opts()) :: arg when arg: var
   def assert_has(session, locator_input, opts \\ []) do
-    locator = normalize_assert_locator(locator_input)
+    {locator, opts} = normalize_assert_locator(locator_input, opts)
     opts = Options.validate_assert!(opts, "assert_has/3")
     driver = Cerberus.driver_module!(session)
 
@@ -90,7 +90,7 @@ defmodule Cerberus.Assertions do
 
   @spec refute_has(arg, term(), Options.assert_opts()) :: arg when arg: var
   def refute_has(session, locator_input, opts \\ []) do
-    locator = normalize_assert_locator(locator_input)
+    {locator, opts} = normalize_assert_locator(locator_input, opts)
     opts = Options.validate_assert!(opts, "refute_has/3")
     driver = Cerberus.driver_module!(session)
 
@@ -128,6 +128,35 @@ defmodule Cerberus.Assertions do
 
   defp normalize_click_locator(locator_input, opts) do
     locator = Locator.normalize(locator_input)
+    opts = merge_locator_opts(locator, opts)
+
+    case locator do
+      %Locator{kind: :text} ->
+        {locator, opts}
+
+      %Locator{kind: :label} ->
+        raise InvalidLocatorError,
+          locator: locator_input,
+          message:
+            "label locators target form-field lookup and are not supported for click/3; use text(...) for generic element text matching"
+
+      %Locator{kind: :link, value: value} ->
+        {%Locator{kind: :text, value: value}, Keyword.put(opts, :kind, :link)}
+
+      %Locator{kind: :button, value: value} ->
+        {%Locator{kind: :text, value: value}, Keyword.put(opts, :kind, :button)}
+
+      %Locator{kind: :css, value: selector} ->
+        {%Locator{kind: :text, value: ""}, Keyword.put(opts, :selector, selector)}
+
+      %Locator{kind: :testid} ->
+        raise InvalidLocatorError, locator: locator_input, message: "testid locators are not yet supported for click/3"
+    end
+  end
+
+  defp normalize_fill_in_locator(locator_input, opts) do
+    locator = Locator.normalize(locator_input)
+    opts = merge_locator_opts(locator, opts)
 
     case locator do
       %Locator{kind: :text} ->
@@ -136,26 +165,8 @@ defmodule Cerberus.Assertions do
       %Locator{kind: :label, value: value} ->
         {%Locator{kind: :text, value: value}, opts}
 
-      %Locator{kind: :link, value: value} ->
-        {%Locator{kind: :text, value: value}, Keyword.put(opts, :kind, :link)}
-
-      %Locator{kind: :button, value: value} ->
-        {%Locator{kind: :text, value: value}, Keyword.put(opts, :kind, :button)}
-
-      %Locator{kind: :testid} ->
-        raise InvalidLocatorError, locator: locator_input, message: "testid locators are not yet supported for click/3"
-    end
-  end
-
-  defp normalize_fill_in_locator(locator_input) do
-    locator = Locator.normalize(locator_input)
-
-    case locator do
-      %Locator{kind: :text} ->
-        locator
-
-      %Locator{kind: :label, value: value} ->
-        %Locator{kind: :text, value: value}
+      %Locator{kind: :css, value: selector} ->
+        {%Locator{kind: :text, value: ""}, Keyword.put(opts, :selector, selector)}
 
       %Locator{kind: :link} ->
         raise InvalidLocatorError, locator: locator_input, message: "link locators are not supported for fill_in/4"
@@ -168,15 +179,19 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  defp normalize_submit_locator(locator_input) do
+  defp normalize_submit_locator(locator_input, opts) do
     locator = Locator.normalize(locator_input)
+    opts = merge_locator_opts(locator, opts)
 
     case locator do
       %Locator{kind: :text} ->
-        locator
+        {locator, opts}
 
       %Locator{kind: :button, value: value} ->
-        %Locator{kind: :text, value: value}
+        {%Locator{kind: :text, value: value}, opts}
+
+      %Locator{kind: :css, value: selector} ->
+        {%Locator{kind: :text, value: ""}, Keyword.put(opts, :selector, selector)}
 
       %Locator{kind: :label} ->
         raise InvalidLocatorError, locator: locator_input, message: "label locators are not supported for submit/3"
@@ -189,20 +204,36 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  defp normalize_assert_locator(locator_input) do
+  defp normalize_assert_locator(locator_input, opts) do
     locator = Locator.normalize(locator_input)
+    opts = merge_locator_opts(locator, opts)
 
     case locator do
       %Locator{kind: :text} ->
-        locator
+        {locator, opts}
 
-      %Locator{kind: kind, value: value} when kind in [:label, :link, :button] ->
-        %Locator{kind: :text, value: value}
+      %Locator{kind: :label} ->
+        raise InvalidLocatorError,
+          locator: locator_input,
+          message:
+            "label locators target form-field lookup and are not supported for assert_has/3 or refute_has/3; use text(...) for generic text assertions"
+
+      %Locator{kind: kind, value: value} when kind in [:link, :button] ->
+        {%Locator{kind: :text, value: value}, opts}
+
+      %Locator{kind: :css} ->
+        raise InvalidLocatorError,
+          locator: locator_input,
+          message: "css locators are not supported for assert_has/3 or refute_has/3 in this slice"
 
       %Locator{kind: :testid} ->
         raise InvalidLocatorError,
           locator: locator_input,
           message: "testid locators are not yet supported for assert_has/3 or refute_has/3"
     end
+  end
+
+  defp merge_locator_opts(%Locator{opts: locator_opts}, opts) when is_list(locator_opts) do
+    Keyword.merge(locator_opts, opts)
   end
 end
