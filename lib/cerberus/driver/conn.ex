@@ -1,0 +1,74 @@
+defmodule Cerberus.Driver.Conn do
+  @moduledoc false
+
+  import Phoenix.ConnTest, only: [build_conn: 0, dispatch: 5, recycle: 1]
+
+  alias Cerberus.Session
+
+  @max_redirects 5
+
+  @spec endpoint!(Session.t() | keyword()) :: module()
+  def endpoint!(%Session{} = session) do
+    session.meta[:endpoint] || Application.get_env(:cerberus, :endpoint) || missing_endpoint!()
+  end
+
+  def endpoint!(opts) when is_list(opts) do
+    opts[:endpoint] || Application.get_env(:cerberus, :endpoint) || missing_endpoint!()
+  end
+
+  @spec ensure_conn(Plug.Conn.t() | nil) :: Plug.Conn.t()
+  def ensure_conn(nil), do: build_conn()
+  def ensure_conn(conn), do: recycle(conn)
+
+  @spec follow_get(module(), Plug.Conn.t(), String.t()) :: Plug.Conn.t()
+  def follow_get(endpoint, conn, path) when is_binary(path) do
+    do_follow_get(endpoint, conn, path, @max_redirects)
+  end
+
+  @spec current_path(Plug.Conn.t(), String.t() | nil) :: String.t() | nil
+  def current_path(conn, fallback \\ nil) do
+    case conn.request_path do
+      path when is_binary(path) and byte_size(path) > 0 ->
+        append_query(path, conn.query_string)
+
+      _ ->
+        fallback
+    end
+  end
+
+  defp do_follow_get(endpoint, conn, path, redirects_left) do
+    conn = dispatch(conn, endpoint, :get, path, %{})
+
+    if redirects_left > 0 and redirect?(conn) do
+      [location | _] = Plug.Conn.get_resp_header(conn, "location")
+      next_path = normalize_location(location)
+      do_follow_get(endpoint, recycle(conn), next_path, redirects_left - 1)
+    else
+      conn
+    end
+  end
+
+  defp redirect?(conn), do: conn.status in 300..399
+
+  defp normalize_location(location) do
+    case URI.parse(location) do
+      %URI{path: nil} ->
+        "/"
+
+      %URI{path: path, query: nil} ->
+        path
+
+      %URI{path: path, query: query} ->
+        path <> "?" <> query
+    end
+  end
+
+  defp append_query(path, ""), do: path
+  defp append_query(path, nil), do: path
+  defp append_query(path, query), do: path <> "?" <> query
+
+  defp missing_endpoint! do
+    raise ArgumentError,
+          "missing :cerberus, :endpoint configuration; set endpoint in session opts or application env"
+  end
+end

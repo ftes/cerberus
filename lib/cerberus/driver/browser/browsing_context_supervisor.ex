@@ -1,0 +1,15 @@
+defmodule Cerberus.Driver.Browser.BrowsingContextSupervisor do
+  @moduledoc false
+
+  use DynamicSupervisor
+
+  @spec start_link(keyword()) :: DynamicSupervisor.on_start()
+  def start_link(opts \\ []) do
+    DynamicSupervisor.start_link(__MODULE__, opts)
+  end
+
+  @impl true
+  def init(_opts) do
+    DynamicSupervisor.init(strategy: :one_for_one)
+  end
+end

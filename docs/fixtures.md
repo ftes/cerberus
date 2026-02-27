@@ -1,0 +1,26 @@
+# Cerberus Fixture Surface
+
+Cerberus conformance tests run against deterministic internal fixtures.
+The fixture app is started from `test/test_helper.exs` and serves only local routes.
+
+## Endpoint
+
+- module: `Cerberus.Fixtures.Endpoint`
+- host: `127.0.0.1`
+- port: `4101`
+- network scope: local only (no external network dependencies)
+
+## Routes
+
+- `/articles` (static): visible text variants + hidden helper text + link to live counter.
+- `/live/counter` (live): deterministic counter with `Increment` button.
+- `/redirect/static` (static redirect): redirects to `/articles`.
+- `/redirect/live` (static redirect): redirects to `/live/counter`.
+- `/live/redirects` (live): live redirects via buttons to `/articles` and `/live/counter`.
+- `/oracle/mismatch` (static): mismatch marker fixture for browser-oracle diff tests.
+- `/live/oracle/mismatch` (live): mismatch marker fixture for browser-oracle diff tests.
+
+## Shared Definitions
+
+Route paths and fixture text constants are centralized in `Cerberus.Fixtures`.
+Driver adapters and tests should reuse these helpers to avoid semantic drift.
