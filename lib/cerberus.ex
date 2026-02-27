@@ -298,6 +298,17 @@ defmodule Cerberus do
     Assertions.fill_in(session, locator, value, opts)
   end
 
+  @spec upload(arg, term(), String.t(), Options.upload_opts()) :: arg when arg: var
+  def upload(session, locator, path, opts \\ [])
+
+  def upload(session, locator, path, opts) when is_binary(path) and is_list(opts) do
+    Assertions.upload(session, locator, path, opts)
+  end
+
+  def upload(_session, _locator, _path, _opts) do
+    raise ArgumentError, "upload/4 expects a non-empty path string and keyword options"
+  end
+
   @spec submit(arg, term(), Options.submit_opts()) :: arg when arg: var
   def submit(session, locator, opts \\ []) do
     Assertions.submit(session, locator, opts)

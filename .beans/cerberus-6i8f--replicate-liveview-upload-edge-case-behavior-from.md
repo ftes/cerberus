@@ -1,10 +1,11 @@
 ---
 # cerberus-6i8f
 title: Replicate LiveView upload edge-case behavior from phoenix_test
-status: todo
+status: completed
 type: task
+priority: normal
 created_at: 2026-02-27T11:31:31Z
-updated_at: 2026-02-27T11:31:31Z
+updated_at: 2026-02-27T21:40:01Z
 parent: cerberus-zqpu
 ---
 
@@ -48,6 +49,13 @@ end
 ```
 
 ## Done When
-- [ ] Upload behavior matches active-form semantics (upload alone does not imply submit-able active form).
-- [ ] Error translation exists for upload failures (`:not_accepted`, `:too_many_files`, `:too_large`).
-- [ ] Upload-triggered change and redirect flows are integration-tested.
+- [x] Upload behavior matches active-form semantics (upload alone does not imply submit-able active form).
+- [x] Error translation exists for upload failures (`:not_accepted`, `:too_many_files`, `:too_large`).
+- [x] Upload-triggered change and redirect flows are integration-tested.
+
+## Summary of Changes
+- Added first-class `upload/4` API and locator normalization with explicit label semantics (string/regex shorthand, `label(...)`, and `css(...)`).
+- Implemented live-driver upload behavior with translated upload errors (`:not_accepted`, `:too_many_files`, `:too_large`), form phx-change triggering, and redirect/patch handling.
+- Implemented browser-driver upload behavior by setting file inputs through in-page file synthesis and dispatching input/change events.
+- Added upload fixture LiveView and file fixtures to cover change-trigger and progress-redirect behavior.
+- Added conformance and public API tests for upload semantics and edge-case parity.

@@ -74,7 +74,7 @@ defmodule Cerberus.Driver.Html do
   end
 
   @spec find_form_field(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
-          {:ok, %{label: String.t(), name: String.t(), id: String.t() | nil, form: String.t() | nil}} | :error
+          {:ok, map()} | :error
   def find_form_field(html, expected, opts, scope \\ nil) when is_binary(html) do
     case parse_document(html) do
       {:ok, lazy_html} ->
@@ -82,6 +82,22 @@ defmodule Cerberus.Driver.Html do
 
       _ ->
         :error
+    end
+  end
+
+  @spec form_defaults(String.t(), String.t(), String.t() | nil) :: map()
+  def form_defaults(html, form_selector, scope \\ nil) when is_binary(html) and is_binary(form_selector) do
+    case parse_document(html) do
+      {:ok, lazy_html} ->
+        selector = scope_form_selector(form_selector, scope)
+
+        lazy_html
+        |> safe_query(selector)
+        |> Enum.at(0)
+        |> collect_form_defaults()
+
+      _ ->
+        %{}
     end
   end
 
@@ -264,17 +280,34 @@ defmodule Cerberus.Driver.Html do
     label_text = node_text(label_node)
 
     with true <- Query.match_text?(label_text, expected, opts),
-         {:ok, %{name: name} = field} <- field_for_label(root_node, label_node),
-         true <- is_binary(name) and name != "" do
-      if field_matches_selector?(root_node, field, selector) do
-        {:ok, %{label: label_text, name: name, id: field.id, form: field.form}}
-      else
-        false
-      end
+         {:ok, %{name: name, node: field_node} = field} <- field_for_label(root_node, label_node),
+         true <- is_binary(name) and name != "",
+         true <- field_matches_selector?(root_node, field, selector) do
+      build_form_field_match(root_node, label_text, name, field, field_node)
     else
       _ -> false
     end
   end
+
+  defp build_form_field_match(root_node, label_text, name, field, field_node) do
+    form_node = field_form_node(root_node, field)
+    form_id = field_form_id(field, form_node)
+
+    {:ok,
+     %{
+       label: label_text,
+       name: name,
+       id: field.id,
+       form: form_id,
+       selector: field_selector(root_node, field),
+       form_selector: form_selector(root_node, form_node, form_id),
+       input_phx_change: field_node |> attr("phx-change") |> phx_change_binding?(),
+       form_phx_change: form_node |> attr_or_nil("phx-change") |> phx_change_binding?()
+     }}
+  end
+
+  defp field_form_id(%{form: form}, _form_node) when is_binary(form) and form != "", do: form
+  defp field_form_id(_field, form_node), do: attr_or_nil(form_node, "id")
 
   defp find_first_matching_in_root(root_node, lazy_html, selector, expected, opts, build_fun, node_predicate) do
     root_node
@@ -441,25 +474,34 @@ defmodule Cerberus.Driver.Html do
       nil ->
         label_node
         |> safe_query("input,textarea,select")
-        |> Enum.find_value(:error, fn node -> field_node_to_map(node) end)
+        |> Enum.find_value(:error, fn node -> field_node_to_map(root_node, node) end)
 
       id ->
         root_node
         |> safe_query("[id='#{id}']")
-        |> Enum.find_value(:error, fn node -> field_node_to_map(node) end)
+        |> Enum.find_value(:error, fn node -> field_node_to_map(root_node, node) end)
     end
   end
 
-  defp field_node_to_map(node) do
+  defp field_node_to_map(root_node, node) do
     name = attr(node, "name")
     id = attr(node, "id")
     form = attr(node, "form")
-    {:ok, %{name: name, id: id, form: form}}
+
+    {:ok,
+     %{
+       name: name,
+       id: id,
+       form: form,
+       node: node,
+       selector: field_selector(root_node, %{id: id, name: name, node: node})
+     }}
   end
 
   defp attr(node, name) do
     node
     |> LazyHTML.attribute(name)
+    |> List.wrap()
     |> List.first()
   end
 
@@ -476,6 +518,163 @@ defmodule Cerberus.Driver.Html do
       attr(form_node, "id") == id
     end)
   end
+
+  defp field_form_node(root_node, %{form: form_id}) when is_binary(form_id) and form_id != "" do
+    form_by_id(root_node, form_id)
+  end
+
+  defp field_form_node(root_node, %{node: node}) do
+    root_node
+    |> safe_query("form")
+    |> Enum.find(fn form_node ->
+      form_node
+      |> safe_query("*")
+      |> Enum.any?(&same_node?(&1, node))
+    end)
+  end
+
+  defp field_selector(_root_node, %{selector: selector}) when is_binary(selector), do: selector
+
+  defp field_selector(_root_node, %{id: id}) when is_binary(id) and id != "" do
+    ~s([id="#{css_attr_escape(id)}"])
+  end
+
+  defp field_selector(_root_node, %{name: name}) when is_binary(name) and name != "" do
+    ~s([name="#{css_attr_escape(name)}"])
+  end
+
+  defp field_selector(root_node, %{node: node}) do
+    unique_selector(root_node, node) || "*"
+  end
+
+  defp form_selector(_root_node, nil, nil), do: nil
+
+  defp form_selector(_root_node, _form_node, form_id) when is_binary(form_id) and form_id != "" do
+    ~s(form[id="#{css_attr_escape(form_id)}"])
+  end
+
+  defp form_selector(root_node, form_node, _form_id) when not is_nil(form_node) do
+    unique_selector(root_node, form_node)
+  end
+
+  defp form_selector(_root_node, _form_node, _form_id), do: nil
+
+  defp scope_form_selector(form_selector, nil), do: form_selector
+  defp scope_form_selector(form_selector, ""), do: form_selector
+  defp scope_form_selector(form_selector, scope), do: scope <> " " <> form_selector
+
+  defp collect_form_defaults(nil), do: %{}
+
+  defp collect_form_defaults(form_node) do
+    inputs =
+      form_node
+      |> safe_query("input[name],textarea[name],select[name]")
+      |> Enum.reduce(%{}, &put_control_value(&2, &1))
+
+    owner_controls =
+      case attr(form_node, "id") do
+        form_id when is_binary(form_id) and form_id != "" ->
+          parent = form_node
+
+          parent
+          |> safe_query(~s([form="#{form_id}"][name]))
+          |> Enum.reduce(inputs, &put_control_value(&2, &1))
+
+        _ ->
+          inputs
+      end
+
+    owner_controls
+  end
+
+  defp put_control_value(acc, node) do
+    case {node_tag(node), attr(node, "name")} do
+      {_, nil} ->
+        acc
+
+      {"input", name} ->
+        put_input_default(acc, node, name)
+
+      {"textarea", name} ->
+        put_name_value(acc, name, node_text(node))
+
+      {"select", name} ->
+        put_select_default(acc, node, name)
+
+      _ ->
+        acc
+    end
+  end
+
+  defp put_input_default(acc, node, name) do
+    type = String.downcase(attr(node, "type") || "text")
+
+    cond do
+      type in ["submit", "button", "image", "file", "reset"] ->
+        acc
+
+      type in ["checkbox", "radio"] ->
+        if checked?(node) do
+          put_name_value(acc, name, attr(node, "value") || "on")
+        else
+          acc
+        end
+
+      true ->
+        put_name_value(acc, name, attr(node, "value") || "")
+    end
+  end
+
+  defp put_select_default(acc, node, name) do
+    selected_values =
+      node
+      |> safe_query("option")
+      |> Enum.filter(&checked?/1)
+      |> Enum.map(&(attr(&1, "value") || node_text(&1)))
+
+    selected_values =
+      if selected_values == [] do
+        case node |> safe_query("option") |> Enum.at(0) do
+          nil -> []
+          option -> [attr(option, "value") || node_text(option)]
+        end
+      else
+        selected_values
+      end
+
+    case selected_values do
+      [] -> acc
+      [single] -> put_name_value(acc, name, single)
+      many -> put_name_value(acc, name, many)
+    end
+  end
+
+  defp put_name_value(acc, name, values) when is_list(values) do
+    Enum.reduce(values, acc, &put_name_value(&2, name, &1))
+  end
+
+  defp put_name_value(acc, name, value) do
+    if String.ends_with?(name, "[]") do
+      Map.update(acc, name, [value], fn existing -> existing ++ [value] end)
+    else
+      Map.put(acc, name, value)
+    end
+  end
+
+  defp checked?(node) do
+    node
+    |> attr("checked")
+    |> is_binary()
+  end
+
+  defp phx_change_binding?(value) when is_binary(value) do
+    String.trim(value) != ""
+  end
+
+  defp phx_change_binding?(_value), do: false
+
+  defp attr_or_nil(nil, _name), do: nil
+  defp attr_or_nil(node, name), do: attr(node, name)
 
   defp scoped_nodes(lazy_html, nil), do: [lazy_html]
   defp scoped_nodes(lazy_html, ""), do: [lazy_html]

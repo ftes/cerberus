@@ -25,6 +25,12 @@ defmodule Cerberus.Options do
           normalize_ws: boolean()
         ]
 
+  @type upload_opts :: [
+          selector: String.t() | nil,
+          exact: boolean(),
+          normalize_ws: boolean()
+        ]
+
   @type submit_opts :: [
           selector: String.t() | nil,
           exact: boolean(),
@@ -96,6 +102,16 @@ defmodule Cerberus.Options do
     ]
   ]
 
+  @upload_opts_schema [
+    selector: [type: :any, default: nil, doc: "Limits file-input lookup to elements that satisfy the CSS selector."],
+    exact: [type: :boolean, default: false, doc: "Enables exact text matching for upload label lookup."],
+    normalize_ws: [
+      type: :boolean,
+      default: true,
+      doc: "Normalizes whitespace before matching upload labels."
+    ]
+  ]
+
   @path_opts_schema [
     exact: [type: :boolean, default: true, doc: "Requires an exact path match unless disabled."],
     query: [
@@ -122,6 +138,9 @@ defmodule Cerberus.Options do
   @spec submit_schema() :: keyword()
   def submit_schema, do: @submit_opts_schema
 
+  @spec upload_schema() :: keyword()
+  def upload_schema, do: @upload_opts_schema
+
   @spec path_schema() :: keyword()
   def path_schema, do: @path_opts_schema
 
@@ -139,6 +158,9 @@ defmodule Cerberus.Options do
 
   @spec validate_submit!(keyword()) :: submit_opts()
   def validate_submit!(opts), do: opts |> validate!(@submit_opts_schema, "submit/3") |> validate_selector!("submit/3")
+
+  @spec validate_upload!(keyword()) :: upload_opts()
+  def validate_upload!(opts), do: opts |> validate!(@upload_opts_schema, "upload/4") |> validate_selector!("upload/4")
 
   @spec validate_path!(keyword(), String.t()) :: path_opts()
   def validate_path!(opts, op_name) do

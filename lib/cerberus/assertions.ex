@@ -41,6 +41,29 @@ defmodule Cerberus.Assertions do
     end
   end
 
+  @spec upload(arg, term(), String.t(), Options.upload_opts()) :: arg when arg: var
+  def upload(session, locator_input, path, opts \\ [])
+
+  def upload(session, locator_input, path, opts) when is_binary(path) and is_list(opts) do
+    ensure_non_empty_upload_path!(path)
+    {locator, opts} = normalize_upload_locator(locator_input, opts)
+    opts = Options.validate_upload!(opts)
+    driver = Cerberus.driver_module!(session)
+
+    case driver.upload(session, locator, path, opts) do
+      {:ok, session, _observed} ->
+        session
+
+      {:error, failed_session, observed, reason} ->
+        raise AssertionError,
+          message: format_error("upload", locator_input, opts, reason, observed, failed_session)
+    end
+  end
+
+  def upload(_session, _locator_input, _path, _opts) do
+    raise ArgumentError, "upload/4 expects a non-empty path string and keyword options"
+  end
+
   @spec submit(arg, term(), Options.submit_opts()) :: arg when arg: var
   def submit(session, locator_input, opts \\ []) do
     {locator, opts} = normalize_submit_locator(locator_input, opts)
@@ -201,6 +224,38 @@ defmodule Cerberus.Assertions do
     end
   end
 
+  defp normalize_upload_locator(locator_input, opts) do
+    locator = Locator.normalize(locator_input)
+    opts = merge_locator_opts(locator, opts)
+
+    case locator do
+      %Locator{kind: :text, value: value} ->
+        if upload_label_shorthand?(locator_input) do
+          {%Locator{kind: :label, value: value}, opts}
+        else
+          raise InvalidLocatorError,
+            locator: locator_input,
+            message:
+              "text locators are not supported for upload/4; use a plain string/regex label shorthand or label(...), role(:textbox, ...), or css(...)"
+        end
+
+      %Locator{kind: :label, value: value} ->
+        {%Locator{kind: :label, value: value}, opts}
+
+      %Locator{kind: :css, value: selector} ->
+        {%Locator{kind: :label, value: ""}, Keyword.put(opts, :selector, selector)}
+
+      %Locator{kind: :link} ->
+        raise InvalidLocatorError, locator: locator_input, message: "link locators are not supported for upload/4"
+
+      %Locator{kind: :button} ->
+        raise InvalidLocatorError, locator: locator_input, message: "button locators are not supported for upload/4"
+
+      %Locator{kind: :testid} ->
+        raise InvalidLocatorError, locator: locator_input, message: "testid locators are not yet supported for upload/4"
+    end
+  end
+
   defp normalize_submit_locator(locator_input, opts) do
     locator = Locator.normalize(locator_input)
     opts = merge_locator_opts(locator, opts)
@@ -261,5 +316,15 @@ defmodule Cerberus.Assertions do
 
   defp fill_in_label_shorthand?(locator_input) do
     is_binary(locator_input) or is_struct(locator_input, Regex)
+  end
+
+  defp upload_label_shorthand?(locator_input) do
+    is_binary(locator_input) or is_struct(locator_input, Regex)
+  end
+
+  defp ensure_non_empty_upload_path!(path) do
+    if String.trim(path) == "" do
+      raise ArgumentError, "upload/4 expects a non-empty path string"
+    end
   end
 end

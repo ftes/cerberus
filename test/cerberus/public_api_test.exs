@@ -167,6 +167,28 @@ defmodule Cerberus.PublicApiTest do
     end
   end
 
+  test "upload accepts string labels and rejects explicit text locators" do
+    jpg = Path.expand("../support/files/elixir.jpg", __DIR__)
+
+    assert is_struct(
+             :live
+             |> session()
+             |> visit("/live/uploads")
+             |> within("#upload-change-form", fn scoped ->
+               upload(scoped, "Avatar", jpg)
+             end)
+           )
+
+    assert_raise InvalidLocatorError, ~r/text locators are not supported for upload\/4/, fn ->
+      :live
+      |> session()
+      |> visit("/live/uploads")
+      |> within("#upload-change-form", fn scoped ->
+        upload(scoped, text("Avatar"), jpg)
+      end)
+    end
+  end
+
   test "invalid keyword options are rejected via NimbleOptions" do
     assert_raise ArgumentError, ~r/invalid options/, fn ->
       :static

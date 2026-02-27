@@ -12,6 +12,7 @@ defmodule Cerberus.Driver.Live do
   alias Cerberus.OpenBrowser
   alias Cerberus.Query
   alias Cerberus.Session
+  alias Cerberus.UploadFile
 
   @type t :: %__MODULE__{
           endpoint: module(),
@@ -147,14 +148,7 @@ defmodule Cerberus.Driver.Live do
 
     case route_kind(session) do
       :live ->
-        observed = %{
-          action: :fill_in,
-          path: session.current_path,
-          mode: route_kind(session),
-          transition: Session.transition(session)
-        }
-
-        {:error, session, observed, "live driver does not yet support fill_in on live routes"}
+        do_live_fill_in(session, expected, value, opts)
 
       :static ->
         case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
@@ -192,6 +186,49 @@ defmodule Cerberus.Driver.Live do
 
             {:error, session, observed, "no form field matched locator"}
         end
+    end
+  end
+
+  @impl true
+  def upload(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, path, opts) do
+    session = with_latest_html(session)
+
+    case route_kind(session) do
+      :live ->
+        case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+          {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
+            do_live_upload(session, field, path)
+
+          {:ok, _field} ->
+            observed = %{
+              action: :upload,
+              path: session.current_path,
+              mode: route_kind(session),
+              transition: Session.transition(session)
+            }
+
+            {:error, session, observed, "matched upload field does not include a name attribute"}
+
+          :error ->
+            observed = %{
+              action: :upload,
+              path: session.current_path,
+              mode: route_kind(session),
+              transition: Session.transition(session)
+            }
+
+            {:error, session, observed, "no file input matched locator"}
+        end
+
+      :static ->
+        observed = %{
+          action: :upload,
+          path: session.current_path,
+          mode: route_kind(session),
+          transition: Session.transition(session)
+        }
+
+        {:error, session, observed, "live driver does not support upload on static routes"}
     end
   end
 
@@ -549,6 +586,228 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
+  defp do_live_upload(session, field, path) do
+    file = UploadFile.read!(path)
+    live_upload_name = live_upload_name!(field.name)
+    form_selector = upload_form_selector(field, Session.scope(session))
+
+    entry = %{
+      last_modified: file.last_modified_unix_ms,
+      name: file.file_name,
+      content: file.content,
+      size: file.size,
+      type: file.mime_type
+    }
+
+    builder = fn ->
+      Phoenix.ChannelTest.__connect__(session.endpoint, Phoenix.LiveView.Socket, %{}, [])
+    end
+
+    upload_progress_result =
+      session.view
+      |> Phoenix.LiveViewTest.__file_input__(form_selector, live_upload_name, [entry], builder)
+      |> Phoenix.LiveViewTest.render_upload(file.file_name)
+      |> maybe_raise_upload_error!(session, file.file_name, live_upload_name)
+
+    change_result = maybe_upload_change_result(session, form_selector, field)
+
+    result = upload_change_result(change_result, upload_progress_result)
+    finalize_upload_result(result, session, field, file.file_name)
+  rescue
+    error in [ArgumentError, File.Error] ->
+      observed = %{
+        action: :upload,
+        path: session.current_path,
+        mode: route_kind(session),
+        field: field,
+        transition: Session.transition(session)
+      }
+
+      {:error, session, observed, Exception.message(error)}
+  end
+
+  defp upload_change_result(_change_result, {:error, _} = upload_progress_result) do
+    upload_progress_result
+  end
+
+  defp upload_change_result(change_result, _upload_progress_result), do: change_result
+
+  defp finalize_upload_result(result, session, field, file_name) do
+    case result do
+      rendered when is_binary(rendered) ->
+        path = maybe_live_patch_path(session.view, session.current_path)
+        updated = %{session | html: rendered, current_path: path}
+        transition = transition(route_kind(session), :live, :upload, session.current_path, path)
+
+        observed = %{
+          action: :upload,
+          path: path,
+          mode: :live,
+          field: field,
+          file_name: file_name,
+          texts: Html.texts(rendered, :any, Session.scope(updated)),
+          transition: transition
+        }
+
+        {:ok, update_session(updated, :upload, observed), observed}
+
+      {:error, {:live_redirect, %{to: to}}} ->
+        upload_redirect_result(session, field, file_name, to, :live_redirect)
+
+      {:error, {:redirect, %{to: to}}} ->
+        upload_redirect_result(session, field, file_name, to, :redirect)
+
+      {:error, {:live_patch, %{to: to}}} ->
+        rendered = render(session.view)
+        path = to_request_path(to, session.current_path)
+        updated = %{session | html: rendered, current_path: path}
+        transition = transition(route_kind(session), :live, :live_patch, session.current_path, path)
+
+        observed = %{
+          action: :upload,
+          path: path,
+          mode: :live,
+          field: field,
+          file_name: file_name,
+          texts: Html.texts(rendered, :any, Session.scope(updated)),
+          transition: transition
+        }
+
+        {:ok, update_session(updated, :upload, observed), observed}
+
+      other ->
+        observed = %{
+          action: :upload,
+          path: session.current_path,
+          mode: route_kind(session),
+          field: field,
+          file_name: file_name,
+          result: other,
+          transition: Session.transition(session)
+        }
+
+        {:error, session, observed, "unexpected live upload result"}
+    end
+  end
+
+  defp upload_redirect_result(session, field, file_name, to, reason) do
+    updated = visit(session, to, [])
+
+    transition =
+      transition(
+        route_kind(session),
+        Session.driver_kind(updated),
+        reason,
+        session.current_path,
+        Session.current_path(updated)
+      )
+
+    observed = %{
+      action: :upload,
+      path: Session.current_path(updated),
+      mode: Session.driver_kind(updated),
+      field: field,
+      file_name: file_name,
+      texts: Html.texts(updated.html, :any, Session.scope(updated)),
+      transition: transition
+    }
+
+    {:ok, update_last_result(updated, :upload, observed), observed}
+  end
+
+  defp maybe_raise_upload_error!({:error, [[_ref, error]]}, session, file_name, live_upload_name) do
+    case error do
+      :not_accepted -> raise ArgumentError, message: not_accepted_error_msg(session, file_name, live_upload_name)
+      :too_many_files -> raise ArgumentError, message: too_many_files_error_msg(session, file_name, live_upload_name)
+      :too_large -> raise ArgumentError, message: too_large_error_msg(session, file_name, live_upload_name)
+      _ -> raise ArgumentError, message: "upload failed with #{inspect(error)}"
+    end
+  end
+
+  defp maybe_raise_upload_error!(upload_result, _session, _file_name, _live_upload_name), do: upload_result
+
+  defp upload_form_selector(%{form: form}, _scope) when is_binary(form) and form != "" do
+    "#" <> form
+  end
+
+  defp upload_form_selector(%{form_selector: form_selector}, _scope)
+       when is_binary(form_selector) and form_selector != "" do
+    form_selector
+  end
+
+  defp upload_form_selector(_field, scope) when is_binary(scope) and scope != "", do: scope
+  defp upload_form_selector(_field, _scope), do: "form"
+
+  defp maybe_upload_change_result(session, form_selector, %{input_phx_change: true, name: name}) do
+    session.view
+    |> Phoenix.LiveViewTest.form(form_selector)
+    |> Phoenix.LiveViewTest.render_change(%{"_target" => name})
+  end
+
+  defp maybe_upload_change_result(session, form_selector, %{form_phx_change: true, name: name}) do
+    session.view
+    |> Phoenix.LiveViewTest.form(form_selector)
+    |> Phoenix.LiveViewTest.render_change(%{"_target" => name})
+  end
+
+  defp maybe_upload_change_result(session, _form_selector, _field), do: render(session.view)
+
+  defp live_upload_name!(name) when is_binary(name) and name != "" do
+    String.to_existing_atom(name)
+  end
+
+  defp live_upload_name!(_name) do
+    raise ArgumentError, "matched upload field does not include a valid name"
+  end
+
+  defp not_accepted_error_msg(session, file_name, live_upload_name) do
+    allowed_list =
+      session
+      |> upload_config(live_upload_name)
+      |> Map.get(:acceptable_exts, MapSet.new())
+      |> MapSet.to_list()
+      |> Enum.join(", ")
+
+    """
+    Unsupported file type.
+
+    You were trying to upload "#{file_name}",
+    but the only file types specified in allow_upload are [#{allowed_list}].
+    """
+  end
+
+  defp too_many_files_error_msg(session, file_name, live_upload_name) do
+    upload = upload_config(session, live_upload_name)
+    name = Map.get(upload, :name, live_upload_name)
+    max_entries = Map.get(upload, :max_entries, 0)
+
+    """
+    Too many files uploaded.
+
+    While attempting to upload "#{file_name}", you've exceeded #{max_entries} file(s). If this is intentional,
+    consider updating allow_upload(:#{name}, max_entries: #{max_entries}).
+    """
+  end
+
+  defp too_large_error_msg(session, file_name, live_upload_name) do
+    upload = upload_config(session, live_upload_name)
+    name = Map.get(upload, :name, live_upload_name)
+    max_file_size = Map.get(upload, :max_file_size, 0)
+
+    """
+    File too large.
+
+    While attempting to upload "#{file_name}", you've exceeded the maximum file size of #{max_file_size} bytes. If this is intentional,
+    consider updating allow_upload(:#{name}, max_file_size: #{max_file_size}).
+    """
+  end
+
+  defp upload_config(%{conn: %Plug.Conn{assigns: assigns}}, live_upload_name) do
+    assigns |> Map.get(:uploads, %{}) |> Map.get(live_upload_name, %{})
+  end
+
+  defp upload_config(_session, _live_upload_name), do: %{}
+
   defp do_submit(session, button) do
     method =
       button
@@ -604,6 +863,63 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
+  defp do_live_fill_in(session, expected, value, opts) do
+    case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+      {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
+        form_data = put_form_value(session.form_data, field.form, name, value)
+        updated = %{session | form_data: form_data}
+
+        case maybe_trigger_live_change(updated, field) do
+          {:ok, changed_session, change} ->
+            observed = %{
+              action: :fill_in,
+              path: Session.current_path(changed_session),
+              mode: Session.driver_kind(changed_session),
+              field: field,
+              value: value,
+              phx_change: change.triggered,
+              target: change.target,
+              transition: change.transition || Session.transition(changed_session)
+            }
+
+            {:ok, update_last_result(changed_session, :fill_in, observed), observed}
+
+          {:error, failed_session, reason, details} ->
+            observed = %{
+              action: :fill_in,
+              path: session.current_path,
+              mode: route_kind(session),
+              field: field,
+              value: value,
+              details: details,
+              transition: Session.transition(session)
+            }
+
+            {:error, failed_session, observed, reason}
+        end
+
+      {:ok, _field} ->
+        observed = %{
+          action: :fill_in,
+          path: session.current_path,
+          mode: route_kind(session),
+          transition: Session.transition(session)
+        }
+
+        {:error, session, observed, "matched field does not include a name attribute"}
+
+      :error ->
+        observed = %{
+          action: :fill_in,
+          path: session.current_path,
+          mode: route_kind(session),
+          transition: Session.transition(session)
+        }
+
+        {:error, session, observed, "no form field matched locator"}
+    end
+  end
+
   defp clear_submitted_session(%__MODULE__{} = session, form_data, op, observed) do
     %{session | form_data: form_data, last_result: %{op: op, observed: observed}}
   end
@@ -611,6 +927,175 @@ defmodule Cerberus.Driver.Live do
   defp clear_submitted_session(%StaticSession{} = session, form_data, op, observed) do
     %{session | form_data: form_data, last_result: %{op: op, observed: observed}}
   end
+
+  defp maybe_trigger_live_change(%__MODULE__{} = session, field) do
+    cond do
+      field[:input_phx_change] ->
+        trigger_input_phx_change(session, field)
+
+      field[:form_phx_change] ->
+        trigger_form_phx_change(session, field)
+
+      true ->
+        {:ok, session, %{triggered: false, target: nil, transition: Session.transition(session)}}
+    end
+  end
+
+  defp trigger_input_phx_change(session, field) do
+    target = target_path(field.name)
+    selector = field[:selector]
+
+    if is_binary(selector) and selector != "" do
+      payload =
+        session
+        |> form_payload_for_change(field)
+        |> Map.take([field.name])
+        |> Map.put("_target", target)
+
+      result =
+        session.view
+        |> element(scoped_selector(selector, Session.scope(session)))
+        |> Phoenix.LiveViewTest.render_change(payload)
+
+      resolve_live_change_result(session, result, target)
+    else
+      {:error, session, "live field change requires a resolvable field selector", %{field: field}}
+    end
+  end
+
+  defp trigger_form_phx_change(session, field) do
+    target = target_path(field.name)
+    form_selector = field[:form_selector]
+
+    if is_binary(form_selector) and form_selector != "" do
+      payload = form_payload_for_change(session, field)
+      additional = %{"_target" => target}
+
+      result =
+        session.view
+        |> Phoenix.LiveViewTest.form(form_selector, payload)
+        |> Phoenix.LiveViewTest.render_change(additional)
+
+      resolve_live_change_result(session, result, target)
+    else
+      {:error, session, "form-level phx-change requires a resolvable form selector", %{field: field}}
+    end
+  end
+
+  defp resolve_live_change_result(session, rendered, target) when is_binary(rendered) do
+    path = maybe_live_patch_path(session.view, session.current_path)
+    updated = %{session | html: rendered, current_path: path}
+    transition = transition(route_kind(session), :live, :fill_in, session.current_path, path)
+    {:ok, updated, %{triggered: true, target: target, transition: transition}}
+  end
+
+  defp resolve_live_change_result(session, {:error, {:live_redirect, %{to: to}}}, target) do
+    redirected = visit(session, to, [])
+
+    transition =
+      transition(
+        route_kind(session),
+        Session.driver_kind(redirected),
+        :live_redirect,
+        session.current_path,
+        Session.current_path(redirected)
+      )
+
+    {:ok, redirected, %{triggered: true, target: target, transition: transition}}
+  end
+
+  defp resolve_live_change_result(session, {:error, {:redirect, %{to: to}}}, target) do
+    redirected = visit(session, to, [])
+
+    transition =
+      transition(
+        route_kind(session),
+        Session.driver_kind(redirected),
+        :redirect,
+        session.current_path,
+        Session.current_path(redirected)
+      )
+
+    {:ok, redirected, %{triggered: true, target: target, transition: transition}}
+  end
+
+  defp resolve_live_change_result(session, {:error, {:live_patch, %{to: to}}}, target) do
+    rendered = render(session.view)
+    path = to_request_path(to, session.current_path)
+    updated = %{session | html: rendered, current_path: path}
+    transition = transition(route_kind(session), :live, :live_patch, session.current_path, path)
+    {:ok, updated, %{triggered: true, target: target, transition: transition}}
+  end
+
+  defp resolve_live_change_result(session, other, _target) do
+    {:error, session, "unexpected live change result", %{result: other}}
+  end
+
+  defp form_payload_for_change(session, field) do
+    defaults = form_defaults_for_change(session, field)
+    active = active_form_values(session.form_data, field)
+
+    defaults
+    |> Map.merge(active)
+    |> decode_query_params()
+  end
+
+  defp form_defaults_for_change(%__MODULE__{} = session, field) do
+    case field[:form_selector] do
+      selector when is_binary(selector) and selector != "" ->
+        Html.form_defaults(session.html, selector, Session.scope(session))
+
+      _ ->
+        %{}
+    end
+  end
+
+  defp active_form_values(form_data, field) do
+    %{active_form: active_form, values: values} = normalize_form_data(form_data)
+    key = form_key(field.form, active_form)
+    Map.get(values, key, %{})
+  end
+
+  defp decode_query_params(params) when is_map(params) do
+    params
+    |> expand_query_entries()
+    |> Enum.map_join("&", fn {name, value} ->
+      "#{URI.encode_www_form(name)}=#{URI.encode_www_form(to_string(value))}"
+    end)
+    |> Plug.Conn.Query.decode()
+  end
+
+  defp expand_query_entries(params) do
+    Enum.flat_map(params, fn
+      {name, value} when is_list(value) ->
+        Enum.map(value, &{name, &1})
+
+      {name, value} ->
+        [{name, value}]
+    end)
+  end
+
+  defp target_path(name) when is_binary(name) do
+    name
+    |> then(&"#{URI.encode_www_form(&1)}=cerberus")
+    |> Plug.Conn.Query.decode()
+    |> map_target_path()
+  end
+
+  defp map_target_path(map) when is_map(map) and map_size(map) == 1 do
+    [{key, value}] = Map.to_list(map)
+    [key | value_target_path(value)]
+  end
+
+  defp map_target_path(_), do: []
+
+  defp value_target_path(value) when is_map(value) and map_size(value) == 1 do
+    [{key, nested}] = Map.to_list(value)
+    [key | value_target_path(nested)]
+  end
+
+  defp value_target_path(value) when is_list(value), do: []
+  defp value_target_path(_), do: []
 
   defp build_submit_target(action, fallback_path, params) do
     base_path = action_path(action, fallback_path)

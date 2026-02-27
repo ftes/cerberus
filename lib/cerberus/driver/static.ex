@@ -171,6 +171,20 @@ defmodule Cerberus.Driver.Static do
   end
 
   @impl true
+  def upload(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, path, opts) do
+    observed = %{
+      action: :upload,
+      path: session.current_path,
+      label: expected,
+      file_path: path,
+      opts: opts,
+      transition: Session.transition(session)
+    }
+
+    {:error, session, observed, "static driver does not yet support upload in this slice"}
+  end
+
+  @impl true
   def submit(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
     case Html.find_submit_button(session.html, expected, opts, Session.scope(session)) do
       {:ok, button} ->

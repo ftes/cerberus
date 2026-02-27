@@ -41,7 +41,9 @@ defmodule Cerberus.Fixtures.Router do
       live("/live/sandbox/messages", SandboxMessagesLive)
       live("/live/redirects", RedirectsLive)
       live("/live/redirect-return", RedirectReturnLive)
+      live("/live/form-change", FormChangeLive)
       live("/live/selector-edge", SelectorEdgeLive)
+      live("/live/uploads", UploadLive)
       live("/live/nested", NestedLive)
       live("/live/oracle/mismatch", OracleMismatchLive)
     end

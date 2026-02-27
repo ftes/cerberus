@@ -30,6 +30,7 @@ defmodule Cerberus.Driver.Browser do
   alias Cerberus.Options
   alias Cerberus.Query
   alias Cerberus.Session
+  alias Cerberus.UploadFile
 
   @default_ready_timeout_ms 1_500
   @default_ready_quiet_ms 40
@@ -255,6 +256,23 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @impl true
+  def upload(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, path, opts) do
+    state = state!(session)
+    selector = Keyword.get(opts, :selector)
+
+    with_driver_ready(session, state, :upload, fn ready_state ->
+      case file_fields(ready_state, selector) do
+        {:ok, fields_data} ->
+          do_upload(session, ready_state, fields_data, expected, path, opts, selector)
+
+        {:error, reason, details} ->
+          observed = %{path: ready_state.current_path, details: details}
+          {:error, session, observed, "failed to inspect upload fields: #{reason}"}
+      end
+    end)
+  end
+
+  @impl true
   def submit(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
     state = state!(session)
     selector = Keyword.get(opts, :selector)
@@ -363,6 +381,96 @@ defmodule Cerberus.Driver.Browser do
       field ->
         fill_field(session, state, field, value, selector)
     end
+  end
+
+  defp do_upload(session, state, fields_data, expected, path, opts, selector) do
+    fields = Map.get(fields_data, "fields", [])
+
+    case find_matching_by_label(fields, expected, opts) do
+      nil ->
+        observed = %{action: :upload, path: state.current_path, fields: fields_data, file_path: path}
+        {:error, session, observed, "no file input matched locator"}
+
+      field ->
+        upload_field(session, state, field, path, selector)
+    end
+  end
+
+  defp upload_field(session, state, field, path, selector) do
+    file = UploadFile.read!(path)
+    index = field["index"] || 0
+
+    expression =
+      upload_field_expression(
+        index,
+        file.file_name,
+        file.mime_type,
+        file.last_modified_unix_ms,
+        file.content,
+        Session.scope(state),
+        selector
+      )
+
+    case eval_json(state, expression) do
+      {:ok, result} ->
+        upload_field_result(session, state, field, file.file_name, result)
+
+      {:error, reason, details} ->
+        observed = %{action: :upload, path: state.current_path, field: field, file_path: path, details: details}
+        {:error, session, observed, "browser upload failed: #{reason}"}
+    end
+  rescue
+    error in [ArgumentError, File.Error] ->
+      observed = %{action: :upload, path: state.current_path, field: field, file_path: path}
+      {:error, session, observed, Exception.message(error)}
+  end
+
+  defp upload_field_result(session, state, field, file_name, %{"ok" => true} = result) do
+    case await_driver_ready(state) do
+      {:ok, readiness} ->
+        case snapshot_with_retry(state) do
+          {next_state, snapshot} ->
+            observed = %{
+              action: :upload,
+              path: snapshot.path,
+              title: snapshot.title,
+              field: field,
+              file_name: file_name,
+              readiness: readiness
+            }
+
+            {:ok, update_session(session, next_state, :upload, observed), observed}
+
+          {:error, reason, details} ->
+            observed = %{
+              action: :upload,
+              path: Map.get(result, "path", state.current_path),
+              field: field,
+              file_name: file_name,
+              readiness: readiness,
+              details: details
+            }
+
+            {:error, session, observed, "failed to inspect page after upload: #{reason}"}
+        end
+
+      {:error, reason, readiness} ->
+        observed = %{
+          action: :upload,
+          path: state.current_path,
+          field: field,
+          file_name: file_name,
+          readiness: readiness
+        }
+
+        {:error, session, observed, readiness_error(reason, readiness)}
+    end
+  end
+
+  defp upload_field_result(session, state, field, file_name, result) do
+    reason = Map.get(result, "reason", "upload_failed")
+    observed = %{action: :upload, path: state.current_path, field: field, file_name: file_name, result: result}
+    {:error, session, observed, "browser upload failed: #{reason}"}
   end
 
   defp click_link(session, state, link) do
@@ -534,6 +642,10 @@ defmodule Cerberus.Driver.Browser do
 
   defp form_fields(state, selector) do
     eval_json(state, form_fields_expression(Session.scope(state), selector))
+  end
+
+  defp file_fields(state, selector) do
+    eval_json(state, file_fields_expression(Session.scope(state), selector))
   end
 
   defp with_snapshot(state) do
@@ -1151,6 +1263,175 @@ defmodule Cerberus.Driver.Browser do
         path: window.location.pathname + window.location.search,
         fields
       });
+    })()
+    """
+  end
+
+  defp file_fields_expression(scope, selector) do
+    encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
+
+    """
+    (() => {
+      const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
+      const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const labels = new Map();
+
+      queryWithinRoots("label[for]").forEach((label) => {
+        const id = label.getAttribute("for");
+        if (id) labels.set(id, normalize(label.textContent));
+      });
+
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
+      const fields = queryWithinRoots("input[type='file']")
+        .filter(selectorMatches)
+        .map((element, index) => ({
+          index,
+          id: element.id || "",
+          name: element.name || "",
+          label: labels.get(element.id) || ""
+        }));
+
+      return JSON.stringify({
+        path: window.location.pathname + window.location.search,
+        fields
+      });
+    })()
+    """
+  end
+
+  defp upload_field_expression(index, file_name, mime_type, last_modified_unix_ms, content, scope, selector) do
+    encoded_file_name = JSON.encode!(file_name)
+    encoded_mime_type = JSON.encode!(mime_type)
+    encoded_last_modified = JSON.encode!(last_modified_unix_ms)
+    encoded_content = JSON.encode!(Base.encode64(content))
+    encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
+
+    """
+    (() => {
+      const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
+      const fileName = #{encoded_file_name};
+      const mimeType = #{encoded_mime_type};
+      const lastModified = #{encoded_last_modified};
+      const contentBase64 = #{encoded_content};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
+      const fields = queryWithinRoots("input[type='file']").filter(selectorMatches);
+      const field = fields[#{index}];
+
+      if (!field) {
+        return JSON.stringify({ ok: false, reason: "field_not_found" });
+      }
+
+      try {
+        const decoded = atob(contentBase64);
+        const bytes = new Uint8Array(decoded.length);
+
+        for (let i = 0; i < decoded.length; i += 1) {
+          bytes[i] = decoded.charCodeAt(i);
+        }
+
+        const file = new File([bytes], fileName, { type: mimeType, lastModified });
+        const transfer = new DataTransfer();
+        transfer.items.add(file);
+        field.files = transfer.files;
+
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        field.dispatchEvent(new Event("change", { bubbles: true }));
+
+        return JSON.stringify({
+          ok: true,
+          path: window.location.pathname + window.location.search
+        });
+      } catch (error) {
+        return JSON.stringify({
+          ok: false,
+          reason: "file_set_failed",
+          message: String(error && error.message ? error.message : error)
+        });
+      }
     })()
     """
   end

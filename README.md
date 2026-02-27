@@ -6,7 +6,7 @@ Cerberus is an experimental Phoenix test harness with one API across:
 - `:browser` (browser-oracle path).
 
 v0 currently ships a first vertical slice:
-- session-first API (`session |> visit |> click |> assert_has/refute_has`),
+- session-first API (`session |> visit |> click/fill_in/upload/submit |> assert_has/refute_has`),
 - text locators (`"text"`, `~r/regex/`, `[text: ...]`),
 - deterministic fixture-backed adapters with optional timeout-aware live assertions,
 - path assertions (`assert_path` / `refute_path`) and scoped flows via `within/3`.
@@ -145,6 +145,7 @@ Helper locator constructors:
 - `role(:button, name: "...")` (supported roles in this slice: `:button`, `:link`, `:textbox`, `:searchbox`, `:combobox`)
 - `testid("...")` (reserved helper; not yet supported by operations in this slice)
 - `fill_in/4` also accepts a plain string/regex as label shorthand; explicit text locators (`text(...)`, `[text: ...]`, `~l"..."`) are reserved for generic text matching.
+- `upload/4` follows the same label semantics as `fill_in/4` (plain string/regex shorthand or explicit `label(...)`/`css(...)`).
 
 ## Conformance Harness
 
@@ -257,6 +258,9 @@ Dependencies: `curl`, `jq`, `unzip`.
 - `within/3` composes nested scopes (`outer inner`) and restores the previous
   scope after the callback. On live sessions, an ID selector that targets a
   nested child LiveView switches operations to that child for the callback.
+- Live-driver `fill_in/4` on live routes triggers `phx-change` when present
+  (including `_target` payload semantics) and avoids server updates when no
+  `phx-change` binding exists.
 - `open_browser/1` is a debug helper that snapshots current page HTML to a temp
   file and opens it via system browser command. For tests, `open_browser/2`
   accepts a callback (`fn path -> ... end`) so callers can inspect snapshots

@@ -1,10 +1,11 @@
 ---
 # cerberus-82ng
 title: Replicate phx-change payload/order quirks in shared form helpers
-status: todo
+status: completed
 type: task
+priority: normal
 created_at: 2026-02-27T11:31:31Z
-updated_at: 2026-02-27T11:31:31Z
+updated_at: 2026-02-27T21:39:57Z
 parent: cerberus-zqpu
 ---
 
@@ -50,6 +51,26 @@ end
 ```
 
 ## Done When
-- [ ] `fill_in/select/check/choose/upload` trigger `phx-change` only when appropriate.
-- [ ] `_target` semantics are represented in the payload.
-- [ ] Active form bookkeeping is ordered correctly to avoid hidden-input race regressions.
+- [x] `fill_in/select/check/choose/upload` trigger `phx-change` only when appropriate.
+- [x] `_target` semantics are represented in the payload.
+- [x] Active form bookkeeping is ordered correctly to avoid hidden-input race regressions.
+
+## Summary of Changes
+- Implemented live-route `fill_in/4` `phx-change` support in `Cerberus.Driver.Live`:
+  - triggers change events only when input/form has `phx-change`,
+  - emits `_target` as path list derived from the field name,
+  - updates active form data before payload construction.
+- Added form payload construction that merges active values with form defaults
+  (including hidden inputs), preventing hidden-field race regressions.
+- Extended HTML field metadata extraction in `Cerberus.Driver.Html` with
+  `selector`, `form_selector`, and `phx-change` flags, plus form-default
+  extraction helper used by live change payloads.
+- Added new live fixture route/page for `phx-change` semantics:
+  - `/live/form-change`
+  - fixture module `Cerberus.Fixtures.FormChangeLive`.
+- Added cross-driver conformance coverage (`:live` vs `:browser`) for:
+  - `_target` payload behavior,
+  - no-change behavior when `phx-change` is absent,
+  - active-form ordering with hidden input preservation.
+- Updated existing live form-action expectation test to reflect new live
+  `fill_in` behavior and retained explicit live-submit unsupported semantics.

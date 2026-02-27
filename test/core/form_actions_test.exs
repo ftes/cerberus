@@ -40,8 +40,7 @@ defmodule Cerberus.CoreFormActionsTest do
   end
 
   @tag drivers: [:live]
-  test "fill_in and submit return explicit unsupported errors on live routes for live driver",
-       context do
+  test "live driver reports missing fields for fill_in and still rejects live submit", context do
     fill_results =
       Harness.run(
         context,
@@ -53,7 +52,7 @@ defmodule Cerberus.CoreFormActionsTest do
       )
 
     assert [%{status: :error, message: fill_message}] = fill_results
-    assert fill_message =~ "does not yet support fill_in on live routes"
+    assert fill_message =~ "no form field matched locator"
 
     submit_results =
       Harness.run(
