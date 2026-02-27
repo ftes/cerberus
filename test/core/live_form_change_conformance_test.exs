@@ -48,4 +48,16 @@ defmodule Cerberus.CoreLiveFormChangeConformanceTest do
       |> assert_has(text("hidden_race: hobbit"), exact: true)
     end)
   end
+
+  @tag browser: true
+  @tag drivers: [:live, :browser]
+  test "fill_in matches wrapped nested label text in live and browser drivers", context do
+    Harness.run!(context, fn session ->
+      session
+      |> visit("/live/form-change")
+      |> fill_in("Nickname *", "Strider")
+      |> assert_has(text("_target: [nickname]"), exact: true)
+      |> assert_has(text("nickname: Strider"), exact: true)
+    end)
+  end
 end

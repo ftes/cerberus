@@ -1,11 +1,11 @@
 ---
 # cerberus-mz94
 title: fill_in label matching fails with nested label nodes
-status: todo
+status: completed
 type: bug
 priority: normal
 created_at: 2026-02-27T21:47:48Z
-updated_at: 2026-02-27T22:35:41Z
+updated_at: 2026-02-27T22:41:33Z
 parent: cerberus-zqpu
 ---
 
@@ -33,11 +33,19 @@ Expected Cerberus parity checks:
 - fill_in exact/non-exact matching should be deterministic across static/live/browser.
 
 ## Todo
-- [ ] Add fixture + failing tests for nested label text content
-- [ ] Define/normalize label text extraction semantics (whitespace + inline nodes)
-- [ ] Implement fix in shared label lookup path
-- [ ] Verify cross-driver conformance against browser behavior
+- [x] Add fixture + failing tests for nested label text content
+- [x] Define/normalize label text extraction semantics (whitespace + inline nodes)
+- [x] Implement fix in shared label lookup path
+- [x] Verify cross-driver conformance against browser behavior
 
 ## Triage Note
 This candidate comes from an upstream phoenix_test issue or PR and may already work in Cerberus.
 If current Cerberus behavior already matches the expected semantics, add or keep the conformance test coverage and close this bean as done (no behavior change required).
+
+## Summary of Changes
+
+- Added nested-label fixtures where controls are wrapped by `<label>` and label text includes inline nested nodes (`<span>*</span>`).
+- Added conformance coverage for nested-label `fill_in` on both static+browser and live+browser paths.
+- Added a focused `Cerberus.Driver.Html` unit test proving wrapped nested label text resolves to a matchable label string.
+- Fixed browser driver form-field label resolution to support both `label[for]` and wrapped controls via `closest("label")` fallback.
+- Verified the scenario across targeted conformance suites and driver-level tests.

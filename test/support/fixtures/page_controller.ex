@@ -122,6 +122,14 @@ defmodule Cerberus.Fixtures.PageController do
             <input id="search_q" name="q" type="text" value="" />
             <button type="submit">Run Search</button>
           </form>
+
+          <form action="/search/nested/results" method="get">
+            <label>
+              Search term <span class="required">*</span>
+              <input name="nested_q" type="text" value="" />
+            </label>
+            <button type="submit">Run Nested Search</button>
+          </form>
         </main>
       </body>
     </html>
@@ -142,6 +150,26 @@ defmodule Cerberus.Fixtures.PageController do
       <body>
         <main>
           <p>Search query: #{query}</p>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def search_nested_results(conn, params) do
+    params = merged_request_params(conn, params)
+    query = Map.get(params, "nested_q", "")
+
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Nested Search Results</title>
+      </head>
+      <body>
+        <main>
+          <p>Nested search query: #{query}</p>
         </main>
       </body>
     </html>

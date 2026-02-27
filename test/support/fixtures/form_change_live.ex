@@ -9,6 +9,7 @@ defmodule Cerberus.Fixtures.FormChangeLive do
        target: [],
        name: "",
        email: "",
+       nickname: "",
        hidden_name: "",
        hidden_email: "",
        hidden_race: ""
@@ -24,6 +25,7 @@ defmodule Cerberus.Fixtures.FormChangeLive do
        target: target,
        name: params["name"] || "",
        email: params["email"] || "",
+       nickname: params["nickname"] || "",
        hidden_race: params["hidden_race"] || ""
      )}
   end
@@ -52,6 +54,11 @@ defmodule Cerberus.Fixtures.FormChangeLive do
 
         <label for="change_email">Email</label>
         <input id="change_email" name="email" type="text" value={@email} />
+
+        <label>
+          Nickname <span class="required">*</span>
+          <input name="nickname" type="text" value={@nickname} />
+        </label>
       </form>
 
       <form id="no-phx-change-form">
@@ -74,6 +81,7 @@ defmodule Cerberus.Fixtures.FormChangeLive do
         <p>_target: [<%= Enum.join(@target, ",") %>]</p>
         <p>name: <%= @hidden_name != "" && @hidden_name || @name %></p>
         <p>email: <%= @hidden_email != "" && @hidden_email || @email %></p>
+        <p>nickname: <%= @nickname %></p>
         <p>hidden_race: <%= @hidden_race %></p>
       </div>
     </main>

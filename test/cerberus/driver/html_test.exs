@@ -22,4 +22,18 @@ defmodule Cerberus.Driver.HtmlTest do
 
     assert 1 = html |> LazyHTML.from_document() |> LazyHTML.query(selector) |> Enum.count()
   end
+
+  test "find_form_field matches wrapped labels with nested inline text" do
+    html = """
+    <form>
+      <label>
+        Search term <span class="required">*</span>
+        <input name="nested_q" type="text" value="" />
+      </label>
+    </form>
+    """
+
+    assert {:ok, %{name: "nested_q", label: "Search term *"}} =
+             Html.find_form_field(html, "Search term *", exact: true)
+  end
 end

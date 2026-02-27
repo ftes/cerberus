@@ -26,6 +26,22 @@ defmodule Cerberus.CoreFormActionsTest do
   end
 
   @tag browser: true
+  @tag drivers: [:static, :browser]
+  test "fill_in matches wrapped labels with nested inline text across static and browser drivers",
+       context do
+    Harness.run!(
+      context,
+      fn session ->
+        session
+        |> visit("/search")
+        |> fill_in("Search term *", "phoenix")
+        |> submit(text: "Run Nested Search")
+        |> assert_has([text: "Nested search query: phoenix"], exact: true)
+      end
+    )
+  end
+
+  @tag browser: true
   @tag drivers: [:live, :browser]
   test "click_button works on live counter flow for live and browser drivers", context do
     Harness.run!(

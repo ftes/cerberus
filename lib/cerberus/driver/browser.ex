@@ -1348,6 +1348,16 @@ defmodule Cerberus.Driver.Browser do
         if (id) labels.set(id, normalize(label.textContent));
       });
 
+      const labelForControl = (element) => {
+        const byId = labels.get(element.id || "");
+        if (byId) return byId;
+
+        const wrappingLabel = element.closest("label");
+        if (wrappingLabel) return normalize(wrappingLabel.textContent);
+
+        return "";
+      };
+
       const selectorMatches = (element) => {
         if (!elementSelector) return true;
         try {
@@ -1368,7 +1378,7 @@ defmodule Cerberus.Driver.Browser do
             index,
             id: element.id || "",
             name: element.name || "",
-            label: labels.get(element.id) || "",
+            label: labelForControl(element),
             type,
             value: element.value || "",
             checked: element.checked === true
