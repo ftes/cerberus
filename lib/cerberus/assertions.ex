@@ -174,14 +174,21 @@ defmodule Cerberus.Assertions do
     opts = merge_locator_opts(locator, opts)
 
     case locator do
-      %Locator{kind: :text} ->
-        {locator, opts}
+      %Locator{kind: :text, value: value} ->
+        if fill_in_label_shorthand?(locator_input) do
+          {%Locator{kind: :label, value: value}, opts}
+        else
+          raise InvalidLocatorError,
+            locator: locator_input,
+            message:
+              "text locators are not supported for fill_in/4; use a plain string/regex label shorthand or label(...), role(:textbox, ...), or css(...)"
+        end
 
       %Locator{kind: :label, value: value} ->
-        {%Locator{kind: :text, value: value}, opts}
+        {%Locator{kind: :label, value: value}, opts}
 
       %Locator{kind: :css, value: selector} ->
-        {%Locator{kind: :text, value: ""}, Keyword.put(opts, :selector, selector)}
+        {%Locator{kind: :label, value: ""}, Keyword.put(opts, :selector, selector)}
 
       %Locator{kind: :link} ->
         raise InvalidLocatorError, locator: locator_input, message: "link locators are not supported for fill_in/4"
@@ -250,5 +257,9 @@ defmodule Cerberus.Assertions do
 
   defp merge_locator_opts(%Locator{opts: locator_opts}, opts) when is_list(locator_opts) do
     Keyword.merge(locator_opts, opts)
+  end
+
+  defp fill_in_label_shorthand?(locator_input) do
+    is_binary(locator_input) or is_struct(locator_input, Regex)
   end
 end

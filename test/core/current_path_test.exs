@@ -44,7 +44,7 @@ defmodule Cerberus.CoreCurrentPathTest do
         session =
           session
           |> visit("/search")
-          |> fill_in([text: "Search term"], "phoenix")
+          |> fill_in("Search term", "phoenix")
           |> submit(text: "Run Search")
 
         assert session.current_path == "/search/results?q=phoenix"

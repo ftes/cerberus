@@ -18,7 +18,7 @@ defmodule Cerberus.CoreFormActionsTest do
         |> click_link(text: "Articles")
         |> assert_has([text: "Articles"], exact: true)
         |> visit("/search")
-        |> fill_in([text: "Search term"], "phoenix")
+        |> fill_in("Search term", "phoenix")
         |> submit(text: "Run Search")
         |> assert_has([text: "Search query: phoenix"], exact: true)
       end
@@ -48,7 +48,7 @@ defmodule Cerberus.CoreFormActionsTest do
         fn session ->
           session
           |> visit("/live/counter")
-          |> fill_in([text: "Search term"], "x")
+          |> fill_in("Search term", "x")
         end
       )
 

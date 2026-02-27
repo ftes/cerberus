@@ -127,6 +127,7 @@ Helper locator constructors:
 - `css("...")`
 - `role(:button, name: "...")` (supported roles in this slice: `:button`, `:link`, `:textbox`, `:searchbox`, `:combobox`)
 - `testid("...")` (reserved helper; not yet supported by operations in this slice)
+- `fill_in/4` also accepts a plain string/regex as label shorthand; explicit text locators (`text(...)`, `[text: ...]`, `~l"..."`) are reserved for generic text matching.
 
 ## Conformance Harness
 

@@ -20,7 +20,7 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
         session =
           session
           |> visit("/owner-form")
-          |> fill_in([text: "Name"], "Aragorn")
+          |> fill_in("Name", "Aragorn")
 
         assert {:error, session_after_reset, _observed, _reason} =
                  driver_module.submit(session, reset_locator, [])
@@ -41,7 +41,7 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
       fn session ->
         session
         |> visit("/owner-form")
-        |> fill_in([text: "Name"], "Aragorn")
+        |> fill_in("Name", "Aragorn")
         |> submit(text: "Save Owner Form")
         |> assert_has([text: "name: Aragorn"], exact: true)
         |> assert_has([text: "form-button: save-owner-form"], exact: true)
@@ -55,7 +55,7 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
       fn session ->
         session
         |> visit("/owner-form")
-        |> fill_in([text: "Name"], "Aragorn")
+        |> fill_in("Name", "Aragorn")
         |> submit(text: "Save Owner Form")
         |> visit("/owner-form")
         |> submit(text: "Save Owner Form")
@@ -72,7 +72,7 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
         session =
           session
           |> visit("/owner-form")
-          |> fill_in([text: "Name"], "Aragorn")
+          |> fill_in("Name", "Aragorn")
           |> submit(text: "Save Owner Form Redirect")
           |> assert_has([text: "name: Aragorn"], exact: true)
           |> assert_has([text: "form-button: save-owner-form-redirect"], exact: true)
@@ -94,7 +94,7 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
           session
           |> Map.put(:conn, seed_conn)
           |> visit("/owner-form")
-          |> fill_in([text: "Name"], "Aragorn")
+          |> fill_in("Name", "Aragorn")
 
         assert %{active_form: active_before} = session.form_data
         assert is_binary(active_before)
@@ -129,7 +129,7 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
           session
           |> Map.put(:conn, seed_conn)
           |> visit("/owner-form")
-          |> fill_in([text: "Name"], "Aragorn")
+          |> fill_in("Name", "Aragorn")
           |> submit(text: "Save Owner Form Redirect")
           |> assert_has([text: "name: Aragorn"], exact: true)
           |> assert_has([text: "form-button: save-owner-form-redirect"], exact: true)

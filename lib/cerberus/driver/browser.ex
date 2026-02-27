@@ -238,7 +238,7 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @impl true
-  def fill_in(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, value, opts) do
+  def fill_in(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, value, opts) do
     state = state!(session)
     selector = Keyword.get(opts, :selector)
 

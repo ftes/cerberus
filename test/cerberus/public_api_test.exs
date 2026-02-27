@@ -149,13 +149,22 @@ defmodule Cerberus.PublicApiTest do
     end
   end
 
-  test "fill_in accepts positional value argument" do
+  test "fill_in accepts positional value argument as a label shorthand" do
     assert is_struct(
              :static
              |> session()
              |> visit("/search")
-             |> fill_in([text: "Search term"], "phoenix")
+             |> fill_in("Search term", "phoenix")
            )
+  end
+
+  test "fill_in rejects explicit text locators to keep label semantics explicit" do
+    assert_raise InvalidLocatorError, ~r/text locators are not supported for fill_in\/4/, fn ->
+      :static
+      |> session()
+      |> visit("/search")
+      |> fill_in(text("Search term"), "phoenix")
+    end
   end
 
   test "invalid keyword options are rejected via NimbleOptions" do

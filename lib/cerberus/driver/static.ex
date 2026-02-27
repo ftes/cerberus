@@ -145,7 +145,7 @@ defmodule Cerberus.Driver.Static do
   end
 
   @impl true
-  def fill_in(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, value, opts) do
+  def fill_in(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, value, opts) do
     case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
       {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
         updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}

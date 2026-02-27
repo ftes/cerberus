@@ -142,7 +142,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def fill_in(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, value, opts) do
+  def fill_in(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, value, opts) do
     session = with_latest_html(session)
 
     case route_kind(session) do
