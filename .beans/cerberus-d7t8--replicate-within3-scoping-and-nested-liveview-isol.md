@@ -1,10 +1,11 @@
 ---
 # cerberus-d7t8
 title: Replicate within/3 scoping and nested LiveView isolation quirks
-status: todo
+status: completed
 type: task
+priority: normal
 created_at: 2026-02-27T11:31:31Z
-updated_at: 2026-02-27T11:31:31Z
+updated_at: 2026-02-27T21:08:48Z
 parent: cerberus-zqpu
 ---
 
@@ -39,6 +40,13 @@ end
 ```
 
 ## Done When
-- [ ] Scope stack is preserved across nested `within` calls.
-- [ ] Child LiveView actions remain isolated from parent state.
-- [ ] Scoped-not-found errors are explicit and tested.
+- [x] Scope stack is preserved across nested `within` calls.
+- [x] Child LiveView actions remain isolated from parent state.
+- [x] Scoped-not-found errors are explicit and tested.
+
+## Summary of Changes
+- Updated `within/3` scope handling to compose nested scopes (`outer inner`) and restore previous scope after callback completion.
+- Added live nested-child targeting in `within/3` for ID selectors that map to `Phoenix.LiveViewTest.find_live_child/2`, so callback operations run against the child LiveView when appropriate.
+- Added new fixtures for nested LiveView behavior: `NestedLive`, `NestedChildLive`, and route `/live/nested`.
+- Added cross-driver conformance coverage in `test/core/live_nested_scope_conformance_test.exs` for nested scope stack behavior, parent/child isolation, and explicit scoped failure messages.
+- Updated fixture documentation and README notes to describe the new nested scope and child LiveView behavior.

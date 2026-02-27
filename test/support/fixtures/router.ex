@@ -41,6 +41,7 @@ defmodule Cerberus.Fixtures.Router do
       live("/live/redirects", RedirectsLive)
       live("/live/redirect-return", RedirectReturnLive)
       live("/live/selector-edge", SelectorEdgeLive)
+      live("/live/nested", NestedLive)
       live("/live/oracle/mismatch", OracleMismatchLive)
     end
   end

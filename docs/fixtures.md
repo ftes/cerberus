@@ -25,6 +25,7 @@ The fixture app is started from `test/test_helper.exs` and serves only local rou
 - `/live/redirects` (live): link/button navigation fixture for navigate/patch/redirect parity, including `phx-click` JS command variants (`push`, `navigate`, `patch`, mixed pipelines, dispatch-only).
 - `/live/redirect-return` (live): immediate live redirect-back fixture with flash.
 - `/live/selector-edge` (live): duplicate button-label fixture for selector disambiguation checks.
+- `/live/nested` (live): nested LiveView fixture for scoped `within/3` stack + child-isolation conformance.
 - `/oracle/mismatch` (static): mismatch marker fixture for browser-oracle diff tests.
 - `/live/oracle/mismatch` (live): mismatch marker fixture for browser-oracle diff tests.
 

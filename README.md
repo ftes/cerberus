@@ -236,6 +236,9 @@ Dependencies: `curl`, `jq`, `unzip`.
 - `open_tab/1` creates another tab in the same user state in all drivers:
   browser maps this to a new `browsingContext` in the same `userContext`;
   live/static map this to a recycled `Plug.Conn` so cookies/session are shared.
+- `within/3` composes nested scopes (`outer inner`) and restores the previous
+  scope after the callback. On live sessions, an ID selector that targets a
+  nested child LiveView switches operations to that child for the callback.
 - `open_browser/1` is a debug helper that snapshots current page HTML to a temp
   file and opens it via system browser command. For tests, `open_browser/2`
   accepts a callback (`fn path -> ... end`) so callers can inspect snapshots

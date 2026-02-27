@@ -191,13 +191,38 @@ defmodule Cerberus do
   end
 
   @spec within(arg, String.t(), (arg -> arg)) :: arg when arg: var
+  def within(%LiveSession{} = session, scope, callback) when is_binary(scope) and is_function(callback, 1) do
+    if String.trim(scope) == "" do
+      raise ArgumentError, "within/3 expects a non-empty CSS selector"
+    end
+
+    previous_scope = Session.scope(session)
+
+    case live_child_view_for_scope(session, scope) do
+      {:ok, child_view} ->
+        child_session =
+          session
+          |> Map.put(:view, child_view)
+          |> Map.put(:html, Phoenix.LiveViewTest.render(child_view))
+          |> Session.with_scope(nil)
+
+        callback_result = callback.(child_session)
+        restore_live_child_scope(callback_result, session, previous_scope)
+
+      :error ->
+        scoped_session = Session.with_scope(session, compose_scope(previous_scope, scope))
+        callback_result = callback.(scoped_session)
+        restore_scope(callback_result, previous_scope)
+    end
+  end
+
   def within(session, scope, callback) when is_binary(scope) and is_function(callback, 1) do
     if String.trim(scope) == "" do
       raise ArgumentError, "within/3 expects a non-empty CSS selector"
     end
 
     previous_scope = Session.scope(session)
-    scoped_session = Session.with_scope(session, scope)
+    scoped_session = Session.with_scope(session, compose_scope(previous_scope, scope))
     callback_result = callback.(scoped_session)
 
     restore_scope(callback_result, previous_scope)
@@ -343,6 +368,46 @@ defmodule Cerberus do
   defp restore_scope(_value, _previous_scope) do
     raise ArgumentError, "within/3 callback must return a Cerberus session"
   end
+
+  defp compose_scope(nil, scope), do: scope
+  defp compose_scope("", scope), do: scope
+  defp compose_scope(previous_scope, scope), do: previous_scope <> " " <> scope
+
+  defp restore_live_child_scope(%{__struct__: _} = callback_result, parent_session, previous_scope) do
+    case callback_result do
+      %LiveSession{} = live_result ->
+        if Session.current_path(live_result) == Session.current_path(parent_session) do
+          live_result
+          |> Map.put(:view, parent_session.view)
+          |> Map.put(:html, Phoenix.LiveViewTest.render(parent_session.view))
+          |> Session.with_scope(previous_scope)
+        else
+          Session.with_scope(live_result, previous_scope)
+        end
+
+      _ ->
+        Session.with_scope(callback_result, previous_scope)
+    end
+  end
+
+  defp restore_live_child_scope(_value, _parent_session, _previous_scope) do
+    raise ArgumentError, "within/3 callback must return a Cerberus session"
+  end
+
+  defp live_child_view_for_scope(%LiveSession{view: %View{} = view}, scope) when is_binary(scope) do
+    if simple_id_selector?(scope) do
+      case Phoenix.LiveViewTest.find_live_child(view, String.trim_leading(scope, "#")) do
+        %View{} = child_view -> {:ok, child_view}
+        _ -> :error
+      end
+    else
+      :error
+    end
+  end
+
+  defp live_child_view_for_scope(_session, _scope), do: :error
+
+  defp simple_id_selector?(scope), do: String.match?(scope, ~r/^#[A-Za-z_][A-Za-z0-9_-]*$/)
 
   defp update_last_result(%{last_result: _} = session, op, observed) do
     %{session | last_result: %{op: op, observed: observed}}
