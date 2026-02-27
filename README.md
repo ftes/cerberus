@@ -1,4 +1,5 @@
 # Cerberus
+![Cerberus hero artwork](docs/hero.png)
 
 Cerberus is an experimental Phoenix test harness with one API across:
 - `:auto` (PhoenixTest-style static/live auto-detection and switching),

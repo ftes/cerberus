@@ -64,7 +64,9 @@ defmodule Cerberus.MixProject do
   defp docs do
     [
       main: "readme",
-      extras: ["README.md"]
+      extras: ["README.md"],
+      assets: %{"docs" => "docs"},
+      logo: "docs/icon.png"
     ]
   end
 
