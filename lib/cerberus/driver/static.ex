@@ -171,6 +171,16 @@ defmodule Cerberus.Driver.Static do
   end
 
   @impl true
+  def check(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, opts) do
+    toggle_checkbox(session, expected, opts, true, :check)
+  end
+
+  @impl true
+  def uncheck(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, opts) do
+    toggle_checkbox(session, expected, opts, false, :uncheck)
+  end
+
+  @impl true
   def upload(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, path, opts) do
     observed = %{
       action: :upload,
@@ -370,7 +380,7 @@ defmodule Cerberus.Driver.Static do
 
   defp build_submit_target(action, fallback_path, params) do
     base_path = action_path(action, fallback_path)
-    query = URI.encode_query(params)
+    query = encode_query_params(params)
 
     if query == "" do
       base_path
@@ -415,8 +425,61 @@ defmodule Cerberus.Driver.Static do
   defp path_with_query(path, ""), do: path
   defp path_with_query(path, query), do: path <> "?" <> query
 
+  defp encode_query_params(params) when is_map(params) do
+    if Enum.any?(params, fn {_name, value} -> is_list(value) end) do
+      params
+      |> Enum.flat_map(fn
+        {name, values} when is_list(values) ->
+          Enum.map(values, &{name, &1})
+
+        {name, value} ->
+          [{name, value}]
+      end)
+      |> Enum.map_join("&", fn {name, value} ->
+        encoded_name = URI.encode_www_form(to_string(name))
+        encoded_value = value |> normalize_query_value() |> URI.encode_www_form()
+        encoded_name <> "=" <> encoded_value
+      end)
+    else
+      URI.encode_query(params)
+    end
+  end
+
+  defp normalize_query_value(nil), do: ""
+  defp normalize_query_value(value), do: to_string(value)
+
   defp empty_form_data do
     %{active_form: nil, values: %{}}
+  end
+
+  defp toggle_checkbox(session, expected, opts, checked?, op) do
+    case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+      {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
+        value = toggled_checkbox_value(session, field, checked?)
+        updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
+
+        observed = %{
+          action: op,
+          path: session.current_path,
+          field: field,
+          checked: checked?,
+          transition: Session.transition(session)
+        }
+
+        {:ok, update_session(updated, op, observed), observed}
+
+      {:ok, %{name: name}} when is_binary(name) and name != "" ->
+        observed = %{action: op, path: session.current_path, transition: Session.transition(session)}
+        {:error, session, observed, "matched field is not a checkbox"}
+
+      {:ok, _field} ->
+        observed = %{action: op, path: session.current_path, transition: Session.transition(session)}
+        {:error, session, observed, "matched field does not include a name attribute"}
+
+      :error ->
+        observed = %{action: op, path: session.current_path, transition: Session.transition(session)}
+        {:error, session, observed, "no form field matched locator"}
+    end
   end
 
   defp put_form_value(form_data, form, name, value) do
@@ -435,6 +498,66 @@ defmodule Cerberus.Driver.Static do
     case button_payload(button) do
       nil -> params
       {name, value} -> Map.put(params, name, value)
+    end
+  end
+
+  defp params_for_form(form_data, form) do
+    %{active_form: active_form, values: values} = normalize_form_data(form_data)
+    key = form_key(form, active_form)
+    Map.get(values, key, %{})
+  end
+
+  defp toggled_checkbox_value(session, field, checked?) do
+    name = field.name
+    defaults = submit_defaults_for_field(session, field)
+    active = params_for_form(session.form_data, field.form)
+    current = Map.get(active, name, Map.get(defaults, name))
+    input_value = field[:input_value] || "on"
+
+    if String.ends_with?(name, "[]") do
+      current_list = checkbox_value_list(current)
+
+      if checked? do
+        ensure_checkbox_value(current_list, input_value)
+      else
+        Enum.reject(current_list, &(&1 == input_value))
+      end
+    else
+      if checked? do
+        input_value
+      else
+        checkbox_unchecked_value(defaults, name, input_value)
+      end
+    end
+  end
+
+  defp submit_defaults_for_field(session, field) do
+    case field[:form_selector] do
+      selector when is_binary(selector) and selector != "" ->
+        Html.form_defaults(session.html, selector, Session.scope(session))
+
+      _ ->
+        %{}
+    end
+  end
+
+  defp checkbox_value_list(nil), do: []
+  defp checkbox_value_list(value) when is_list(value), do: value
+  defp checkbox_value_list(value), do: [value]
+
+  defp ensure_checkbox_value(values, input_value) do
+    if Enum.any?(values, &(&1 == input_value)) do
+      values
+    else
+      values ++ [input_value]
+    end
+  end
+
+  defp checkbox_unchecked_value(defaults, name, input_value) do
+    case Map.get(defaults, name) do
+      ^input_value -> ""
+      nil -> ""
+      other -> other
     end
   end
 

@@ -65,13 +65,16 @@ defmodule Cerberus.MixProject do
     [
       main: "readme",
       extras: ["README.md"],
+      source_url: "https://github.com/ftes/cerberus",
+      source_ref: "main",
+      homepage_url: "https://github.com/ftes/cerberus",
       assets: %{"docs" => "docs"},
       logo: "docs/icon.png"
     ]
   end
 
   defp description do
-    "Experimental Phoenix test harness with one API across static, LiveView, and browser drivers."
+    "Phoenix test harness with one API across static, LiveView, and browser drivers"
   end
 
   defp package do

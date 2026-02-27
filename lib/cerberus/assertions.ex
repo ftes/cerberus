@@ -41,6 +41,38 @@ defmodule Cerberus.Assertions do
     end
   end
 
+  @spec check(arg, term(), Options.check_opts()) :: arg when arg: var
+  def check(session, locator_input, opts \\ []) when is_list(opts) do
+    {locator, opts} = normalize_check_locator(locator_input, opts, "check/3")
+    opts = Options.validate_check!(opts, "check/3")
+    driver = Cerberus.driver_module!(session)
+
+    case driver.check(session, locator, opts) do
+      {:ok, session, _observed} ->
+        session
+
+      {:error, failed_session, observed, reason} ->
+        raise AssertionError,
+          message: format_error("check", locator_input, opts, reason, observed, failed_session)
+    end
+  end
+
+  @spec uncheck(arg, term(), Options.check_opts()) :: arg when arg: var
+  def uncheck(session, locator_input, opts \\ []) when is_list(opts) do
+    {locator, opts} = normalize_check_locator(locator_input, opts, "uncheck/3")
+    opts = Options.validate_check!(opts, "uncheck/3")
+    driver = Cerberus.driver_module!(session)
+
+    case driver.uncheck(session, locator, opts) do
+      {:ok, session, _observed} ->
+        session
+
+      {:error, failed_session, observed, reason} ->
+        raise AssertionError,
+          message: format_error("uncheck", locator_input, opts, reason, observed, failed_session)
+    end
+  end
+
   @spec upload(arg, term(), String.t(), Options.upload_opts()) :: arg when arg: var
   def upload(session, locator_input, path, opts \\ [])
 
@@ -256,6 +288,38 @@ defmodule Cerberus.Assertions do
     end
   end
 
+  defp normalize_check_locator(locator_input, opts, op_name) do
+    locator = Locator.normalize(locator_input)
+    opts = merge_locator_opts(locator, opts)
+
+    case locator do
+      %Locator{kind: :text, value: value} ->
+        if check_label_shorthand?(locator_input) do
+          {%Locator{kind: :label, value: value}, opts}
+        else
+          raise InvalidLocatorError,
+            locator: locator_input,
+            message:
+              "text locators are not supported for #{op_name}; use a plain string/regex label shorthand or label(...) or css(...)"
+        end
+
+      %Locator{kind: :label, value: value} ->
+        {%Locator{kind: :label, value: value}, opts}
+
+      %Locator{kind: :css, value: selector} ->
+        {%Locator{kind: :label, value: ""}, Keyword.put(opts, :selector, selector)}
+
+      %Locator{kind: :link} ->
+        raise InvalidLocatorError, locator: locator_input, message: "link locators are not supported for #{op_name}"
+
+      %Locator{kind: :button} ->
+        raise InvalidLocatorError, locator: locator_input, message: "button locators are not supported for #{op_name}"
+
+      %Locator{kind: :testid} ->
+        raise InvalidLocatorError, locator: locator_input, message: "testid locators are not yet supported for #{op_name}"
+    end
+  end
+
   defp normalize_submit_locator(locator_input, opts) do
     locator = Locator.normalize(locator_input)
     opts = merge_locator_opts(locator, opts)
@@ -316,6 +380,10 @@ defmodule Cerberus.Assertions do
   end
 
   defp upload_label_shorthand?(locator_input) do
+    is_binary(locator_input) or is_struct(locator_input, Regex)
+  end
+
+  defp check_label_shorthand?(locator_input) do
     is_binary(locator_input) or is_struct(locator_input, Regex)
   end
 

@@ -330,20 +330,20 @@ defmodule Cerberus do
     Assertions.unsupported(session, :choose, [locator: locator] ++ opts)
   end
 
-  @spec check(Session.t(), term()) :: no_return()
+  @spec check(arg, term()) :: arg when arg: var
   def check(session, locator), do: check(session, locator, [])
 
-  @spec check(Session.t(), term(), keyword()) :: no_return()
+  @spec check(arg, term(), Options.check_opts()) :: arg when arg: var
   def check(session, locator, opts) when is_list(opts) do
-    Assertions.unsupported(session, :check, [locator: locator] ++ opts)
+    Assertions.check(session, locator, opts)
   end
 
-  @spec uncheck(Session.t(), term()) :: no_return()
+  @spec uncheck(arg, term()) :: arg when arg: var
   def uncheck(session, locator), do: uncheck(session, locator, [])
 
-  @spec uncheck(Session.t(), term(), keyword()) :: no_return()
+  @spec uncheck(arg, term(), Options.check_opts()) :: arg when arg: var
   def uncheck(session, locator, opts) when is_list(opts) do
-    Assertions.unsupported(session, :uncheck, [locator: locator] ++ opts)
+    Assertions.uncheck(session, locator, opts)
   end
 
   @spec assert_has(arg, term(), Options.assert_opts()) :: arg when arg: var

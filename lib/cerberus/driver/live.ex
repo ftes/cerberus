@@ -190,6 +190,122 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
+  def check(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, opts) do
+    session = with_latest_html(session)
+
+    case route_kind(session) do
+      :live ->
+        do_live_toggle_checkbox(session, expected, opts, true, :check)
+
+      :static ->
+        case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+          {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
+            value = toggled_checkbox_value(session, field, true)
+            updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
+
+            observed = %{
+              action: :check,
+              path: session.current_path,
+              mode: route_kind(session),
+              field: field,
+              checked: true,
+              transition: Session.transition(session)
+            }
+
+            {:ok, update_session(updated, :check, observed), observed}
+
+          {:ok, %{name: name}} when is_binary(name) and name != "" ->
+            observed = %{
+              action: :check,
+              path: session.current_path,
+              mode: route_kind(session),
+              transition: Session.transition(session)
+            }
+
+            {:error, session, observed, "matched field is not a checkbox"}
+
+          {:ok, _field} ->
+            observed = %{
+              action: :check,
+              path: session.current_path,
+              mode: route_kind(session),
+              transition: Session.transition(session)
+            }
+
+            {:error, session, observed, "matched field does not include a name attribute"}
+
+          :error ->
+            observed = %{
+              action: :check,
+              path: session.current_path,
+              mode: route_kind(session),
+              transition: Session.transition(session)
+            }
+
+            {:error, session, observed, "no form field matched locator"}
+        end
+    end
+  end
+
+  @impl true
+  def uncheck(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, opts) do
+    session = with_latest_html(session)
+
+    case route_kind(session) do
+      :live ->
+        do_live_toggle_checkbox(session, expected, opts, false, :uncheck)
+
+      :static ->
+        case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+          {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
+            value = toggled_checkbox_value(session, field, false)
+            updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
+
+            observed = %{
+              action: :uncheck,
+              path: session.current_path,
+              mode: route_kind(session),
+              field: field,
+              checked: false,
+              transition: Session.transition(session)
+            }
+
+            {:ok, update_session(updated, :uncheck, observed), observed}
+
+          {:ok, %{name: name}} when is_binary(name) and name != "" ->
+            observed = %{
+              action: :uncheck,
+              path: session.current_path,
+              mode: route_kind(session),
+              transition: Session.transition(session)
+            }
+
+            {:error, session, observed, "matched field is not a checkbox"}
+
+          {:ok, _field} ->
+            observed = %{
+              action: :uncheck,
+              path: session.current_path,
+              mode: route_kind(session),
+              transition: Session.transition(session)
+            }
+
+            {:error, session, observed, "matched field does not include a name attribute"}
+
+          :error ->
+            observed = %{
+              action: :uncheck,
+              path: session.current_path,
+              mode: route_kind(session),
+              transition: Session.transition(session)
+            }
+
+            {:error, session, observed, "no form field matched locator"}
+        end
+    end
+  end
+
+  @impl true
   def upload(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, path, opts) do
     session = with_latest_html(session)
 
@@ -1111,6 +1227,77 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
+  defp do_live_toggle_checkbox(session, expected, opts, checked?, op) do
+    case find_checkbox_field(session, expected, opts) do
+      {:ok, field} ->
+        apply_live_checkbox_change(session, field, checked?, op)
+
+      {:error, reason} ->
+        observed = checkbox_error_observed(session, op)
+        {:error, session, observed, reason}
+    end
+  end
+
+  defp find_checkbox_field(session, expected, opts) do
+    case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+      {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
+        {:ok, field}
+
+      {:ok, %{name: name}} when is_binary(name) and name != "" ->
+        {:error, "matched field is not a checkbox"}
+
+      {:ok, _field} ->
+        {:error, "matched field does not include a name attribute"}
+
+      :error ->
+        {:error, "no form field matched locator"}
+    end
+  end
+
+  defp apply_live_checkbox_change(session, field, checked?, op) do
+    value = toggled_checkbox_value(session, field, checked?)
+    form_data = put_form_value(session.form_data, field.form, field.name, value)
+    updated = %{session | form_data: form_data}
+
+    case maybe_trigger_live_change(updated, field) do
+      {:ok, changed_session, change} ->
+        observed = %{
+          action: op,
+          path: Session.current_path(changed_session),
+          mode: Session.driver_kind(changed_session),
+          field: field,
+          checked: checked?,
+          phx_change: change.triggered,
+          target: change.target,
+          transition: change.transition || Session.transition(changed_session)
+        }
+
+        {:ok, update_last_result(changed_session, op, observed), observed}
+
+      {:error, failed_session, reason, details} ->
+        observed = %{
+          action: op,
+          path: session.current_path,
+          mode: route_kind(session),
+          field: field,
+          checked: checked?,
+          details: details,
+          transition: Session.transition(session)
+        }
+
+        {:error, failed_session, observed, reason}
+    end
+  end
+
+  defp checkbox_error_observed(session, op) do
+    %{
+      action: op,
+      path: session.current_path,
+      mode: route_kind(session),
+      transition: Session.transition(session)
+    }
+  end
+
   defp clear_submitted_session(%__MODULE__{} = session, form_data, op, observed) do
     %{session | form_data: form_data, last_result: %{op: op, observed: observed}}
   end
@@ -1426,6 +1613,50 @@ defmodule Cerberus.Driver.Live do
     Map.get(values, key, %{})
   end
 
+  defp toggled_checkbox_value(session, field, checked?) do
+    name = field.name
+    defaults = form_defaults_for_change(session, field)
+    active = active_form_values(session.form_data, field)
+    current = Map.get(active, name, Map.get(defaults, name))
+    input_value = field[:input_value] || "on"
+
+    if String.ends_with?(name, "[]") do
+      current_list = checkbox_value_list(current)
+
+      if checked? do
+        ensure_checkbox_value(current_list, input_value)
+      else
+        Enum.reject(current_list, &(&1 == input_value))
+      end
+    else
+      if checked? do
+        input_value
+      else
+        checkbox_unchecked_value(defaults, name, input_value)
+      end
+    end
+  end
+
+  defp checkbox_value_list(nil), do: []
+  defp checkbox_value_list(value) when is_list(value), do: value
+  defp checkbox_value_list(value), do: [value]
+
+  defp ensure_checkbox_value(values, input_value) do
+    if Enum.any?(values, &(&1 == input_value)) do
+      values
+    else
+      values ++ [input_value]
+    end
+  end
+
+  defp checkbox_unchecked_value(defaults, name, input_value) do
+    case Map.get(defaults, name) do
+      ^input_value -> ""
+      nil -> ""
+      other -> other
+    end
+  end
+
   defp decode_query_params(params) when is_map(params) do
     params
     |> expand_query_entries()
@@ -1469,7 +1700,7 @@ defmodule Cerberus.Driver.Live do
 
   defp build_submit_target(action, fallback_path, params) do
     base_path = action_path(action, fallback_path)
-    query = URI.encode_query(params)
+    query = encode_query_params(params)
 
     if query == "" do
       base_path
@@ -1513,6 +1744,29 @@ defmodule Cerberus.Driver.Live do
   defp path_with_query(path, nil), do: path
   defp path_with_query(path, ""), do: path
   defp path_with_query(path, query), do: path <> "?" <> query
+
+  defp encode_query_params(params) when is_map(params) do
+    if Enum.any?(params, fn {_name, value} -> is_list(value) end) do
+      params
+      |> Enum.flat_map(fn
+        {name, values} when is_list(values) ->
+          Enum.map(values, &{name, &1})
+
+        {name, value} ->
+          [{name, value}]
+      end)
+      |> Enum.map_join("&", fn {name, value} ->
+        encoded_name = URI.encode_www_form(to_string(name))
+        encoded_value = value |> normalize_query_value() |> URI.encode_www_form()
+        encoded_name <> "=" <> encoded_value
+      end)
+    else
+      URI.encode_query(params)
+    end
+  end
+
+  defp normalize_query_value(nil), do: ""
+  defp normalize_query_value(value), do: to_string(value)
 
   defp maybe_live_patch_path(nil, fallback_path), do: fallback_path
 

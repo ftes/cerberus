@@ -340,6 +340,7 @@ defmodule Cerberus.Driver.Html do
   defp build_form_field_match(root_node, label_text, name, field, field_node) do
     form_node = field_form_node(root_node, field)
     form_id = field_form_id(field, form_node)
+    input_type = input_type(field_node)
 
     {:ok,
      %{
@@ -349,6 +350,9 @@ defmodule Cerberus.Driver.Html do
        form: form_id,
        selector: field_selector(root_node, field),
        form_selector: form_selector(root_node, form_node, form_id),
+       input_type: input_type,
+       input_value: input_value(field_node, input_type),
+       input_checked: checked?(field_node),
        input_phx_change: field_node |> attr("phx-change") |> phx_change_binding?(),
        form_phx_change: form_node |> attr_or_nil("phx-change") |> phx_change_binding?()
      }}
@@ -515,6 +519,23 @@ defmodule Cerberus.Driver.Html do
     |> LazyHTML.text()
     |> String.replace("\u00A0", " ")
     |> String.trim()
+  end
+
+  defp input_type(field_node) do
+    case node_tag(field_node) do
+      "input" -> String.downcase(attr(field_node, "type") || "text")
+      other -> other
+    end
+  end
+
+  defp input_value(field_node, input_type) do
+    case attr(field_node, "value") do
+      value when is_binary(value) ->
+        value
+
+      _ ->
+        if input_type in ["checkbox", "radio"], do: "on", else: ""
+    end
   end
 
   defp field_for_label(root_node, label_node) do

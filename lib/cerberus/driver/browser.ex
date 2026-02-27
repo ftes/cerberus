@@ -256,6 +256,40 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @impl true
+  def check(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, opts) do
+    state = state!(session)
+    selector = Keyword.get(opts, :selector)
+
+    with_driver_ready(session, state, :check, fn ready_state ->
+      case form_fields(ready_state, selector) do
+        {:ok, fields_data} ->
+          do_toggle_checkbox(session, ready_state, fields_data, expected, opts, selector, true, :check)
+
+        {:error, reason, details} ->
+          observed = %{path: ready_state.current_path, details: details}
+          {:error, session, observed, "failed to inspect form fields: #{reason}"}
+      end
+    end)
+  end
+
+  @impl true
+  def uncheck(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, opts) do
+    state = state!(session)
+    selector = Keyword.get(opts, :selector)
+
+    with_driver_ready(session, state, :uncheck, fn ready_state ->
+      case form_fields(ready_state, selector) do
+        {:ok, fields_data} ->
+          do_toggle_checkbox(session, ready_state, fields_data, expected, opts, selector, false, :uncheck)
+
+        {:error, reason, details} ->
+          observed = %{path: ready_state.current_path, details: details}
+          {:error, session, observed, "failed to inspect form fields: #{reason}"}
+      end
+    end)
+  end
+
+  @impl true
   def upload(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, path, opts) do
     state = state!(session)
     selector = Keyword.get(opts, :selector)
@@ -393,6 +427,24 @@ defmodule Cerberus.Driver.Browser do
 
       field ->
         upload_field(session, state, field, path, selector)
+    end
+  end
+
+  defp do_toggle_checkbox(session, state, fields_data, expected, opts, selector, checked?, op) do
+    fields = Map.get(fields_data, "fields", [])
+
+    case find_matching_by_label(fields, expected, opts) do
+      nil ->
+        observed = %{action: op, path: state.current_path, fields: fields_data}
+        {:error, session, observed, "no form field matched locator"}
+
+      field ->
+        if checkbox_field?(field) do
+          toggle_checkbox_field(session, state, field, checked?, selector, op)
+        else
+          observed = %{action: op, path: state.current_path, field: field}
+          {:error, session, observed, "matched field is not a checkbox"}
+        end
     end
   end
 
@@ -555,6 +607,20 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
+  defp toggle_checkbox_field(session, state, field, checked?, selector, op) do
+    index = field["index"] || 0
+    expression = checkbox_set_expression(index, checked?, Session.scope(state), selector)
+
+    case eval_json(state, expression) do
+      {:ok, result} ->
+        toggle_checkbox_result(session, state, field, checked?, op, result)
+
+      {:error, reason, details} ->
+        observed = %{action: op, path: state.current_path, field: field, checked: checked?, details: details}
+        {:error, session, observed, "browser checkbox toggle failed: #{reason}"}
+    end
+  end
+
   defp fill_field_result(session, state, field, value, %{"ok" => true} = result) do
     case await_driver_ready(state) do
       {:ok, readiness} ->
@@ -585,6 +651,38 @@ defmodule Cerberus.Driver.Browser do
     reason = Map.get(result, "reason", "field_fill_failed")
     observed = %{action: :fill_in, path: state.current_path, field: field, result: result}
     {:error, session, observed, "browser field fill failed: #{reason}"}
+  end
+
+  defp toggle_checkbox_result(session, state, field, checked?, op, %{"ok" => true} = result) do
+    case await_driver_ready(state) do
+      {:ok, readiness} ->
+        observed = %{
+          action: op,
+          path: Map.get(result, "path", state.current_path),
+          field: field,
+          checked: checked?,
+          readiness: readiness
+        }
+
+        {:ok, update_last_result(session, op, observed), observed}
+
+      {:error, reason, readiness} ->
+        observed = %{
+          action: op,
+          path: state.current_path,
+          field: field,
+          checked: checked?,
+          readiness: readiness
+        }
+
+        {:error, session, observed, readiness_error(reason, readiness)}
+    end
+  end
+
+  defp toggle_checkbox_result(session, state, field, checked?, op, result) do
+    reason = Map.get(result, "reason", "checkbox_toggle_failed")
+    observed = %{action: op, path: state.current_path, field: field, checked: checked?, result: result}
+    {:error, session, observed, "browser checkbox toggle failed: #{reason}"}
   end
 
   defp navigate_link(session, state, link, url) do
@@ -628,6 +726,10 @@ defmodule Cerberus.Driver.Browser do
   defp submit_control?(button) do
     type = (button["type"] || "submit") |> to_string() |> String.downcase()
     type in ["submit", ""]
+  end
+
+  defp checkbox_field?(field) do
+    (field["type"] || "") |> to_string() |> String.downcase() == "checkbox"
   end
 
   defp click_button(session, state, button, selector) do
@@ -1260,12 +1362,18 @@ defmodule Cerberus.Driver.Browser do
           const type = (element.getAttribute("type") || "").toLowerCase();
           return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
         })
-        .map((element, index) => ({
-          index,
-          id: element.id || "",
-          name: element.name || "",
-          label: labels.get(element.id) || ""
-        }));
+        .map((element, index) => {
+          const type = (element.getAttribute("type") || "").toLowerCase();
+          return {
+            index,
+            id: element.id || "",
+            name: element.name || "",
+            label: labels.get(element.id) || "",
+            type,
+            value: element.value || "",
+            checked: element.checked === true
+          };
+        });
 
       return JSON.stringify({
         path: window.location.pathname + window.location.search,
@@ -1507,6 +1615,80 @@ defmodule Cerberus.Driver.Browser do
 
       const value = #{encoded_value};
       field.value = value;
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+
+      return JSON.stringify({
+        ok: true,
+        path: window.location.pathname + window.location.search
+      });
+    })()
+    """
+  end
+
+  defp checkbox_set_expression(index, checked, scope, selector) do
+    encoded_checked = JSON.encode!(checked)
+    encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
+
+    """
+    (() => {
+      const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
+      const shouldCheck = #{encoded_checked};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
+      const fields = queryWithinRoots("input")
+        .filter((element) => {
+          const type = (element.getAttribute("type") || "").toLowerCase();
+          return type === "checkbox" && selectorMatches(element);
+        });
+
+      const field = fields[#{index}];
+      if (!field) {
+        return JSON.stringify({ ok: false, reason: "field_not_found" });
+      }
+
+      field.checked = shouldCheck;
       field.dispatchEvent(new Event("input", { bubbles: true }));
       field.dispatchEvent(new Event("change", { bubbles: true }));
 

@@ -327,6 +327,63 @@ defmodule Cerberus.Fixtures.PageController do
     redirect(conn, to: destination)
   end
 
+  def checkbox_array(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Checkbox Arrays</title>
+      </head>
+      <body>
+        <main>
+          <form id="checkbox-array-form" action="/checkbox-array/result" method="get">
+            <input type="hidden" name="items[]" value="" />
+
+            <label for="item_one">One</label>
+            <input id="item_one" type="checkbox" name="items[]" value="one" checked />
+
+            <label for="item_two">Two</label>
+            <input id="item_two" type="checkbox" name="items[]" value="two" />
+
+            <label for="item_three">Three</label>
+            <input id="item_three" type="checkbox" name="items[]" value="three" />
+
+            <button type="submit">Save Items</button>
+          </form>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def checkbox_array_result(conn, params) do
+    params = merged_request_params(conn, params)
+
+    items =
+      params
+      |> Map.get("items", [])
+      |> List.wrap()
+      |> Enum.reject(&(&1 == ""))
+
+    selected = if items == [], do: "None", else: Enum.join(items, ",")
+
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Checkbox Array Result</title>
+      </head>
+      <body>
+        <main>
+          <p id="selected-items">Selected Items: #{selected}</p>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
   def trigger_action_result(conn, params) do
     params = merged_request_params(conn, params)
     trigger_hidden = Map.get(params, "trigger_action_hidden_input", "")

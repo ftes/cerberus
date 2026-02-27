@@ -98,7 +98,7 @@ defmodule Cerberus.PublicApiTest do
     assert session.current_path == "/search/results?q=phoenix"
   end
 
-  test "label locators are explicit to fill_in and are rejected for click/assert" do
+  test "label locators are explicit to fill_in; click rejects while assertions treat as text" do
     assert_raise InvalidLocatorError, ~r/label locators target form-field lookup/, fn ->
       :static
       |> session()
@@ -106,12 +106,12 @@ defmodule Cerberus.PublicApiTest do
       |> click(label("Search term"))
     end
 
-    assert_raise InvalidLocatorError, ~r/label locators target form-field lookup/, fn ->
-      :static
-      |> session()
-      |> visit("/search")
-      |> assert_has(label("Search term"))
-    end
+    assert is_struct(
+             :static
+             |> session()
+             |> visit("/search")
+             |> assert_has(label("Search term"))
+           )
   end
 
   test "helper locators work with click/assert/fill_in flows" do
@@ -164,6 +164,35 @@ defmodule Cerberus.PublicApiTest do
       |> session()
       |> visit("/search")
       |> fill_in(text("Search term"), "phoenix")
+    end
+  end
+
+  test "check and uncheck support label shorthand on checkbox groups" do
+    checked =
+      :static
+      |> session()
+      |> visit("/checkbox-array")
+      |> check("Two")
+      |> submit(text("Save Items"))
+
+    assert_has(checked, text("Selected Items: one,two"), exact: true)
+
+    unchecked =
+      :static
+      |> session()
+      |> visit("/checkbox-array")
+      |> uncheck("One")
+      |> submit(text("Save Items"))
+
+    assert_has(unchecked, text("Selected Items: None"), exact: true)
+  end
+
+  test "check rejects explicit text locators to keep label semantics explicit" do
+    assert_raise InvalidLocatorError, ~r/text locators are not supported for check\/3/, fn ->
+      :static
+      |> session()
+      |> visit("/checkbox-array")
+      |> check(text("Two"))
     end
   end
 

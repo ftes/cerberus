@@ -25,6 +25,12 @@ defmodule Cerberus.Options do
           normalize_ws: boolean()
         ]
 
+  @type check_opts :: [
+          selector: String.t() | nil,
+          exact: boolean(),
+          normalize_ws: boolean()
+        ]
+
   @type upload_opts :: [
           selector: String.t() | nil,
           exact: boolean(),
@@ -155,6 +161,9 @@ defmodule Cerberus.Options do
 
   @spec validate_fill_in!(keyword()) :: fill_in_opts()
   def validate_fill_in!(opts), do: opts |> validate!(@fill_in_opts_schema, "fill_in/4") |> validate_selector!("fill_in/4")
+
+  @spec validate_check!(keyword(), String.t()) :: check_opts()
+  def validate_check!(opts, op_name), do: opts |> validate!(@fill_in_opts_schema, op_name) |> validate_selector!(op_name)
 
   @spec validate_submit!(keyword()) :: submit_opts()
   def validate_submit!(opts), do: opts |> validate!(@submit_opts_schema, "submit/3") |> validate_selector!("submit/3")

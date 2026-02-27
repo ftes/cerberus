@@ -6,6 +6,12 @@ Cerberus is an experimental Phoenix test harness with one API across:
 - `:static` / `:live` (explicit non-browser modes, mainly for focused conformance),
 - `:browser` (browser-oracle path).
 
+## Key Difference vs PhoenixTest + PhoenixTest.Playwright
+
+Cerberus integrates browser testing directly into the same driver stack and conformance harness, so browser behavior acts as an HTML-spec oracle for static/live semantics.
+
+Cerberus also uses WebDriver BiDi directly (instead of Playwright), keeping the browser layer slimmer and typically faster to start and run in this architecture.
+
 v0 currently ships a first vertical slice:
 - session-first API (`session |> visit |> click/fill_in/upload/submit |> assert_has/refute_has`),
 - text locators (`"text"`, `~r/regex/`, `[text: ...]`),
