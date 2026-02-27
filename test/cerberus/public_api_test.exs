@@ -3,17 +3,20 @@ defmodule Cerberus.PublicApiTest do
 
   import Cerberus
 
+  alias Cerberus.Driver.Browser, as: BrowserSession
+  alias Cerberus.Driver.Live, as: LiveSession
+  alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.InvalidLocatorError
-  alias Cerberus.Session
 
-  test "session constructor returns a session for static and live drivers" do
-    assert %Session{driver: :static} = session(:static)
-    assert %Session{driver: :live} = session(:live)
+  test "session constructor returns per-driver structs for non-browser drivers" do
+    assert %StaticSession{} = session(:static)
+    assert %LiveSession{} = session(:live)
+    assert %StaticSession{} = session(:auto)
   end
 
   @tag browser: true
   test "session constructor returns a browser session" do
-    assert %Session{driver: :browser} = session(:browser)
+    assert %BrowserSession{} = session(:browser)
   end
 
   test "assert_has with unsupported locator raises InvalidLocatorError" do
@@ -32,11 +35,12 @@ defmodule Cerberus.PublicApiTest do
   end
 
   test "fill_in accepts positional value argument" do
-    assert %Session{} =
+    assert is_struct(
              :static
              |> session()
              |> visit("/search")
              |> fill_in([text: "Search term"], "phoenix")
+           )
   end
 
   test "invalid keyword options are rejected via NimbleOptions" do

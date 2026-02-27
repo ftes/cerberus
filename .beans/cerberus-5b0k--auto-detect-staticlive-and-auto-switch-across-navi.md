@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-27T08:07:23Z
-updated_at: 2026-02-27T12:43:28Z
+updated_at: 2026-02-27T14:20:55Z
 parent: cerberus-sfku
 ---
 
@@ -24,15 +24,15 @@ Add PhoenixTest-style automatic static/live driver detection and automatic drive
 - Keep harness compatibility: same scenario should still run against `:auto`, explicit `:live`, explicit `:static`, and explicit `:browser` where applicable.
 
 ## Tests
-- [ ] `session(:auto)` starts static for static route and switches to live when navigating to live route.
-- [ ] `session(:auto)` starts live for live route and switches to static when navigating to static route.
+- [x] `session(:auto)` starts static for static route and switches to live when navigating to live route.
+- [x] `session(:auto)` starts live for live route and switches to static when navigating to static route.
 - [ ] redirect and live_redirect transitions update both `current_path` and active driver.
 - [ ] explicit browser sessions do not auto-switch back to static/live.
 - [ ] failure output includes transition diagnostics in common shape.
 
 ## Done When
-- [ ] API docs show no-manual-selection happy path for static/live.
-- [ ] conformance harness supports `@tag drivers: [:auto, :browser]` style selection.
+- [x] API docs show no-manual-selection happy path for static/live.
+- [x] conformance harness supports `@tag drivers: [:auto, :browser]` style selection.
 - [ ] cross-driver behavior remains deterministic for fixture scenarios.
 
 ## Notes (2026-02-27)
@@ -48,3 +48,12 @@ Explicit driver matrices are preferred over automatic static/live switching. We 
 ## Reopened (2026-02-27)
 
 Reopened per product direction: non-browser execution should mirror PhoenixTest behavior by auto-detecting static vs live on first visit and re-evaluating mode after each interaction/navigation transition.
+
+## Progress (2026-02-27, session model refactor)
+
+- Moved to driver-owned session structs (`Cerberus.Driver.Static/Live/Browser`) and removed the `driver_state` wrapper layer.
+- Removed unused `meta` fields from session structs.
+- Kept only actively used runtime fields in each driver struct.
+- Added `test/core/auto_mode_test.exs` for static->live and live->static switching in `:auto` mode.
+- Updated README/docs to describe `:auto` as default non-browser behavior and note explicit `:static/:live` modes.
+- Verified focused non-browser test slices pass; full `--exclude browser` run still has existing browser parity failures in owner-form/search flows.

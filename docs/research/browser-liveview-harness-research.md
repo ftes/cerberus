@@ -40,7 +40,7 @@ session
 ```
 
 ## Architecture Snapshot
-- `Cerberus.Session` keeps driver + driver_state + current_path.
+- Per-driver session structs (`Cerberus.Driver.Static/Live/Browser`) keep only actively used runtime fields.
 - `Cerberus.Driver` behavior defines per-driver callbacks.
 - `Cerberus.Locator` normalizes user locator input.
 - `Cerberus.Query` implements shared text semantics once.

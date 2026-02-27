@@ -1,8 +1,8 @@
 # Cerberus
 
 Cerberus is an experimental Phoenix test harness with one API across:
-- `:static` (stateless HTML),
-- `:live` (LiveView semantics),
+- `:auto` (PhoenixTest-style static/live auto-detection and switching),
+- `:static` / `:live` (explicit non-browser modes, mainly for focused conformance),
 - `:browser` (browser-oracle path).
 
 v0 currently ships a first vertical slice:
@@ -15,7 +15,7 @@ v0 currently ships a first vertical slice:
 ```elixir
 import Cerberus
 
-session(:live)
+session(:auto)
 |> visit("/live/counter")
 |> click([text: "Increment"])
 |> assert_has([text: "Count: 1"], exact: true)
@@ -33,7 +33,7 @@ defmodule MyConformanceTest do
   alias Cerberus.Harness
 
   @tag :conformance
-  @tag drivers: [:static, :live, :browser]
+  @tag drivers: [:auto, :browser]
   test "shared behavior", context do
     Harness.run!(context, fn session ->
       session
@@ -89,7 +89,7 @@ Dependencies: `curl`, `jq`, `unzip`.
 
 ## Notes
 
-- `:live` now uses `Phoenix.LiveViewTest` against the fixture Phoenix app.
+- `:auto` uses `Phoenix.LiveViewTest` and `Phoenix.ConnTest` to auto-detect static/live on each interaction.
 - `:browser` uses WebDriver BiDi with a shared runtime/connection plus per-test `userContext` isolation.
 - Fixture LiveView browser bootstrap lives in `assets/js/app.js`; run `mix assets.build` to sync `priv/static/assets/app.js`.
 - Browser worker topology and restart semantics are documented in `docs/adr/0004-browser-runtime-supervision-topology.md`.

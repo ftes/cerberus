@@ -17,16 +17,13 @@ defmodule Cerberus.CoreStaticNavigationTest do
     end)
   end
 
-  test "static driver rejects dynamic button interactions", context do
-    results =
-      Harness.run(context, fn session ->
-        session
-        |> visit("/live/counter")
-        |> click(text: "Increment")
-      end)
-
-    assert [%{driver: :static, status: :error, message: message}] = results
-    assert message =~ "static driver does not support dynamic button clicks"
+  test "static session auto-switches to live for dynamic button interactions", context do
+    Harness.run!(context, fn session ->
+      session
+      |> visit("/live/counter")
+      |> click(text: "Increment")
+      |> assert_has([text: "Count: 1"], exact: true)
+    end)
   end
 
   test "static redirects are deterministic and stay inside fixture routes", context do

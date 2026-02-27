@@ -12,10 +12,13 @@ defmodule Cerberus.Harness do
   - return normalized result maps for reporting and assertions.
   """
 
+  alias Cerberus.Driver.Browser, as: BrowserSession
+  alias Cerberus.Driver.Live, as: LiveSession
+  alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.Session
   alias ExUnit.AssertionError
 
-  @default_drivers [:static, :live, :browser]
+  @default_drivers [:auto, :browser]
 
   @type driver_kind :: Session.driver_kind()
 
@@ -113,19 +116,33 @@ defmodule Cerberus.Harness do
     end
   end
 
-  defp normalize_value(%Session{} = session) do
-    %{
-      value: session,
-      session_data: %{
-        operation: session.last_result && session.last_result[:op],
-        current_path: session.current_path,
-        observed: session.last_result && session.last_result[:observed]
-      }
-    }
+  defp normalize_value(%StaticSession{} = session) do
+    normalize_session_value(session)
+  end
+
+  defp normalize_value(%LiveSession{} = session) do
+    normalize_session_value(session)
+  end
+
+  defp normalize_value(%BrowserSession{} = session) do
+    normalize_session_value(session)
   end
 
   defp normalize_value(value) do
     %{value: value, session_data: %{}}
+  end
+
+  defp normalize_session_value(session) do
+    last_result = Session.last_result(session)
+
+    %{
+      value: session,
+      session_data: %{
+        operation: last_result && last_result[:op],
+        current_path: Session.current_path(session),
+        observed: last_result && last_result[:observed]
+      }
+    }
   end
 
   defp normalize_drivers!(drivers) when is_list(drivers) do

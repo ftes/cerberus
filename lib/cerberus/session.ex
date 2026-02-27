@@ -1,19 +1,22 @@
 defmodule Cerberus.Session do
-  @moduledoc "Runtime test session passed through Cerberus API calls."
+  @moduledoc "Runtime session shapes used by Cerberus drivers."
 
-  @type driver_kind :: :static | :live | :browser
+  alias Cerberus.Driver.Browser
+  alias Cerberus.Driver.Live
+  alias Cerberus.Driver.Static
 
-  @type t :: %__MODULE__{
-          driver: driver_kind(),
-          driver_state: term(),
-          current_path: String.t() | nil,
-          last_result: map() | nil,
-          meta: map()
-        }
+  @type driver_kind :: :auto | :static | :live | :browser
+  @type last_result :: %{op: atom(), observed: map()} | nil
+  @type t :: Static.t() | Live.t() | Browser.t()
 
-  defstruct driver: nil,
-            driver_state: nil,
-            current_path: nil,
-            last_result: nil,
-            meta: %{}
+  @spec driver_kind(t()) :: :static | :live | :browser
+  def driver_kind(%Static{}), do: :static
+  def driver_kind(%Live{}), do: :live
+  def driver_kind(%Browser{}), do: :browser
+
+  @spec current_path(t()) :: String.t() | nil
+  def current_path(%{current_path: current_path}), do: current_path
+
+  @spec last_result(t()) :: last_result()
+  def last_result(%{last_result: last_result}), do: last_result
 end

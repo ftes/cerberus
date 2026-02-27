@@ -3,13 +3,15 @@ defmodule Cerberus.Driver.Conn do
 
   import Phoenix.ConnTest, only: [build_conn: 0, dispatch: 5, recycle: 1]
 
-  alias Cerberus.Session
-
   @max_redirects 5
 
-  @spec endpoint!(Session.t() | keyword()) :: module()
-  def endpoint!(%Session{} = session) do
-    session.meta[:endpoint] || Application.get_env(:cerberus, :endpoint) || missing_endpoint!()
+  @spec endpoint!(struct() | keyword()) :: module()
+  def endpoint!(%{endpoint: endpoint}) when is_atom(endpoint) do
+    endpoint
+  end
+
+  def endpoint!(session) when is_struct(session) do
+    Application.get_env(:cerberus, :endpoint) || missing_endpoint!()
   end
 
   def endpoint!(opts) when is_list(opts) do

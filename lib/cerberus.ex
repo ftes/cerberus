@@ -12,6 +12,9 @@ defmodule Cerberus do
   """
 
   alias Cerberus.Assertions
+  alias Cerberus.Driver.Browser, as: BrowserSession
+  alias Cerberus.Driver.Live, as: LiveSession
+  alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.Options
   alias Cerberus.Session
 
@@ -22,79 +25,84 @@ defmodule Cerberus do
     driver_module!(driver).new_session(opts)
   end
 
-  @spec visit(Session.t(), String.t(), keyword()) :: Session.t()
-  def visit(%Session{} = session, path, opts \\ []) when is_binary(path) do
-    driver_module!(session.driver).visit(session, path, opts)
+  @spec visit(arg, String.t(), keyword()) :: arg when arg: var
+  def visit(session, path, opts \\ []) when is_binary(path) do
+    driver_module!(session).visit(session, path, opts)
   end
 
-  @spec reload_page(Session.t(), keyword()) :: Session.t()
-  def reload_page(%Session{} = session, opts \\ []) do
-    visit(session, session.current_path || "/", opts)
+  @spec reload_page(arg, keyword()) :: arg when arg: var
+  def reload_page(session, opts \\ []) do
+    visit(session, Session.current_path(session) || "/", opts)
   end
 
-  @spec click(Session.t(), term(), Options.click_opts()) :: Session.t()
-  def click(%Session{} = session, locator, opts \\ []) do
+  @spec click(arg, term(), Options.click_opts()) :: arg when arg: var
+  def click(session, locator, opts \\ []) do
     Assertions.click(session, locator, opts)
   end
 
-  @spec click_link(Session.t(), term(), Options.click_opts()) :: Session.t()
-  def click_link(%Session{} = session, locator, opts \\ []) do
+  @spec click_link(arg, term(), Options.click_opts()) :: arg when arg: var
+  def click_link(session, locator, opts \\ []) do
     click(session, locator, Keyword.put(opts, :kind, :link))
   end
 
-  @spec click_button(Session.t(), term(), Options.click_opts()) :: Session.t()
-  def click_button(%Session{} = session, locator, opts \\ []) do
+  @spec click_button(arg, term(), Options.click_opts()) :: arg when arg: var
+  def click_button(session, locator, opts \\ []) do
     click(session, locator, Keyword.put(opts, :kind, :button))
   end
 
-  @spec fill_in(Session.t(), term(), Options.fill_in_value(), Options.fill_in_opts()) ::
-          Session.t()
-  def fill_in(%Session{} = session, locator, value, opts \\ []) when is_list(opts) do
+  @spec fill_in(arg, term(), Options.fill_in_value(), Options.fill_in_opts()) :: arg when arg: var
+  def fill_in(session, locator, value, opts \\ []) when is_list(opts) do
     Assertions.fill_in(session, locator, value, opts)
   end
 
-  @spec submit(Session.t(), term(), Options.submit_opts()) :: Session.t()
-  def submit(%Session{} = session, locator, opts \\ []) do
+  @spec submit(arg, term(), Options.submit_opts()) :: arg when arg: var
+  def submit(session, locator, opts \\ []) do
     Assertions.submit(session, locator, opts)
   end
 
-  @spec select(Session.t(), term(), keyword()) :: Session.t()
-  def select(%Session{} = session, locator, opts \\ []) do
+  @spec select(arg, term(), keyword()) :: arg when arg: var
+  def select(session, locator, opts \\ []) do
     Assertions.unsupported(session, :select, [locator: locator] ++ opts)
   end
 
-  @spec choose(Session.t(), term(), keyword()) :: Session.t()
-  def choose(%Session{} = session, locator, opts \\ []) do
+  @spec choose(arg, term(), keyword()) :: arg when arg: var
+  def choose(session, locator, opts \\ []) do
     Assertions.unsupported(session, :choose, [locator: locator] ++ opts)
   end
 
-  @spec check(Session.t(), term(), keyword()) :: Session.t()
-  def check(%Session{} = session, locator, opts \\ []) do
+  @spec check(arg, term(), keyword()) :: arg when arg: var
+  def check(session, locator, opts \\ []) do
     Assertions.unsupported(session, :check, [locator: locator] ++ opts)
   end
 
-  @spec uncheck(Session.t(), term(), keyword()) :: Session.t()
-  def uncheck(%Session{} = session, locator, opts \\ []) do
+  @spec uncheck(arg, term(), keyword()) :: arg when arg: var
+  def uncheck(session, locator, opts \\ []) do
     Assertions.unsupported(session, :uncheck, [locator: locator] ++ opts)
   end
 
-  @spec assert_has(Session.t(), term(), Options.assert_opts()) :: Session.t()
-  def assert_has(%Session{} = session, locator, opts \\ []) do
+  @spec assert_has(arg, term(), Options.assert_opts()) :: arg when arg: var
+  def assert_has(session, locator, opts \\ []) do
     Assertions.assert_has(session, locator, opts)
   end
 
-  @spec refute_has(Session.t(), term(), Options.assert_opts()) :: Session.t()
-  def refute_has(%Session{} = session, locator, opts \\ []) do
+  @spec refute_has(arg, term(), Options.assert_opts()) :: arg when arg: var
+  def refute_has(session, locator, opts \\ []) do
     Assertions.refute_has(session, locator, opts)
   end
 
   @spec driver_module!(driver_kind()) :: module()
-  def driver_module!(:static), do: Cerberus.Driver.Static
-  def driver_module!(:live), do: Cerberus.Driver.Live
-  def driver_module!(:browser), do: Cerberus.Driver.Browser
+  def driver_module!(:auto), do: StaticSession
+  def driver_module!(:static), do: StaticSession
+  def driver_module!(:live), do: LiveSession
+  def driver_module!(:browser), do: BrowserSession
+
+  @spec driver_module!(Session.t()) :: module()
+  def driver_module!(%StaticSession{}), do: StaticSession
+  def driver_module!(%LiveSession{}), do: LiveSession
+  def driver_module!(%BrowserSession{}), do: BrowserSession
 
   def driver_module!(driver) do
     raise ArgumentError,
-          "unsupported driver #{inspect(driver)}; expected one of :static, :live, :browser"
+          "unsupported driver #{inspect(driver)}; expected one of :auto, :static, :live, :browser"
   end
 end

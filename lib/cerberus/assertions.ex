@@ -6,11 +6,11 @@ defmodule Cerberus.Assertions do
   alias Cerberus.Session
   alias ExUnit.AssertionError
 
-  @spec click(Session.t(), term(), Options.click_opts()) :: Session.t()
-  def click(%Session{} = session, locator_input, opts \\ []) do
+  @spec click(arg, term(), Options.click_opts()) :: arg when arg: var
+  def click(session, locator_input, opts \\ []) do
     opts = Options.validate_click!(opts)
     locator = Locator.normalize(locator_input)
-    driver = driver_module!(session.driver)
+    driver = Cerberus.driver_module!(session)
 
     case driver.click(session, locator, opts) do
       {:ok, session, _observed} ->
@@ -22,12 +22,11 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  @spec fill_in(Session.t(), term(), Options.fill_in_value(), Options.fill_in_opts()) ::
-          Session.t()
-  def fill_in(%Session{} = session, locator_input, value, opts \\ []) when is_list(opts) do
+  @spec fill_in(arg, term(), Options.fill_in_value(), Options.fill_in_opts()) :: arg when arg: var
+  def fill_in(session, locator_input, value, opts \\ []) when is_list(opts) do
     opts = Options.validate_fill_in!(opts)
     locator = Locator.normalize(locator_input)
-    driver = driver_module!(session.driver)
+    driver = Cerberus.driver_module!(session)
 
     case driver.fill_in(session, locator, to_string(value), opts) do
       {:ok, session, _observed} ->
@@ -39,11 +38,11 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  @spec submit(Session.t(), term(), Options.submit_opts()) :: Session.t()
-  def submit(%Session{} = session, locator_input, opts \\ []) do
+  @spec submit(arg, term(), Options.submit_opts()) :: arg when arg: var
+  def submit(session, locator_input, opts \\ []) do
     opts = Options.validate_submit!(opts)
     locator = Locator.normalize(locator_input)
-    driver = driver_module!(session.driver)
+    driver = Cerberus.driver_module!(session)
 
     case driver.submit(session, locator, opts) do
       {:ok, session, _observed} ->
@@ -55,24 +54,26 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  @spec unsupported(Session.t(), atom(), keyword()) :: Session.t()
-  def unsupported(%Session{} = session, operation, opts \\ []) when is_atom(operation) do
+  @spec unsupported(arg, atom(), keyword()) :: arg when arg: var
+  def unsupported(session, operation, opts \\ []) when is_atom(operation) do
+    driver_kind = Session.driver_kind(session)
+
     raise AssertionError,
       message:
         format_error(
           Atom.to_string(operation),
           :none,
           opts,
-          "#{operation} is not implemented for #{inspect(session.driver)} driver in this slice",
-          %{driver: session.driver}
+          "#{operation} is not implemented for #{inspect(driver_kind)} driver in this slice",
+          %{driver: driver_kind}
         )
   end
 
-  @spec assert_has(Session.t(), term(), Options.assert_opts()) :: Session.t()
-  def assert_has(%Session{} = session, locator_input, opts \\ []) do
+  @spec assert_has(arg, term(), Options.assert_opts()) :: arg when arg: var
+  def assert_has(session, locator_input, opts \\ []) do
     opts = Options.validate_assert!(opts, "assert_has/3")
     locator = Locator.normalize(locator_input)
-    driver = driver_module!(session.driver)
+    driver = Cerberus.driver_module!(session)
 
     case driver.assert_has(session, locator, opts) do
       {:ok, session, _observed} ->
@@ -84,11 +85,11 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  @spec refute_has(Session.t(), term(), Options.assert_opts()) :: Session.t()
-  def refute_has(%Session{} = session, locator_input, opts \\ []) do
+  @spec refute_has(arg, term(), Options.assert_opts()) :: arg when arg: var
+  def refute_has(session, locator_input, opts \\ []) do
     opts = Options.validate_assert!(opts, "refute_has/3")
     locator = Locator.normalize(locator_input)
-    driver = driver_module!(session.driver)
+    driver = Cerberus.driver_module!(session)
 
     case driver.refute_has(session, locator, opts) do
       {:ok, session, _observed} ->
@@ -108,8 +109,4 @@ defmodule Cerberus.Assertions do
     observed: #{inspect(observed)}
     """
   end
-
-  defp driver_module!(:static), do: Cerberus.Driver.Static
-  defp driver_module!(:live), do: Cerberus.Driver.Live
-  defp driver_module!(:browser), do: Cerberus.Driver.Browser
 end

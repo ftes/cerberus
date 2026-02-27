@@ -7,97 +7,100 @@ defmodule Cerberus.Driver.Live do
 
   alias Cerberus.Driver.Conn
   alias Cerberus.Driver.Html
+  alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.Locator
   alias Cerberus.Query
   alias Cerberus.Session
 
-  @type state :: %{
+  @type t :: %__MODULE__{
           endpoint: module(),
           conn: Plug.Conn.t() | nil,
           mode: :static | :live,
           view: term() | nil,
           html: String.t(),
-          path: String.t() | nil,
-          form_data: map()
+          form_data: map(),
+          current_path: String.t() | nil,
+          last_result: Session.last_result()
         }
+
+  defstruct endpoint: nil,
+            conn: nil,
+            mode: :static,
+            view: nil,
+            html: "",
+            form_data: %{active_form: nil, values: %{}},
+            current_path: nil,
+            last_result: nil
 
   @impl true
   def new_session(opts \\ []) do
-    endpoint = Conn.endpoint!(opts)
-
-    %Session{
-      driver: :live,
-      driver_state: %{
-        endpoint: endpoint,
-        conn: nil,
-        mode: :static,
-        view: nil,
-        html: "",
-        path: nil,
-        form_data: empty_form_data()
-      },
-      meta: Map.new(opts)
+    %__MODULE__{
+      endpoint: Conn.endpoint!(opts)
     }
   end
 
   @impl true
-  def visit(%Session{} = session, path, _opts) do
-    state = state!(session)
-    conn = Conn.ensure_conn(state.conn)
-    conn = Conn.follow_get(state.endpoint, conn, path)
+  def visit(%__MODULE__{} = session, path, _opts) do
+    conn = Conn.ensure_conn(session.conn)
+    conn = Conn.follow_get(session.endpoint, conn, path)
     current_path = Conn.current_path(conn, path)
 
-    {mode, view, html} =
-      case try_live(conn) do
-        {:ok, view, html} ->
-          {:live, view, html}
+    case try_live(conn) do
+      {:ok, view, html} ->
+        %{
+          session
+          | conn: conn,
+            mode: :live,
+            view: view,
+            html: html,
+            current_path: current_path,
+            last_result: %{op: :visit, observed: %{path: current_path, mode: :live}}
+        }
 
-        :error ->
-          {:static, nil, conn.resp_body || ""}
-      end
+      :error ->
+        html = conn.resp_body || ""
 
-    update_session(
-      session,
-      %{state | conn: conn, mode: mode, view: view, html: html, path: current_path},
-      :visit,
-      %{
-        path: current_path,
-        mode: mode
-      }
-    )
+        %StaticSession{
+          endpoint: session.endpoint,
+          conn: conn,
+          html: html,
+          form_data: session.form_data,
+          current_path: current_path,
+          last_result: %{op: :visit, observed: %{path: current_path, mode: :static}}
+        }
+    end
   end
 
   @impl true
-  def click(%Session{} = session, %Locator{kind: :text, value: expected}, opts) do
-    state = with_latest_html(state!(session))
+  def click(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
+    session = with_latest_html(session)
     kind = Keyword.get(opts, :kind, :any)
 
-    case find_clickable_link(state, expected, opts, kind) do
+    case find_clickable_link(session, expected, opts, kind) do
       {:ok, link} when is_binary(link.href) ->
         updated = visit(session, link.href, [])
-        updated_state = state!(updated)
 
         observed = %{
           action: :link,
-          path: updated_state.path,
-          mode: updated_state.mode,
+          path: Session.current_path(updated),
+          mode: Session.driver_kind(updated),
           clicked: link.text,
-          texts: Html.texts(updated_state.html, :any)
+          texts: Html.texts(updated.html, :any)
         }
 
         {:ok, update_last_result(updated, :click, observed), observed}
 
       :error ->
-        case find_clickable_button(state, expected, opts, kind) do
-          {:ok, button} when state.mode == :live and state.view != nil ->
-            click_live_button(session, state, button)
+        case find_clickable_button(session, expected, opts, kind) do
+          {:ok, button} when session.mode == :live and session.view != nil ->
+            click_live_button(session, button)
 
           {:ok, button} ->
             observed = %{
               action: :button,
               clicked: button.text,
-              path: state.path,
-              mode: state.mode
+              path: session.current_path,
+              mode: session.mode
             }
 
             {:error, session, observed, click_button_error(kind)}
@@ -105,9 +108,9 @@ defmodule Cerberus.Driver.Live do
           :error ->
             observed = %{
               action: :click,
-              path: state.path,
-              mode: state.mode,
-              texts: Html.texts(state.html, :any)
+              path: session.current_path,
+              mode: session.mode,
+              texts: Html.texts(session.html, :any)
             }
 
             {:error, session, observed, no_clickable_error(kind)}
@@ -116,71 +119,71 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def fill_in(%Session{} = session, %Locator{kind: :text, value: expected}, value, opts) do
-    state = with_latest_html(state!(session))
+  def fill_in(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, value, opts) do
+    session = with_latest_html(session)
 
-    case state.mode do
+    case session.mode do
       :live ->
-        observed = %{action: :fill_in, path: state.path, mode: state.mode}
+        observed = %{action: :fill_in, path: session.current_path, mode: session.mode}
         {:error, session, observed, "live driver does not yet support fill_in on live routes"}
 
       :static ->
-        case Html.find_form_field(state.html, expected, opts) do
+        case Html.find_form_field(session.html, expected, opts) do
           {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
-            updated_state = %{state | form_data: put_form_value(state.form_data, field.form, name, value)}
+            updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
 
             observed = %{
               action: :fill_in,
-              path: state.path,
-              mode: state.mode,
+              path: session.current_path,
+              mode: session.mode,
               field: field,
               value: value
             }
 
-            {:ok, update_session(session, updated_state, :fill_in, observed), observed}
+            {:ok, update_session(updated, :fill_in, observed), observed}
 
           {:ok, _field} ->
-            observed = %{action: :fill_in, path: state.path, mode: state.mode}
+            observed = %{action: :fill_in, path: session.current_path, mode: session.mode}
             {:error, session, observed, "matched field does not include a name attribute"}
 
           :error ->
-            observed = %{action: :fill_in, path: state.path, mode: state.mode}
+            observed = %{action: :fill_in, path: session.current_path, mode: session.mode}
             {:error, session, observed, "no form field matched locator"}
         end
     end
   end
 
   @impl true
-  def submit(%Session{} = session, %Locator{kind: :text, value: expected}, opts) do
-    state = with_latest_html(state!(session))
+  def submit(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
+    session = with_latest_html(session)
 
-    case state.mode do
+    case session.mode do
       :live ->
-        observed = %{action: :submit, path: state.path, mode: state.mode}
+        observed = %{action: :submit, path: session.current_path, mode: session.mode}
         {:error, session, observed, "live driver does not yet support submit on live routes"}
 
       :static ->
-        case Html.find_submit_button(state.html, expected, opts) do
+        case Html.find_submit_button(session.html, expected, opts) do
           {:ok, button} ->
-            do_submit(session, state, button)
+            do_submit(session, button)
 
           :error ->
-            observed = %{action: :submit, path: state.path, mode: state.mode}
+            observed = %{action: :submit, path: session.current_path, mode: session.mode}
             {:error, session, observed, "no submit button matched locator"}
         end
     end
   end
 
   @impl true
-  def assert_has(%Session{} = session, %Locator{kind: :text, value: expected}, opts) do
-    state = with_latest_html(state!(session))
+  def assert_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
+    session = with_latest_html(session)
     visible = Keyword.get(opts, :visible, true)
-    texts = Html.texts(state.html, visible)
+    texts = Html.texts(session.html, visible)
     matched = Enum.filter(texts, &Query.match_text?(&1, expected, opts))
 
     observed = %{
-      path: state.path,
-      mode: state.mode,
+      path: session.current_path,
+      mode: session.mode,
       visible: visible,
       texts: texts,
       matched: matched,
@@ -190,20 +193,20 @@ defmodule Cerberus.Driver.Live do
     if matched == [] do
       {:error, session, observed, "expected text not found"}
     else
-      {:ok, update_session(session, state, :assert_has, observed), observed}
+      {:ok, update_session(session, :assert_has, observed), observed}
     end
   end
 
   @impl true
-  def refute_has(%Session{} = session, %Locator{kind: :text, value: expected}, opts) do
-    state = with_latest_html(state!(session))
+  def refute_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
+    session = with_latest_html(session)
     visible = Keyword.get(opts, :visible, true)
-    texts = Html.texts(state.html, visible)
+    texts = Html.texts(session.html, visible)
     matched = Enum.filter(texts, &Query.match_text?(&1, expected, opts))
 
     observed = %{
-      path: state.path,
-      mode: state.mode,
+      path: session.current_path,
+      mode: session.mode,
       visible: visible,
       texts: texts,
       matched: matched,
@@ -211,22 +214,22 @@ defmodule Cerberus.Driver.Live do
     }
 
     if matched == [] do
-      {:ok, update_session(session, state, :refute_has, observed), observed}
+      {:ok, update_session(session, :refute_has, observed), observed}
     else
       {:error, session, observed, "unexpected matching text found"}
     end
   end
 
-  defp click_live_button(session, state, button) do
+  defp click_live_button(session, button) do
     result =
-      state.view
+      session.view
       |> element("button", button.text)
       |> render_click()
 
     case result do
       rendered when is_binary(rendered) ->
-        path = maybe_live_patch_path(state.view, state.path)
-        updated_state = %{state | html: rendered, path: path}
+        path = maybe_live_patch_path(session.view, session.current_path)
+        updated = %{session | html: rendered, current_path: path}
 
         observed = %{
           action: :button,
@@ -236,7 +239,7 @@ defmodule Cerberus.Driver.Live do
           texts: Html.texts(rendered, :any)
         }
 
-        {:ok, update_session(session, updated_state, :click, observed), observed}
+        {:ok, update_session(updated, :click, observed), observed}
 
       {:error, {:live_redirect, %{to: to}}} ->
         redirected_result(session, button, to)
@@ -245,8 +248,8 @@ defmodule Cerberus.Driver.Live do
         redirected_result(session, button, to)
 
       {:error, {:live_patch, %{to: to}}} ->
-        rendered = render(state.view)
-        updated_state = %{state | html: rendered, path: to}
+        rendered = render(session.view)
+        updated = %{session | html: rendered, current_path: to}
 
         observed = %{
           action: :button,
@@ -256,14 +259,14 @@ defmodule Cerberus.Driver.Live do
           texts: Html.texts(rendered, :any)
         }
 
-        {:ok, update_session(session, updated_state, :click, observed), observed}
+        {:ok, update_session(updated, :click, observed), observed}
 
       other ->
         observed = %{
           action: :button,
           clicked: button.text,
-          path: state.path,
-          mode: state.mode,
+          path: session.current_path,
+          mode: session.mode,
           result: other
         }
 
@@ -273,14 +276,13 @@ defmodule Cerberus.Driver.Live do
 
   defp redirected_result(session, button, to) do
     updated = visit(session, to, [])
-    updated_state = state!(updated)
 
     observed = %{
       action: :button,
       clicked: button.text,
-      path: updated_state.path,
-      mode: updated_state.mode,
-      texts: Html.texts(updated_state.html, :any)
+      path: Session.current_path(updated),
+      mode: Session.driver_kind(updated),
+      texts: Html.texts(updated.html, :any)
     }
 
     {:ok, update_last_result(updated, :click, observed), observed}
@@ -295,45 +297,40 @@ defmodule Cerberus.Driver.Live do
     _ -> :error
   end
 
-  defp with_latest_html(%{mode: :live, view: view} = state) when not is_nil(view) do
-    %{state | html: render(view)}
+  defp with_latest_html(%__MODULE__{mode: :live, view: view} = session) when not is_nil(view) do
+    %{session | html: render(view)}
   end
 
-  defp with_latest_html(state), do: state
+  defp with_latest_html(session), do: session
 
-  defp state!(%Session{driver_state: %{} = state}), do: state
-  defp state!(_), do: raise(ArgumentError, "live driver state is not initialized")
-
-  defp update_session(%Session{} = session, state, op, observed) do
-    %{
-      session
-      | driver_state: state,
-        current_path: state.path,
-        last_result: %{op: op, observed: observed}
-    }
-  end
-
-  defp update_last_result(%Session{} = session, op, observed) do
+  defp update_session(%__MODULE__{} = session, op, observed) do
     %{session | last_result: %{op: op, observed: observed}}
   end
 
-  defp find_clickable_link(_state, _expected, _opts, :button), do: :error
+  defp update_last_result(%__MODULE__{} = session, op, observed) do
+    %{session | last_result: %{op: op, observed: observed}}
+  end
 
-  defp find_clickable_link(state, expected, opts, _kind), do: Html.find_link(state.html, expected, opts)
+  defp update_last_result(%StaticSession{} = session, op, observed) do
+    %{session | last_result: %{op: op, observed: observed}}
+  end
 
-  defp find_clickable_button(_state, _expected, _opts, :link), do: :error
+  defp find_clickable_link(_session, _expected, _opts, :button), do: :error
 
-  defp find_clickable_button(state, expected, opts, _kind), do: Html.find_button(state.html, expected, opts)
+  defp find_clickable_link(session, expected, opts, _kind), do: Html.find_link(session.html, expected, opts)
+
+  defp find_clickable_button(_session, _expected, _opts, :link), do: :error
+
+  defp find_clickable_button(session, expected, opts, _kind), do: Html.find_button(session.html, expected, opts)
 
   defp click_button_error(:button), do: "live driver can only click buttons on live routes for click_button"
-
   defp click_button_error(_kind), do: "live driver can only click buttons on live routes"
 
   defp no_clickable_error(:link), do: "no link matched locator"
   defp no_clickable_error(:button), do: "no button matched locator"
   defp no_clickable_error(_kind), do: "no clickable element matched locator"
 
-  defp do_submit(session, state, button) do
+  defp do_submit(session, button) do
     method =
       button
       |> Map.get(:method)
@@ -349,27 +346,34 @@ defmodule Cerberus.Driver.Live do
       target =
         button
         |> Map.get(:action)
-        |> build_submit_target(state.path, params_for_submit(state.form_data, button))
+        |> build_submit_target(session.current_path, params_for_submit(session.form_data, button))
 
       updated = visit(session, target, [])
-      updated_state = state!(updated)
-      submitted_params = params_for_submit(state.form_data, button)
+      submitted_params = params_for_submit(session.form_data, button)
 
       observed = %{
         action: :submit,
         clicked: button.text,
-        path: updated_state.path,
+        path: Session.current_path(updated),
         method: method,
-        mode: updated_state.mode,
+        mode: Session.driver_kind(updated),
         params: submitted_params
       }
 
-      cleared_state = %{updated_state | form_data: clear_submitted_form(state.form_data, button.form)}
-      {:ok, update_session(updated, cleared_state, :submit, observed), observed}
+      cleared_form_data = clear_submitted_form(session.form_data, button.form)
+      {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
     else
-      observed = %{action: :submit, clicked: button.text, path: state.path, mode: state.mode}
+      observed = %{action: :submit, clicked: button.text, path: session.current_path, mode: session.mode}
       {:error, session, observed, "live driver static mode only supports GET form submissions"}
     end
+  end
+
+  defp clear_submitted_session(%__MODULE__{} = session, form_data, op, observed) do
+    %{session | form_data: form_data, last_result: %{op: op, observed: observed}}
+  end
+
+  defp clear_submitted_session(%StaticSession{} = session, form_data, op, observed) do
+    %{session | form_data: form_data, last_result: %{op: op, observed: observed}}
   end
 
   defp build_submit_target(action, fallback_path, params) do
@@ -459,8 +463,7 @@ defmodule Cerberus.Driver.Live do
     %{active_form: nil, values: Map.delete(values, key)}
   end
 
-  defp normalize_form_data(%{active_form: _active_form, values: values} = data) when is_map(values),
-    do: data
+  defp normalize_form_data(%{active_form: _active_form, values: values} = data) when is_map(values), do: data
 
   defp normalize_form_data(values) when is_map(values) do
     %{active_form: "__default__", values: %{"__default__" => values}}

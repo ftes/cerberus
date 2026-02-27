@@ -32,13 +32,21 @@ defmodule Cerberus.Driver.Browser do
   @default_ready_quiet_ms 40
   @user_context_supervisor Cerberus.Driver.Browser.UserContextSupervisor
 
-  @type state :: %{
+  @type t :: %__MODULE__{
           user_context_pid: pid(),
           base_url: String.t(),
-          path: String.t() | nil,
           ready_timeout_ms: pos_integer(),
-          ready_quiet_ms: pos_integer()
+          ready_quiet_ms: pos_integer(),
+          current_path: String.t() | nil,
+          last_result: Session.last_result()
         }
+
+  defstruct user_context_pid: nil,
+            base_url: nil,
+            ready_timeout_ms: @default_ready_timeout_ms,
+            ready_quiet_ms: @default_ready_quiet_ms,
+            current_path: nil,
+            last_result: nil
 
   @impl true
   def new_session(opts \\ []) do
@@ -54,21 +62,16 @@ defmodule Cerberus.Driver.Browser do
           raise ArgumentError, "failed to initialize browser driver: #{inspect(reason)}"
       end
 
-    %Session{
-      driver: :browser,
-      driver_state: %{
-        user_context_pid: user_context_pid,
-        base_url: base_url,
-        path: nil,
-        ready_timeout_ms: ready_timeout_ms(opts),
-        ready_quiet_ms: ready_quiet_ms(opts)
-      },
-      meta: Map.new(opts)
+    %__MODULE__{
+      user_context_pid: user_context_pid,
+      base_url: base_url,
+      ready_timeout_ms: ready_timeout_ms(opts),
+      ready_quiet_ms: ready_quiet_ms(opts)
     }
   end
 
   @impl true
-  def visit(%Session{} = session, path, _opts) do
+  def visit(%__MODULE__{} = session, path, _opts) do
     state = state!(session)
     url = to_absolute_url(state.base_url, path)
 
@@ -89,7 +92,7 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @impl true
-  def click(%Session{} = session, %Locator{kind: :text, value: expected}, opts) do
+  def click(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
     state = state!(session)
 
     with_driver_ready(session, state, :click, fn ready_state ->
@@ -98,14 +101,14 @@ defmodule Cerberus.Driver.Browser do
           do_click(session, ready_state, clickables_data, expected, opts)
 
         {:error, reason, details} ->
-          observed = %{path: ready_state.path, details: details}
+          observed = %{path: ready_state.current_path, details: details}
           {:error, session, observed, "failed to inspect clickable elements: #{reason}"}
       end
     end)
   end
 
   @impl true
-  def fill_in(%Session{} = session, %Locator{kind: :text, value: expected}, value, opts) do
+  def fill_in(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, value, opts) do
     state = state!(session)
 
     with_driver_ready(session, state, :fill_in, fn ready_state ->
@@ -114,14 +117,14 @@ defmodule Cerberus.Driver.Browser do
           do_fill_in(session, ready_state, fields_data, expected, value, opts)
 
         {:error, reason, details} ->
-          observed = %{path: ready_state.path, details: details}
+          observed = %{path: ready_state.current_path, details: details}
           {:error, session, observed, "failed to inspect form fields: #{reason}"}
       end
     end)
   end
 
   @impl true
-  def submit(%Session{} = session, %Locator{kind: :text, value: expected}, opts) do
+  def submit(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
     state = state!(session)
 
     with_driver_ready(session, state, :submit, fn ready_state ->
@@ -130,14 +133,14 @@ defmodule Cerberus.Driver.Browser do
           do_submit(session, ready_state, clickables_data, expected, opts)
 
         {:error, reason, details} ->
-          observed = %{path: ready_state.path, details: details}
+          observed = %{path: ready_state.current_path, details: details}
           {:error, session, observed, "failed to inspect submit controls: #{reason}"}
       end
     end)
   end
 
   @impl true
-  def assert_has(%Session{} = session, %Locator{kind: :text, value: expected}, opts) do
+  def assert_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
     state = state!(session)
     visible = Keyword.get(opts, :visible, true)
 
@@ -147,14 +150,14 @@ defmodule Cerberus.Driver.Browser do
           assert_snapshot_result(session, next_state, snapshot, expected, visible, opts)
 
         {:error, reason, details} ->
-          observed = %{path: ready_state.path, details: details}
+          observed = %{path: ready_state.current_path, details: details}
           {:error, session, observed, "failed to collect browser text snapshot: #{reason}"}
       end
     end)
   end
 
   @impl true
-  def refute_has(%Session{} = session, %Locator{kind: :text, value: expected}, opts) do
+  def refute_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
     state = state!(session)
     visible = Keyword.get(opts, :visible, true)
 
@@ -164,7 +167,7 @@ defmodule Cerberus.Driver.Browser do
           refute_snapshot_result(session, next_state, snapshot, expected, visible, opts)
 
         {:error, reason, details} ->
-          observed = %{path: ready_state.path, details: details}
+          observed = %{path: ready_state.current_path, details: details}
           {:error, session, observed, "failed to collect browser text snapshot: #{reason}"}
       end
     end)
@@ -191,7 +194,7 @@ defmodule Cerberus.Driver.Browser do
         end
 
       if button == nil do
-        observed = %{action: :click, path: state.path, clickables: clickables_data}
+        observed = %{action: :click, path: state.current_path, clickables: clickables_data}
         {:error, session, observed, no_clickable_error(kind)}
       else
         click_button(session, state, button)
@@ -209,7 +212,7 @@ defmodule Cerberus.Driver.Browser do
 
     case find_matching_by_text(buttons, expected, opts) do
       nil ->
-        observed = %{action: :submit, path: state.path, clickables: clickables_data}
+        observed = %{action: :submit, path: state.current_path, clickables: clickables_data}
         {:error, session, observed, "no submit button matched locator"}
 
       button ->
@@ -222,7 +225,7 @@ defmodule Cerberus.Driver.Browser do
 
     case find_matching_by_label(fields, expected, opts) do
       nil ->
-        observed = %{action: :fill_in, path: state.path, fields: fields_data}
+        observed = %{action: :fill_in, path: state.current_path, fields: fields_data}
         {:error, session, observed, "no form field matched locator"}
 
       field ->
@@ -234,7 +237,7 @@ defmodule Cerberus.Driver.Browser do
     url = link["resolvedHref"] || link["href"] || ""
 
     if url == "" do
-      observed = %{action: :link, path: state.path, clicked: link["text"], link: link}
+      observed = %{action: :link, path: state.current_path, clicked: link["text"], link: link}
       {:error, session, observed, "matched link has no href"}
     else
       navigate_link(session, state, link, url)
@@ -251,11 +254,11 @@ defmodule Cerberus.Driver.Browser do
 
       {:ok, result} ->
         reason = Map.get(result, "reason", "submit_target_failed")
-        observed = %{action: :submit, clicked: button["text"], path: state.path, result: result}
+        observed = %{action: :submit, clicked: button["text"], path: state.current_path, result: result}
         {:error, session, observed, "browser submit failed: #{reason}"}
 
       {:error, reason, details} ->
-        observed = %{action: :submit, clicked: button["text"], path: state.path, details: details}
+        observed = %{action: :submit, clicked: button["text"], path: state.current_path, details: details}
         {:error, session, observed, "browser submit failed: #{reason}"}
     end
   end
@@ -266,7 +269,7 @@ defmodule Cerberus.Driver.Browser do
         submit_snapshot_result(session, state, button)
 
       {:error, reason, details} ->
-        observed = %{action: :submit, clicked: button["text"], path: state.path, details: details}
+        observed = %{action: :submit, clicked: button["text"], path: state.current_path, details: details}
         {:error, session, observed, "browser submit navigation failed: #{reason}"}
     end
   end
@@ -285,7 +288,7 @@ defmodule Cerberus.Driver.Browser do
         {:ok, update_session(session, next_state, :submit, observed), observed}
 
       {:error, reason, details} ->
-        observed = %{action: :submit, clicked: button["text"], path: state.path, details: details}
+        observed = %{action: :submit, clicked: button["text"], path: state.current_path, details: details}
         {:error, session, observed, "failed to inspect page after submit: #{reason}"}
     end
   end
@@ -299,7 +302,7 @@ defmodule Cerberus.Driver.Browser do
         fill_field_result(session, state, field, value, result)
 
       {:error, reason, details} ->
-        observed = %{action: :fill_in, path: state.path, field: field, details: details}
+        observed = %{action: :fill_in, path: state.current_path, field: field, details: details}
         {:error, session, observed, "browser field fill failed: #{reason}"}
     end
   end
@@ -310,7 +313,7 @@ defmodule Cerberus.Driver.Browser do
         {:ok, readiness} ->
           observed = %{
             action: :fill_in,
-            path: Map.get(result, "path", state.path),
+            path: Map.get(result, "path", state.current_path),
             field: field,
             value: value,
             readiness: readiness
@@ -321,7 +324,7 @@ defmodule Cerberus.Driver.Browser do
         {:error, reason, readiness} ->
           observed = %{
             action: :fill_in,
-            path: state.path,
+            path: state.current_path,
             field: field,
             value: value,
             readiness: readiness
@@ -331,7 +334,7 @@ defmodule Cerberus.Driver.Browser do
       end
     else
       reason = Map.get(result, "reason", "field_fill_failed")
-      observed = %{action: :fill_in, path: state.path, field: field, result: result}
+      observed = %{action: :fill_in, path: state.current_path, field: field, result: result}
       {:error, session, observed, "browser field fill failed: #{reason}"}
     end
   end
@@ -342,7 +345,7 @@ defmodule Cerberus.Driver.Browser do
         link_snapshot_result(session, state, link)
 
       {:error, reason, details} ->
-        observed = %{action: :link, clicked: link["text"], path: state.path, details: details}
+        observed = %{action: :link, clicked: link["text"], path: state.current_path, details: details}
         {:error, session, observed, "browser link navigation failed: #{reason}"}
     end
   end
@@ -361,7 +364,7 @@ defmodule Cerberus.Driver.Browser do
         {:ok, update_session(session, next_state, :click, observed), observed}
 
       {:error, reason, details} ->
-        observed = %{action: :link, clicked: link["text"], path: state.path, details: details}
+        observed = %{action: :link, clicked: link["text"], path: state.current_path, details: details}
         {:error, session, observed, "failed to inspect page after link click: #{reason}"}
     end
   end
@@ -388,7 +391,7 @@ defmodule Cerberus.Driver.Browser do
         click_button_after_eval(session, state, button)
 
       {:error, reason, details} ->
-        observed = %{action: :button, clicked: button["text"], path: state.path, details: details}
+        observed = %{action: :button, clicked: button["text"], path: state.current_path, details: details}
         {:error, session, observed, "browser button click failed: #{reason}"}
     end
   end
@@ -411,7 +414,7 @@ defmodule Cerberus.Driver.Browser do
           hidden: snapshot["hidden"] || []
         }
 
-        {%{state | path: snapshot.path}, snapshot}
+        {%{state | current_path: snapshot.path}, snapshot}
 
       {:error, reason, details} ->
         {:error, reason, details}
@@ -450,7 +453,7 @@ defmodule Cerberus.Driver.Browser do
       {:error, reason, readiness} ->
         observed = %{
           action: action,
-          path: state.path,
+          path: state.current_path,
           readiness: readiness
         }
 
@@ -539,7 +542,7 @@ defmodule Cerberus.Driver.Browser do
         observed = %{
           action: :button,
           clicked: button["text"],
-          path: state.path,
+          path: state.current_path,
           readiness: readiness
         }
 
@@ -565,7 +568,7 @@ defmodule Cerberus.Driver.Browser do
         observed = %{
           action: :button,
           clicked: button["text"],
-          path: state.path,
+          path: state.current_path,
           details: details,
           readiness: readiness
         }
@@ -633,19 +636,22 @@ defmodule Cerberus.Driver.Browser do
   defp select_texts(snapshot, false), do: snapshot.hidden
   defp select_texts(snapshot, :any), do: snapshot.visible ++ snapshot.hidden
 
-  defp state!(%Session{driver_state: %{} = state}), do: state
+  defp state!(%__MODULE__{user_context_pid: user_context_pid} = state) when is_pid(user_context_pid), do: state
   defp state!(_), do: raise(ArgumentError, "browser driver state is not initialized")
 
-  defp update_session(%Session{} = session, %{} = state, op, observed) do
+  defp update_session(%__MODULE__{} = session, %{} = state, op, observed) do
     %{
       session
-      | driver_state: state,
-        current_path: state.path,
+      | user_context_pid: state.user_context_pid,
+        base_url: state.base_url,
+        ready_timeout_ms: state.ready_timeout_ms,
+        ready_quiet_ms: state.ready_quiet_ms,
+        current_path: state.current_path,
         last_result: %{op: op, observed: observed}
     }
   end
 
-  defp update_last_result(%Session{} = session, op, observed) do
+  defp update_last_result(%__MODULE__{} = session, op, observed) do
     %{session | last_result: %{op: op, observed: observed}}
   end
 
