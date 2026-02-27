@@ -2,7 +2,7 @@ defmodule Cerberus.Options do
   @moduledoc false
 
   @type click_kind :: :any | :link | :button
-  @type visibility_filter :: true | false | :any
+  @type visibility_filter :: boolean() | :any
   @type fill_in_value :: String.t() | integer() | float() | boolean()
 
   @type click_opts :: [

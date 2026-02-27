@@ -366,7 +366,7 @@ defmodule Cerberus.Driver.Static do
 
     case {uri.scheme, String.starts_with?(action, "/")} do
       {scheme, _} when is_binary(scheme) ->
-        URI.to_string(%URI{path: uri.path || "/", query: uri.query})
+        path_with_query(uri.path || "/", uri.query)
 
       {_, true} ->
         action
@@ -374,9 +374,13 @@ defmodule Cerberus.Driver.Static do
       _ ->
         base = URI.parse("http://cerberus.test" <> (fallback_path || "/"))
         merged = URI.merge(base, action)
-        URI.to_string(%URI{path: merged.path || "/", query: merged.query})
+        path_with_query(merged.path || "/", merged.query)
     end
   end
+
+  defp path_with_query(path, nil), do: path
+  defp path_with_query(path, ""), do: path
+  defp path_with_query(path, query), do: path <> "?" <> query
 
   defp empty_form_data do
     %{active_form: nil, values: %{}}

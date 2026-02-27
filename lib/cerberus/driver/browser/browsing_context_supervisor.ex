@@ -3,7 +3,7 @@ defmodule Cerberus.Driver.Browser.BrowsingContextSupervisor do
 
   use DynamicSupervisor
 
-  @spec start_link(keyword()) :: DynamicSupervisor.on_start()
+  @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts \\ []) do
     DynamicSupervisor.start_link(__MODULE__, opts)
   end

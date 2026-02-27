@@ -10,7 +10,7 @@ defmodule Cerberus.MixProject do
       start_permanent: Mix.env() == :prod,
       cli: cli(),
       aliases: aliases(),
-      dialyzer: [plt_add_apps: [:ex_unit]],
+      dialyzer: [plt_add_apps: [:ex_unit, :mix]],
       deps: deps(),
       description: description(),
       docs: docs(),

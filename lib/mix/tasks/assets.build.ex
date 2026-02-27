@@ -17,6 +17,6 @@ defmodule Mix.Tasks.Assets.Build do
     File.mkdir_p!(Path.dirname(target))
     File.cp!(source, target)
 
-    Mix.shell().info("Copied assets/js/app.js -> priv/static/assets/app.js")
+    IO.puts("Copied assets/js/app.js -> priv/static/assets/app.js")
   end
 end

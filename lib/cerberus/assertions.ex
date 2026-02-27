@@ -57,8 +57,11 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  @spec unsupported(arg, atom(), keyword()) :: arg when arg: var
-  def unsupported(session, operation, opts \\ []) when is_atom(operation) do
+  @spec unsupported(Session.t(), atom()) :: no_return()
+  def unsupported(session, operation), do: unsupported(session, operation, [])
+
+  @spec unsupported(Session.t(), atom(), keyword()) :: no_return()
+  def unsupported(session, operation, opts) when is_atom(operation) and is_list(opts) do
     driver_kind = Session.driver_kind(session)
 
     raise AssertionError,

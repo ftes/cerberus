@@ -13,6 +13,7 @@ defmodule Cerberus do
 
   alias Cerberus.Assertions
   alias Cerberus.Driver.Browser, as: BrowserSession
+  alias Cerberus.Driver.Conn, as: DriverConn
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.Locator
@@ -20,6 +21,7 @@ defmodule Cerberus do
   alias Cerberus.Path
   alias Cerberus.Session
   alias ExUnit.AssertionError
+  alias Phoenix.LiveViewTest.View
 
   @type driver_kind :: Session.driver_kind()
 
@@ -71,6 +73,38 @@ defmodule Cerberus do
   def close_tab(%BrowserSession{} = session), do: BrowserSession.close_tab(session)
   def close_tab(%StaticSession{} = session), do: StaticSession.close_tab(session)
   def close_tab(%LiveSession{} = session), do: LiveSession.close_tab(session)
+
+  @spec unwrap(arg, (term() -> term())) :: arg when arg: var
+  def unwrap(_session, fun) when not is_function(fun, 1) do
+    raise ArgumentError, "unwrap/2 expects a callback with arity 1"
+  end
+
+  def unwrap(%StaticSession{} = session, fun) do
+    session.conn
+    |> DriverConn.ensure_conn()
+    |> fun.()
+    |> unwrap_conn_result(session, :static)
+  end
+
+  def unwrap(%LiveSession{view: nil}, _fun) do
+    raise ArgumentError, "unwrap/2 requires an active LiveView; visit a live route first"
+  end
+
+  def unwrap(%LiveSession{} = session, fun) do
+    session.view
+    |> fun.()
+    |> unwrap_live_result(session)
+  end
+
+  def unwrap(%BrowserSession{} = session, fun) do
+    _ =
+      fun.(%{
+        user_context_pid: session.user_context_pid,
+        tab_id: session.tab_id
+      })
+
+    session
+  end
 
   @spec text(String.t() | Regex.t()) :: keyword()
   def text(value), do: [text: value]
@@ -203,23 +237,35 @@ defmodule Cerberus do
     Assertions.submit(session, locator, opts)
   end
 
-  @spec select(arg, term(), keyword()) :: arg when arg: var
-  def select(session, locator, opts \\ []) do
+  @spec select(Session.t(), term()) :: no_return()
+  def select(session, locator), do: select(session, locator, [])
+
+  @spec select(Session.t(), term(), keyword()) :: no_return()
+  def select(session, locator, opts) when is_list(opts) do
     Assertions.unsupported(session, :select, [locator: locator] ++ opts)
   end
 
-  @spec choose(arg, term(), keyword()) :: arg when arg: var
-  def choose(session, locator, opts \\ []) do
+  @spec choose(Session.t(), term()) :: no_return()
+  def choose(session, locator), do: choose(session, locator, [])
+
+  @spec choose(Session.t(), term(), keyword()) :: no_return()
+  def choose(session, locator, opts) when is_list(opts) do
     Assertions.unsupported(session, :choose, [locator: locator] ++ opts)
   end
 
-  @spec check(arg, term(), keyword()) :: arg when arg: var
-  def check(session, locator, opts \\ []) do
+  @spec check(Session.t(), term()) :: no_return()
+  def check(session, locator), do: check(session, locator, [])
+
+  @spec check(Session.t(), term(), keyword()) :: no_return()
+  def check(session, locator, opts) when is_list(opts) do
     Assertions.unsupported(session, :check, [locator: locator] ++ opts)
   end
 
-  @spec uncheck(arg, term(), keyword()) :: arg when arg: var
-  def uncheck(session, locator, opts \\ []) do
+  @spec uncheck(Session.t(), term()) :: no_return()
+  def uncheck(session, locator), do: uncheck(session, locator, [])
+
+  @spec uncheck(Session.t(), term(), keyword()) :: no_return()
+  def uncheck(session, locator, opts) when is_list(opts) do
     Assertions.unsupported(session, :uncheck, [locator: locator] ++ opts)
   end
 
@@ -259,6 +305,198 @@ defmodule Cerberus do
 
   defp update_last_result(%{last_result: _} = session, op, observed) do
     %{session | last_result: %{op: op, observed: observed}}
+  end
+
+  defp unwrap_conn_result(%Plug.Conn{} = conn, session, from_driver) when from_driver in [:static, :live] do
+    case redirect_target(conn) do
+      nil ->
+        build_session_from_conn(session, conn, from_driver)
+
+      redirect_path ->
+        redirected_session =
+          session
+          |> static_seed_from_session(conn)
+          |> visit(redirect_path)
+
+        transition =
+          transition(
+            from_driver,
+            Session.driver_kind(redirected_session),
+            :unwrap,
+            session.current_path,
+            Session.current_path(redirected_session)
+          )
+
+        update_last_result(redirected_session, :unwrap, %{
+          path: Session.current_path(redirected_session),
+          mode: Session.driver_kind(redirected_session),
+          transition: transition
+        })
+    end
+  end
+
+  defp unwrap_conn_result(other, _session, _from_driver) do
+    raise ArgumentError,
+          "unwrap callback must return a Plug.Conn in static mode, got: #{inspect(other)}"
+  end
+
+  defp unwrap_live_result({:ok, %Plug.Conn{} = conn}, %LiveSession{} = session) do
+    unwrap_conn_result(conn, session, :live)
+  end
+
+  defp unwrap_live_result(%Plug.Conn{} = conn, %LiveSession{} = session) do
+    unwrap_conn_result(conn, session, :live)
+  end
+
+  defp unwrap_live_result({:ok, %View{} = view, html}, %LiveSession{} = session) when is_binary(html) do
+    build_live_session_from_view(session, view, html)
+  end
+
+  defp unwrap_live_result({:ok, %View{} = view, _extra}, %LiveSession{} = session) do
+    build_live_session_from_view(session, view, Phoenix.LiveViewTest.render(view))
+  end
+
+  defp unwrap_live_result(%View{} = view, %LiveSession{} = session) do
+    build_live_session_from_view(session, view, Phoenix.LiveViewTest.render(view))
+  end
+
+  defp unwrap_live_result({:error, {kind, %{to: to}}}, %LiveSession{} = session)
+       when kind in [:redirect, :live_redirect] and is_binary(to) do
+    redirected = LiveSession.follow_redirect(session, to)
+
+    transition =
+      transition(
+        :live,
+        Session.driver_kind(redirected),
+        kind,
+        session.current_path,
+        Session.current_path(redirected)
+      )
+
+    update_last_result(redirected, :unwrap, %{
+      path: Session.current_path(redirected),
+      mode: Session.driver_kind(redirected),
+      transition: transition
+    })
+  end
+
+  defp unwrap_live_result({:error, {:live_patch, %{to: to}}}, %LiveSession{} = session) when is_binary(to) do
+    path = Path.normalize(to) || session.current_path
+    html = Phoenix.LiveViewTest.render(session.view)
+    transition = transition(:live, :live, :live_patch, session.current_path, path)
+
+    session
+    |> Map.put(:html, html)
+    |> Map.put(:current_path, path)
+    |> update_last_result(:unwrap, %{path: path, mode: :live, transition: transition})
+  end
+
+  defp unwrap_live_result(rendered, %LiveSession{} = session) when is_binary(rendered) do
+    path = maybe_live_patch_path(session.view, session.current_path)
+    transition = transition(:live, :live, :unwrap, session.current_path, path)
+
+    session
+    |> Map.put(:html, rendered)
+    |> Map.put(:current_path, path)
+    |> update_last_result(:unwrap, %{path: path, mode: :live, transition: transition})
+  end
+
+  defp unwrap_live_result(other, _session) do
+    raise ArgumentError,
+          "unwrap callback in live mode must return render output, redirect tuple, view, or Plug.Conn; got: #{inspect(other)}"
+  end
+
+  defp build_session_from_conn(session, conn, from_driver) do
+    current_path = DriverConn.current_path(conn, session.current_path)
+
+    case try_live(conn) do
+      {:ok, view, html} ->
+        transition = transition(from_driver, :live, :unwrap, session.current_path, current_path)
+
+        %LiveSession{
+          endpoint: session.endpoint,
+          conn: conn,
+          view: view,
+          html: html,
+          form_data: Map.get(session, :form_data),
+          scope: session.scope,
+          current_path: current_path,
+          last_result: %{op: :unwrap, observed: %{path: current_path, mode: :live, transition: transition}}
+        }
+
+      :error ->
+        transition = transition(from_driver, :static, :unwrap, session.current_path, current_path)
+
+        %StaticSession{
+          endpoint: session.endpoint,
+          conn: conn,
+          html: conn.resp_body || "",
+          form_data: Map.get(session, :form_data),
+          scope: session.scope,
+          current_path: current_path,
+          last_result: %{op: :unwrap, observed: %{path: current_path, mode: :static, transition: transition}}
+        }
+    end
+  end
+
+  defp build_live_session_from_view(session, view, html) do
+    path = maybe_live_patch_path(view, session.current_path)
+    transition = transition(:live, :live, :unwrap, session.current_path, path)
+
+    session
+    |> Map.put(:view, view)
+    |> Map.put(:html, html)
+    |> Map.put(:current_path, path)
+    |> update_last_result(:unwrap, %{path: path, mode: :live, transition: transition})
+  end
+
+  defp static_seed_from_session(session, conn) do
+    %StaticSession{
+      endpoint: session.endpoint,
+      conn: conn,
+      html: conn.resp_body || "",
+      form_data: Map.get(session, :form_data),
+      scope: session.scope,
+      current_path: DriverConn.current_path(conn, session.current_path),
+      last_result: session.last_result
+    }
+  end
+
+  defp redirect_target(%Plug.Conn{status: status} = conn) when status in 300..399 do
+    case Plug.Conn.get_resp_header(conn, "location") do
+      [location | _] -> Path.normalize(location)
+      _ -> nil
+    end
+  end
+
+  defp redirect_target(_conn), do: nil
+
+  defp try_live(conn) do
+    case Phoenix.LiveViewTest.__live__(conn, nil, []) do
+      {:ok, view, html} -> {:ok, view, html}
+      _ -> :error
+    end
+  rescue
+    _ -> :error
+  end
+
+  defp maybe_live_patch_path(nil, fallback_path), do: fallback_path
+
+  defp maybe_live_patch_path(view, fallback_path) do
+    path = Phoenix.LiveViewTest.assert_patch(view, 0)
+    Path.normalize(path) || fallback_path
+  rescue
+    ArgumentError -> fallback_path
+  end
+
+  defp transition(from_driver, to_driver, reason, from_path, to_path) do
+    %{
+      from_driver: from_driver,
+      to_driver: to_driver,
+      reason: reason,
+      from_path: from_path,
+      to_path: to_path
+    }
   end
 
   defp ensure_same_endpoint!(%{endpoint: endpoint}, %{endpoint: endpoint}), do: :ok

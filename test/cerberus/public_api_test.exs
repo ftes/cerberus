@@ -2,6 +2,7 @@ defmodule Cerberus.PublicApiTest do
   use ExUnit.Case, async: true
 
   import Cerberus
+  import Phoenix.LiveViewTest, only: [element: 3, render_click: 1]
 
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Live, as: LiveSession
@@ -235,6 +236,99 @@ defmodule Cerberus.PublicApiTest do
       |> session()
       |> visit("/articles")
       |> assert_path("/articles", query: "bad")
+    end
+  end
+
+  test "unwrap provides static conn escape hatch and keeps pipeline state" do
+    session =
+      :static
+      |> session()
+      |> visit("/articles")
+      |> unwrap(fn conn ->
+        Plug.Conn.put_req_header(conn, "x-custom-header", "unwrap-flow")
+      end)
+      |> visit("/main")
+      |> assert_has(text("x-custom-header: unwrap-flow"), exact: true)
+
+    assert session.current_path == "/main"
+  end
+
+  test "unwrap follows static redirects returned from callback conn actions" do
+    session =
+      :static
+      |> session()
+      |> visit("/articles")
+      |> unwrap(fn conn ->
+        Phoenix.ConnTest.dispatch(
+          conn,
+          Cerberus.Fixtures.Endpoint,
+          :get,
+          "/redirect/live",
+          %{}
+        )
+      end)
+      |> assert_has(text("Count: 0"), exact: true)
+
+    assert %LiveSession{} = session
+    assert session.current_path == "/live/counter"
+  end
+
+  test "unwrap in live mode follows live redirects from render actions" do
+    session =
+      :live
+      |> session()
+      |> visit("/live/redirects")
+      |> unwrap(fn view ->
+        view
+        |> element("button", "Redirect to Counter")
+        |> render_click()
+      end)
+      |> assert_has(text("Count: 0"), exact: true)
+
+    assert session.current_path == "/live/counter"
+  end
+
+  @tag browser: true
+  test "unwrap in browser mode exposes native tab handles" do
+    session =
+      :browser
+      |> session()
+      |> visit("/articles")
+      |> unwrap(fn native ->
+        send(self(), {:unwrap_native, native})
+      end)
+
+    assert session.current_path == "/articles"
+
+    assert_receive {:unwrap_native, %{user_context_pid: user_context_pid, tab_id: tab_id}}
+    assert is_pid(user_context_pid)
+    assert is_binary(tab_id)
+    assert tab_id != ""
+  end
+
+  test "unwrap rejects invalid callback arity" do
+    assert_raise ArgumentError, ~r/callback with arity 1/, fn ->
+      :static
+      |> session()
+      |> visit("/articles")
+      |> unwrap(fn -> :ok end)
+    end
+  end
+
+  test "unwrap rejects invalid static callback result values" do
+    assert_raise ArgumentError, ~r/must return a Plug.Conn in static mode/, fn ->
+      :static
+      |> session()
+      |> visit("/articles")
+      |> unwrap(fn _conn -> :invalid end)
+    end
+  end
+
+  test "unwrap rejects live sessions without an active LiveView" do
+    assert_raise ArgumentError, ~r/requires an active LiveView/, fn ->
+      :live
+      |> session()
+      |> unwrap(fn view -> view end)
     end
   end
 end

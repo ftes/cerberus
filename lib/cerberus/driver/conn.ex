@@ -87,7 +87,7 @@ defmodule Cerberus.Driver.Conn do
   defp recycle_preserving_headers(conn) do
     recycled = recycle(conn)
 
-    Enum.reduce(conn.req_headers || [], recycled, fn {name, value}, acc ->
+    Enum.reduce(conn.req_headers, recycled, fn {name, value}, acc ->
       Plug.Conn.put_req_header(acc, name, value)
     end)
   end

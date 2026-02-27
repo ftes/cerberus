@@ -235,7 +235,7 @@ defmodule Cerberus.Driver.Browser do
   @impl true
   def assert_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
     state = state!(session)
-    visible = Keyword.get(opts, :visible, true)
+    visible = visibility_filter(opts)
 
     with_driver_ready(session, state, :assert_has, fn ready_state ->
       case with_snapshot(ready_state) do
@@ -252,7 +252,7 @@ defmodule Cerberus.Driver.Browser do
   @impl true
   def refute_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
     state = state!(session)
-    visible = Keyword.get(opts, :visible, true)
+    visible = visibility_filter(opts)
 
     with_driver_ready(session, state, :refute_has, fn ready_state ->
       case with_snapshot(ready_state) do
@@ -400,36 +400,36 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp fill_field_result(session, state, field, value, result) do
-    if Map.get(result, "ok", false) do
-      case await_driver_ready(state) do
-        {:ok, readiness} ->
-          observed = %{
-            action: :fill_in,
-            path: Map.get(result, "path", state.current_path),
-            field: field,
-            value: value,
-            readiness: readiness
-          }
+  defp fill_field_result(session, state, field, value, %{"ok" => true} = result) do
+    case await_driver_ready(state) do
+      {:ok, readiness} ->
+        observed = %{
+          action: :fill_in,
+          path: Map.get(result, "path", state.current_path),
+          field: field,
+          value: value,
+          readiness: readiness
+        }
 
-          {:ok, update_last_result(session, :fill_in, observed), observed}
+        {:ok, update_last_result(session, :fill_in, observed), observed}
 
-        {:error, reason, readiness} ->
-          observed = %{
-            action: :fill_in,
-            path: state.current_path,
-            field: field,
-            value: value,
-            readiness: readiness
-          }
+      {:error, reason, readiness} ->
+        observed = %{
+          action: :fill_in,
+          path: state.current_path,
+          field: field,
+          value: value,
+          readiness: readiness
+        }
 
-          {:error, session, observed, readiness_error(reason, readiness)}
-      end
-    else
-      reason = Map.get(result, "reason", "field_fill_failed")
-      observed = %{action: :fill_in, path: state.current_path, field: field, result: result}
-      {:error, session, observed, "browser field fill failed: #{reason}"}
+        {:error, session, observed, readiness_error(reason, readiness)}
     end
+  end
+
+  defp fill_field_result(session, state, field, _value, result) do
+    reason = Map.get(result, "reason", "field_fill_failed")
+    observed = %{action: :fill_in, path: state.current_path, field: field, result: result}
+    {:error, session, observed, "browser field fill failed: #{reason}"}
   end
 
   defp navigate_link(session, state, link, url) do
@@ -675,15 +675,14 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp normalize_await_ready_error(state, reason, details) do
-    cond do
-      is_map(details) and navigation_transition_error?(reason, details) ->
-        {:ok, navigation_transition_readiness(details)}
-
-      is_map(details) and readiness_payload?(details) ->
+    if navigation_transition_error?(reason, details) do
+      {:ok, navigation_transition_readiness(details)}
+    else
+      if readiness_payload?(details) do
         {:error, reason, details}
-
-      true ->
+      else
         {:error, reason, merge_last_readiness(state, details)}
+      end
     end
   end
 
@@ -816,6 +815,14 @@ defmodule Cerberus.Driver.Browser do
 
   defp ready_quiet_ms(opts) do
     opts |> Keyword.get(:ready_quiet_ms, @default_ready_quiet_ms) |> normalize_positive_integer(@default_ready_quiet_ms)
+  end
+
+  defp visibility_filter(opts) do
+    case Keyword.get(opts, :visible, true) do
+      :any -> :any
+      false -> false
+      _ -> true
+    end
   end
 
   defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
