@@ -11,6 +11,7 @@ parent: cerberus-efry
 
 ## Objective
 Create a harness that runs one spec against static/live/browser and compares normalized outcomes.
+Easy switching between browser and non-browser (`:auto`/`:static`/`:live`) execution is an essential feature. Prefer the standard shared API so scenarios switch cleanly, while allowing targeted driver-specific escape hatches (for example, `unwrap/2`) when needed.
 
 ## Harness Design
 - Regular ExUnit tests + shared helpers define the shared spec contract in v0.
@@ -69,6 +70,7 @@ end
 
 ## Acceptance Criteria
 - [ ] Same scenario file runs across all 3 drivers.
+- [ ] Most switching between browser and non-browser execution is done by changing driver tags/session mode; when driver-specific behavior is required (for example `unwrap/2`), keep it isolated and minimal.
 - [ ] Reporter prints grouped mismatches by semantic category.
 - [ ] CI can run `conformance` suite independently from unit tests.
 

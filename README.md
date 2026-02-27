@@ -82,6 +82,19 @@ user2 =
   |> visit("/session/user")
 ```
 
+Unwrap escape-hatch example:
+
+```elixir
+session(:live)
+|> visit("/live/redirects")
+|> unwrap(fn view ->
+  view
+  |> Phoenix.LiveViewTest.element("button", "Redirect to Counter")
+  |> Phoenix.LiveViewTest.render_click()
+end)
+|> assert_path("/live/counter")
+```
+
 Supported sigil:
 - `~l` for text locators.
 - `~l` modifiers:
@@ -101,6 +114,7 @@ Helper locator constructors:
 ## Conformance Harness
 
 Use ExUnit tags to select applicable drivers per scenario:
+Easy switching between browser and non-browser execution is an essential feature: prefer the standard shared API so most scenarios only vary tags/session mode, and use driver-specific escape hatches (for example `unwrap/2`) only when necessary.
 
 ```elixir
 defmodule MyConformanceTest do
@@ -205,6 +219,11 @@ Dependencies: `curl`, `jq`, `unzip`.
 - `open_tab/1` creates another tab in the same user state in all drivers:
   browser maps this to a new `browsingContext` in the same `userContext`;
   live/static map this to a recycled `Plug.Conn` so cookies/session are shared.
+- `unwrap/2` mirrors PhoenixTest escape-hatch semantics for static/live:
+  static callbacks receive a `Plug.Conn` and must return a `Plug.Conn`;
+  live callbacks receive the underlying LiveView and may return render output
+  or redirect tuples; Cerberus follows redirects and updates session mode/path.
+  Browser mode passes `%{user_context_pid:, tab_id:}` for low-level access.
 - Live-driver `click_button` treats `phx-click` raw events and JS `push`/`navigate`/`patch` bindings as actionable; `dispatch`-only bindings are intentionally excluded from server-actionable resolution.
 - Fixture LiveView browser bootstrap lives in `assets/js/app.js`; run `mix assets.build` to sync `priv/static/assets/app.js`.
 - Browser worker topology and restart semantics are documented in `docs/adr/0004-browser-runtime-supervision-topology.md`.
