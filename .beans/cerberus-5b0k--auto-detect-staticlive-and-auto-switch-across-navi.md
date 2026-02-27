@@ -1,11 +1,11 @@
 ---
 # cerberus-5b0k
 title: Auto-detect static/live and auto-switch across navigation; browser opt-in sticky
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-02-27T08:07:23Z
-updated_at: 2026-02-27T14:59:02Z
+updated_at: 2026-02-27T15:38:36Z
 parent: cerberus-sfku
 ---
 
@@ -26,9 +26,9 @@ Add PhoenixTest-style automatic static/live driver detection and automatic drive
 ## Tests
 - [x] `session(:auto)` starts static for static route and switches to live when navigating to live route.
 - [x] `session(:auto)` starts live for live route and switches to static when navigating to static route.
-- [ ] redirect and live_redirect transitions update both `current_path` and active driver.
-- [ ] explicit browser sessions do not auto-switch back to static/live.
-- [ ] failure output includes transition diagnostics in common shape.
+- [x] redirect and live_redirect transitions update both `current_path` and active driver.
+- [x] explicit browser sessions do not auto-switch back to static/live.
+- [x] failure output includes transition diagnostics in common shape.
 
 ## Done When
 - [x] API docs show no-manual-selection happy path for static/live.
@@ -63,3 +63,10 @@ Reopened per product direction: non-browser execution should mirror PhoenixTest 
 - Fixed cross-driver parity failures in owner-form/search scenarios by ensuring fixture pages merge query-string params via `Plug.Conn.fetch_query_params/1` before rendering echoed values.
 - Browser assertions now pass consistently on submitted/redirected GET forms.
 - Verified with full `mix test` run: 45 tests, 0 failures.
+
+## Summary of Changes
+
+- Added transition diagnostics shape to static/live operation observations and assertion failures (`from_driver`, `to_driver`, `reason`, `from_path`, `to_path`).
+- Added auto-mode coverage for `live_redirect` and `redirect` transitions plus browser sticky behavior assertions.
+- Updated redirect fixtures and tests to cover both soft live navigation and hard redirect paths.
+- Verified behavior with focused suites and full test run (48 tests, 0 failures).
