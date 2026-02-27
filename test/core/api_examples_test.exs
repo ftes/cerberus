@@ -15,7 +15,7 @@ defmodule Cerberus.CoreApiExamplesTest do
         session
         |> visit("/articles")
         |> assert_has(~l"Articles")
-        |> assert_has(~L/articles index/i)
+        |> assert_has(~l"This is an articles index page")
         |> refute_has(~l"500 Internal Server Error")
       end
     )

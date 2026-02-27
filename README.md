@@ -27,13 +27,12 @@ Sigil locator examples:
 session(:static)
 |> visit("/articles")
 |> assert_has(~l"Articles")
-|> assert_has(~L/articles index/i)
+|> assert_has(~l"This is an articles index page")
 |> refute_has(~l"500 Internal Server Error")
 ```
 
-Supported sigil aliases:
-- `~l` / `~t` for text locators.
-- `~L` for regex text locators.
+Supported sigil:
+- `~l` for text locators.
 
 ## Conformance Harness
 

@@ -31,30 +31,17 @@ defmodule Cerberus.LocatorTest do
     end
   end
 
-  test "text sigils normalize to text locators" do
-    assert %Locator{kind: :text, value: "Saved"} = ~t"Saved"
+  test "~l normalizes to text locators" do
     assert %Locator{kind: :text, value: "Saved"} = ~l"Saved"
-  end
-
-  test "regex sigils normalize to regex locators" do
-    expected = ~r/Sav(ed|ing)/i
-    assert %Locator{kind: :text, value: regex} = ~L/Sav(ed|ing)/i
-    assert Regex.source(regex) == Regex.source(expected)
-    assert Regex.opts(regex) == Regex.opts(expected)
   end
 
   test "sigil and non-sigil locators normalize identically" do
     assert Locator.normalize(~l"Saved") == Locator.normalize("Saved")
-
-    assert %Locator{kind: :text, value: sigil_regex} = Locator.normalize(~L/Sav(ed|ing)/i)
-    assert %Locator{kind: :text, value: literal_regex} = Locator.normalize(~r/Sav(ed|ing)/i)
-    assert Regex.source(sigil_regex) == Regex.source(literal_regex)
-    assert Regex.opts(sigil_regex) == Regex.opts(literal_regex)
   end
 
-  test "invalid sigil modifiers raise explicit locator errors" do
-    assert_raise InvalidLocatorError, ~r/unsupported modifier/, fn ->
-      ~L/Saved/z
+  test "~l modifiers raise explicit locator errors" do
+    assert_raise InvalidLocatorError, ~r/modifiers are not supported/, fn ->
+      ~l/Saved/i
     end
   end
 end
