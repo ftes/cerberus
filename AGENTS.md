@@ -10,7 +10,6 @@ Keep a log of what you did to present when you're done.
 - Keep it simple: choose the least complex approach that satisfies the requirement.
 - Deliver vertical slices end-to-end whenever possible (API + drivers + harness coverage for the slice).
 - Prefer the browser-oracle harness approach to validate HTML/browser behavior and catch static/live semantic drift.
-- Update docs when behavior, API semantics, architecture, or harness strategy changes.
 - Run `mix format` after each logical change set (and before tests/precommit), since precommit checks formatting and does not rewrite files.
 - Commit in small increments and run `mix precommit` before each commit.
 - Browser runtime policy:
@@ -20,3 +19,7 @@ Keep a log of what you did to present when you're done.
   - Run browser-tagged tests outside the Codex sandbox (escalated permissions), since Chrome startup can fail inside the sandbox.
 - If in doubt about static/live driver behavior, check PhoenixTest static and live driver implementations for reference patterns.
 - If in doubt about browser driver behavior, use Cuprite as the primary implementation reference; use Playwright JS as the secondary reference.
+
+## Docs check (final step)
+- At the end of implementation, right before `mix format` and `mix precommit`, do a docs impact check.
+- If public API/behavior/examples changed, update docs in the same change (`README.md`, relevant guides, moduledocs).
