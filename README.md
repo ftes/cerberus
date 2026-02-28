@@ -134,6 +134,23 @@ Most tests switch modes by changing only the first session line:
  |> assert_has(text("Count: 1"))
 ```
 
+## Timeout Defaults
+
+You can configure default assertion and browser readiness timeouts once:
+
+```elixir
+config :cerberus, :assert_timeout_ms, 300
+
+config :cerberus, :browser,
+  ready_timeout_ms: 2_200
+```
+
+Override precedence is:
+- call opts (`assert_has(..., timeout: ...)`)
+- session opts (`session(assert_timeout_ms: ...)`, `session(:browser, ready_timeout_ms: ...)`)
+- app config
+- hardcoded fallback
+
 ## Learn More
 
 - [Getting Started Guide](docs/getting-started.md)

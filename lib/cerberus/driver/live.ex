@@ -18,6 +18,7 @@ defmodule Cerberus.Driver.Live do
   @type t :: %__MODULE__{
           endpoint: module(),
           conn: Plug.Conn.t() | nil,
+          assert_timeout_ms: non_neg_integer(),
           view: term() | nil,
           html: String.t(),
           form_data: map(),
@@ -28,6 +29,7 @@ defmodule Cerberus.Driver.Live do
 
   defstruct endpoint: nil,
             conn: nil,
+            assert_timeout_ms: 0,
             view: nil,
             html: "",
             form_data: %{active_form: nil, values: %{}},
@@ -39,18 +41,27 @@ defmodule Cerberus.Driver.Live do
   def new_session(opts \\ []) do
     %__MODULE__{
       endpoint: Conn.endpoint!(opts),
-      conn: initial_conn(opts)
+      conn: initial_conn(opts),
+      assert_timeout_ms: Session.assert_timeout_from_opts!(opts)
     }
   end
 
   @spec open_user(t()) :: t()
   def open_user(%__MODULE__{} = session) do
-    new_session(endpoint: session.endpoint, conn: Conn.fork_user_conn(session.conn))
+    new_session(
+      endpoint: session.endpoint,
+      conn: Conn.fork_user_conn(session.conn),
+      assert_timeout_ms: session.assert_timeout_ms
+    )
   end
 
   @spec open_tab(t()) :: t()
   def open_tab(%__MODULE__{} = session) do
-    new_session(endpoint: session.endpoint, conn: Conn.fork_tab_conn(session.conn))
+    new_session(
+      endpoint: session.endpoint,
+      conn: Conn.fork_tab_conn(session.conn),
+      assert_timeout_ms: session.assert_timeout_ms
+    )
   end
 
   @spec switch_tab(t(), Session.t()) :: Session.t()
@@ -96,6 +107,7 @@ defmodule Cerberus.Driver.Live do
         %StaticSession{
           endpoint: session.endpoint,
           conn: conn,
+          assert_timeout_ms: session.assert_timeout_ms,
           html: html,
           form_data: session.form_data,
           scope: session.scope,
@@ -1616,6 +1628,7 @@ defmodule Cerberus.Driver.Live do
         %StaticSession{
           endpoint: session.endpoint,
           conn: conn,
+          assert_timeout_ms: session.assert_timeout_ms,
           html: conn.resp_body || "",
           form_data: session.form_data,
           scope: session.scope,

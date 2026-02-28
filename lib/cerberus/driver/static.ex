@@ -14,6 +14,7 @@ defmodule Cerberus.Driver.Static do
   @type t :: %__MODULE__{
           endpoint: module(),
           conn: Plug.Conn.t() | nil,
+          assert_timeout_ms: non_neg_integer(),
           html: String.t(),
           form_data: map(),
           scope: String.t() | nil,
@@ -23,6 +24,7 @@ defmodule Cerberus.Driver.Static do
 
   defstruct endpoint: nil,
             conn: nil,
+            assert_timeout_ms: 0,
             html: "",
             form_data: %{active_form: nil, values: %{}},
             scope: nil,
@@ -33,18 +35,27 @@ defmodule Cerberus.Driver.Static do
   def new_session(opts \\ []) do
     %__MODULE__{
       endpoint: Conn.endpoint!(opts),
-      conn: initial_conn(opts)
+      conn: initial_conn(opts),
+      assert_timeout_ms: Session.assert_timeout_from_opts!(opts)
     }
   end
 
   @spec open_user(t()) :: t()
   def open_user(%__MODULE__{} = session) do
-    new_session(endpoint: session.endpoint, conn: Conn.fork_user_conn(session.conn))
+    new_session(
+      endpoint: session.endpoint,
+      conn: Conn.fork_user_conn(session.conn),
+      assert_timeout_ms: session.assert_timeout_ms
+    )
   end
 
   @spec open_tab(t()) :: t()
   def open_tab(%__MODULE__{} = session) do
-    new_session(endpoint: session.endpoint, conn: Conn.fork_tab_conn(session.conn))
+    new_session(
+      endpoint: session.endpoint,
+      conn: Conn.fork_tab_conn(session.conn),
+      assert_timeout_ms: session.assert_timeout_ms
+    )
   end
 
   @spec switch_tab(t(), Session.t()) :: Session.t()
@@ -75,6 +86,7 @@ defmodule Cerberus.Driver.Static do
         %LiveSession{
           endpoint: session.endpoint,
           conn: conn,
+          assert_timeout_ms: session.assert_timeout_ms,
           view: view,
           html: html,
           form_data: session.form_data,

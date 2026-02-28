@@ -5,6 +5,8 @@ defmodule Cerberus.Session do
   alias Cerberus.Driver.Live
   alias Cerberus.Driver.Static
 
+  @default_assert_timeout_ms 0
+
   @type driver_kind :: :auto | :static | :live | :browser
   @type last_result :: %{op: atom(), observed: map()} | nil
   @type t :: Static.t() | Live.t() | Browser.t()
@@ -33,4 +35,34 @@ defmodule Cerberus.Session do
   end
 
   def transition(_session), do: nil
+
+  @spec assert_timeout_ms(t()) :: non_neg_integer()
+  def assert_timeout_ms(%{assert_timeout_ms: timeout}) when is_integer(timeout) and timeout >= 0, do: timeout
+  def assert_timeout_ms(_session), do: default_assert_timeout_ms()
+
+  @doc false
+  @spec assert_timeout_from_opts!(keyword()) :: non_neg_integer()
+  def assert_timeout_from_opts!(opts) when is_list(opts) do
+    if Keyword.has_key?(opts, :assert_timeout_ms) do
+      case Keyword.get(opts, :assert_timeout_ms) do
+        timeout when is_integer(timeout) and timeout >= 0 ->
+          timeout
+
+        timeout ->
+          raise ArgumentError, ":assert_timeout_ms must be a non-negative integer, got: #{inspect(timeout)}"
+      end
+    else
+      default_assert_timeout_ms()
+    end
+  end
+
+  @spec default_assert_timeout_ms() :: non_neg_integer()
+  def default_assert_timeout_ms do
+    :cerberus
+    |> Application.get_env(:assert_timeout_ms)
+    |> normalize_non_negative_integer(@default_assert_timeout_ms)
+  end
+
+  defp normalize_non_negative_integer(value, _default) when is_integer(value) and value >= 0, do: value
+  defp normalize_non_negative_integer(_value, default), do: default
 end

@@ -90,6 +90,7 @@ session()
 > #### Tip
 >
 > Prefer timeout-bounded assertions for async LiveView states. Cerberus reacts to watched updates and still respects hard timeout budgets.
+> You can also set defaults with `config :cerberus, :assert_timeout_ms, 300` and override per session via `session(assert_timeout_ms: ...)`.
 
 ## Step 7: Browser-Only Extensions
 

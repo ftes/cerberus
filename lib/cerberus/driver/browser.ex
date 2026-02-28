@@ -48,6 +48,7 @@ defmodule Cerberus.Driver.Browser do
           user_context_pid: pid(),
           tab_id: String.t(),
           base_url: String.t(),
+          assert_timeout_ms: non_neg_integer(),
           ready_timeout_ms: pos_integer(),
           ready_quiet_ms: pos_integer(),
           browser_context_defaults: browser_context_defaults(),
@@ -60,6 +61,7 @@ defmodule Cerberus.Driver.Browser do
   defstruct user_context_pid: nil,
             tab_id: nil,
             base_url: nil,
+            assert_timeout_ms: 0,
             ready_timeout_ms: @default_ready_timeout_ms,
             ready_quiet_ms: @default_ready_quiet_ms,
             browser_context_defaults: @empty_browser_context_defaults,
@@ -99,6 +101,7 @@ defmodule Cerberus.Driver.Browser do
       user_context_pid: user_context_pid,
       tab_id: tab_id,
       base_url: base_url,
+      assert_timeout_ms: Session.assert_timeout_from_opts!(opts),
       ready_timeout_ms: ready_timeout_ms(opts),
       ready_quiet_ms: ready_quiet_ms(opts),
       browser_context_defaults: context_defaults,
@@ -109,6 +112,7 @@ defmodule Cerberus.Driver.Browser do
   @spec open_user(t()) :: t()
   def open_user(%__MODULE__{} = session) do
     opts = [
+      assert_timeout_ms: session.assert_timeout_ms,
       ready_timeout_ms: session.ready_timeout_ms,
       ready_quiet_ms: session.ready_quiet_ms,
       browser_context_defaults: session.browser_context_defaults
@@ -1032,8 +1036,10 @@ defmodule Cerberus.Driver.Browser do
       | user_context_pid: state.user_context_pid,
         tab_id: state.tab_id,
         base_url: state.base_url,
+        assert_timeout_ms: state.assert_timeout_ms,
         ready_timeout_ms: state.ready_timeout_ms,
         ready_quiet_ms: state.ready_quiet_ms,
+        browser_context_defaults: state.browser_context_defaults,
         sandbox_metadata: state.sandbox_metadata,
         scope: session.scope,
         current_path: state.current_path,
@@ -1188,14 +1194,22 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp ready_timeout_ms(opts) do
+  @doc false
+  @spec ready_timeout_ms(keyword()) :: pos_integer()
+  def ready_timeout_ms(opts) when is_list(opts) do
+    browser_opts = merged_browser_opts(opts)
+
     opts
-    |> Keyword.get(:ready_timeout_ms, @default_ready_timeout_ms)
+    |> Keyword.get(:ready_timeout_ms, browser_opts[:ready_timeout_ms])
     |> normalize_positive_integer(@default_ready_timeout_ms)
   end
 
   defp ready_quiet_ms(opts) do
-    opts |> Keyword.get(:ready_quiet_ms, @default_ready_quiet_ms) |> normalize_positive_integer(@default_ready_quiet_ms)
+    browser_opts = merged_browser_opts(opts)
+
+    opts
+    |> Keyword.get(:ready_quiet_ms, browser_opts[:ready_quiet_ms])
+    |> normalize_positive_integer(@default_ready_quiet_ms)
   end
 
   defp visibility_filter(opts) do

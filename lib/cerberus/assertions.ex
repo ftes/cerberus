@@ -132,24 +132,30 @@ defmodule Cerberus.Assertions do
   end
 
   @spec assert_has(arg, term(), Options.assert_opts()) :: arg when arg: var
-  def assert_has(session, locator_input, opts \\ []) do
-    {locator, opts} = normalize_assert_locator(locator_input, opts)
-    opts = Options.validate_assert!(opts, "assert_has/3")
-    {timeout, driver_opts} = Keyword.pop(opts, :timeout, 0)
+  def assert_has(session, locator_input, call_opts \\ []) do
+    call_has_timeout = Keyword.has_key?(call_opts, :timeout)
+    {locator, call_opts} = normalize_assert_locator(locator_input, call_opts)
+    validated_opts = Options.validate_assert!(call_opts, "assert_has/3")
+    {validated_timeout, driver_opts} = Keyword.pop(validated_opts, :timeout, 0)
+    timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
+    message_opts = Keyword.put(driver_opts, :timeout, timeout)
 
     LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
-      run_assertion!(timed_session, :assert_has, locator, locator_input, driver_opts, opts)
+      run_assertion!(timed_session, :assert_has, locator, locator_input, driver_opts, message_opts)
     end)
   end
 
   @spec refute_has(arg, term(), Options.assert_opts()) :: arg when arg: var
-  def refute_has(session, locator_input, opts \\ []) do
-    {locator, opts} = normalize_assert_locator(locator_input, opts)
-    opts = Options.validate_assert!(opts, "refute_has/3")
-    {timeout, driver_opts} = Keyword.pop(opts, :timeout, 0)
+  def refute_has(session, locator_input, call_opts \\ []) do
+    call_has_timeout = Keyword.has_key?(call_opts, :timeout)
+    {locator, call_opts} = normalize_assert_locator(locator_input, call_opts)
+    validated_opts = Options.validate_assert!(call_opts, "refute_has/3")
+    {validated_timeout, driver_opts} = Keyword.pop(validated_opts, :timeout, 0)
+    timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
+    message_opts = Keyword.put(driver_opts, :timeout, timeout)
 
     LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
-      run_assertion!(timed_session, :refute_has, locator, locator_input, driver_opts, opts)
+      run_assertion!(timed_session, :refute_has, locator, locator_input, driver_opts, message_opts)
     end)
   end
 
@@ -195,6 +201,9 @@ defmodule Cerberus.Assertions do
   end
 
   defp observed_transition(_observed), do: nil
+
+  defp resolve_assert_timeout(_session, true, validated_timeout), do: validated_timeout
+  defp resolve_assert_timeout(session, false, _validated_timeout), do: Session.assert_timeout_ms(session)
 
   defp normalize_click_locator(locator_input, opts) do
     locator = Locator.normalize(locator_input)

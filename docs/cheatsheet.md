@@ -6,6 +6,8 @@
 | --- | --- |
 | Phoenix mode (auto static/live switching) | `session()` or `session(:phoenix)` |
 | Real browser behavior | `session(:browser)` |
+| Session assertion timeout default | `session(assert_timeout_ms: 300)` |
+| Browser ready timeout default | `session(:browser, ready_timeout_ms: 2200)` |
 
 ## Core Navigation and Assertions
 
