@@ -3,26 +3,6 @@ defmodule Cerberus.Driver.HtmlTest do
 
   alias Cerberus.Driver.Html
 
-  test "find_live_clickable_button escapes multiline attribute values in selector" do
-    html = """
-    <main>
-      <button phx-click="select_confirm" data-confirm="Are you sure?
-    More text">Create</button>
-      <button phx-click="select_other" data-confirm="Other">Create</button>
-    </main>
-    """
-
-    assert {:ok, %{selector: selector}} =
-             Html.find_live_clickable_button(html, "Create", exact: true)
-
-    assert is_binary(selector)
-    assert selector =~ "data-confirm="
-    assert selector =~ ~r/\\[Aa]\s/
-    refute String.contains?(selector, "\n")
-
-    assert 1 = html |> LazyHTML.from_document() |> LazyHTML.query(selector) |> Enum.count()
-  end
-
   test "find_form_field matches wrapped labels with nested inline text" do
     html = """
     <form>
@@ -37,35 +17,21 @@ defmodule Cerberus.Driver.HtmlTest do
              Html.find_form_field(html, "Search term *", exact: true)
   end
 
-  test "find_live_clickable_button includes dispatch(change) buttons tied to form-level phx-change" do
+  test "find_form_field remains framework-agnostic and omits phx metadata" do
     html = """
     <main>
-      <form id="dynamic-form" phx-change="validate">
-        <button type="button" name="items_drop[]" value="1" phx-click='[["dispatch",{"event":"change"}]]'>
-          delete
-        </button>
+      <form id="profile-form" phx-change="validate">
+        <label>
+          Name
+          <input id="profile_name" name="profile[name]" phx-change="validate_input" />
+        </label>
       </form>
     </main>
     """
 
-    assert {:ok,
-            %{
-              dispatch_change: true,
-              button_name: "items_drop[]",
-              button_value: "1",
-              form: "dynamic-form",
-              form_selector: ~s(form[id="dynamic-form"])
-            }} = Html.find_live_clickable_button(html, "delete", exact: true)
-  end
-
-  test "find_live_clickable_button excludes dispatch-only buttons without form phx-change context" do
-    html = """
-    <main>
-      <button phx-click='[["dispatch",{"event":"change"}]]'>dispatch only</button>
-    </main>
-    """
-
-    assert :error = Html.find_live_clickable_button(html, "dispatch only", exact: true)
+    assert {:ok, field} = Html.find_form_field(html, "Name", exact: true)
+    refute Map.has_key?(field, :input_phx_change)
+    refute Map.has_key?(field, :form_phx_change)
   end
 
   test "form_field_names returns current named controls for pruning stale params" do

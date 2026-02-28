@@ -1,7 +1,16 @@
 defmodule Cerberus.Driver.Html do
-  @moduledoc false
+  @moduledoc """
+  HTML-platform semantics used by all non-browser drivers.
 
-  alias Cerberus.LiveViewBindings
+  This module intentionally models browser/HTML behavior only and does not
+  include Phoenix/LiveView semantics.
+
+  Reference specs:
+  - WHATWG forms and submission model: https://html.spec.whatwg.org/multipage/forms.html
+  - WHATWG form-associated elements and ownership: https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#association-of-controls-and-forms
+  - WHATWG labels: https://html.spec.whatwg.org/multipage/forms.html#the-label-element
+  """
+
   alias Cerberus.Query
 
   @spec texts(String.t(), true | false | :any, String.t() | nil) :: [String.t()]
@@ -61,28 +70,6 @@ defmodule Cerberus.Driver.Html do
     end
   end
 
-  @spec find_live_clickable_button(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
-          {:ok,
-           %{
-             text: String.t(),
-             selector: String.t() | nil,
-             button_name: String.t() | nil,
-             button_value: String.t() | nil,
-             form: String.t() | nil,
-             form_selector: String.t() | nil,
-             dispatch_change: boolean()
-           }}
-          | :error
-  def find_live_clickable_button(html, expected, opts, scope \\ nil) when is_binary(html) do
-    case parse_document(html) do
-      {:ok, lazy_html} ->
-        find_live_clickable_button_in_doc(lazy_html, expected, opts, scope)
-
-      _ ->
-        :error
-    end
-  end
-
   @spec find_form_field(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
           {:ok, map()} | :error
   def find_form_field(html, expected, opts, scope \\ nil) when is_binary(html) do
@@ -119,17 +106,6 @@ defmodule Cerberus.Driver.Html do
     end
   end
 
-  @spec trigger_action_forms(String.t()) :: [map()]
-  def trigger_action_forms(html) when is_binary(html) do
-    case parse_document(html) do
-      {:ok, lazy_html} ->
-        trigger_action_forms_in_doc(lazy_html)
-
-      _ ->
-        []
-    end
-  end
-
   @spec find_submit_button(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
           {:ok,
            %{
@@ -138,7 +114,6 @@ defmodule Cerberus.Driver.Html do
              method: String.t() | nil,
              form: String.t() | nil,
              form_selector: String.t() | nil,
-             form_phx_submit: boolean(),
              button_name: String.t() | nil,
              button_value: String.t() | nil
            }}
@@ -182,22 +157,6 @@ defmodule Cerberus.Driver.Html do
         %{text: text}
       end,
       fn _root_node, node -> button_node?(node) end
-    )
-  end
-
-  defp find_live_clickable_button_in_doc(lazy_html, expected, opts, scope) do
-    query_selector = selector_opt(opts) || "button[phx-click]"
-
-    find_first_matching(
-      lazy_html,
-      query_selector,
-      expected,
-      opts,
-      scope,
-      fn node, text, root_node ->
-        build_live_clickable_button(root_node, node, text)
-      end,
-      &live_clickable_button_node?/2
     )
   end
 
@@ -273,7 +232,6 @@ defmodule Cerberus.Driver.Html do
          method: method,
          form: form_meta.form,
          form_selector: form_meta.form_selector,
-         form_phx_submit: form_meta.form_phx_submit,
          button_name: attr(button_node, "name"),
          button_value: attr(button_node, "value")
        }}
@@ -293,31 +251,8 @@ defmodule Cerberus.Driver.Html do
       form: form_id,
       action: attr(form_node, "action"),
       method: attr(form_node, "method"),
-      form_selector: form_selector(root_node, form_node, form_id),
-      form_phx_submit: form_node |> attr("phx-submit") |> phx_submit_binding?()
+      form_selector: form_selector(root_node, form_node, form_id)
     }
-  end
-
-  defp trigger_action_forms_in_doc(root_node) do
-    root_node
-    |> safe_query("form")
-    |> Enum.flat_map(fn form_node ->
-      if form_node |> attr("phx-trigger-action") |> trigger_action_enabled?() do
-        form_id = attr(form_node, "id")
-
-        [
-          %{
-            form: form_id,
-            form_selector: form_selector(root_node, form_node, form_id),
-            action: attr(form_node, "action"),
-            method: attr(form_node, "method"),
-            defaults: collect_form_defaults(form_node)
-          }
-        ]
-      else
-        []
-      end
-    end)
   end
 
   defp submit_button_match?(type, text, expected, opts) do
@@ -370,9 +305,7 @@ defmodule Cerberus.Driver.Html do
        form_selector: form_selector(root_node, form_node, form_id),
        input_type: input_type,
        input_value: input_value(field_node, input_type),
-       input_checked: checked?(field_node),
-       input_phx_change: field_node |> attr("phx-change") |> phx_change_binding?(),
-       form_phx_change: form_node |> attr_or_nil("phx-change") |> phx_change_binding?()
+       input_checked: checked?(field_node)
      }}
   end
 
@@ -872,34 +805,6 @@ defmodule Cerberus.Driver.Html do
     |> is_binary()
   end
 
-  defp phx_change_binding?(value) when is_binary(value) do
-    String.trim(value) != ""
-  end
-
-  defp phx_change_binding?(_value), do: false
-
-  defp phx_submit_binding?(value) when is_binary(value) do
-    String.trim(value) != ""
-  end
-
-  defp phx_submit_binding?(_value), do: false
-
-  defp trigger_action_enabled?(nil), do: false
-
-  defp trigger_action_enabled?(value) when is_binary(value) do
-    value
-    |> String.trim()
-    |> String.downcase()
-    |> case do
-      "" -> true
-      "false" -> false
-      "0" -> false
-      _ -> true
-    end
-  end
-
-  defp trigger_action_enabled?(_value), do: true
-
   defp attr_or_nil(nil, _name), do: nil
   defp attr_or_nil(node, name), do: attr(node, name)
 
@@ -958,54 +863,6 @@ defmodule Cerberus.Driver.Html do
   end
 
   defp button_node?(node), do: node_tag(node) == "button"
-
-  defp live_clickable_button_node?(root_node, node) do
-    button_node?(node) and
-      (node
-       |> attr("phx-click")
-       |> LiveViewBindings.phx_click?() or dispatch_change_clickable?(root_node, node))
-  end
-
-  defp dispatch_change_clickable?(root_node, node) do
-    phx_click = attr(node, "phx-click")
-
-    LiveViewBindings.dispatch_change?(phx_click) and
-      case button_form_node(root_node, node) do
-        nil -> false
-        form_node -> form_node |> attr("phx-change") |> phx_change_binding?()
-      end
-  end
-
-  defp build_live_clickable_button(root_node, node, text) do
-    phx_click = attr(node, "phx-click")
-    form_node = button_form_node(root_node, node)
-    form_id = attr_or_nil(form_node, "id")
-
-    %{
-      text: text,
-      button_name: attr(node, "name"),
-      button_value: attr(node, "value"),
-      form: form_id,
-      form_selector: form_selector(root_node, form_node, form_id),
-      dispatch_change: dispatch_change_clickable?(root_node, node) and not LiveViewBindings.phx_click?(phx_click)
-    }
-  end
-
-  defp button_form_node(root_node, button_node) do
-    case attr(button_node, "form") do
-      form_id when is_binary(form_id) and form_id != "" ->
-        form_by_id(root_node, form_id)
-
-      _ ->
-        root_node
-        |> safe_query("form")
-        |> Enum.find(fn form_node ->
-          form_node
-          |> safe_query("*")
-          |> Enum.any?(&same_node?(&1, button_node))
-        end)
-    end
-  end
 
   defp same_node?(left, right) do
     left_id = attr(left, "id")

@@ -270,6 +270,10 @@ Dependencies: `curl`, `jq`, `unzip`.
 - Live-driver `fill_in/4` on live routes triggers `phx-change` when present
   (including `_target` payload semantics) and avoids server updates when no
   `phx-change` binding exists.
+- Internal semantic layering is explicit:
+  `Cerberus.Driver.Html` contains HTML-platform parsing/ownership/submission
+  rules, while `Cerberus.Driver.LiveViewHtml` contains `phx-*` behavior
+  (`phx-click`, `phx-change`, `phx-submit`, `phx-trigger-action`).
 - `open_browser/1` is a debug helper that snapshots current page HTML to a temp
   file and opens it via system browser command. For tests, `open_browser/2`
   accepts a callback (`fn path -> ... end`) so callers can inspect snapshots
