@@ -19,7 +19,7 @@ import Cerberus
 session()
 |> visit("/live/counter")
 |> click(button("Increment"))
-|> assert_has(text("Count: 1"), exact: true)
+|> assert_has(text("Count: 1"))
 ```
 
 > #### Tip
@@ -33,8 +33,8 @@ session()
 ```elixir
 session()
 |> visit("/articles")
-|> assert_has(text("Articles"), exact: true)
-|> refute_has(text("500 Internal Server Error"), exact: true)
+|> assert_has(text("Articles"))
+|> refute_has(text("500 Internal Server Error"))
 ```
 
 ### 2. LiveView Interaction
@@ -43,7 +43,7 @@ session()
 session()
 |> visit("/live/counter")
 |> click(role(:button, name: "Increment"))
-|> assert_has(text("Count: 1"), exact: true)
+|> assert_has(text("Count: 1"))
 ```
 
 ### 3. Form + Path Assertions
@@ -54,7 +54,7 @@ session()
 |> fill_in(label("Search term"), "Aragorn")
 |> submit(button("Run Search"))
 |> assert_path("/search/results", query: %{q: "Aragorn"})
-|> assert_has(text("Search query: Aragorn"), exact: true)
+|> assert_has(text("Search query: Aragorn"))
 ```
 
 ### 4. Scope + Navigation
@@ -64,7 +64,7 @@ session()
 |> visit("/scoped")
 |> within("#secondary-panel", fn scoped ->
   scoped
-  |> assert_has(text("Status: secondary"), exact: true)
+  |> assert_has(text("Status: secondary"))
   |> click(link("Open"))
 end)
 |> assert_path("/search")
@@ -103,8 +103,8 @@ session =
   end)
 
 session
-|> assert_has(text("Press result: submitted"), exact: true)
-|> assert_has(text("Dialog result: cancelled"), exact: true)
+|> assert_has(text("Press result: submitted"))
+|> assert_has(text("Dialog result: cancelled"))
 ```
 
 > #### Warning
@@ -131,7 +131,7 @@ Most tests switch modes by changing only the first session line:
 +session(:browser)
  |> visit("/live/counter")
  |> click(button("Increment"))
- |> assert_has(text("Count: 1"), exact: true)
+ |> assert_has(text("Count: 1"))
 ```
 
 ## Learn More

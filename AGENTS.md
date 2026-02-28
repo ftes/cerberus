@@ -1,5 +1,6 @@
 IMPORTANT: before you do anything else, run the `beans prime` command and heed its output.
 Don't include backticks when using beans CLI (shell expansion).
+Other agents may be running (beans in-progress). Try to pick next beans that won't conflict. Also try to ignore other changes in git - only commit your changes.
 
 ## Be autonomous
 Read a lot up front. Try to ask all questions up front.
@@ -12,6 +13,7 @@ Keep a log of what you did to present when you're done.
 - Prefer the browser-oracle harness approach to validate HTML/browser behavior and catch static/live semantic drift.
 - Run `mix format` after each logical change set (and before tests/precommit), since precommit checks formatting and does not rewrite files.
 - Commit in small increments and run `mix precommit` before each commit.
+- Cerberus is unreleased. Feel free to change anything - ignore backwards compatability.
 - Browser runtime policy:
   - Use a single shared browser process.
   - Use a single shared BiDi connection (per worker/runtime) and multiplex messages by command id.
