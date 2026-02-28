@@ -51,6 +51,20 @@ Current Tier 3 targets:
 - Edge as a first-class target (Chromium engine overlap exists, but no official adapter/CI policy yet).
 - Safari/WebKit (no Cerberus runtime target yet).
 
+## Additional Browser Evaluation (as of February 28, 2026)
+
+- Edge:
+  - Evidence: Microsoft positions EdgeDriver as the official browser automation endpoint for Chromium-based Edge.
+  - Source: [Use WebDriver to automate Microsoft Edge](https://learn.microsoft.com/en-us/microsoft-edge/webdriver-chromium/).
+  - Recommendation: promote Edge to Tier 2 next (after CI workflow finalization), because Cerberus already models Chromium-style capability flow and runtime process shape.
+
+- Safari/WebKit:
+  - Evidence: WebKit WebDriver BiDi work remains active in implementation bugs (for example session support and enabling in builds), which indicates ongoing maturation rather than stable broad readiness.
+  - Sources:
+    - [WebKit Bug 275457: [WebDriver BiDi] Add Session support](https://bugs.webkit.org/show_bug.cgi?id=275457)
+    - [WebKit Bug 288652: [WebDriver BiDi] Default-enable all module support in WebKit and STP](https://bugs.webkit.org/show_bug.cgi?id=288652)
+  - Recommendation: keep Safari/WebKit in Tier 3 until stable release-channel BiDi support and repeatable CI/runtime setup are confirmed.
+
 ## Admission Criteria For Tier 1
 
 A browser moves to Tier 1 only when all conditions are met:
