@@ -10,6 +10,7 @@ defmodule Cerberus.Driver.Static do
   alias Cerberus.OpenBrowser
   alias Cerberus.Query
   alias Cerberus.Session
+  alias Cerberus.UploadFile
 
   @type t :: %__MODULE__{
           endpoint: module(),
@@ -214,16 +215,38 @@ defmodule Cerberus.Driver.Static do
   def upload(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, path, opts) do
     match_opts = locator_match_opts(locator, opts)
 
-    observed = %{
-      action: :upload,
-      path: session.current_path,
-      label: expected,
-      file_path: path,
-      opts: match_opts,
-      transition: Session.transition(session)
-    }
+    case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
+      {:ok, %{name: name, input_type: "file"} = field} when is_binary(name) and name != "" ->
+        file = UploadFile.read!(path)
+        value = upload_value_for_update(session, field, file, path)
+        updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
 
-    {:error, session, observed, "static driver does not yet support upload in this slice"}
+        observed = %{
+          action: :upload,
+          path: session.current_path,
+          field: field,
+          file_name: file.file_name,
+          transition: Session.transition(session)
+        }
+
+        {:ok, update_session(updated, :upload, observed), observed}
+
+      {:ok, %{name: name}} when is_binary(name) and name != "" ->
+        observed = %{action: :upload, path: session.current_path, transition: Session.transition(session)}
+        {:error, session, observed, "matched field is not a file input"}
+
+      {:ok, _field} ->
+        observed = %{action: :upload, path: session.current_path, transition: Session.transition(session)}
+        {:error, session, observed, "matched upload field does not include a name attribute"}
+
+      :error ->
+        observed = %{action: :upload, path: session.current_path, transition: Session.transition(session)}
+        {:error, session, observed, "no file input matched locator"}
+    end
+  rescue
+    error in [ArgumentError, File.Error] ->
+      observed = %{action: :upload, path: session.current_path, transition: Session.transition(session)}
+      {:error, session, observed, Exception.message(error)}
   end
 
   @impl true
@@ -322,55 +345,110 @@ defmodule Cerberus.Driver.Static do
   end
 
   defp do_submit(session, button) do
-    method =
-      button
-      |> Map.get(:method)
-      |> to_string()
-      |> String.trim()
-      |> String.downcase()
-      |> case do
-        "" -> "get"
-        value -> value
-      end
+    method = normalize_submit_method(button.method)
+    form_selector = submit_form_selector(button)
+    submitted_params = params_for_submit(session, button, form_selector)
 
-    if method == "get" do
-      form_selector = submit_form_selector(button)
-      submitted_params = params_for_submit(session, button, form_selector)
+    case follow_form_request(session, method, button.action, submitted_params) do
+      {:ok, updated, transition} ->
+        observed = %{
+          action: :submit,
+          clicked: button.text,
+          method: method,
+          path: Session.current_path(updated),
+          mode: Session.driver_kind(updated),
+          params: submitted_params,
+          transition: transition
+        }
 
-      target =
-        button
-        |> Map.get(:action)
-        |> build_submit_target(session.current_path, submitted_params)
+        cleared_form_data = clear_submitted_form(session.form_data, button.form)
+        {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
 
-      updated = visit(session, target, [])
+      {:error, failed_session, reason, details} ->
+        observed = %{
+          action: :submit,
+          clicked: button.text,
+          method: method,
+          path: session.current_path,
+          mode: :static,
+          details: details,
+          transition: Session.transition(session)
+        }
 
-      transition =
-        transition(:static, Session.driver_kind(updated), :submit, session.current_path, Session.current_path(updated))
-
-      observed = %{
-        action: :submit,
-        clicked: button.text,
-        method: method,
-        path: Session.current_path(updated),
-        mode: Session.driver_kind(updated),
-        params: submitted_params,
-        transition: transition
-      }
-
-      cleared_form_data = clear_submitted_form(session.form_data, button.form)
-      {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
-    else
-      observed = %{
-        action: :submit,
-        clicked: button.text,
-        path: session.current_path,
-        method: method,
-        transition: Session.transition(session)
-      }
-
-      {:error, session, observed, "static driver only supports GET form submissions"}
+        {:error, failed_session, observed, reason}
     end
   end
+
+  defp follow_form_request(session, method, action, params) do
+    request_path = submit_request_path(method, action, session.current_path, params)
+    request_params = if method == "get", do: %{}, else: params
+
+    conn =
+      session.conn
+      |> Conn.ensure_conn()
+      |> then(&Conn.follow_request(session.endpoint, &1, method, request_path, request_params))
+
+    updated = session_from_conn(session, conn, request_path)
+
+    transition =
+      transition(:static, Session.driver_kind(updated), :submit, session.current_path, Session.current_path(updated))
+
+    {:ok, updated, transition}
+  rescue
+    error ->
+      {:error, session, Exception.message(error), %{method: method, action: action, params: params}}
+  end
+
+  defp submit_request_path("get", action, fallback_path, params) do
+    build_submit_target(action, fallback_path, params)
+  end
+
+  defp submit_request_path(_method, action, fallback_path, _params) do
+    action_path(action, fallback_path)
+  end
+
+  defp session_from_conn(session, conn, fallback_path) do
+    current_path = Conn.current_path(conn, fallback_path)
+
+    case try_live(conn) do
+      {:ok, view, html} ->
+        %LiveSession{
+          endpoint: session.endpoint,
+          conn: conn,
+          assert_timeout_ms: session.assert_timeout_ms,
+          view: view,
+          html: html,
+          form_data: session.form_data,
+          scope: session.scope,
+          current_path: current_path,
+          last_result: session.last_result
+        }
+
+      :error ->
+        %{
+          session
+          | conn: conn,
+            html: conn.resp_body || "",
+            current_path: current_path
+        }
+    end
+  end
+
+  defp normalize_submit_method(value) when is_binary(value) do
+    value
+    |> String.trim()
+    |> String.downcase()
+    |> case do
+      "" -> "get"
+      "post" -> "post"
+      "put" -> "put"
+      "patch" -> "patch"
+      "delete" -> "delete"
+      _ -> "get"
+    end
+  end
+
+  defp normalize_submit_method(nil), do: "get"
 
   defp clear_submitted_session(%__MODULE__{} = session, form_data, op, observed) do
     %{
@@ -734,6 +812,23 @@ defmodule Cerberus.Driver.Static do
   end
 
   defp normalize_form_data(_), do: empty_form_data()
+
+  defp upload_value_for_update(session, field, file, source_path) do
+    upload = %Plug.Upload{
+      path: source_path,
+      filename: file.file_name,
+      content_type: file.mime_type
+    }
+
+    if String.ends_with?(field.name, "[]") do
+      defaults = submit_defaults_for_field(session, field)
+      active = pruned_params_for_form(session, field.form, field[:form_selector])
+      current = Map.get(active, field.name, Map.get(defaults, field.name))
+      checkbox_value_list(current) ++ [upload]
+    else
+      upload
+    end
+  end
 
   defp form_key(form, _active_form) when is_binary(form) and form != "", do: "form:" <> form
   defp form_key(_form, active_form) when is_binary(active_form), do: active_form

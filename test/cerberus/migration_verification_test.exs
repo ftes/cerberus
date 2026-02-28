@@ -157,12 +157,18 @@ defmodule Cerberus.MigrationVerificationTest do
       %{id: "pt_text_refute", test_file: "test/features/pt_text_refute_test.exs"},
       %{id: "pt_click_navigation", test_file: "test/features/pt_click_navigation_test.exs"},
       %{id: "pt_form_fill", test_file: "test/features/pt_form_fill_test.exs"},
+      %{id: "pt_select", test_file: "test/features/pt_select_test.exs"},
+      %{id: "pt_choose", test_file: "test/features/pt_choose_test.exs"},
       %{id: "pt_checkbox_array", test_file: "test/features/pt_checkbox_array_test.exs"},
       %{id: "pt_submit_action", test_file: "test/features/pt_submit_action_test.exs"},
+      %{id: "pt_upload", test_file: "test/features/pt_upload_test.exs"},
       %{id: "pt_path_assert", test_file: "test/features/pt_path_assert_test.exs"},
       %{id: "pt_path_refute", test_file: "test/features/pt_path_refute_test.exs"},
-      %{id: "pt_multi_user_tab", test_file: "test/features/pt_multi_user_tab_test.exs"},
       %{id: "pt_live_click", test_file: "test/features/pt_live_click_test.exs"},
+      %{id: "pt_live_change", test_file: "test/features/pt_live_change_test.exs"},
+      %{id: "pt_live_nav", test_file: "test/features/pt_live_nav_test.exs"},
+      %{id: "pt_live_async_timeout", test_file: "test/features/pt_live_async_timeout_test.exs"},
+      %{id: "pt_unwrap", test_file: "test/features/pt_unwrap_test.exs"},
       %{id: "pt_scope_nested", test_file: "test/features/pt_scope_nested_test.exs"}
     ]
 

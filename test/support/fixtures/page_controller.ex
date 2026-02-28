@@ -176,6 +176,53 @@ defmodule Cerberus.Fixtures.PageController do
     """)
   end
 
+  def static_upload(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Static Upload</title>
+      </head>
+      <body>
+        <main>
+          <h1>Static Upload</h1>
+          <form
+            id="static-upload-form"
+            action="/upload/static/result"
+            method="post"
+            enctype="multipart/form-data"
+          >
+            <label for="static_upload_avatar">Avatar</label>
+            <input id="static_upload_avatar" type="file" name="avatar" />
+            <button type="submit">Upload Avatar</button>
+          </form>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def static_upload_result(conn, params) do
+    params = merged_request_params(conn, params)
+    file_name = params |> Map.get("avatar") |> upload_filename()
+
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Static Upload Result</title>
+      </head>
+      <body>
+        <main>
+          <p id="uploaded-file">Uploaded file: #{file_name}</p>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
   def controls_form(conn, _params) do
     html(conn, """
     <!doctype html>
@@ -606,6 +653,10 @@ defmodule Cerberus.Fixtures.PageController do
     |> Map.get(:query_params, %{})
     |> Map.merge(params)
   end
+
+  defp upload_filename(%Plug.Upload{filename: filename}) when is_binary(filename), do: filename
+  defp upload_filename([%Plug.Upload{} = upload | _]), do: upload_filename(upload)
+  defp upload_filename(_), do: ""
 
   def oracle_mismatch(conn, _params) do
     html(conn, """

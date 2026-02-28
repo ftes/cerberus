@@ -831,7 +831,7 @@ defmodule Cerberus.Driver.Html do
       {"input", name} ->
         type = String.downcase(attr(node, "type") || "text")
 
-        if type in ["submit", "button", "image", "file", "reset"] do
+        if type in ["submit", "button", "image", "reset"] do
           nil
         else
           name

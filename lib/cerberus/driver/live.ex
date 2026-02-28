@@ -384,14 +384,7 @@ defmodule Cerberus.Driver.Live do
         end
 
       :static ->
-        observed = %{
-          action: :upload,
-          path: session.current_path,
-          mode: route_kind(session),
-          transition: Session.transition(session)
-        }
-
-        {:error, session, observed, "live driver does not support upload on static routes"}
+        upload_in_static_mode(session, expected, path, match_opts)
     end
   end
 
@@ -1413,6 +1406,66 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
+  defp upload_in_static_mode(session, expected, path, opts) do
+    case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+      {:ok, %{name: name, input_type: "file"} = field} when is_binary(name) and name != "" ->
+        file = UploadFile.read!(path)
+        value = upload_value_for_update(session, field, file, path, :static)
+        updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
+
+        observed = %{
+          action: :upload,
+          path: session.current_path,
+          mode: route_kind(session),
+          field: field,
+          file_name: file.file_name,
+          transition: Session.transition(session)
+        }
+
+        {:ok, update_session(updated, :upload, observed), observed}
+
+      {:ok, %{name: name}} when is_binary(name) and name != "" ->
+        observed = %{
+          action: :upload,
+          path: session.current_path,
+          mode: route_kind(session),
+          transition: Session.transition(session)
+        }
+
+        {:error, session, observed, "matched field is not a file input"}
+
+      {:ok, _field} ->
+        observed = %{
+          action: :upload,
+          path: session.current_path,
+          mode: route_kind(session),
+          transition: Session.transition(session)
+        }
+
+        {:error, session, observed, "matched upload field does not include a name attribute"}
+
+      :error ->
+        observed = %{
+          action: :upload,
+          path: session.current_path,
+          mode: route_kind(session),
+          transition: Session.transition(session)
+        }
+
+        {:error, session, observed, "no file input matched locator"}
+    end
+  rescue
+    error in [ArgumentError, File.Error] ->
+      observed = %{
+        action: :upload,
+        path: session.current_path,
+        mode: route_kind(session),
+        transition: Session.transition(session)
+      }
+
+      {:error, session, observed, Exception.message(error)}
+  end
+
   defp do_live_select(session, expected, option, opts) do
     with {:ok, field} <- find_live_select_field(session, expected, opts),
          {:ok, %{values: values, multiple?: multiple?}} <-
@@ -2051,6 +2104,23 @@ defmodule Cerberus.Driver.Live do
     |> checkbox_value_list()
     |> Enum.concat(values)
     |> Enum.uniq()
+  end
+
+  defp upload_value_for_update(session, field, file, source_path, _route_kind) do
+    upload = %Plug.Upload{
+      path: source_path,
+      filename: file.file_name,
+      content_type: file.mime_type
+    }
+
+    if String.ends_with?(field.name, "[]") do
+      defaults = form_defaults_for_change(session, field)
+      active = pruned_active_form_values(session, field)
+      current = Map.get(active, field.name, Map.get(defaults, field.name))
+      checkbox_value_list(current) ++ [upload]
+    else
+      upload
+    end
   end
 
   defp checkbox_value_list(nil), do: []

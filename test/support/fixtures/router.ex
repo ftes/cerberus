@@ -23,6 +23,7 @@ defmodule Cerberus.Fixtures.Router do
     pipe_through(:browser_no_csrf)
 
     post("/trigger-action/result", PageController, :trigger_action_result)
+    post("/upload/static/result", PageController, :static_upload_result)
   end
 
   scope "/", Cerberus.Fixtures do
@@ -52,6 +53,7 @@ defmodule Cerberus.Fixtures.Router do
     get("/redirect/static", PageController, :redirect_static)
     get("/redirect/live", PageController, :redirect_live)
     get("/oracle/mismatch", PageController, :oracle_mismatch)
+    get("/upload/static", PageController, :static_upload)
 
     live_session :fixtures,
       root_layout: {Cerberus.Fixtures.Layouts, :root},
