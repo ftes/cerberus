@@ -23,6 +23,21 @@ defmodule Cerberus.LiveViewBindings do
 
   def phx_click?(_value), do: false
 
+  @spec dispatch_change?(term()) :: boolean()
+  def dispatch_change?(value) when is_binary(value) do
+    value = String.trim(value)
+
+    if String.starts_with?(value, "[") do
+      value
+      |> decode_js_commands()
+      |> Enum.any?(&dispatch_change_command?/1)
+    else
+      false
+    end
+  end
+
+  def dispatch_change?(_value), do: false
+
   defp decode_js_commands(value) do
     case Jason.decode(value) do
       {:ok, commands} when is_list(commands) -> commands
@@ -39,4 +54,13 @@ defmodule Cerberus.LiveViewBindings do
   end
 
   defp valid_js_command?(_command), do: false
+
+  defp dispatch_change_command?(["dispatch", %{} = opts]) do
+    case Map.get(opts, "event") do
+      "change" -> true
+      _ -> false
+    end
+  end
+
+  defp dispatch_change_command?(_command), do: false
 end

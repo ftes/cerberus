@@ -435,6 +435,10 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
+  defp click_live_button(session, %{dispatch_change: true} = button) do
+    click_live_dispatch_change_button(session, button)
+  end
+
   defp click_live_button(session, button) do
     result =
       session.view
@@ -467,6 +471,75 @@ defmodule Cerberus.Driver.Live do
         }
 
         {:error, session, observed, "unexpected live click result"}
+    end
+  end
+
+  defp click_live_dispatch_change_button(session, button) do
+    form_selector = button[:form_selector]
+
+    if is_binary(form_selector) and form_selector != "" do
+      target = dispatch_change_target(button)
+      payload = dispatch_change_payload(session, button, form_selector)
+      additional = dispatch_change_additional_payload(button, target)
+
+      result =
+        session.view
+        |> Phoenix.LiveViewTest.form(form_selector, payload)
+        |> Phoenix.LiveViewTest.render_change(additional)
+
+      case resolve_live_change_result(session, result, target || []) do
+        {:ok, changed_session, change} ->
+          observed = %{
+            action: :button,
+            clicked: button.text,
+            path: Session.current_path(changed_session),
+            mode: Session.driver_kind(changed_session),
+            phx_change: change.triggered,
+            target: change.target,
+            texts: Html.texts(changed_session.html, :any, Session.scope(changed_session)),
+            transition: change.transition
+          }
+
+          {:ok, update_last_result(changed_session, :click, observed), observed}
+
+        {:error, failed_session, reason, details} ->
+          click_live_button_error(session, button, failed_session, reason, details)
+      end
+    else
+      observed = %{
+        action: :button,
+        clicked: button.text,
+        path: session.current_path,
+        mode: route_kind(session),
+        transition: Session.transition(session)
+      }
+
+      {:error, session, observed, "dispatch(change) requires a resolvable form selector"}
+    end
+  end
+
+  defp dispatch_change_payload(session, button, form_selector) do
+    defaults = Html.form_defaults(session.html, form_selector, Session.scope(session))
+    active = pruned_params_for_form(session, button.form, form_selector)
+
+    defaults
+    |> Map.merge(active)
+    |> decode_query_params()
+  end
+
+  defp dispatch_change_target(button) do
+    case button_payload(button) do
+      {name, _value} -> target_path(name)
+      nil -> nil
+    end
+  end
+
+  defp dispatch_change_additional_payload(button, target) do
+    additional = button_payload_map(button)
+
+    case target do
+      nil -> additional
+      _ -> Map.put(additional, "_target", target)
     end
   end
 
@@ -951,13 +1024,15 @@ defmodule Cerberus.Driver.Live do
       end
 
     if method == "get" do
+      form_selector = submit_form_selector(button)
+      submitted_params = params_for_submit(session, button, form_selector)
+
       target =
         button
         |> Map.get(:action)
-        |> build_submit_target(session.current_path, params_for_submit(session.form_data, button))
+        |> build_submit_target(session.current_path, submitted_params)
 
       updated = visit(session, target, [])
-      submitted_params = params_for_submit(session.form_data, button)
 
       transition =
         transition(
@@ -1471,7 +1546,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp trigger_action_submit_payload(session, form) do
-    active = params_for_form(session.form_data, form[:form])
+    active = pruned_params_for_form(session, form[:form], form[:form_selector])
     defaults = Map.get(form, :defaults, %{})
     defaults |> Map.merge(active) |> decode_query_params()
   end
@@ -1559,7 +1634,8 @@ defmodule Cerberus.Driver.Live do
 
   defp submit_form_payload(session, button) do
     defaults = submit_form_defaults(session, button)
-    active = params_for_form(session.form_data, button.form)
+    form_selector = submit_form_selector(button)
+    active = pruned_params_for_form(session, button.form, form_selector)
     defaults |> Map.merge(active) |> decode_query_params()
   end
 
@@ -1590,7 +1666,7 @@ defmodule Cerberus.Driver.Live do
 
   defp form_payload_for_change(session, field) do
     defaults = form_defaults_for_change(session, field)
-    active = active_form_values(session.form_data, field)
+    active = pruned_active_form_values(session, field)
 
     defaults
     |> Map.merge(active)
@@ -1613,10 +1689,16 @@ defmodule Cerberus.Driver.Live do
     Map.get(values, key, %{})
   end
 
+  defp pruned_active_form_values(session, field) do
+    active = active_form_values(session.form_data, field)
+    keep = form_field_name_allowlist(session, field[:form_selector])
+    prune_form_params(active, keep)
+  end
+
   defp toggled_checkbox_value(session, field, checked?) do
     name = field.name
     defaults = form_defaults_for_change(session, field)
-    active = active_form_values(session.form_data, field)
+    active = pruned_active_form_values(session, field)
     current = Map.get(active, name, Map.get(defaults, name))
     input_value = field[:input_value] || "on"
 
@@ -1795,8 +1877,8 @@ defmodule Cerberus.Driver.Live do
     %{active_form: key, values: next_values}
   end
 
-  defp params_for_submit(form_data, button) do
-    params = params_for_form(form_data, button.form)
+  defp params_for_submit(session, button, form_selector) do
+    params = pruned_params_for_form(session, button.form, form_selector)
 
     case button_payload(button) do
       nil -> params
@@ -1804,11 +1886,26 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
+  defp pruned_params_for_form(session, form, form_selector) do
+    active = params_for_form(session.form_data, form)
+    keep = form_field_name_allowlist(session, form_selector)
+    prune_form_params(active, keep)
+  end
+
   defp params_for_form(form_data, form) do
     %{active_form: active_form, values: values} = normalize_form_data(form_data)
     key = form_key(form, active_form)
     Map.get(values, key, %{})
   end
+
+  defp form_field_name_allowlist(_session, selector) when selector in [nil, ""], do: nil
+
+  defp form_field_name_allowlist(session, selector) do
+    Html.form_field_names(session.html, selector, Session.scope(session))
+  end
+
+  defp prune_form_params(params, nil) when is_map(params), do: params
+  defp prune_form_params(params, %MapSet{} = keep) when is_map(params), do: Map.take(params, MapSet.to_list(keep))
 
   defp clear_submitted_form(form_data, form) do
     %{active_form: active_form, values: values} = normalize_form_data(form_data)

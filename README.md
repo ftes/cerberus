@@ -285,7 +285,7 @@ Dependencies: `curl`, `jq`, `unzip`.
   live callbacks receive the underlying LiveView and may return render output
   or redirect tuples; Cerberus follows redirects and updates session mode/path.
   Browser mode passes `%{user_context_pid:, tab_id:}` for low-level access.
-- Live-driver `click_button` treats `phx-click` raw events and JS `push`/`navigate`/`patch` bindings as actionable; `dispatch`-only bindings are intentionally excluded from server-actionable resolution.
+- Live-driver `click_button` treats `phx-click` raw events and JS `push`/`navigate`/`patch` bindings as actionable. It also supports `JS.dispatch("change")` buttons when they are associated with a form that has `phx-change`. Dispatch-only buttons outside that form context remain non-actionable.
 - Fixture LiveView browser bootstrap lives in `assets/js/app.js`; run `mix assets.build` to sync `priv/static/assets/app.js`.
 - Browser worker topology and restart semantics are documented in `docs/adr/0004-browser-runtime-supervision-topology.md`.
 - Internal deterministic fixture routes are documented in `docs/fixtures.md`.

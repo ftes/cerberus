@@ -62,7 +62,17 @@ defmodule Cerberus.Driver.Html do
   end
 
   @spec find_live_clickable_button(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
-          {:ok, %{text: String.t(), selector: String.t() | nil}} | :error
+          {:ok,
+           %{
+             text: String.t(),
+             selector: String.t() | nil,
+             button_name: String.t() | nil,
+             button_value: String.t() | nil,
+             form: String.t() | nil,
+             form_selector: String.t() | nil,
+             dispatch_change: boolean()
+           }}
+          | :error
   def find_live_clickable_button(html, expected, opts, scope \\ nil) when is_binary(html) do
     case parse_document(html) do
       {:ok, lazy_html} ->
@@ -89,15 +99,23 @@ defmodule Cerberus.Driver.Html do
   def form_defaults(html, form_selector, scope \\ nil) when is_binary(html) and is_binary(form_selector) do
     case parse_document(html) do
       {:ok, lazy_html} ->
-        selector = scope_form_selector(form_selector, scope)
-
         lazy_html
-        |> safe_query(selector)
-        |> Enum.at(0)
+        |> form_node_from_selector(form_selector, scope)
         |> collect_form_defaults()
 
       _ ->
         %{}
+    end
+  end
+
+  @spec form_field_names(String.t(), String.t(), String.t() | nil) :: MapSet.t(String.t())
+  def form_field_names(html, form_selector, scope \\ nil) when is_binary(html) and is_binary(form_selector) do
+    case parse_document(html) do
+      {:ok, lazy_html} ->
+        form_field_names_in_doc(lazy_html, form_selector, scope)
+
+      _ ->
+        MapSet.new()
     end
   end
 
@@ -144,10 +162,10 @@ defmodule Cerberus.Driver.Html do
       expected,
       opts,
       scope,
-      fn node, text ->
+      fn node, text, _root_node ->
         %{text: text, href: attr(node, "href")}
       end,
-      &link_node?/1
+      fn _root_node, node -> link_node?(node) end
     )
   end
 
@@ -160,10 +178,10 @@ defmodule Cerberus.Driver.Html do
       expected,
       opts,
       scope,
-      fn _node, text ->
+      fn _node, text, _root_node ->
         %{text: text}
       end,
-      &button_node?/1
+      fn _root_node, node -> button_node?(node) end
     )
   end
 
@@ -176,10 +194,10 @@ defmodule Cerberus.Driver.Html do
       expected,
       opts,
       scope,
-      fn _node, text ->
-        %{text: text}
+      fn node, text, root_node ->
+        build_live_clickable_button(root_node, node, text)
       end,
-      &live_clickable_button_node?/1
+      &live_clickable_button_node?/2
     )
   end
 
@@ -365,17 +383,17 @@ defmodule Cerberus.Driver.Html do
     root_node
     |> safe_query(selector)
     |> Enum.find_value(false, fn node ->
-      maybe_matching_node(node, lazy_html, expected, opts, build_fun, node_predicate)
+      maybe_matching_node(root_node, node, lazy_html, expected, opts, build_fun, node_predicate)
     end)
   end
 
-  defp maybe_matching_node(node, lazy_html, expected, opts, build_fun, node_predicate) do
+  defp maybe_matching_node(root_node, node, lazy_html, expected, opts, build_fun, node_predicate) do
     text = node_text(node)
 
-    if node_predicate.(node) and Query.match_text?(text, expected, opts) do
+    if node_predicate.(root_node, node) and Query.match_text?(text, expected, opts) do
       mapped =
         node
-        |> build_fun.(text)
+        |> build_fun.(text, root_node)
         |> maybe_put_unique_selector(lazy_html, node)
 
       {:ok, mapped}
@@ -638,6 +656,66 @@ defmodule Cerberus.Driver.Html do
   defp scope_form_selector(form_selector, ""), do: form_selector
   defp scope_form_selector(form_selector, scope), do: scope <> " " <> form_selector
 
+  defp form_field_names_in_doc(root_node, form_selector, scope) do
+    case form_node_from_selector(root_node, form_selector, scope) do
+      nil ->
+        MapSet.new()
+
+      form_node ->
+        collect_form_field_names(root_node, form_node)
+    end
+  end
+
+  defp form_node_from_selector(root_node, form_selector, scope) do
+    selector = scope_form_selector(form_selector, scope)
+
+    case root_node |> safe_query(selector) |> Enum.at(0) do
+      nil -> form_node_scope_fallback(root_node, form_selector, scope)
+      form_node -> form_node
+    end
+  end
+
+  defp form_node_scope_fallback(root_node, form_selector, scope) do
+    with id when is_binary(id) <- form_id_from_selector(form_selector),
+         true <- scope_targets_form_id?(scope, id) do
+      root_node |> safe_query(form_selector) |> Enum.at(0)
+    else
+      _ -> nil
+    end
+  end
+
+  defp form_id_from_selector(form_selector) do
+    case Regex.run(~r/^form\[id="([^"]+)"\]$/, form_selector, capture: :all_but_first) do
+      [id] -> id
+      _ -> nil
+    end
+  end
+
+  defp scope_targets_form_id?(scope, _id) when scope in [nil, ""], do: false
+
+  defp scope_targets_form_id?(scope, id) when is_binary(scope) and is_binary(id) do
+    trimmed = String.trim(scope)
+
+    trimmed == "#" <> id or
+      String.ends_with?(trimmed, " #" <> id) or
+      String.contains?(trimmed, ~s([id="#{id}"])) or
+      String.ends_with?(trimmed, ~s(form[id="#{id}"]))
+  end
+
+  defp collect_form_field_names(root_node, form_node) do
+    controls =
+      form_node
+      |> form_controls()
+      |> maybe_append_owner_controls(root_node, form_node)
+
+    Enum.reduce(controls, MapSet.new(), fn control, acc ->
+      case control_name_for_submission(control) do
+        nil -> acc
+        name -> MapSet.put(acc, name)
+      end
+    end)
+  end
+
   defp collect_form_defaults(nil), do: %{}
 
   defp collect_form_defaults(form_node) do
@@ -662,6 +740,27 @@ defmodule Cerberus.Driver.Html do
     owner_controls
   end
 
+  defp form_controls(node) do
+    node
+    |> safe_query("input[name],textarea[name],select[name]")
+    |> Enum.reject(&disabled?/1)
+  end
+
+  defp maybe_append_owner_controls(controls, root_node, form_node) do
+    case attr(form_node, "id") do
+      form_id when is_binary(form_id) and form_id != "" ->
+        owner_controls =
+          root_node
+          |> safe_query(~s([form="#{form_id}"][name]))
+          |> Enum.reject(&disabled?/1)
+
+        controls ++ owner_controls
+
+      _ ->
+        controls
+    end
+  end
+
   defp put_control_value(acc, node) do
     case {node_tag(node), attr(node, "name")} do
       {_, nil} ->
@@ -678,6 +777,31 @@ defmodule Cerberus.Driver.Html do
 
       _ ->
         acc
+    end
+  end
+
+  defp control_name_for_submission(node) do
+    case {node_tag(node), attr(node, "name")} do
+      {_, nil} ->
+        nil
+
+      {"input", name} ->
+        type = String.downcase(attr(node, "type") || "text")
+
+        if type in ["submit", "button", "image", "file", "reset"] do
+          nil
+        else
+          name
+        end
+
+      {"textarea", name} ->
+        name
+
+      {"select", name} ->
+        name
+
+      _ ->
+        nil
     end
   end
 
@@ -739,6 +863,12 @@ defmodule Cerberus.Driver.Html do
   defp checked?(node) do
     node
     |> attr("checked")
+    |> is_binary()
+  end
+
+  defp disabled?(node) do
+    node
+    |> attr("disabled")
     |> is_binary()
   end
 
@@ -829,11 +959,52 @@ defmodule Cerberus.Driver.Html do
 
   defp button_node?(node), do: node_tag(node) == "button"
 
-  defp live_clickable_button_node?(node) do
+  defp live_clickable_button_node?(root_node, node) do
     button_node?(node) and
-      node
-      |> attr("phx-click")
-      |> LiveViewBindings.phx_click?()
+      (node
+       |> attr("phx-click")
+       |> LiveViewBindings.phx_click?() or dispatch_change_clickable?(root_node, node))
+  end
+
+  defp dispatch_change_clickable?(root_node, node) do
+    phx_click = attr(node, "phx-click")
+
+    LiveViewBindings.dispatch_change?(phx_click) and
+      case button_form_node(root_node, node) do
+        nil -> false
+        form_node -> form_node |> attr("phx-change") |> phx_change_binding?()
+      end
+  end
+
+  defp build_live_clickable_button(root_node, node, text) do
+    phx_click = attr(node, "phx-click")
+    form_node = button_form_node(root_node, node)
+    form_id = attr_or_nil(form_node, "id")
+
+    %{
+      text: text,
+      button_name: attr(node, "name"),
+      button_value: attr(node, "value"),
+      form: form_id,
+      form_selector: form_selector(root_node, form_node, form_id),
+      dispatch_change: dispatch_change_clickable?(root_node, node) and not LiveViewBindings.phx_click?(phx_click)
+    }
+  end
+
+  defp button_form_node(root_node, button_node) do
+    case attr(button_node, "form") do
+      form_id when is_binary(form_id) and form_id != "" ->
+        form_by_id(root_node, form_id)
+
+      _ ->
+        root_node
+        |> safe_query("form")
+        |> Enum.find(fn form_node ->
+          form_node
+          |> safe_query("*")
+          |> Enum.any?(&same_node?(&1, button_node))
+        end)
+    end
   end
 
   defp same_node?(left, right) do

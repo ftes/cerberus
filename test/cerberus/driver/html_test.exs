@@ -36,4 +36,52 @@ defmodule Cerberus.Driver.HtmlTest do
     assert {:ok, %{name: "nested_q", label: "Search term *"}} =
              Html.find_form_field(html, "Search term *", exact: true)
   end
+
+  test "find_live_clickable_button includes dispatch(change) buttons tied to form-level phx-change" do
+    html = """
+    <main>
+      <form id="dynamic-form" phx-change="validate">
+        <button type="button" name="items_drop[]" value="1" phx-click='[["dispatch",{"event":"change"}]]'>
+          delete
+        </button>
+      </form>
+    </main>
+    """
+
+    assert {:ok,
+            %{
+              dispatch_change: true,
+              button_name: "items_drop[]",
+              button_value: "1",
+              form: "dynamic-form",
+              form_selector: ~s(form[id="dynamic-form"])
+            }} = Html.find_live_clickable_button(html, "delete", exact: true)
+  end
+
+  test "find_live_clickable_button excludes dispatch-only buttons without form phx-change context" do
+    html = """
+    <main>
+      <button phx-click='[["dispatch",{"event":"change"}]]'>dispatch only</button>
+    </main>
+    """
+
+    assert :error = Html.find_live_clickable_button(html, "dispatch only", exact: true)
+  end
+
+  test "form_field_names returns current named controls for pruning stale params" do
+    html = """
+    <main>
+      <form id="prune-form">
+        <input name="profile[version]" type="hidden" value="b" />
+        <input name="profile[version_b_text]" type="text" value="" />
+        <button type="submit">Save</button>
+      </form>
+    </main>
+    """
+
+    assert names = Html.form_field_names(html, ~s(form[id="prune-form"]))
+    assert MapSet.member?(names, "profile[version]")
+    assert MapSet.member?(names, "profile[version_b_text]")
+    refute MapSet.member?(names, "profile[version_a_text]")
+  end
 end

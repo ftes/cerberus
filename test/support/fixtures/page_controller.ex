@@ -176,6 +176,82 @@ defmodule Cerberus.Fixtures.PageController do
     """)
   end
 
+  def profile_version_a(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Profile Version A</title>
+      </head>
+      <body>
+        <main>
+          <h1>Profile Form Version A</h1>
+          <a href="/search/profile/b">Switch to Version B</a>
+
+          <form id="profile-form" action="/search/profile/results" method="get">
+            <input type="hidden" name="profile[version]" value="a" />
+            <label for="profile_version_a_text">Version A Text</label>
+            <input id="profile_version_a_text" type="text" name="profile[version_a_text]" value="" />
+            <button type="submit">Save Profile</button>
+          </form>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def profile_version_b(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Profile Version B</title>
+      </head>
+      <body>
+        <main>
+          <h1>Profile Form Version B</h1>
+          <a href="/search/profile/a">Switch to Version A</a>
+
+          <form id="profile-form" action="/search/profile/results" method="get">
+            <input type="hidden" name="profile[version]" value="b" />
+            <label for="profile_version_b_text">Version B Text</label>
+            <input id="profile_version_b_text" type="text" name="profile[version_b_text]" value="" />
+            <button type="submit">Save Profile</button>
+          </form>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def profile_results(conn, params) do
+    params = merged_request_params(conn, params)
+    profile = Map.get(params, "profile", %{})
+
+    has_version_a_text? = Map.has_key?(profile, "version_a_text")
+    has_version_b_text? = Map.has_key?(profile, "version_b_text")
+    version_b_text = Map.get(profile, "version_b_text", "")
+
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Profile Results</title>
+      </head>
+      <body>
+        <main>
+          <p>has version_a_text?: #{has_version_a_text?}</p>
+          <p>has version_b_text?: #{has_version_b_text?}</p>
+          <p>submitted version_b_text: #{version_b_text}</p>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
   def browser_extensions(conn, _params) do
     html(conn, """
     <!doctype html>

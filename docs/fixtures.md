@@ -17,6 +17,7 @@ The fixture app is started from `test/test_helper.exs` and serves only local rou
 - `/sandbox/messages` (static): DB-backed fixture page listing sandbox-visible rows.
 - `/scoped` (static): duplicated link text across scoped sections for `within/3` conformance.
 - `/search` and `/search/results` (static): deterministic query form flow.
+- `/search/profile/a`, `/search/profile/b`, and `/search/profile/results` (static): alternate-form-shape fixture for stale-field pruning conformance across static/browser drivers.
 - `/browser/extensions` (static): browser-only extension fixture for screenshot, keyboard, dialog, drag, and cookie helpers.
 - `/session/user` and `/session/user/:value` (static): deterministic cookie/session sharing fixture for multi-user and multi-tab conformance.
 - `/live/counter` (live): deterministic counter with `Increment` button.
@@ -26,6 +27,7 @@ The fixture app is started from `test/test_helper.exs` and serves only local rou
 - `/live/redirects` (live): link/button navigation fixture for navigate/patch/redirect parity, including `phx-click` JS command variants (`push`, `navigate`, `patch`, mixed pipelines, dispatch-only).
 - `/live/redirect-return` (live): immediate live redirect-back fixture with flash.
 - `/live/form-change` (live): `phx-change` fixture for `_target` payload semantics, no-change forms, and hidden-input ordering checks.
+- `/live/form-sync` (live): dynamic/conditional form synchronization fixture for stale-field pruning, submit-only forms, and `JS.dispatch("change")` add/remove flows.
 - `/live/trigger-action` (live): `phx-trigger-action` fixture for static POST handoff, patch sequencing, dynamic forms, and ambiguity handling.
 - `/trigger-action/result` (static POST): deterministic sink page echoing trigger-action payloads and HTTP method.
 - `/live/selector-edge` (live): duplicate button-label fixture for selector disambiguation checks.

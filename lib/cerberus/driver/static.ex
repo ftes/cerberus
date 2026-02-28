@@ -294,13 +294,15 @@ defmodule Cerberus.Driver.Static do
       end
 
     if method == "get" do
+      form_selector = submit_form_selector(button)
+      submitted_params = params_for_submit(session, button, form_selector)
+
       target =
         button
         |> Map.get(:action)
-        |> build_submit_target(session.current_path, params_for_submit(session.form_data, button))
+        |> build_submit_target(session.current_path, submitted_params)
 
       updated = visit(session, target, [])
-      submitted_params = params_for_submit(session.form_data, button)
 
       transition =
         transition(:static, Session.driver_kind(updated), :submit, session.current_path, Session.current_path(updated))
@@ -490,15 +492,27 @@ defmodule Cerberus.Driver.Static do
     %{active_form: key, values: next_values}
   end
 
-  defp params_for_submit(form_data, button) do
-    %{active_form: active_form, values: values} = normalize_form_data(form_data)
-    key = form_key(button.form, active_form)
-    params = Map.get(values, key, %{})
+  defp params_for_submit(session, button, form_selector) do
+    params = pruned_params_for_form(session, button.form, form_selector)
 
     case button_payload(button) do
       nil -> params
       {name, value} -> Map.put(params, name, value)
     end
+  end
+
+  defp submit_form_selector(%{form_selector: selector}) when is_binary(selector) and selector != "", do: selector
+
+  defp submit_form_selector(%{form: form}) when is_binary(form) and form != "" do
+    ~s(form[id="#{form}"])
+  end
+
+  defp submit_form_selector(_), do: nil
+
+  defp pruned_params_for_form(session, form, form_selector) do
+    active = params_for_form(session.form_data, form)
+    keep = form_field_name_allowlist(session, form_selector)
+    prune_form_params(active, keep)
   end
 
   defp params_for_form(form_data, form) do
@@ -510,7 +524,7 @@ defmodule Cerberus.Driver.Static do
   defp toggled_checkbox_value(session, field, checked?) do
     name = field.name
     defaults = submit_defaults_for_field(session, field)
-    active = params_for_form(session.form_data, field.form)
+    active = pruned_params_for_form(session, field.form, field[:form_selector])
     current = Map.get(active, name, Map.get(defaults, name))
     input_value = field[:input_value] || "on"
 
@@ -585,6 +599,15 @@ defmodule Cerberus.Driver.Static do
       _ -> nil
     end
   end
+
+  defp form_field_name_allowlist(_session, selector) when selector in [nil, ""], do: nil
+
+  defp form_field_name_allowlist(session, selector) do
+    Html.form_field_names(session.html, selector, Session.scope(session))
+  end
+
+  defp prune_form_params(params, nil) when is_map(params), do: params
+  defp prune_form_params(params, %MapSet{} = keep) when is_map(params), do: Map.take(params, MapSet.to_list(keep))
 
   defp transition(from_driver, to_driver, reason, from_path, to_path) do
     %{

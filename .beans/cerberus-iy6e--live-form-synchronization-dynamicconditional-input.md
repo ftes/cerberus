@@ -1,11 +1,11 @@
 ---
 # cerberus-iy6e
 title: 'Live form synchronization: dynamic/conditional inputs and dispatch(change)'
-status: todo
+status: completed
 type: bug
 priority: normal
 created_at: 2026-02-27T21:48:03Z
-updated_at: 2026-02-27T22:35:41Z
+updated_at: 2026-02-28T05:55:58Z
 parent: cerberus-zqpu
 ---
 
@@ -54,11 +54,21 @@ Expected Cerberus parity checks:
 - nested inputs_for drop/sort params align with browser submissions
 
 ## Todo
-- [ ] Expand fixtures for dynamic add/remove + conditional field removal + no-phx-change submit
-- [ ] Add failing browser-oracle conformance tests for stale-field submission
-- [ ] Align active_form/form_data pruning + dispatch(change) handling
-- [ ] Validate fixes across static/live/browser drivers
+- [x] Expand fixtures for dynamic add/remove + conditional field removal + no-phx-change submit
+- [x] Add failing browser-oracle conformance tests for stale-field submission
+- [x] Align active_form/form_data pruning + dispatch(change) handling
+- [x] Validate fixes across static/live/browser drivers
 
 ## Triage Note
 This candidate comes from an upstream phoenix_test issue or PR and may already work in Cerberus.
 If current Cerberus behavior already matches the expected semantics, add or keep the conformance test coverage and close this bean as done (no behavior change required).
+
+## Summary of Changes
+- Added live fixture /live/form-sync for conditional fields, dynamic add/remove via JS.dispatch("change"), and submit-only phx-submit behavior.
+- Added static fixture routes /search/profile/a, /search/profile/b, and /search/profile/results to assert stale-field pruning across static/browser.
+- Added cross-driver conformance coverage in test/core/live_form_synchronization_conformance_test.exs for live/browser and static/browser parity.
+- Updated live/static payload assembly to prune active form_data to currently rendered, submittable field names before change/submit.
+- Added Html.form_field_names/3 and live-click metadata handling so form-scoped dispatch(change) buttons are actionable in the live driver.
+- Fixed scoped form lookup regression for within("#form-id") by handling form-self selector resolution in HTML helpers.
+- Added HTML unit coverage for dispatch(change) discovery and form-field-name extraction.
+- Validation: mix test (175 tests, 0 failures) and mix precommit both pass.
