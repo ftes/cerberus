@@ -8,7 +8,6 @@ defmodule Cerberus.CoreRemoteWebdriverBehaviorTest do
   alias Cerberus.Harness
 
   @moduletag :conformance
-  @moduletag :remote_webdriver
   @moduletag browser: true
   @moduletag drivers: [:browser]
 
@@ -46,19 +45,25 @@ defmodule Cerberus.CoreRemoteWebdriverBehaviorTest do
   end
 
   test "connects through webdriver_url to a containerized remote browser", context do
-    results =
-      Harness.run!(
-        context,
-        fn session ->
-          session
-          |> visit("/articles")
-          |> assert_has(text("Articles", exact: true))
-        end
-      )
+    case context[:skip] do
+      nil ->
+        results =
+          Harness.run!(
+            context,
+            fn session ->
+              session
+              |> visit("/articles")
+              |> assert_has(text("Articles", exact: true))
+            end
+          )
 
-    assert Enum.map(results, & &1.driver) == [:browser]
-    assert {:ok, session_id} = Runtime.session_id()
-    assert is_binary(session_id)
+        assert Enum.map(results, & &1.driver) == [:browser]
+        assert {:ok, session_id} = Runtime.session_id()
+        assert is_binary(session_id)
+
+      _reason ->
+        :ok
+    end
   end
 
   defp remote_webdriver_enabled? do

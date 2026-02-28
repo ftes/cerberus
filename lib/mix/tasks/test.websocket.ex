@@ -13,7 +13,7 @@ defmodule Mix.Tasks.Test.Websocket do
       mix test.websocket
       mix test.websocket --warnings-as-errors
       mix test.websocket --browsers chrome,firefox
-      mix test.websocket test/core/remote_webdriver_behavior_test.exs
+      mix test.websocket test/core/browser_cross_browser_runtime_test.exs
 
   Optional flag:
 
