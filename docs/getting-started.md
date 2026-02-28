@@ -137,3 +137,11 @@ config :cerberus, :browser,
 ```
 
 Remote mode connects to an already-running WebDriver endpoint and skips local Chrome/ChromeDriver launch.
+
+## Step 10: Cross-Browser Matrix Runs
+
+```bash
+CERBERUS_BROWSER_MATRIX=chrome,firefox mix test --only browser
+```
+
+This expands harness `:browser` lanes into explicit `:chrome` + `:firefox` runs.

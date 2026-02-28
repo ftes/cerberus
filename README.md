@@ -201,6 +201,8 @@ Current Tier 1 support is Chrome/Chromium via ChromeDriver; see the Browser Supp
 Local managed runtime (default) requires:
 - `CHROME`
 - `CHROMEDRIVER`
+- `FIREFOX` (for `session(:firefox)` / Firefox matrix runs)
+- `GECKODRIVER` (for `session(:firefox)` / Firefox matrix runs)
 
 Optional:
 - `SHOW_BROWSER=true` to run headed.
@@ -213,6 +215,14 @@ config :cerberus, :browser,
 ```
 
 With `webdriver_url` set, Cerberus does not launch local Chrome/ChromeDriver and does not require `CHROME`/`CHROMEDRIVER` for runtime startup.
+
+Cross-browser matrix (harness expansion):
+
+```bash
+CERBERUS_BROWSER_MATRIX=chrome,firefox mix test --only browser
+```
+
+`CERBERUS_BROWSER_MATRIX` defaults to `browser` (single default browser lane).
 
 Project helper:
 
