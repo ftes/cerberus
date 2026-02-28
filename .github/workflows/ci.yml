@@ -10,29 +10,9 @@ permissions:
   contents: read
 
 jobs:
-  ci:
-    name: CI
+  quality:
+    name: Quality
     runs-on: ubuntu-latest
-    env:
-      POSTGRES_HOST: 127.0.0.1
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 6
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -63,6 +43,108 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-plt-
 
+      - name: Install deps
+        run: mix deps.get
+
+      - name: Run precommit
+        run: mix precommit
+
+  migration-verification:
+    name: Migration Verification
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup BEAM
+        uses: erlef/setup-beam@v1
+        with:
+          version-file: .tool-versions
+          version-type: strict
+
+      - name: Cache deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-
+
+      - name: Install deps
+        run: mix deps.get
+
+      - name: Build fixture assets
+        run: mix assets.build
+
+      - name: Run non-browser tests
+        run: mix test test/core/documentation_examples_test.exs --exclude browser
+
+      - name: Run migration verification tests
+        run: mix test test/cerberus/migration_verification_test.exs
+
+  browser-conformance:
+    name: Browser Conformance
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup BEAM
+        uses: erlef/setup-beam@v1
+        with:
+          version-file: .tool-versions
+          version-type: strict
+
+      - name: Cache deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-
+
       - name: Cache browser tools
         uses: actions/cache@v4
         with:
@@ -74,15 +156,6 @@ jobs:
 
       - name: Build fixture assets
         run: mix assets.build
-
-      - name: Run precommit
-        run: mix precommit
-
-      - name: Run non-browser tests
-        run: mix test test/core/documentation_examples_test.exs --exclude browser
-
-      - name: Run migration verification tests
-        run: mix test test/cerberus/migration_verification_test.exs
 
       - name: Prepare explicit browser runtime env
         run: |
@@ -104,3 +177,24 @@ jobs:
 
       - name: Run remote webdriver integration test
         run: mix test.websocket test/core/remote_webdriver_behavior_test.exs
+
+  ci:
+    name: CI
+    if: ${{ always() }}
+    needs:
+      - quality
+      - migration-verification
+      - browser-conformance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report lane status
+        run: |
+          echo "quality=${{ needs.quality.result }}"
+          echo "migration-verification=${{ needs['migration-verification'].result }}"
+          echo "browser-conformance=${{ needs['browser-conformance'].result }}"
+
+          if [ "${{ needs.quality.result }}" != "success" ] || \
+             [ "${{ needs['migration-verification'].result }}" != "success" ] || \
+             [ "${{ needs['browser-conformance'].result }}" != "success" ]; then
+            exit 1
+          fi
