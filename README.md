@@ -8,8 +8,10 @@ Cerberus is an experimental Phoenix testing harness with one API across:
 Cerberus is designed for teams that want to write one feature-test flow and run it in browser and non-browser modes with minimal rewrites.
 
 ## 30-Second Start
-
-Add `{:cerberus, github: "ftes/cerberus"}` to your `deps` list in `mix.exs`, then start with this flow:
+```ex
+# mix.exs
+{:cerberus, "~> 0.1"}
+```
 
 ```elixir
 import Cerberus
