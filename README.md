@@ -139,10 +139,12 @@ Most tests switch modes by changing only the first session line:
 - [Getting Started Guide](docs/getting-started.md)
 - [Cheat Sheet](docs/cheatsheet.md)
 - [Architecture and Driver Model](docs/architecture.md)
+- [Browser Support Policy](docs/browser-support-policy.md)
 
 ## Browser Runtime Setup
 
 Cerberus browser tests use WebDriver BiDi with explicit binaries.
+Current Tier 1 support is Chrome/Chromium via ChromeDriver; see the Browser Support Policy for broader target status.
 
 Required env vars:
 - `CHROME`

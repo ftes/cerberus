@@ -69,10 +69,15 @@ defmodule Cerberus.MixProject do
         "README.md",
         "docs/getting-started.md",
         "docs/cheatsheet.md",
-        "docs/architecture.md"
+        "docs/architecture.md",
+        "docs/browser-support-policy.md"
       ],
       groups_for_extras: [
-        Guides: ["docs/getting-started.md", "docs/architecture.md"],
+        Guides: [
+          "docs/getting-started.md",
+          "docs/architecture.md",
+          "docs/browser-support-policy.md"
+        ],
         Reference: ["docs/cheatsheet.md"]
       ],
       source_url: "https://github.com/ftes/cerberus",
