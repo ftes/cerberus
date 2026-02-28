@@ -1,0 +1,8 @@
+{
+  "name": "migration_fixture_assets",
+  "private": true,
+  "version": "0.1.0",
+  "devDependencies": {
+    "playwright": "^1.52.0"
+  }
+}

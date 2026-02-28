@@ -106,28 +106,26 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
              "WARNING #{file}: PhoenixTest.Playwright calls need manual migration to browser-only Cerberus APIs."
   end
 
-  test "can run against committed PhoenixTest fixture files", %{tmp_dir: tmp_dir} do
-    fixture_dir = Path.expand("../../support/fixtures/migration_source", __DIR__)
-    live_source = Path.join(fixture_dir, "live_fixture.exs")
-    static_source = Path.join(fixture_dir, "static_fixture.exs")
-    live_copy = Path.join(tmp_dir, "live_test.exs")
-    static_copy = Path.join(tmp_dir, "static_test.exs")
+  test "can run against committed nested Phoenix fixture project tests", %{tmp_dir: tmp_dir} do
+    fixture_dir = Path.expand("../../support/fixtures/migration_project", __DIR__)
+    project_copy = Path.join(tmp_dir, "migration_project")
+    test_dir = Path.join(project_copy, "test/features")
+    static_copy = Path.join(test_dir, "phoenix_test_baseline_test.exs")
+    playwright_copy = Path.join(test_dir, "phoenix_test_playwright_baseline_test.exs")
 
-    File.cp!(live_source, live_copy)
-    File.cp!(static_source, static_copy)
+    File.cp_r!(fixture_dir, project_copy)
 
     output =
       capture_io(fn ->
         Mix.Task.reenable(@task)
-        Mix.Task.run(@task, ["--write", live_copy, static_copy])
+        Mix.Task.run(@task, ["--write", test_dir])
       end)
 
-    rewritten_live = File.read!(live_copy)
     rewritten_static = File.read!(static_copy)
+    rewritten_playwright = File.read!(playwright_copy)
 
-    assert rewritten_live =~ "import Cerberus"
     assert rewritten_static =~ "import Cerberus"
-    assert output =~ "WARNING #{live_copy}:"
-    assert output =~ "WARNING #{static_copy}:"
+    assert rewritten_playwright =~ "use Cerberus.Playwright.Case"
+    assert output =~ "WARNING #{playwright_copy}:"
   end
 end
