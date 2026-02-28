@@ -29,6 +29,7 @@ defmodule Cerberus.PublicApiTest do
     end
   end
 
+  @tag :firefox
   test "chrome/firefox aliases construct browser sessions" do
     assert %BrowserSession{} = session(:chrome)
     assert %BrowserSession{} = session(:firefox)

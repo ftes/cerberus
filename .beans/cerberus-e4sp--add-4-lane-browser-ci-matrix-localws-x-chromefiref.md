@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-28T20:40:01Z
-updated_at: 2026-02-28T21:35:16Z
+updated_at: 2026-02-28T21:46:47Z
 ---
 
 Restructure CI to run browser-tagged tests in four lanes: local chrome, local firefox, websocket chrome, websocket firefox. Minimize duplicate setup via shared non-browser setup and reusable matrix job steps.
@@ -36,3 +36,5 @@ Restructure CI to run browser-tagged tests in four lanes: local chrome, local fi
 - Removed all ExUnit drivers: [...] tags from test/core, switched Harness driver selection to top-level tags only, and updated CI/README browser selectors to match top-level browser tags.
 
 - Restored pre-migration override semantics by adding explicit false tags where test-level selections should replace module-level tags (for example browser: false, live: false, auto: false, static: false).
+
+- Fixed browser radio/checkbox index mismatches and added multi-select value memory for browser selects, updated timeout assertion examples, tagged firefox-only public API constructor coverage, and adjusted CI to exclude firefox-tagged tests from default lane while keeping local firefox lane best-effort.

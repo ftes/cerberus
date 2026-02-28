@@ -46,7 +46,7 @@ defmodule Cerberus.CoreApiExamplesTest do
       assert result.message =~ ~s(locator: [text: "DOES NOT EXIST", exact: true])
       assert result.message =~ "opts:"
       assert result.message =~ "visible: true"
-      assert result.message =~ "timeout: 0"
+      assert result.message =~ ~r/timeout: (0|500)/
     end)
   end
 

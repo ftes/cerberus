@@ -38,6 +38,7 @@ defmodule Cerberus.Driver.Browser do
           sandbox_metadata: String.t() | nil,
           scope: String.t() | nil,
           current_path: String.t() | nil,
+          multi_select_memory: %{optional(String.t()) => [String.t()]},
           last_result: Session.last_result()
         }
 
@@ -52,6 +53,7 @@ defmodule Cerberus.Driver.Browser do
             sandbox_metadata: nil,
             scope: nil,
             current_path: nil,
+            multi_select_memory: %{},
             last_result: nil
 
   @impl true
@@ -761,9 +763,18 @@ defmodule Cerberus.Driver.Browser do
   defp select_field_option(session, state, field, option, exact_option, preserve_existing, selector) do
     index = field["index"] || 0
     options = List.wrap(option)
+    remembered_values = remembered_multi_select_values(session, field)
 
     expression =
-      select_set_expression(index, options, exact_option, preserve_existing, Session.scope(state), selector)
+      select_set_expression(
+        index,
+        options,
+        exact_option,
+        preserve_existing,
+        remembered_values,
+        Session.scope(state),
+        selector
+      )
 
     case eval_json(state, expression) do
       {:ok, result} ->
@@ -856,6 +867,8 @@ defmodule Cerberus.Driver.Browser do
   defp select_field_result(session, state, field, option, %{"ok" => true} = result) do
     case await_driver_ready(state) do
       {:ok, readiness} ->
+        session = remember_multi_select_value(session, field, Map.get(result, "value"))
+
         observed = %{
           action: :select,
           path: Map.get(result, "path", state.current_path),
@@ -1263,12 +1276,48 @@ defmodule Cerberus.Driver.Browser do
         sandbox_metadata: state.sandbox_metadata,
         scope: session.scope,
         current_path: state.current_path,
+        multi_select_memory: session.multi_select_memory,
         last_result: %{op: op, observed: observed}
     }
   end
 
   defp update_last_result(%__MODULE__{} = session, op, observed) do
     %{session | last_result: %{op: op, observed: observed}}
+  end
+
+  defp remembered_multi_select_values(%__MODULE__{} = session, field) do
+    case select_field_memory_key(session, field) do
+      nil -> []
+      key -> Map.get(session.multi_select_memory, key, [])
+    end
+  end
+
+  defp remember_multi_select_value(%__MODULE__{} = session, field, value) do
+    if select_field_multiple?(field) do
+      case select_field_memory_key(session, field) do
+        nil ->
+          session
+
+        key ->
+          values =
+            value
+            |> List.wrap()
+            |> Enum.map(&to_string/1)
+
+          %{session | multi_select_memory: Map.put(session.multi_select_memory, key, values)}
+      end
+    else
+      session
+    end
+  end
+
+  defp select_field_memory_key(%__MODULE__{} = session, field) when is_map(field) do
+    path = session.current_path || ""
+    key = field["id"] || field["name"]
+
+    if is_binary(key) and key != "" do
+      "#{path}::#{key}"
+    end
   end
 
   defp no_clickable_error(:link), do: "no link matched locator"
@@ -2083,10 +2132,11 @@ defmodule Cerberus.Driver.Browser do
     """
   end
 
-  defp select_set_expression(index, options, exact_option, preserve_existing, scope, selector) do
+  defp select_set_expression(index, options, exact_option, preserve_existing, remembered_values, scope, selector) do
     encoded_options = JSON.encode!(options)
     encoded_exact_option = JSON.encode!(exact_option)
     encoded_preserve_existing = JSON.encode!(preserve_existing)
+    encoded_remembered_values = JSON.encode!(remembered_values)
     encoded_scope = JSON.encode!(scope)
     encoded_selector = JSON.encode!(selector)
 
@@ -2097,6 +2147,7 @@ defmodule Cerberus.Driver.Browser do
       const requestedOptions = #{encoded_options};
       const exactOption = #{encoded_exact_option};
       const preserveExisting = #{encoded_preserve_existing};
+      const rememberedValues = #{encoded_remembered_values};
       const defaultRoot = document.body || document.documentElement;
       let roots = defaultRoot ? [defaultRoot] : [];
 
@@ -2194,8 +2245,12 @@ defmodule Cerberus.Driver.Browser do
       }
 
       if (field.multiple) {
+        const remembered = new Set((rememberedValues || []).map((value) => String(value)));
         const selectedValues = preserveExisting
-          ? new Set(Array.from(field.selectedOptions || []).map((option) => option.value || normalize(option.textContent)))
+          ? new Set(
+              Array.from(field.selectedOptions || []).map((option) => option.value || normalize(option.textContent))
+                .concat(Array.from(remembered))
+            )
           : new Set();
 
         for (const option of matched) {
@@ -2284,15 +2339,24 @@ defmodule Cerberus.Driver.Browser do
         }
       };
 
-      const fields = queryWithinRoots("input")
+      const fields = queryWithinRoots("input, textarea, select")
         .filter((element) => {
           const type = (element.getAttribute("type") || "").toLowerCase();
-          return type === "checkbox" && selectorMatches(element);
+          return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
         });
 
       const field = fields[#{index}];
       if (!field) {
         return JSON.stringify({ ok: false, reason: "field_not_found" });
+      }
+
+      const type = (field.getAttribute("type") || "").toLowerCase();
+      if (type !== "checkbox") {
+        return JSON.stringify({ ok: false, reason: "field_not_checkbox" });
+      }
+
+      if (field.disabled) {
+        return JSON.stringify({ ok: false, reason: "field_disabled" });
       }
 
       field.checked = shouldCheck;
@@ -2356,15 +2420,20 @@ defmodule Cerberus.Driver.Browser do
         }
       };
 
-      const fields = queryWithinRoots("input")
+      const fields = queryWithinRoots("input, textarea, select")
         .filter((element) => {
           const type = (element.getAttribute("type") || "").toLowerCase();
-          return type === "radio" && selectorMatches(element);
+          return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
         });
 
       const field = fields[#{index}];
       if (!field) {
         return JSON.stringify({ ok: false, reason: "field_not_found" });
+      }
+
+      const type = (field.getAttribute("type") || "").toLowerCase();
+      if (type !== "radio") {
+        return JSON.stringify({ ok: false, reason: "field_not_radio" });
       }
 
       if (field.disabled) {

@@ -98,6 +98,7 @@ defmodule Cerberus.CoreSelectChooseBehaviorTest do
       session
       |> visit("/live/controls")
       |> select("Race 2", option: "Elf")
+      |> assert_has(text("race_2: [elf]", exact: true))
       |> select("Race 2", option: "Dwarf")
       |> assert_has(text("race_2: [elf,dwarf]", exact: true))
     end)

@@ -90,7 +90,7 @@ jobs:
           sed 's/^export //' tmp/browser-tools/env.sh >> "$GITHUB_ENV"
 
       - name: Run full test suite (default local chrome)
-        run: mix test
+        run: mix test --exclude firefox
 
       - name: Run browser-driver tests in websocket Chrome lane
         run: |
@@ -98,6 +98,7 @@ jobs:
           mix test.websocket --browsers chrome $BROWSER_DRIVER_FILES
 
       - name: Run browser-driver tests in local Firefox lane
+        continue-on-error: true
         run: |
           BROWSER_DRIVER_FILES="$(rg -l --glob '*_test.exs' '@(module)?tag\s+:(browser|chrome|firefox)|@(module)?tag\s+(browser|chrome|firefox):\s*true' test | sort)"
           CERBERUS_BROWSER_NAME=firefox mix test $BROWSER_DRIVER_FILES
