@@ -65,7 +65,16 @@ defmodule Cerberus.MixProject do
   defp docs do
     [
       main: "readme",
-      extras: ["README.md"],
+      extras: [
+        "README.md",
+        "docs/getting-started.md",
+        "docs/cheatsheet.md",
+        "docs/architecture.md"
+      ],
+      groups_for_extras: [
+        Guides: ["docs/getting-started.md", "docs/architecture.md"],
+        Reference: ["docs/cheatsheet.md"]
+      ],
       source_url: "https://github.com/ftes/cerberus",
       source_ref: "main",
       homepage_url: "https://github.com/ftes/cerberus",
