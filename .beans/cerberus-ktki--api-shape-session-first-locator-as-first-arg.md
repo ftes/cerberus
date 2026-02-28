@@ -1,11 +1,11 @@
 ---
 # cerberus-ktki
 title: 'API Shape: Session-First, Locator-as-First-Arg'
-status: todo
+status: completed
 type: epic
 priority: normal
 created_at: 2026-02-27T07:40:06Z
-updated_at: 2026-02-27T07:40:20Z
+updated_at: 2026-02-28T06:42:25Z
 parent: cerberus-efry
 ---
 
@@ -79,3 +79,9 @@ end
 - [ ] No public API requires a separate `locate(...)` step.
 - [ ] Example tests above pass (or have explicit pending tags per slice status).
 - [ ] Dialyzer typespecs reflect `session -> session` contract.
+
+## Summary of Changes
+- Delivered the session-first public API shape and locator-as-first-arg model across static/live/browser flows.
+- Landed locator normalization and ergonomic helpers/sigil support consistent with the v0 surface.
+- Added API-level example and conformance coverage to validate the shape across drivers.
+- Completed the API parity feature track (cerberus-zqpu) under this epic.

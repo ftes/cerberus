@@ -1,11 +1,11 @@
 ---
 # cerberus-syh3
 title: 'Test Harness: Cross-Driver Conformance + Browser Oracle'
-status: todo
+status: completed
 type: epic
 priority: normal
 created_at: 2026-02-27T07:40:42Z
-updated_at: 2026-02-27T07:56:20Z
+updated_at: 2026-02-28T06:42:36Z
 parent: cerberus-efry
 ---
 
@@ -77,3 +77,9 @@ end
 ## Implementation Note (v0)
 Use regular ExUnit tests with driver tags (`@tag drivers: [:static, :live, :browser]`) and shared helper functions.
 A custom harness DSL is optional future work, not a requirement for slice 1.
+
+## Summary of Changes
+- Built and evolved the cross-driver conformance harness with explicit driver matrices and fixture-backed coverage.
+- Added deterministic static/live/browser fixture surfaces and reorganized suites for focused, maintainable parity tests.
+- Promoted core scenarios into stable integration coverage while preserving browser-oracle strategy for semantic drift checks.
+- Completed harness policy refinements and support-module cleanup needed for repeatable v0 validation.

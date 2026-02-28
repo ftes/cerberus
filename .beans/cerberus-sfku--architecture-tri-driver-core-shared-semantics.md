@@ -1,11 +1,11 @@
 ---
 # cerberus-sfku
 title: 'Architecture: Tri-Driver Core + Shared Semantics'
-status: todo
+status: completed
 type: epic
 priority: normal
 created_at: 2026-02-27T07:40:25Z
-updated_at: 2026-02-27T07:40:38Z
+updated_at: 2026-02-28T06:42:30Z
 parent: cerberus-efry
 ---
 
@@ -71,3 +71,9 @@ Normalization contract:
 - [ ] Same locator/options produce same pass/fail result across all drivers on identical fixture content.
 - [ ] Failure output includes driver, locator, options, and observed values.
 - [ ] No driver duplicates text normalization logic.
+
+## Summary of Changes
+- Established and validated the tri-driver architecture across static, live, and browser drivers.
+- Implemented shared session and driver dispatch foundations plus browser runtime supervision and BiDi integration.
+- Unified cross-driver semantics for navigation, mode switching, multi-user/multi-tab flows, and event-driven synchronization.
+- Completed architectural layering work separating HTML-platform semantics from LiveView-framework semantics.

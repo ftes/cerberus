@@ -1,10 +1,11 @@
 ---
 # cerberus-efry
 title: 'Cerberus v0: Vertical Slice Foundation'
-status: todo
+status: completed
 type: milestone
+priority: normal
 created_at: 2026-02-27T07:39:53Z
-updated_at: 2026-02-27T07:39:53Z
+updated_at: 2026-02-28T06:42:46Z
 ---
 
 ## Goal
@@ -27,3 +28,9 @@ Ship a first usable Cerberus foundation using vertical slices, not horizontal ar
 - [ ] Harness produces one unified report per run with per-driver outcomes.
 - [ ] At least one mismatch test demonstrates oracle reporting format.
 - [ ] Architecture decisions captured as ADR docs and linked from beans.
+
+## Summary of Changes
+- Delivered the v0 vertical slice across API shape, tri-driver architecture, and cross-driver conformance harness strategy.
+- Completed milestone epics for public API ergonomics, shared semantics architecture, and browser-oracle harness coverage.
+- Closed supporting project tasks covering docs, tooling, test infrastructure, and execution guidelines needed to ship v0.
+- Resulting baseline provides one coherent Cerberus flow across static, live, and browser modes with parity-focused validation.
