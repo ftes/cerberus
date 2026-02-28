@@ -115,3 +115,78 @@ jobs:
 
       - name: Run precommit
         run: mix precommit
+
+  browser_matrix:
+    name: Browser Conformance (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, firefox]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup BEAM
+        uses: erlef/setup-beam@v1
+        with:
+          version-file: .tool-versions
+          version-type: strict
+
+      - name: Cache deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-
+
+      - name: Cache browser tools
+        if: matrix.browser == 'chrome'
+        uses: actions/cache@v4
+        with:
+          path: tmp/browser-tools
+          key: ${{ runner.os }}-browser-tools-${{ hashFiles('bin/check_bidi_ready.sh') }}
+
+      - name: Setup Firefox
+        if: matrix.browser == 'firefox'
+        uses: browser-actions/setup-firefox@v1
+
+      - name: Setup GeckoDriver
+        if: matrix.browser == 'firefox'
+        uses: browser-actions/setup-geckodriver@v1
+        with:
+          geckodriver-version: 0.36.0
+
+      - name: Prepare browser runtime env
+        run: |
+          if [ "${{ matrix.browser }}" = "chrome" ]; then
+            bin/check_bidi_ready.sh --install
+            set -a
+            source tmp/browser-tools/env.sh
+            set +a
+            echo "CHROME=$CHROME" >> "$GITHUB_ENV"
+            echo "CHROMEDRIVER=$CHROMEDRIVER" >> "$GITHUB_ENV"
+            echo "CERBERUS_BROWSER_MATRIX=chrome" >> "$GITHUB_ENV"
+          else
+            FIREFOX_BIN="$(command -v firefox)"
+            GECKODRIVER_BIN="$(command -v geckodriver)"
+            export FIREFOX="$FIREFOX_BIN"
+            export GECKODRIVER="$GECKODRIVER_BIN"
+            bin/check_gecko_bidi_ready.sh
+            echo "FIREFOX=$FIREFOX_BIN" >> "$GITHUB_ENV"
+            echo "GECKODRIVER=$GECKODRIVER_BIN" >> "$GITHUB_ENV"
+            echo "CERBERUS_BROWSER_MATRIX=firefox" >> "$GITHUB_ENV"
+          fi
+
+      - name: Install deps
+        run: mix deps.get
+
+      - name: Build fixture assets
+        run: mix assets.build
+
+      - name: Run browser conformance lane
+        run: mix test --only conformance --only browser

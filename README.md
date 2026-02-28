@@ -232,6 +232,12 @@ bin/check_bidi_ready.sh --install
 
 The helper installs pinned local Chrome for Testing + ChromeDriver under `tmp/browser-tools`, validates version parity, and verifies `webSocketUrl` BiDi handshake support.
 
+Firefox readiness helper:
+
+```bash
+FIREFOX=/path/to/firefox GECKODRIVER=/path/to/geckodriver bin/check_gecko_bidi_ready.sh
+```
+
 ## Migration Task
 
 Cerberus includes an Igniter migration task for PhoenixTest codebases:
