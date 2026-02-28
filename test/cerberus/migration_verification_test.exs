@@ -3,6 +3,7 @@ defmodule Cerberus.MigrationVerificationTest do
 
   alias Cerberus.MigrationVerification
 
+  @moduletag :migration_verification
   @moduletag :tmp_dir
 
   test "runs pre-test, migration, and post-test in order", %{tmp_dir: tmp_dir} do
