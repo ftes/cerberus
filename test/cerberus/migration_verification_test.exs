@@ -161,6 +161,7 @@ defmodule Cerberus.MigrationVerificationTest do
       %{id: "pt_submit_action", test_file: "test/features/pt_submit_action_test.exs"},
       %{id: "pt_path_assert", test_file: "test/features/pt_path_assert_test.exs"},
       %{id: "pt_path_refute", test_file: "test/features/pt_path_refute_test.exs"},
+      %{id: "pt_multi_user_tab", test_file: "test/features/pt_multi_user_tab_test.exs"},
       %{id: "pt_live_click", test_file: "test/features/pt_live_click_test.exs"},
       %{id: "pt_scope_nested", test_file: "test/features/pt_scope_nested_test.exs"}
     ]

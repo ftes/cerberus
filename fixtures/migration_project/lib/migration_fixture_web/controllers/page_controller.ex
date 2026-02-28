@@ -9,6 +9,7 @@ defmodule MigrationFixtureWeb.PageController do
       <a href=\"/counter\">Counter</a>
       <a href=\"/search\">Search</a>
       <a href=\"/checkbox\">Checkbox</a>
+      <a href=\"/session-counter\">Session Counter</a>
       """
     )
   end
@@ -80,5 +81,26 @@ defmodule MigrationFixtureWeb.PageController do
       <p>Selected Items: #{selected}</p>
       """
     )
+  end
+
+  def session_counter(conn, _params) do
+    count = get_session(conn, :session_counter) || 0
+
+    html(
+      conn,
+      """
+      <h1>Session Counter</h1>
+      <p id=\"session-count\">Session Count: #{count}</p>
+      <a href=\"/session-counter/increment\">Increment Session</a>
+      """
+    )
+  end
+
+  def session_counter_increment(conn, _params) do
+    count = (get_session(conn, :session_counter) || 0) + 1
+
+    conn
+    |> put_session(:session_counter, count)
+    |> redirect(to: "/session-counter")
   end
 end

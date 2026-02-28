@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-28T15:08:23Z
-updated_at: 2026-02-28T16:41:30Z
+updated_at: 2026-02-28T17:20:06Z
 parent: cerberus-it5x
 ---
 
@@ -54,3 +54,10 @@ Missing-tests follow-up: migration verification matrix declares rows that are no
 
 - pt_checkbox_array uses explicit PhoenixTest submit in Phoenix mode and Cerberus submit in Cerberus mode because static button click behavior differs across drivers for this flow.
 - Migration run emits expected non-fatal direct-call warning for that explicit PhoenixTest submit branch.
+
+## Progress Update 3
+
+- Added matrix fixture row pt_multi_user_tab with a session-counter flow that validates same-user tab sharing and new-user isolation.
+- Extended fixture routes/controllers for the session-counter endpoints.
+- Wired pt_multi_user_tab into migration verification rows and the implemented-row list in the matrix doc.
+- Validated row integration with migration verification test run in this branch context.

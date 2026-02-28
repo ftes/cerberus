@@ -18,6 +18,8 @@ defmodule MigrationFixtureWeb.Router do
     get("/search/results", PageController, :search_results)
     get("/checkbox", PageController, :checkbox)
     get("/checkbox/save", PageController, :checkbox_save)
+    get("/session-counter", PageController, :session_counter)
+    get("/session-counter/increment", PageController, :session_counter_increment)
     live("/counter", CounterLive, :index)
   end
 end
