@@ -12,40 +12,28 @@ defmodule Cerberus.Options do
 
   @type click_opts :: [
           kind: click_kind(),
-          selector: String.t() | nil,
-          exact: boolean(),
-          normalize_ws: boolean()
+          selector: String.t() | nil
         ]
 
   @type assert_opts :: [
           visible: visibility_filter(),
-          exact: boolean(),
-          normalize_ws: boolean(),
           timeout: non_neg_integer()
         ]
 
   @type fill_in_opts :: [
-          selector: String.t() | nil,
-          exact: boolean(),
-          normalize_ws: boolean()
+          selector: String.t() | nil
         ]
 
   @type check_opts :: [
-          selector: String.t() | nil,
-          exact: boolean(),
-          normalize_ws: boolean()
+          selector: String.t() | nil
         ]
 
   @type upload_opts :: [
-          selector: String.t() | nil,
-          exact: boolean(),
-          normalize_ws: boolean()
+          selector: String.t() | nil
         ]
 
   @type submit_opts :: [
-          selector: String.t() | nil,
-          exact: boolean(),
-          normalize_ws: boolean()
+          selector: String.t() | nil
         ]
 
   @type screenshot_opts :: [
@@ -65,9 +53,7 @@ defmodule Cerberus.Options do
       default: :any,
       doc: "Limits click matching to links, buttons, or both."
     ],
-    selector: [type: :any, default: nil, doc: "Limits matching to elements that satisfy the CSS selector."],
-    exact: [type: :boolean, default: false, doc: "Enables exact text matching."],
-    normalize_ws: [type: :boolean, default: true, doc: "Normalizes whitespace before matching."]
+    selector: [type: :any, default: nil, doc: "Limits matching to elements that satisfy the CSS selector."]
   ]
 
   @assert_opts_schema [
@@ -76,8 +62,6 @@ defmodule Cerberus.Options do
       default: true,
       doc: "Chooses visible text only, hidden only, or both."
     ],
-    exact: [type: :boolean, default: false, doc: "Enables exact text matching."],
-    normalize_ws: [type: :boolean, default: true, doc: "Normalizes whitespace before matching."],
     timeout: [
       type: :non_neg_integer,
       default: 0,
@@ -86,13 +70,7 @@ defmodule Cerberus.Options do
   ]
 
   @fill_in_opts_schema [
-    selector: [type: :any, default: nil, doc: "Limits field lookup to elements that satisfy the CSS selector."],
-    exact: [type: :boolean, default: false, doc: "Enables exact text matching for label lookup."],
-    normalize_ws: [
-      type: :boolean,
-      default: true,
-      doc: "Normalizes whitespace before matching labels."
-    ]
+    selector: [type: :any, default: nil, doc: "Limits field lookup to elements that satisfy the CSS selector."]
   ]
 
   @submit_opts_schema [
@@ -100,27 +78,11 @@ defmodule Cerberus.Options do
       type: :any,
       default: nil,
       doc: "Limits submit control lookup to elements that satisfy the CSS selector."
-    ],
-    exact: [
-      type: :boolean,
-      default: false,
-      doc: "Enables exact text matching for submit button lookup."
-    ],
-    normalize_ws: [
-      type: :boolean,
-      default: true,
-      doc: "Normalizes whitespace before matching submit buttons."
     ]
   ]
 
   @upload_opts_schema [
-    selector: [type: :any, default: nil, doc: "Limits file-input lookup to elements that satisfy the CSS selector."],
-    exact: [type: :boolean, default: false, doc: "Enables exact text matching for upload label lookup."],
-    normalize_ws: [
-      type: :boolean,
-      default: true,
-      doc: "Normalizes whitespace before matching upload labels."
-    ]
+    selector: [type: :any, default: nil, doc: "Limits file-input lookup to elements that satisfy the CSS selector."]
   ]
 
   @path_opts_schema [

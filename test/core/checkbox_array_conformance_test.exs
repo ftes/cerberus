@@ -14,7 +14,7 @@ defmodule Cerberus.CoreCheckboxArrayConformanceTest do
       session
       |> visit("/live/checkbox-array")
       |> check("Two")
-      |> assert_has(text("Selected Items: one,two"), exact: true)
+      |> assert_has(text("Selected Items: one,two", exact: true))
     end)
   end
 
@@ -25,7 +25,7 @@ defmodule Cerberus.CoreCheckboxArrayConformanceTest do
       session
       |> visit("/live/checkbox-array")
       |> uncheck("One")
-      |> assert_has(text("Selected Items: None"), exact: true)
+      |> assert_has(text("Selected Items: None", exact: true))
     end)
   end
 
@@ -37,7 +37,7 @@ defmodule Cerberus.CoreCheckboxArrayConformanceTest do
       |> visit("/checkbox-array")
       |> check("Two")
       |> submit(text("Save Items"))
-      |> assert_has(text("Selected Items: one,two"), exact: true)
+      |> assert_has(text("Selected Items: one,two", exact: true))
     end)
   end
 
@@ -49,7 +49,7 @@ defmodule Cerberus.CoreCheckboxArrayConformanceTest do
       |> visit("/checkbox-array")
       |> uncheck("One")
       |> submit(text("Save Items"))
-      |> assert_has(text("Selected Items: None"), exact: true)
+      |> assert_has(text("Selected Items: None", exact: true))
     end)
   end
 end

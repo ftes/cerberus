@@ -29,8 +29,8 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
                  driver_module.submit(session_after_reset, save_locator, [])
 
         submitted_session
-        |> assert_has([text: "name: Aragorn"], exact: true)
-        |> assert_has([text: "form-button: save-owner-form"], exact: true)
+        |> assert_has(text: "name: Aragorn", exact: true)
+        |> assert_has(text: "form-button: save-owner-form", exact: true)
       end
     )
   end
@@ -43,8 +43,8 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
         |> visit("/owner-form")
         |> fill_in("Name", "Aragorn")
         |> submit(text: "Save Owner Form")
-        |> assert_has([text: "name: Aragorn"], exact: true)
-        |> assert_has([text: "form-button: save-owner-form"], exact: true)
+        |> assert_has(text: "name: Aragorn", exact: true)
+        |> assert_has(text: "form-button: save-owner-form", exact: true)
       end
     )
   end
@@ -59,8 +59,8 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
         |> submit(text: "Save Owner Form")
         |> visit("/owner-form")
         |> submit(text: "Save Owner Form")
-        |> assert_has([text: "name: "], exact: true)
-        |> assert_has([text: "form-button: save-owner-form"], exact: true)
+        |> assert_has(text: "name: ", exact: true)
+        |> assert_has(text: "form-button: save-owner-form", exact: true)
       end
     )
   end
@@ -74,8 +74,8 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
           |> visit("/owner-form")
           |> fill_in("Name", "Aragorn")
           |> submit(text: "Save Owner Form Redirect")
-          |> assert_has([text: "name: Aragorn"], exact: true)
-          |> assert_has([text: "form-button: save-owner-form-redirect"], exact: true)
+          |> assert_has(text: "name: Aragorn", exact: true)
+          |> assert_has(text: "form-button: save-owner-form-redirect", exact: true)
 
         assert String.starts_with?(session.current_path || "", "/owner-form/result")
         session
@@ -131,9 +131,9 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
           |> visit("/owner-form")
           |> fill_in("Name", "Aragorn")
           |> submit(text: "Save Owner Form Redirect")
-          |> assert_has([text: "name: Aragorn"], exact: true)
-          |> assert_has([text: "form-button: save-owner-form-redirect"], exact: true)
-          |> assert_has([text: "x-flow-token: flow-123"], exact: true)
+          |> assert_has(text: "name: Aragorn", exact: true)
+          |> assert_has(text: "form-button: save-owner-form-redirect", exact: true)
+          |> assert_has(text: "x-flow-token: flow-123", exact: true)
 
         assert String.starts_with?(session.current_path || "", "/owner-form/result")
         session

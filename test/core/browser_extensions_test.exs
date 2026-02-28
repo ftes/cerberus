@@ -53,9 +53,9 @@ defmodule Cerberus.CoreBrowserExtensionsTest do
 
     session = Browser.drag(session, "#drag-source", "#drop-target")
 
-    assert_has(session, text("Press result: submitted"), exact: true)
-    assert_has(session, text("Dialog result: cancelled"), exact: true)
-    assert_has(session, text("Drag result: dropped"), exact: true)
+    assert_has(session, text("Press result: submitted", exact: true))
+    assert_has(session, text("Dialog result: cancelled", exact: true))
+    assert_has(session, text("Drag result: dropped", exact: true))
 
     png = File.read!(path)
     assert :binary.part(png, 0, 8) == <<137, 80, 78, 71, 13, 10, 26, 10>>

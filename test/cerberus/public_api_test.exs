@@ -33,19 +33,19 @@ defmodule Cerberus.PublicApiTest do
     primary =
       session()
       |> visit("/session/user/alice")
-      |> assert_has(text("Session user: alice"), exact: true)
+      |> assert_has(text("Session user: alice", exact: true))
 
     tab =
       primary
       |> open_tab()
       |> visit("/session/user")
-      |> assert_has(text("Session user: alice"), exact: true)
+      |> assert_has(text("Session user: alice", exact: true))
 
     isolated_user =
       primary
       |> open_user()
       |> visit("/session/user")
-      |> assert_has(text("Session user: unset"), exact: true)
+      |> assert_has(text("Session user: unset", exact: true))
 
     switched = switch_tab(tab, primary)
     assert switched.current_path == "/session/user"
@@ -204,7 +204,7 @@ defmodule Cerberus.PublicApiTest do
       |> check("Two")
       |> submit(text("Save Items"))
 
-    assert_has(checked, text("Selected Items: one,two"), exact: true)
+    assert_has(checked, text("Selected Items: one,two", exact: true))
 
     unchecked =
       session()
@@ -212,7 +212,7 @@ defmodule Cerberus.PublicApiTest do
       |> uncheck("One")
       |> submit(text("Save Items"))
 
-    assert_has(unchecked, text("Selected Items: None"), exact: true)
+    assert_has(unchecked, text("Selected Items: None", exact: true))
   end
 
   test "check rejects explicit text locators to keep label semantics explicit" do
@@ -248,6 +248,26 @@ defmodule Cerberus.PublicApiTest do
       session()
       |> visit("/articles")
       |> click([text: "Articles"], kind: :nope)
+    end
+  end
+
+  test "operation-level text matching options are rejected" do
+    assert_raise ArgumentError, ~r/invalid options/, fn ->
+      session()
+      |> visit("/articles")
+      |> click(button("Counter"), exact: true)
+    end
+
+    assert_raise ArgumentError, ~r/invalid options/, fn ->
+      session()
+      |> visit("/articles")
+      |> assert_has(text("Articles"), exact: true)
+    end
+
+    assert_raise ArgumentError, ~r/invalid options/, fn ->
+      session()
+      |> visit("/articles")
+      |> assert_has(text("Articles"), normalize_ws: false)
     end
   end
 
@@ -334,7 +354,7 @@ defmodule Cerberus.PublicApiTest do
       |> visit("/scoped")
       |> within("#secondary-panel", fn scoped ->
         scoped
-        |> assert_has(text("Secondary Panel"), exact: true)
+        |> assert_has(text("Secondary Panel", exact: true))
         |> click(link("Open"))
       end)
 
@@ -373,7 +393,7 @@ defmodule Cerberus.PublicApiTest do
         Plug.Conn.put_req_header(conn, "x-custom-header", "unwrap-flow")
       end)
       |> visit("/main")
-      |> assert_has(text("x-custom-header: unwrap-flow"), exact: true)
+      |> assert_has(text("x-custom-header: unwrap-flow", exact: true))
 
     assert session.current_path == "/main"
   end
@@ -391,7 +411,7 @@ defmodule Cerberus.PublicApiTest do
           %{}
         )
       end)
-      |> assert_has(text("Count: 0"), exact: true)
+      |> assert_has(text("Count: 0", exact: true))
 
     assert %LiveSession{} = session
     assert session.current_path == "/live/counter"
@@ -406,7 +426,7 @@ defmodule Cerberus.PublicApiTest do
         |> element("button", "Redirect to Counter")
         |> render_click()
       end)
-      |> assert_has(text("Count: 0"), exact: true)
+      |> assert_has(text("Count: 0", exact: true))
 
     assert session.current_path == "/live/counter"
   end

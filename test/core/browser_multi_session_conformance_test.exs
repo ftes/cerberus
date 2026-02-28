@@ -13,7 +13,7 @@ defmodule Cerberus.CoreBrowserMultiSessionConformanceTest do
       :browser
       |> session()
       |> visit("/articles")
-      |> assert_has(text("Articles"), exact: true)
+      |> assert_has(text("Articles", exact: true))
 
     primary_tab = primary.tab_id
     assert is_binary(primary_tab)
@@ -24,7 +24,7 @@ defmodule Cerberus.CoreBrowserMultiSessionConformanceTest do
       |> open_tab()
       |> visit("/live/counter")
       |> click(button("Increment"))
-      |> assert_has(text("Count: 1"), exact: true)
+      |> assert_has(text("Count: 1", exact: true))
 
     assert secondary.tab_id != primary_tab
     assert Enum.sort(UserContextProcess.tabs(primary.user_context_pid)) == Enum.sort([primary_tab, secondary.tab_id])
@@ -32,7 +32,7 @@ defmodule Cerberus.CoreBrowserMultiSessionConformanceTest do
     primary =
       secondary
       |> switch_tab(primary)
-      |> assert_has(text("Articles"), exact: true)
+      |> assert_has(text("Articles", exact: true))
       |> assert_path("/articles")
 
     closed = close_tab(secondary)
@@ -52,13 +52,13 @@ defmodule Cerberus.CoreBrowserMultiSessionConformanceTest do
       :browser
       |> session()
       |> visit("/live/counter")
-      |> assert_has(text("Count: 0"), exact: true)
+      |> assert_has(text("Count: 0", exact: true))
 
     session_b =
       :browser
       |> session()
       |> visit("/live/counter")
-      |> assert_has(text("Count: 0"), exact: true)
+      |> assert_has(text("Count: 0", exact: true))
 
     user_context_a = :sys.get_state(session_a.user_context_pid).user_context_id
     user_context_b = :sys.get_state(session_b.user_context_pid).user_context_id
@@ -71,7 +71,7 @@ defmodule Cerberus.CoreBrowserMultiSessionConformanceTest do
         {:go, ^barrier} ->
           initial_session
           |> click(button("Increment"))
-          |> assert_has(text("Count: 1"), exact: true)
+          |> assert_has(text("Count: 1", exact: true))
       end
     end
 
@@ -84,7 +84,7 @@ defmodule Cerberus.CoreBrowserMultiSessionConformanceTest do
     updated_a = Task.await(task_a, 10_000)
     updated_b = Task.await(task_b, 10_000)
 
-    assert_has(updated_a, text("Count: 1"), exact: true)
-    assert_has(updated_b, text("Count: 1"), exact: true)
+    assert_has(updated_a, text("Count: 1", exact: true))
+    assert_has(updated_b, text("Count: 1", exact: true))
   end
 end

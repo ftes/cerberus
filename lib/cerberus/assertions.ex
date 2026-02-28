@@ -198,7 +198,7 @@ defmodule Cerberus.Assertions do
 
   defp normalize_click_locator(locator_input, opts) do
     locator = Locator.normalize(locator_input)
-    opts = merge_locator_opts(locator, opts)
+    opts = merge_locator_selector_opts(locator, opts)
 
     case locator do
       %Locator{kind: :text} ->
@@ -211,13 +211,13 @@ defmodule Cerberus.Assertions do
             "label locators target form-field lookup and are not supported for click/3; use text(...) for generic element text matching"
 
       %Locator{kind: :link, value: value} ->
-        {%Locator{kind: :text, value: value}, Keyword.put(opts, :kind, :link)}
+        {%{locator | kind: :text, value: value}, Keyword.put(opts, :kind, :link)}
 
       %Locator{kind: :button, value: value} ->
-        {%Locator{kind: :text, value: value}, Keyword.put(opts, :kind, :button)}
+        {%{locator | kind: :text, value: value}, Keyword.put(opts, :kind, :button)}
 
       %Locator{kind: :css, value: selector} ->
-        {%Locator{kind: :text, value: ""}, Keyword.put(opts, :selector, selector)}
+        {%{locator | kind: :text, value: "", opts: Keyword.put(locator.opts, :selector, selector)}, opts}
 
       %Locator{kind: :testid} ->
         raise InvalidLocatorError, locator: locator_input, message: "testid locators are not yet supported for click/3"
@@ -226,7 +226,7 @@ defmodule Cerberus.Assertions do
 
   defp normalize_fill_in_locator(locator_input, opts) do
     locator = Locator.normalize(locator_input)
-    opts = merge_locator_opts(locator, opts)
+    opts = merge_locator_selector_opts(locator, opts)
 
     case locator do
       %Locator{kind: :text, value: value} ->
@@ -243,7 +243,7 @@ defmodule Cerberus.Assertions do
         {%Locator{kind: :label, value: value}, opts}
 
       %Locator{kind: :css, value: selector} ->
-        {%Locator{kind: :label, value: ""}, Keyword.put(opts, :selector, selector)}
+        {%{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}, opts}
 
       %Locator{kind: :link} ->
         raise InvalidLocatorError, locator: locator_input, message: "link locators are not supported for fill_in/4"
@@ -258,7 +258,7 @@ defmodule Cerberus.Assertions do
 
   defp normalize_upload_locator(locator_input, opts) do
     locator = Locator.normalize(locator_input)
-    opts = merge_locator_opts(locator, opts)
+    opts = merge_locator_selector_opts(locator, opts)
 
     case locator do
       %Locator{kind: :text, value: value} ->
@@ -275,7 +275,7 @@ defmodule Cerberus.Assertions do
         {%Locator{kind: :label, value: value}, opts}
 
       %Locator{kind: :css, value: selector} ->
-        {%Locator{kind: :label, value: ""}, Keyword.put(opts, :selector, selector)}
+        {%{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}, opts}
 
       %Locator{kind: :link} ->
         raise InvalidLocatorError, locator: locator_input, message: "link locators are not supported for upload/4"
@@ -290,7 +290,7 @@ defmodule Cerberus.Assertions do
 
   defp normalize_check_locator(locator_input, opts, op_name) do
     locator = Locator.normalize(locator_input)
-    opts = merge_locator_opts(locator, opts)
+    opts = merge_locator_selector_opts(locator, opts)
 
     case locator do
       %Locator{kind: :text, value: value} ->
@@ -307,7 +307,7 @@ defmodule Cerberus.Assertions do
         {%Locator{kind: :label, value: value}, opts}
 
       %Locator{kind: :css, value: selector} ->
-        {%Locator{kind: :label, value: ""}, Keyword.put(opts, :selector, selector)}
+        {%{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}, opts}
 
       %Locator{kind: :link} ->
         raise InvalidLocatorError, locator: locator_input, message: "link locators are not supported for #{op_name}"
@@ -322,17 +322,17 @@ defmodule Cerberus.Assertions do
 
   defp normalize_submit_locator(locator_input, opts) do
     locator = Locator.normalize(locator_input)
-    opts = merge_locator_opts(locator, opts)
+    opts = merge_locator_selector_opts(locator, opts)
 
     case locator do
       %Locator{kind: :text} ->
         {locator, opts}
 
       %Locator{kind: :button, value: value} ->
-        {%Locator{kind: :text, value: value}, opts}
+        {%{locator | kind: :text, value: value}, opts}
 
       %Locator{kind: :css, value: selector} ->
-        {%Locator{kind: :text, value: ""}, Keyword.put(opts, :selector, selector)}
+        {%{locator | kind: :text, value: "", opts: Keyword.put(locator.opts, :selector, selector)}, opts}
 
       %Locator{kind: :label} ->
         raise InvalidLocatorError, locator: locator_input, message: "label locators are not supported for submit/3"
@@ -347,17 +347,17 @@ defmodule Cerberus.Assertions do
 
   defp normalize_assert_locator(locator_input, opts) do
     locator = Locator.normalize(locator_input)
-    opts = merge_locator_opts(locator, opts)
+    ensure_assert_locator_opts!(locator, locator_input)
 
     case locator do
       %Locator{kind: :text} ->
         {locator, opts}
 
       %Locator{kind: :label, value: value} ->
-        {%Locator{kind: :text, value: value}, opts}
+        {%{locator | kind: :text, value: value}, opts}
 
       %Locator{kind: kind, value: value} when kind in [:link, :button] ->
-        {%Locator{kind: :text, value: value}, opts}
+        {%{locator | kind: :text, value: value}, opts}
 
       %Locator{kind: :css} ->
         raise InvalidLocatorError,
@@ -371,8 +371,17 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  defp merge_locator_opts(%Locator{opts: locator_opts}, opts) when is_list(locator_opts) do
-    Keyword.merge(locator_opts, opts)
+  defp ensure_assert_locator_opts!(%Locator{opts: locator_opts}, locator_input) do
+    if Keyword.has_key?(locator_opts, :selector) do
+      raise InvalidLocatorError,
+        locator: locator_input,
+        message: "selector locator option is not supported for assert_has/3 or refute_has/3 in this slice"
+    end
+  end
+
+  defp merge_locator_selector_opts(%Locator{opts: locator_opts}, opts) when is_list(locator_opts) do
+    selector_opt = Keyword.take(locator_opts, [:selector])
+    Keyword.merge(selector_opt, opts)
   end
 
   defp fill_in_label_shorthand?(locator_input) do

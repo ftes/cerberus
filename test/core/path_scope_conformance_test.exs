@@ -16,13 +16,13 @@ defmodule Cerberus.CorePathScopeConformanceTest do
         |> visit("/scoped")
         |> within("#secondary-panel", fn scoped ->
           scoped
-          |> assert_has(text("Secondary Panel"), exact: true)
-          |> assert_has(text("Status: secondary"), exact: true)
-          |> refute_has(text("Status: primary"), exact: true)
+          |> assert_has(text("Secondary Panel", exact: true))
+          |> assert_has(text("Status: secondary", exact: true))
+          |> refute_has(text("Status: primary", exact: true))
           |> click(link("Open"))
         end)
         |> assert_path("/search")
-        |> assert_has(text("Search"), exact: true)
+        |> assert_has(text("Search", exact: true))
       end
     )
   end
@@ -55,8 +55,8 @@ defmodule Cerberus.CorePathScopeConformanceTest do
         end)
         |> within("#selected-result", fn scoped ->
           scoped
-          |> assert_has(text("Selected: secondary"), exact: true)
-          |> refute_has(text("Selected: primary"), exact: true)
+          |> assert_has(text("Selected: secondary", exact: true))
+          |> refute_has(text("Selected: primary", exact: true))
         end)
       end
     )

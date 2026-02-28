@@ -239,14 +239,15 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @impl true
-  def click(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
+  def click(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
     state = state!(session)
-    selector = Keyword.get(opts, :selector)
+    match_opts = locator_match_opts(locator, opts)
+    selector = Keyword.get(match_opts, :selector)
 
     with_driver_ready(session, state, :click, fn ready_state ->
       case clickables(ready_state, selector) do
         {:ok, clickables_data} ->
-          do_click(session, ready_state, clickables_data, expected, opts, selector)
+          do_click(session, ready_state, clickables_data, expected, match_opts, selector)
 
         {:error, reason, details} ->
           observed = %{path: ready_state.current_path, details: details}
@@ -256,14 +257,15 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @impl true
-  def fill_in(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, value, opts) do
+  def fill_in(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, value, opts) do
     state = state!(session)
-    selector = Keyword.get(opts, :selector)
+    match_opts = locator_match_opts(locator, opts)
+    selector = Keyword.get(match_opts, :selector)
 
     with_driver_ready(session, state, :fill_in, fn ready_state ->
       case form_fields(ready_state, selector) do
         {:ok, fields_data} ->
-          do_fill_in(session, ready_state, fields_data, expected, value, opts, selector)
+          do_fill_in(session, ready_state, fields_data, expected, value, match_opts, selector)
 
         {:error, reason, details} ->
           observed = %{path: ready_state.current_path, details: details}
@@ -273,14 +275,15 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @impl true
-  def check(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, opts) do
+  def check(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
     state = state!(session)
-    selector = Keyword.get(opts, :selector)
+    match_opts = locator_match_opts(locator, opts)
+    selector = Keyword.get(match_opts, :selector)
 
     with_driver_ready(session, state, :check, fn ready_state ->
       case form_fields(ready_state, selector) do
         {:ok, fields_data} ->
-          do_toggle_checkbox(session, ready_state, fields_data, expected, opts, selector, true, :check)
+          do_toggle_checkbox(session, ready_state, fields_data, expected, match_opts, selector, true, :check)
 
         {:error, reason, details} ->
           observed = %{path: ready_state.current_path, details: details}
@@ -290,14 +293,15 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @impl true
-  def uncheck(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, opts) do
+  def uncheck(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
     state = state!(session)
-    selector = Keyword.get(opts, :selector)
+    match_opts = locator_match_opts(locator, opts)
+    selector = Keyword.get(match_opts, :selector)
 
     with_driver_ready(session, state, :uncheck, fn ready_state ->
       case form_fields(ready_state, selector) do
         {:ok, fields_data} ->
-          do_toggle_checkbox(session, ready_state, fields_data, expected, opts, selector, false, :uncheck)
+          do_toggle_checkbox(session, ready_state, fields_data, expected, match_opts, selector, false, :uncheck)
 
         {:error, reason, details} ->
           observed = %{path: ready_state.current_path, details: details}
@@ -307,14 +311,15 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @impl true
-  def upload(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, path, opts) do
+  def upload(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, path, opts) do
     state = state!(session)
-    selector = Keyword.get(opts, :selector)
+    match_opts = locator_match_opts(locator, opts)
+    selector = Keyword.get(match_opts, :selector)
 
     with_driver_ready(session, state, :upload, fn ready_state ->
       case file_fields(ready_state, selector) do
         {:ok, fields_data} ->
-          do_upload(session, ready_state, fields_data, expected, path, opts, selector)
+          do_upload(session, ready_state, fields_data, expected, path, match_opts, selector)
 
         {:error, reason, details} ->
           observed = %{path: ready_state.current_path, details: details}
@@ -324,14 +329,15 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @impl true
-  def submit(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
+  def submit(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
     state = state!(session)
-    selector = Keyword.get(opts, :selector)
+    match_opts = locator_match_opts(locator, opts)
+    selector = Keyword.get(match_opts, :selector)
 
     with_driver_ready(session, state, :submit, fn ready_state ->
       case clickables(ready_state, selector) do
         {:ok, clickables_data} ->
-          do_submit(session, ready_state, clickables_data, expected, opts, selector)
+          do_submit(session, ready_state, clickables_data, expected, match_opts, selector)
 
         {:error, reason, details} ->
           observed = %{path: ready_state.current_path, details: details}
@@ -341,14 +347,15 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @impl true
-  def assert_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
+  def assert_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
     state = state!(session)
+    match_opts = locator_match_opts(locator, opts)
     visible = visibility_filter(opts)
 
     with_driver_ready(session, state, :assert_has, fn ready_state ->
       case with_snapshot(ready_state) do
         {next_state, snapshot} ->
-          assert_snapshot_result(session, next_state, snapshot, expected, visible, opts)
+          assert_snapshot_result(session, next_state, snapshot, expected, visible, match_opts)
 
         {:error, reason, details} ->
           observed = %{path: ready_state.current_path, details: details}
@@ -358,14 +365,15 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @impl true
-  def refute_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
+  def refute_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
     state = state!(session)
+    match_opts = locator_match_opts(locator, opts)
     visible = visibility_filter(opts)
 
     with_driver_ready(session, state, :refute_has, fn ready_state ->
       case with_snapshot(ready_state) do
         {next_state, snapshot} ->
-          refute_snapshot_result(session, next_state, snapshot, expected, visible, opts)
+          refute_snapshot_result(session, next_state, snapshot, expected, visible, match_opts)
 
         {:error, reason, details} ->
           observed = %{path: ready_state.current_path, details: details}
@@ -1040,6 +1048,10 @@ defmodule Cerberus.Driver.Browser do
   defp no_clickable_error(:link), do: "no link matched locator"
   defp no_clickable_error(:button), do: "no button matched locator"
   defp no_clickable_error(_kind), do: "no clickable element matched locator"
+
+  defp locator_match_opts(%Locator{opts: locator_opts}, opts) do
+    Keyword.merge(locator_opts, opts)
+  end
 
   defp to_absolute_url(base_url, path_or_url) do
     uri = URI.parse(path_or_url)

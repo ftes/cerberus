@@ -112,11 +112,12 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def click(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
+  def click(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
     session = with_latest_html(session)
+    match_opts = locator_match_opts(locator, opts)
     kind = Keyword.get(opts, :kind, :any)
 
-    case find_clickable_link(session, expected, opts, kind) do
+    case find_clickable_link(session, expected, match_opts, kind) do
       {:ok, link} when is_binary(link.href) ->
         if live_route?(session) do
           click_live_link(session, link)
@@ -125,7 +126,7 @@ defmodule Cerberus.Driver.Live do
         end
 
       :error ->
-        case find_clickable_button(session, expected, opts, kind) do
+        case find_clickable_button(session, expected, match_opts, kind) do
           {:ok, button} ->
             click_or_error_for_button(session, button, kind)
 
@@ -144,15 +145,16 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def fill_in(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, value, opts) do
+  def fill_in(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, value, opts) do
     session = with_latest_html(session)
+    match_opts = locator_match_opts(locator, opts)
 
     case route_kind(session) do
       :live ->
-        do_live_fill_in(session, expected, value, opts)
+        do_live_fill_in(session, expected, value, match_opts)
 
       :static ->
-        case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+        case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
           {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
             updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
 
@@ -191,15 +193,16 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def check(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, opts) do
+  def check(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
     session = with_latest_html(session)
+    match_opts = locator_match_opts(locator, opts)
 
     case route_kind(session) do
       :live ->
-        do_live_toggle_checkbox(session, expected, opts, true, :check)
+        do_live_toggle_checkbox(session, expected, match_opts, true, :check)
 
       :static ->
-        case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+        case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
           {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
             value = toggled_checkbox_value(session, field, true)
             updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
@@ -249,15 +252,16 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def uncheck(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, opts) do
+  def uncheck(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
     session = with_latest_html(session)
+    match_opts = locator_match_opts(locator, opts)
 
     case route_kind(session) do
       :live ->
-        do_live_toggle_checkbox(session, expected, opts, false, :uncheck)
+        do_live_toggle_checkbox(session, expected, match_opts, false, :uncheck)
 
       :static ->
-        case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+        case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
           {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
             value = toggled_checkbox_value(session, field, false)
             updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
@@ -307,12 +311,13 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def upload(%__MODULE__{} = session, %Locator{kind: :label, value: expected}, path, opts) do
+  def upload(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, path, opts) do
     session = with_latest_html(session)
+    match_opts = locator_match_opts(locator, opts)
 
     case route_kind(session) do
       :live ->
-        case LiveViewHtml.find_form_field(session.html, expected, opts, Session.scope(session)) do
+        case LiveViewHtml.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
           {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
             do_live_upload(session, field, path)
 
@@ -350,12 +355,13 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def submit(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
+  def submit(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
     session = with_latest_html(session)
+    match_opts = locator_match_opts(locator, opts)
 
     case route_kind(session) do
       :live ->
-        case LiveViewHtml.find_submit_button(session.html, expected, opts, Session.scope(session)) do
+        case LiveViewHtml.find_submit_button(session.html, expected, match_opts, Session.scope(session)) do
           {:ok, button} ->
             do_live_submit(session, button)
 
@@ -371,7 +377,7 @@ defmodule Cerberus.Driver.Live do
         end
 
       :static ->
-        case Html.find_submit_button(session.html, expected, opts, Session.scope(session)) do
+        case Html.find_submit_button(session.html, expected, match_opts, Session.scope(session)) do
           {:ok, button} ->
             do_submit(session, button)
 
@@ -389,11 +395,12 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def assert_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
+  def assert_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
     session = with_latest_html(session)
+    match_opts = locator_match_opts(locator, opts)
     visible = Keyword.get(opts, :visible, true)
     texts = Html.texts(session.html, visible, Session.scope(session))
-    matched = Enum.filter(texts, &Query.match_text?(&1, expected, opts))
+    matched = Enum.filter(texts, &Query.match_text?(&1, expected, match_opts))
 
     observed = %{
       path: session.current_path,
@@ -413,11 +420,12 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def refute_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected}, opts) do
+  def refute_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
     session = with_latest_html(session)
+    match_opts = locator_match_opts(locator, opts)
     visible = Keyword.get(opts, :visible, true)
     texts = Html.texts(session.html, visible, Session.scope(session))
-    matched = Enum.filter(texts, &Query.match_text?(&1, expected, opts))
+    matched = Enum.filter(texts, &Query.match_text?(&1, expected, match_opts))
 
     observed = %{
       path: session.current_path,
@@ -773,6 +781,10 @@ defmodule Cerberus.Driver.Live do
   defp no_clickable_error(:link), do: "no link matched locator"
   defp no_clickable_error(:button), do: "no button matched locator"
   defp no_clickable_error(_kind), do: "no clickable element matched locator"
+
+  defp locator_match_opts(%Locator{opts: locator_opts}, opts) do
+    Keyword.merge(locator_opts, opts)
+  end
 
   defp click_or_error_for_button(session, button, kind) do
     if live_route?(session) do

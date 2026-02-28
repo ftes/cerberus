@@ -190,17 +190,25 @@ defmodule Cerberus do
     raise ArgumentError, "screenshot/2 expects a path string or keyword options"
   end
 
-  @spec text(String.t() | Regex.t()) :: keyword()
-  def text(value), do: [text: value]
+  @spec text(String.t() | Regex.t(), keyword()) :: keyword()
+  def text(value, opts \\ []) when is_list(opts) do
+    build_text_locator(:text, value, opts)
+  end
 
-  @spec link(String.t() | Regex.t()) :: keyword()
-  def link(value), do: [link: value]
+  @spec link(String.t() | Regex.t(), keyword()) :: keyword()
+  def link(value, opts \\ []) when is_list(opts) do
+    build_text_locator(:link, value, opts)
+  end
 
-  @spec button(String.t() | Regex.t()) :: keyword()
-  def button(value), do: [button: value]
+  @spec button(String.t() | Regex.t(), keyword()) :: keyword()
+  def button(value, opts \\ []) when is_list(opts) do
+    build_text_locator(:button, value, opts)
+  end
 
-  @spec label(String.t() | Regex.t()) :: keyword()
-  def label(value), do: [label: value]
+  @spec label(String.t() | Regex.t(), keyword()) :: keyword()
+  def label(value, opts \\ []) when is_list(opts) do
+    build_text_locator(:label, value, opts)
+  end
 
   @spec css(String.t()) :: keyword()
   def css(value) when is_binary(value), do: [css: value]
@@ -208,6 +216,8 @@ defmodule Cerberus do
   @spec role(String.t() | atom(), keyword()) :: keyword()
   def role(role, opts \\ []) when is_list(opts) do
     [role: role, name: Keyword.get(opts, :name)]
+    |> maybe_put_locator_opt(opts, :exact)
+    |> maybe_put_locator_opt(opts, :selector)
   end
 
   @spec testid(String.t()) :: keyword()
@@ -664,6 +674,19 @@ defmodule Cerberus do
 
   defp ensure_same_endpoint!(_session, _target_session) do
     raise ArgumentError, "cannot switch tab across sessions with different endpoints"
+  end
+
+  defp build_text_locator(kind, value, opts) do
+    [{kind, value}]
+    |> maybe_put_locator_opt(opts, :exact)
+    |> maybe_put_locator_opt(opts, :selector)
+  end
+
+  defp maybe_put_locator_opt(locator, opts, key) do
+    case Keyword.fetch(opts, key) do
+      {:ok, value} -> Keyword.put(locator, key, value)
+      :error -> locator
+    end
   end
 
   defp format_path_error(op, observed) do

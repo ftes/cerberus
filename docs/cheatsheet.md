@@ -15,8 +15,8 @@
 | Click link/button | `click(session, link("Counter"))` |
 | Fill input | `fill_in(session, label("Search term"), "Aragorn")` |
 | Submit form | `submit(session, button("Run Search"))` |
-| Assert text present | `assert_has(session, text("Articles"), exact: true)` |
-| Assert text absent | `refute_has(session, text("Error"), exact: true)` |
+| Assert text present | `assert_has(session, text("Articles", exact: true))` |
+| Assert text absent | `refute_has(session, text("Error", exact: true))` |
 | Assert path/query | `assert_path(session, "/search/results", query: %{q: "Aragorn"})` |
 | Scope to subtree | `within(session, "#secondary-panel", fn s -> ... end)` |
 
@@ -73,5 +73,5 @@ Use `Cerberus.Browser` only with `session(:browser)`.
 -session()
 +session(:browser)
  |> visit("/articles")
- |> assert_has(text("Articles"), exact: true)
+ |> assert_has(text("Articles", exact: true))
 ```

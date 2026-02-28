@@ -3,8 +3,8 @@ defmodule Cerberus.Query do
   Shared query semantics reused by all drivers.
 
   Per ADR-0001, this module is the semantic source of truth for text matching
-  behavior (`exact`, `normalize_ws`, regex/string matching), so driver adapters
-  do not diverge in assertion behavior.
+  behavior (`exact`, regex/string matching, and string whitespace normalization),
+  so driver adapters do not diverge in assertion behavior.
   """
 
   @spec match_text?(String.t(), String.t() | Regex.t(), keyword()) :: boolean()

@@ -9,7 +9,7 @@ Cerberus is session-first. Every operation returns an updated session.
 ```elixir
 session()
 |> visit("/articles")
-|> assert_has(text("Articles"), exact: true)
+|> assert_has(text("Articles", exact: true))
 ```
 
 > #### Info
@@ -21,8 +21,8 @@ session()
 ```elixir
 session()
 |> visit("/articles")
-|> assert_has(text("Articles"), exact: true)
-|> refute_has(text("500 Internal Server Error"), exact: true)
+|> assert_has(text("Articles", exact: true))
+|> refute_has(text("500 Internal Server Error", exact: true))
 ```
 
 ## Step 2: LiveView Interaction (Same API)
@@ -31,7 +31,7 @@ session()
 session()
 |> visit("/live/counter")
 |> click(button("Increment"))
-|> assert_has(text("Count: 1"), exact: true)
+|> assert_has(text("Count: 1", exact: true))
 ```
 
 ## Step 3: Forms + Path Assertions
@@ -42,7 +42,7 @@ session()
 |> fill_in(label("Search term"), "Aragorn")
 |> submit(button("Run Search"))
 |> assert_path("/search/results", query: %{q: "Aragorn"})
-|> assert_has(text("Search query: Aragorn"), exact: true)
+|> assert_has(text("Search query: Aragorn", exact: true))
 ```
 
 ## Step 4: Scoped Interaction
@@ -52,7 +52,7 @@ session()
 |> visit("/scoped")
 |> within("#secondary-panel", fn scoped ->
   scoped
-  |> assert_has(text("Status: secondary"), exact: true)
+  |> assert_has(text("Status: secondary", exact: true))
   |> click(link("Open"))
 end)
 |> assert_path("/search")
@@ -64,19 +64,19 @@ end)
 primary =
   session()
   |> visit("/session/user/alice")
-  |> assert_has(text("Session user: alice"), exact: true)
+  |> assert_has(text("Session user: alice", exact: true))
 
 _tab2 =
   primary
   |> open_tab()
   |> visit("/session/user")
-  |> assert_has(text("Session user: alice"), exact: true)
+  |> assert_has(text("Session user: alice", exact: true))
 
 primary
 |> open_user()
 |> visit("/session/user")
-|> assert_has(text("Session user: unset"), exact: true)
-|> refute_has(text("Session user: alice"), exact: true)
+|> assert_has(text("Session user: unset", exact: true))
+|> refute_has(text("Session user: alice", exact: true))
 ```
 
 ## Step 6: Async LiveView Assertions
@@ -106,8 +106,8 @@ session =
   end)
 
 session
-|> assert_has(text("Press result: submitted"), exact: true)
-|> assert_has(text("Dialog result: cancelled"), exact: true)
+|> assert_has(text("Press result: submitted", exact: true))
+|> assert_has(text("Dialog result: cancelled", exact: true))
 ```
 
 > #### Warning

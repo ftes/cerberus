@@ -35,7 +35,7 @@ defmodule Cerberus.CoreApiExamplesTest do
         fn session ->
           session
           |> visit("/articles")
-          |> assert_has([text: "DOES NOT EXIST"], exact: true, normalize_ws: false)
+          |> assert_has(text: "DOES NOT EXIST", exact: true)
         end
       )
 
@@ -43,10 +43,10 @@ defmodule Cerberus.CoreApiExamplesTest do
 
     Enum.each(results, fn result ->
       assert result.message =~ "assert_has failed"
-      assert result.message =~ ~s(locator: [text: "DOES NOT EXIST"])
+      assert result.message =~ ~s(locator: [text: "DOES NOT EXIST", exact: true])
       assert result.message =~ "opts:"
-      assert result.message =~ "exact: true"
-      assert result.message =~ "normalize_ws: false"
+      assert result.message =~ "visible: true"
+      assert result.message =~ "timeout: 0"
     end)
   end
 
@@ -54,6 +54,6 @@ defmodule Cerberus.CoreApiExamplesTest do
     session
     |> visit("/live/counter")
     |> click(role(:button, name: "Increment"))
-    |> assert_has(text("Count: 1"), exact: true)
+    |> assert_has(text("Count: 1", exact: true))
   end
 end

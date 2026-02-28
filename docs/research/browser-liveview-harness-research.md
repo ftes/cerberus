@@ -36,7 +36,7 @@ Example:
 session
 |> visit("/live/counter")
 |> click([text: "Increment"])
-|> assert_has([text: "Count: 1"], exact: true)
+|> assert_has([text: "Count: 1", exact: true])
 ```
 
 ## Architecture Snapshot

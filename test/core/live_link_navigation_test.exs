@@ -15,16 +15,16 @@ defmodule Cerberus.CoreLiveLinkNavigationTest do
       fn session ->
         session
         |> visit("/live/redirects")
-        |> click_link(link("Navigate link"), exact: true)
+        |> click_link(link("Navigate link", exact: true))
         |> assert_path("/live/counter")
-        |> assert_has(text("Count: 0"), exact: true)
+        |> assert_has(text("Count: 0", exact: true))
         |> visit("/live/redirects")
-        |> click_link(link("Patch link"), exact: true)
+        |> click_link(link("Patch link", exact: true))
         |> assert_path("/live/redirects", query: [details: "true", foo: "bar"])
-        |> assert_has(text("Live Redirects Details"), exact: true)
-        |> click_link(link("Navigate to non-liveview"), exact: true)
+        |> assert_has(text("Live Redirects Details", exact: true))
+        |> click_link(link("Navigate to non-liveview", exact: true))
         |> assert_path("/main")
-        |> assert_has(text("Main page"), exact: true)
+        |> assert_has(text("Main page", exact: true))
       end
     )
   end
@@ -36,10 +36,10 @@ defmodule Cerberus.CoreLiveLinkNavigationTest do
       fn session ->
         session
         |> visit("/live/redirects")
-        |> click_link(link("Navigate (and redirect back) link"), exact: true)
+        |> click_link(link("Navigate (and redirect back) link", exact: true))
         |> assert_path("/live/redirects")
-        |> assert_has(text("Live Redirects"), exact: true)
-        |> assert_has(text("Navigated back!"), exact: true)
+        |> assert_has(text("Live Redirects", exact: true))
+        |> assert_has(text("Navigated back!", exact: true))
       end
     )
   end
@@ -53,10 +53,10 @@ defmodule Cerberus.CoreLiveLinkNavigationTest do
       fn session ->
         session
         |> visit("/live/redirects")
-        |> click_link(link("Navigate to non-liveview"), exact: true)
+        |> click_link(link("Navigate to non-liveview", exact: true))
         |> assert_path("/main")
-        |> assert_has(text("Main page"), exact: true)
-        |> assert_has(text("x-custom-header: Some-Value"), exact: true)
+        |> assert_has(text("Main page", exact: true))
+        |> assert_has(text("x-custom-header: Some-Value", exact: true))
         |> then(fn updated_session ->
           assert {"x-custom-header", "Some-Value"} in updated_session.conn.req_headers
           updated_session
@@ -75,10 +75,10 @@ defmodule Cerberus.CoreLiveLinkNavigationTest do
       fn session ->
         session
         |> visit("/live/redirects")
-        |> assert_has(text("connect timezone: Europe/Berlin"), exact: true)
-        |> click_link(link("Navigate link"), exact: true)
+        |> assert_has(text("connect timezone: Europe/Berlin", exact: true))
+        |> click_link(link("Navigate link", exact: true))
         |> assert_path("/live/counter")
-        |> assert_has(text("connect timezone: Europe/Berlin"), exact: true)
+        |> assert_has(text("connect timezone: Europe/Berlin", exact: true))
         |> then(fn updated_session ->
           assert updated_session.conn.private[:live_view_connect_params] == %{"timezone" => "Europe/Berlin"}
           updated_session

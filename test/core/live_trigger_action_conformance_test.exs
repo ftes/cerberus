@@ -16,7 +16,7 @@ defmodule Cerberus.CoreLiveTriggerActionConformanceTest do
       |> fill_in("Trigger action", "engage")
       |> submit(text: "Submit Trigger Form")
       |> assert_path("/trigger-action/result")
-      |> assert_has(text("method: POST"), exact: true)
+      |> assert_has(text("method: POST", exact: true))
     end)
   end
 
@@ -27,8 +27,8 @@ defmodule Cerberus.CoreLiveTriggerActionConformanceTest do
     |> fill_in("Trigger action", "engage")
     |> submit(text: "Submit Trigger Form")
     |> assert_path("/trigger-action/result")
-    |> assert_has(text("trigger_action_hidden_input: trigger_action_hidden_value"), exact: true)
-    |> assert_has(text("trigger_action_input: engage"), exact: true)
+    |> assert_has(text("trigger_action_hidden_input: trigger_action_hidden_value", exact: true))
+    |> assert_has(text("trigger_action_input: engage", exact: true))
   end
 
   test "phx-trigger-action can be triggered from outside the form", context do
@@ -37,7 +37,7 @@ defmodule Cerberus.CoreLiveTriggerActionConformanceTest do
       |> visit("/live/trigger-action")
       |> click_button(text: "Trigger from elsewhere")
       |> assert_path("/trigger-action/result")
-      |> assert_has(text("method: POST"), exact: true)
+      |> assert_has(text("method: POST", exact: true))
     end)
   end
 
@@ -47,8 +47,8 @@ defmodule Cerberus.CoreLiveTriggerActionConformanceTest do
     |> visit("/live/trigger-action")
     |> click_button(text: "Trigger from elsewhere")
     |> assert_path("/trigger-action/result")
-    |> assert_has(text("trigger_action_hidden_input: trigger_action_hidden_value"), exact: true)
-    |> refute_has(text("trigger_action_input: engage"), exact: true)
+    |> assert_has(text("trigger_action_hidden_input: trigger_action_hidden_value", exact: true))
+    |> refute_has(text("trigger_action_input: engage", exact: true))
   end
 
   @tag drivers: [:live]
@@ -58,7 +58,7 @@ defmodule Cerberus.CoreLiveTriggerActionConformanceTest do
       |> visit("/live/trigger-action")
       |> fill_in("Patch and trigger action", "let's go")
       |> assert_path("/trigger-action/result")
-      |> assert_has(text("patch_and_trigger_action: let's go"), exact: true)
+      |> assert_has(text("patch_and_trigger_action: let's go", exact: true))
     end)
   end
 
@@ -68,11 +68,11 @@ defmodule Cerberus.CoreLiveTriggerActionConformanceTest do
       |> visit("/live/trigger-action")
       |> click_button(text: "Redirect and trigger action")
       |> assert_path("/live/counter")
-      |> assert_has(text("Counter"), exact: true)
+      |> assert_has(text("Counter", exact: true))
       |> visit("/live/trigger-action")
       |> click_button(text: "Navigate and trigger action")
       |> assert_path("/live/counter")
-      |> assert_has(text("Counter"), exact: true)
+      |> assert_has(text("Counter", exact: true))
     end)
   end
 
@@ -84,7 +84,7 @@ defmodule Cerberus.CoreLiveTriggerActionConformanceTest do
       |> fill_in("Message", "dynamic")
       |> submit(text: "Submit Dynamic Form")
       |> assert_path("/trigger-action/result")
-      |> assert_has(text("method: POST"), exact: true)
+      |> assert_has(text("method: POST", exact: true))
     end)
   end
 
@@ -96,7 +96,7 @@ defmodule Cerberus.CoreLiveTriggerActionConformanceTest do
     |> fill_in("Message", "dynamic")
     |> submit(text: "Submit Dynamic Form")
     |> assert_path("/trigger-action/result")
-    |> assert_has(text("message: dynamic"), exact: true)
+    |> assert_has(text("message: dynamic", exact: true))
   end
 
   @tag drivers: [:live]

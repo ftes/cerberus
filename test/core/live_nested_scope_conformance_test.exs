@@ -20,11 +20,11 @@ defmodule Cerberus.CoreLiveNestedScopeConformanceTest do
           |> within(".actions", fn nested ->
             click(nested, button("Save"))
           end)
-          |> assert_has(text("Child saved: 1"), exact: true)
-          |> refute_has(text("Parent saved: 1"), exact: true)
+          |> assert_has(text("Child saved: 1", exact: true))
+          |> refute_has(text("Parent saved: 1", exact: true))
         end)
-        |> assert_has(text("Child saved: 1"), exact: true)
-        |> refute_has(text("Parent saved: 1"), exact: true)
+        |> assert_has(text("Child saved: 1", exact: true))
+        |> refute_has(text("Parent saved: 1", exact: true))
       end
     )
   end

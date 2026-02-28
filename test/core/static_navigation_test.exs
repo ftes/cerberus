@@ -13,7 +13,7 @@ defmodule Cerberus.CoreStaticNavigationTest do
       session
       |> visit("/articles")
       |> click(text: "Counter")
-      |> assert_has([text: "Count: 0"], exact: true)
+      |> assert_has(text: "Count: 0", exact: true)
     end)
   end
 
@@ -22,7 +22,7 @@ defmodule Cerberus.CoreStaticNavigationTest do
       session
       |> visit("/live/counter")
       |> click(text: "Increment")
-      |> assert_has([text: "Count: 1"], exact: true)
+      |> assert_has(text: "Count: 1", exact: true)
     end)
   end
 
@@ -32,7 +32,7 @@ defmodule Cerberus.CoreStaticNavigationTest do
       |> visit("/redirect/static")
       |> assert_has(text: "Articles")
       |> visit("/redirect/live")
-      |> assert_has([text: "Count: 0"], exact: true)
+      |> assert_has(text: "Count: 0", exact: true)
     end)
   end
 end

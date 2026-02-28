@@ -15,7 +15,7 @@ defmodule Cerberus.CoreAssertionFilterSemanticsTest do
     Harness.run!(context, fn session ->
       session
       |> visit("/live/form-change")
-      |> refute_has(label(@missing_label), exact: true)
+      |> refute_has(label(@missing_label, exact: true))
     end)
   end
 
@@ -25,7 +25,7 @@ defmodule Cerberus.CoreAssertionFilterSemanticsTest do
       Harness.run(context, fn session ->
         session
         |> visit("/live/form-change")
-        |> assert_has(label(@missing_label), exact: true)
+        |> assert_has(label(@missing_label, exact: true))
       end)
 
     assert Enum.all?(results, &(&1.status == :error))

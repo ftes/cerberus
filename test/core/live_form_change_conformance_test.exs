@@ -14,8 +14,8 @@ defmodule Cerberus.CoreLiveFormChangeConformanceTest do
       session
       |> visit("/live/form-change")
       |> fill_in("Email", "frodo@example.com")
-      |> assert_has(text("_target: [email]"), exact: true)
-      |> assert_has(text("email: frodo@example.com"), exact: true)
+      |> assert_has(text("_target: [email]", exact: true))
+      |> assert_has(text("email: frodo@example.com", exact: true))
     end)
   end
 
@@ -28,7 +28,7 @@ defmodule Cerberus.CoreLiveFormChangeConformanceTest do
       |> within("#no-phx-change-form", fn scoped ->
         fill_in(scoped, "Name (no phx-change)", "Aragorn")
       end)
-      |> assert_has(text("No change value: unchanged"), exact: true)
+      |> assert_has(text("No change value: unchanged", exact: true))
     end)
   end
 
@@ -43,9 +43,9 @@ defmodule Cerberus.CoreLiveFormChangeConformanceTest do
         |> fill_in("Name for hidden", "Frodo")
         |> fill_in("Email for hidden", "frodo@example.com")
       end)
-      |> assert_has(text("name: Frodo"), exact: true)
-      |> assert_has(text("email: frodo@example.com"), exact: true)
-      |> assert_has(text("hidden_race: hobbit"), exact: true)
+      |> assert_has(text("name: Frodo", exact: true))
+      |> assert_has(text("email: frodo@example.com", exact: true))
+      |> assert_has(text("hidden_race: hobbit", exact: true))
     end)
   end
 
@@ -56,8 +56,8 @@ defmodule Cerberus.CoreLiveFormChangeConformanceTest do
       session
       |> visit("/live/form-change")
       |> fill_in("Nickname *", "Strider")
-      |> assert_has(text("_target: [nickname]"), exact: true)
-      |> assert_has(text("nickname: Strider"), exact: true)
+      |> assert_has(text("_target: [nickname]", exact: true))
+      |> assert_has(text("nickname: Strider", exact: true))
     end)
   end
 end

@@ -14,7 +14,7 @@ defmodule Cerberus.CoreOracleMismatchTest do
       fn session ->
         session
         |> visit("/oracle/mismatch")
-        |> assert_has([text: "Oracle mismatch static fixture marker"], exact: true)
+        |> assert_has(text: "Oracle mismatch static fixture marker", exact: true)
       end
     )
   end
@@ -26,7 +26,7 @@ defmodule Cerberus.CoreOracleMismatchTest do
       fn session ->
         session
         |> visit("/live/oracle/mismatch")
-        |> assert_has([text: "Oracle mismatch live fixture marker"], exact: true)
+        |> assert_has(text: "Oracle mismatch live fixture marker", exact: true)
       end
     )
   end

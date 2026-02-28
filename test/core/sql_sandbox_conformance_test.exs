@@ -19,7 +19,7 @@ defmodule Cerberus.CoreSQLSandboxConformanceTest do
 
         session
         |> visit("/sandbox/messages")
-        |> assert_has(text(body), exact: true)
+        |> assert_has(text(body, exact: true))
       end,
       sandbox: true
     )
@@ -35,9 +35,9 @@ defmodule Cerberus.CoreSQLSandboxConformanceTest do
 
         session
         |> visit("/live/sandbox/messages")
-        |> assert_has(text(body), exact: true)
-        |> click_button(button("Refresh"), exact: true)
-        |> assert_has(text(body), exact: true)
+        |> assert_has(text(body, exact: true))
+        |> click_button(button("Refresh", exact: true))
+        |> assert_has(text(body, exact: true))
       end,
       sandbox: true
     )

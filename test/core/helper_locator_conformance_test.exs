@@ -16,16 +16,16 @@ defmodule Cerberus.CoreHelperLocatorConformanceTest do
         |> visit("/search")
         |> fill_in(label("Search term"), "phoenix")
         |> submit(button("Run Search"))
-        |> assert_has(text("Search query: phoenix"), exact: true)
+        |> assert_has(text("Search query: phoenix", exact: true))
         |> visit("/search")
         |> fill_in(role(:textbox, name: "Search term"), "elixir")
         |> submit(role(:button, name: "Run Search"))
-        |> assert_has(text("Search query: elixir"), exact: true)
+        |> assert_has(text("Search query: elixir", exact: true))
         |> visit("/articles")
         |> click(role(:link, name: "Counter"))
-        |> assert_has(role(:button, name: "Increment"), exact: true)
+        |> assert_has(role(:button, name: "Increment", exact: true))
         |> click(link("Articles"))
-        |> assert_has(text("Articles"), exact: true)
+        |> assert_has(text("Articles", exact: true))
       end
     )
   end
@@ -56,9 +56,9 @@ defmodule Cerberus.CoreHelperLocatorConformanceTest do
         session
         |> visit("/live/selector-edge")
         |> click(button("Apply"))
-        |> assert_has(text("Selected: primary"), exact: true)
+        |> assert_has(text("Selected: primary", exact: true))
         |> click(role(:button, name: "Apply"))
-        |> assert_has(text("Selected: primary"), exact: true)
+        |> assert_has(text("Selected: primary", exact: true))
       end
     )
   end
@@ -72,7 +72,7 @@ defmodule Cerberus.CoreHelperLocatorConformanceTest do
         session
         |> visit("/live/selector-edge")
         |> click(~l"#secondary-actions button"c)
-        |> assert_has(text("Selected: secondary"), exact: true)
+        |> assert_has(text("Selected: secondary", exact: true))
       end
     )
   end
@@ -85,8 +85,8 @@ defmodule Cerberus.CoreHelperLocatorConformanceTest do
       fn session ->
         session
         |> visit("/live/selector-edge")
-        |> click_button(button("Create"), exact: true)
-        |> assert_has(text("Selected: confirmed"), exact: true)
+        |> click_button(button("Create", exact: true))
+        |> assert_has(text("Selected: confirmed", exact: true))
       end
     )
   end
@@ -100,7 +100,7 @@ defmodule Cerberus.CoreHelperLocatorConformanceTest do
         session
         |> visit("/live/selector-edge")
         |> click(role(:link, name: "Articles"))
-        |> assert_has(text("Articles"), exact: true)
+        |> assert_has(text("Articles", exact: true))
       end
     )
   end

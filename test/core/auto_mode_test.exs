@@ -13,10 +13,10 @@ defmodule Cerberus.CoreAutoModeTest do
     Harness.run!(context, fn session ->
       session
       |> visit("/articles")
-      |> assert_has([text: "Articles"], exact: true)
+      |> assert_has(text: "Articles", exact: true)
       |> visit("/live/counter")
       |> click_button(text: "Increment")
-      |> assert_has([text: "Count: 1"], exact: true)
+      |> assert_has(text: "Count: 1", exact: true)
     end)
   end
 
@@ -25,7 +25,7 @@ defmodule Cerberus.CoreAutoModeTest do
       session
       |> visit("/live/counter")
       |> click_link(text: "Articles")
-      |> assert_has([text: "Articles"], exact: true)
+      |> assert_has(text: "Articles", exact: true)
     end)
   end
 
@@ -34,7 +34,7 @@ defmodule Cerberus.CoreAutoModeTest do
       session = visit(session, "/live/redirects")
       assert Session.driver_kind(session) == :live
 
-      session = click_button(session, "Redirect to Articles", exact: true)
+      session = click_button(session, button("Redirect to Articles", exact: true))
       assert session.current_path == "/articles"
       assert Session.driver_kind(session) == :static
       assert session.last_result.observed.transition.reason == :live_redirect
@@ -44,7 +44,7 @@ defmodule Cerberus.CoreAutoModeTest do
       session = visit(session, "/live/redirects")
       assert Session.driver_kind(session) == :live
 
-      session = click_button(session, "Hard Redirect to Articles", exact: true)
+      session = click_button(session, button("Hard Redirect to Articles", exact: true))
       assert session.current_path == "/articles"
       assert Session.driver_kind(session) == :static
       assert session.last_result.observed.transition.reason == :redirect
@@ -79,7 +79,7 @@ defmodule Cerberus.CoreAutoModeTest do
         session()
         |> visit("/articles")
         |> click_link(text: "Counter")
-        |> assert_has([text: "no such text"], exact: true)
+        |> assert_has(text: "no such text", exact: true)
       end
 
     assert error.message =~ "transition:"

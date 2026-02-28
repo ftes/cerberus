@@ -68,7 +68,7 @@ defmodule Cerberus.CoreLiveUploadConformanceTest do
         |> within("#upload-change-form", fn scoped ->
           upload(scoped, "Avatar", jpg)
         end)
-        |> assert_has(text("phx-change triggered on file selection"), exact: true)
+        |> assert_has(text("phx-change triggered on file selection", exact: true))
       end
     )
   end
