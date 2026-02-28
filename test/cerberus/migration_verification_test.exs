@@ -35,6 +35,12 @@ defmodule Cerberus.MigrationVerificationTest do
 
     assert result.work_dir == work_dir
     assert result.test_file == "test/features/migration_ready_test.exs"
+    assert result.report.summary.all_parity_pass?
+    assert result.report.summary.total_rows == 1
+    assert result.report.summary.pre_pass_rows == 1
+    assert result.report.summary.post_pass_rows == 1
+    assert result.report.summary.parity_pass_rows == 1
+    assert [%{id: "pt_migration_ready", parity: true}] = result.report.rows
 
     assert_receive {:cmd, "mix", ["deps.get"], deps_opts}
     assert_receive {:cmd, "mix", ["test", "test/features/migration_ready_test.exs"], pre_opts}
@@ -45,6 +51,49 @@ defmodule Cerberus.MigrationVerificationTest do
     assert mode(post_opts) == "cerberus"
 
     assert File.read!(Path.join(work_dir, "test/features/migration_ready_test.exs")) =~ "import Cerberus"
+  end
+
+  test "records row-level parity for multiple rows", %{tmp_dir: tmp_dir} do
+    fixture_dir = build_fixture_project(tmp_dir)
+
+    File.write!(
+      Path.join(fixture_dir, "test/features/migration_ready_second_test.exs"),
+      """
+      defmodule FixtureMigrationReadySecondTest do
+        use ExUnit.Case, async: true
+
+        import PhoenixTest
+
+        test "placeholder second" do
+          assert true
+        end
+      end
+      """
+    )
+
+    rows = [
+      %{id: "row_1", test_file: "test/features/migration_ready_test.exs"},
+      %{id: "row_2", test_file: "test/features/migration_ready_second_test.exs"}
+    ]
+
+    assert {:ok, result} =
+             MigrationVerification.run(
+               [
+                 fixture_dir: fixture_dir,
+                 work_dir: Path.join(tmp_dir, "work"),
+                 rows: rows,
+                 keep: true
+               ],
+               fn _cmd, _args, _opts -> {"ok", 0} end
+             )
+
+    assert result.report.summary.total_rows == 2
+    assert result.report.summary.pre_pass_rows == 2
+    assert result.report.summary.post_pass_rows == 2
+    assert result.report.summary.parity_pass_rows == 2
+    assert result.report.summary.all_parity_pass?
+    assert Enum.all?(result.report.rows, & &1.parity)
+    assert Enum.map(result.report.rows, & &1.id) == ["row_1", "row_2"]
   end
 
   test "returns detailed failure for post-test failures", %{tmp_dir: tmp_dir} do
@@ -76,9 +125,19 @@ defmodule Cerberus.MigrationVerificationTest do
              )
 
     assert failure.stage == :post_test
+    assert failure.row_id == "pt_migration_ready"
+    assert failure.test_file == "test/features/migration_ready_test.exs"
     assert failure.status == 1
     assert failure.work_dir == work_dir
     assert failure.output == "post failed"
+    assert failure.report.summary.total_rows == 1
+    assert failure.report.summary.pre_pass_rows == 1
+    assert failure.report.summary.post_pass_rows == 0
+    assert failure.report.summary.parity_pass_rows == 0
+    refute failure.report.summary.all_parity_pass?
+
+    assert [%{id: "pt_migration_ready", pre_status: :pass, post_status: :fail, parity: false}] =
+             failure.report.rows
   end
 
   test "returns prepare error when fixture directory is missing", %{tmp_dir: tmp_dir} do
