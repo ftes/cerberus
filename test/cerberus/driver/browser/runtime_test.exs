@@ -63,13 +63,10 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
       refute Map.has_key?(chrome_opts, "binary")
     end
 
-    test "managed payload includes local browser binary" do
-      chrome_path = Path.join(System.tmp_dir!(), "cerberus-fake-chrome-#{System.unique_integer([:positive])}")
+    @tag :tmp_dir
+    test "managed payload includes local browser binary", %{tmp_dir: tmp_dir} do
+      chrome_path = Path.join(tmp_dir, "cerberus-fake-chrome")
       File.write!(chrome_path, "")
-
-      on_exit(fn ->
-        File.rm(chrome_path)
-      end)
 
       payload = Runtime.webdriver_session_payload([chrome_binary: chrome_path], true, :chrome)
       chrome_opts = payload["capabilities"]["alwaysMatch"]["goog:chromeOptions"]

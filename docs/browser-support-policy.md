@@ -1,80 +1,46 @@
 # Browser Support Policy
 
-This document defines Cerberus browser support tiers for WebDriver BiDi and the constraints required for promotion.
+This document defines current browser support for Cerberus WebDriver BiDi execution.
 
-## Current Baseline
+## Supported Browsers
 
-Cerberus currently has one official browser target:
+Cerberus currently supports:
 
-- Chrome/Chromium via ChromeDriver BiDi.
+- Chrome/Chromium via ChromeDriver BiDi
+- Firefox via geckodriver BiDi
 
-This is the only target validated by conformance tests and CI today.
+Both targets are maintained in CI and covered by browser conformance suites and shared API examples.
 
-Current runtime assumptions are Chrome-specific:
+## Runtime Model
 
-- WebDriver session handshake uses `browserName: "chrome"`.
-- Capabilities use `goog:chromeOptions`.
-- Local managed runtime expects Chrome and ChromeDriver binaries (`CHROME`, `CHROMEDRIVER`).
-- Remote runtime mode (`webdriver_url`) connects to a pre-running WebDriver endpoint and skips local browser/chromedriver launch.
+- Cerberus uses one shared browser runtime process and one shared BiDi connection per test invocation.
+- Browser isolation is done through per-session `userContext` and per-tab `browsingContext`.
+- Runtime launch settings are invocation-level, including browser selection, headed/headless mode, WebDriver endpoint, binary paths, and driver args.
+- If you need different runtime launch settings, run separate test invocations.
 
-## Support Tiers
+## Local Managed Runtime
 
-### Tier 1: Officially Supported
+Configure local browser and WebDriver binaries via `:cerberus, :browser`:
 
-- Maintained in CI.
-- Covered by browser conformance suites and shared API examples.
-- Included in setup docs with deterministic local install instructions.
+```elixir
+config :cerberus, :browser,
+  chrome_binary: "/path/to/chrome-or-chromium",
+  chromedriver_binary: "/path/to/chromedriver",
+  firefox_binary: "/path/to/firefox",
+  geckodriver_binary: "/path/to/geckodriver"
+```
 
-Current Tier 1 browser:
+## Remote Runtime
 
-- Chrome/Chromium (ChromeDriver + BiDi).
+Use a pre-running WebDriver endpoint:
 
-### Tier 2: Planned/Experimental
+```elixir
+config :cerberus, :browser,
+  webdriver_url: "http://127.0.0.1:4444"
+```
 
-- Actively being implemented, but not yet guaranteed in CI.
-- May be available behind explicit opt-in APIs or runtime settings.
+With `webdriver_url` set, Cerberus skips local browser/WebDriver process launch.
 
-Current Tier 2 targets:
+## Not Current Targets
 
-- Firefox (`session(:firefox)`), currently experimental.
-
-### Tier 3: Unsupported
-
-- No compatibility guarantees.
-- No CI coverage.
-- Community experiments are allowed, but breakage is expected.
-
-Current Tier 3 targets:
-
-- Edge as a first-class target (Chromium engine overlap exists, but no official adapter/CI policy yet).
-- Safari/WebKit (no Cerberus runtime target yet).
-
-## Additional Browser Evaluation (as of February 28, 2026)
-
-- Edge:
-  - Evidence: Microsoft positions EdgeDriver as the official browser automation endpoint for Chromium-based Edge.
-  - Source: [Use WebDriver to automate Microsoft Edge](https://learn.microsoft.com/en-us/microsoft-edge/webdriver-chromium/).
-  - Recommendation: promote Edge to Tier 2 next (after CI workflow finalization), because Cerberus already models Chromium-style capability flow and runtime process shape.
-
-- Safari/WebKit:
-  - Evidence: WebKit WebDriver BiDi work remains active in implementation bugs (for example session support and enabling in builds), which indicates ongoing maturation rather than stable broad readiness.
-  - Sources:
-    - [WebKit Bug 275457: [WebDriver BiDi] Add Session support](https://bugs.webkit.org/show_bug.cgi?id=275457)
-    - [WebKit Bug 288652: [WebDriver BiDi] Default-enable all module support in WebKit and STP](https://bugs.webkit.org/show_bug.cgi?id=288652)
-  - Recommendation: keep Safari/WebKit in Tier 3 until stable release-channel BiDi support and repeatable CI/runtime setup are confirmed.
-
-## Admission Criteria For Tier 1
-
-A browser moves to Tier 1 only when all conditions are met:
-
-- Stable runtime handshake and startup strategy (local and CI).
-- Full conformance coverage across shared Cerberus APIs.
-- Browser-only extensions (`Cerberus.Browser.*`) have documented behavior and known limitations.
-- Multi-user and multi-tab isolation semantics match Cerberus contracts.
-- Setup documentation is complete and reproducible.
-
-## Explicitly Separate Work
-
-This policy document does not implement:
-
-- global timeout/screenshot default knobs (`cerberus-kmpz`, `cerberus-qeus`, `cerberus-bflg`, `cerberus-dh5w`, `cerberus-fwox`).
+Edge and Safari/WebKit are not currently first-class Cerberus runtime targets.

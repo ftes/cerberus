@@ -7,7 +7,7 @@
 
 Cerberus is an experimental Phoenix testing harness with one API across:
 - non-browser Phoenix mode with static/live auto-detection and switching,
-- browser mode defaulting to Chrome, optionally with Firefox via WebDriver BiDi.
+- browser mode for Chrome and Firefox via WebDriver BiDi.
 
 Minimal API: You control your tests. Easily run single tests/describe blocks/entire modules in one or more browsers.
 
@@ -156,35 +156,38 @@ Isolation strategy:
 - each `session(:browser, ...)` creates an isolated browser user context,
 - context-level overrides (viewport/user-agent/init scripts) are isolated per session and do not require a dedicated browser process.
 
-## Timeout Defaults
+## Browser Defaults and Runtime Options
 
-You can configure default assertion and browser readiness timeouts once:
+You can configure defaults once:
 
 ```elixir
 config :cerberus, :assert_timeout_ms, 300
 
 config :cerberus, :browser,
   ready_timeout_ms: 2_200,
+  ready_quiet_ms: 40,
   bidi_command_timeout_ms: 5_000,
   runtime_http_timeout_ms: 9_000,
   dialog_timeout_ms: 1_500,
   screenshot_full_page: false,
-  screenshot_artifact_dir: "tmp/cerberus-artifacts/screenshots"
+  screenshot_artifact_dir: "tmp/cerberus-artifacts/screenshots",
+  show_browser: false
 ```
 
 Override precedence is:
 - call opts (`assert_has(..., timeout: ...)`)
-- session opts (`session(assert_timeout_ms: ...)`, `session(:browser, ready_timeout_ms: ...)`)
+- session opts (`session(assert_timeout_ms: ...)`, `session(:browser, ready_timeout_ms: ...)`, `session(:browser, ready_quiet_ms: ...)`, context overrides in `session(:browser, browser: [...])`)
 - app config
 - hardcoded fallback
 
-`bidi_command_timeout_ms` is used as the default timeout for WebDriver BiDi commands.
-`runtime_http_timeout_ms` is used for browser runtime HTTP calls (for example WebDriver `/status` and session lifecycle requests).
-`dialog_timeout_ms` is used by `Browser.with_dialog/3` when a call-level `timeout:` is not provided.
-`screenshot_full_page` is the default for `screenshot(..., full_page: ...)` when the call omits `full_page`.
-`screenshot_artifact_dir` controls where generated screenshot files are written when no `path:` is provided.
-You can optionally set `screenshot_path` in `:cerberus, :browser` to force a single default output path.
-Per-command `timeout:` still takes precedence when provided.
+Option scopes:
+- Per-session context options: `ready_timeout_ms`, `ready_quiet_ms`, `browser: [viewport: ..., user_agent: ..., init_script: ... | init_scripts: [...]]`.
+- Global runtime launch options: `browser_name`, `webdriver_url`, `show_browser`, `headless`, `chrome_args`, `firefox_args`, `chrome_binary`, `firefox_binary`, `chromedriver_binary`, `geckodriver_binary`.
+- Global browser defaults: `bidi_command_timeout_ms`, `runtime_http_timeout_ms`, `dialog_timeout_ms`, `screenshot_full_page`, `screenshot_artifact_dir`, `screenshot_path`.
+
+`show_browser: true` runs headed by default. `headless` has higher precedence if both are set.
+
+Because browser runtime + BiDi transport are shared, runtime launch options are fixed when the runtime starts and should be treated as invocation-level config (not per-test toggles).
 
 ## Learn More
 
@@ -197,16 +200,25 @@ Per-command `timeout:` still takes precedence when provided.
 ## Browser Runtime Setup
 
 Cerberus browser tests use WebDriver BiDi.
-Current Tier 1 support is Chrome/Chromium via ChromeDriver; see the Browser Support Policy for broader target status.
+Chrome and Firefox are both fully supported browser targets.
 
-Local managed runtime (default) requires:
-- `CHROME`
-- `CHROMEDRIVER`
-- `FIREFOX` (for `session(:firefox)` / Firefox matrix runs)
-- `GECKODRIVER` (for `session(:firefox)` / Firefox matrix runs)
+Local managed runtime (default) uses configured browser and WebDriver binaries:
 
-Optional:
-- `SHOW_BROWSER=true` to run headed.
+```elixir
+config :cerberus, :browser,
+  chrome_binary: "/path/to/chrome-or-chromium",
+  chromedriver_binary: "/path/to/chromedriver",
+  firefox_binary: "/path/to/firefox",
+  geckodriver_binary: "/path/to/geckodriver"
+```
+
+Only the selected browser lane needs to be configured for a given run.
+
+Headed mode:
+
+```elixir
+config :cerberus, :browser, show_browser: true
+```
 
 Remote runtime mode:
 
@@ -215,7 +227,7 @@ config :cerberus, :browser,
   webdriver_url: "http://127.0.0.1:4444"
 ```
 
-With `webdriver_url` set, Cerberus does not launch local Chrome/ChromeDriver and does not require `CHROME`/`CHROMEDRIVER` for runtime startup.
+With `webdriver_url` set, Cerberus does not launch local browser/WebDriver processes.
 
 Cross-browser conformance run:
 

@@ -4,15 +4,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
   import ExUnit.CaptureIO
 
   @task "igniter.cerberus.migrate_phoenix_test"
-
-  setup do
-    tmp_dir = Path.join(System.tmp_dir!(), "cerberus-migrate-task-#{System.unique_integer([:positive])}")
-    File.rm_rf!(tmp_dir)
-    File.mkdir_p!(tmp_dir)
-
-    on_exit(fn -> File.rm_rf!(tmp_dir) end)
-    %{tmp_dir: tmp_dir}
-  end
+  @moduletag :tmp_dir
 
   test "dry-run prints diff and keeps files unchanged", %{tmp_dir: tmp_dir} do
     file = Path.join(tmp_dir, "sample_feature_test.exs")

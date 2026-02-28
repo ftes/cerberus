@@ -472,8 +472,9 @@ defmodule Cerberus.PublicApiTest do
   end
 
   @tag browser: true
-  test "screenshot captures browser PNG output to a requested path" do
-    path = Path.join(System.tmp_dir!(), "cerberus-screenshot-#{System.unique_integer([:positive])}.png")
+  @tag :tmp_dir
+  test "screenshot captures browser PNG output to a requested path", %{tmp_dir: tmp_dir} do
+    path = Path.join(tmp_dir, "cerberus-screenshot.png")
 
     session =
       :browser

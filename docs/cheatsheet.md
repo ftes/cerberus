@@ -6,8 +6,11 @@
 | --- | --- |
 | Phoenix mode (auto static/live switching) | `session()` or `session(:phoenix)` |
 | Real browser behavior | `session(:browser)` |
+| Explicit browser lane | `session(:chrome)` or `session(:firefox)` |
 | Session assertion timeout default | `session(assert_timeout_ms: 300)` |
 | Browser ready timeout default | `session(:browser, ready_timeout_ms: 2200)` |
+| Global headed mode | `config :cerberus, :browser, show_browser: true` |
+| Global remote runtime | `config :cerberus, :browser, webdriver_url: "http://127.0.0.1:4444"` |
 | Global screenshot defaults | `config :cerberus, :browser, screenshot_full_page: false, screenshot_artifact_dir: "tmp/screenshots"` |
 
 ## Core Navigation and Assertions

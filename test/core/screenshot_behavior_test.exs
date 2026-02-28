@@ -24,16 +24,13 @@ defmodule Cerberus.CoreScreenshotBehaviorTest do
   end
 
   @tag browser: true
+  @tag :tmp_dir
   @tag drivers: [:browser]
-  test "screenshot emits PNG output in browser driver", context do
+  test "screenshot emits PNG output in browser driver", %{tmp_dir: tmp_dir} = context do
     Harness.run!(context, fn session ->
       session = visit(session, "/articles")
 
-      path =
-        Path.join(
-          System.tmp_dir!(),
-          "cerberus-screenshot-#{System.unique_integer([:positive])}.png"
-        )
+      path = Path.join(tmp_dir, "cerberus-screenshot.png")
 
       session = screenshot(session, path: path)
       assert File.exists?(path)

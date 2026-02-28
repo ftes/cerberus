@@ -128,8 +128,9 @@ defmodule Cerberus.TimeoutDefaultsTest do
     assert Browser.screenshot_full_page(full_page: false, browser: [screenshot_full_page: true]) == false
   end
 
-  test "screenshot path uses configured policy and allows per-call override" do
-    artifact_dir = Path.join(System.tmp_dir!(), "cerberus-screenshot-defaults")
+  @tag :tmp_dir
+  test "screenshot path uses configured policy and allows per-call override", %{tmp_dir: tmp_dir} do
+    artifact_dir = Path.join(tmp_dir, "cerberus-screenshot-defaults")
 
     Application.put_env(:cerberus, :browser,
       screenshot_artifact_dir: artifact_dir,

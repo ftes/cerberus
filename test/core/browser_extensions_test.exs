@@ -27,12 +27,9 @@ defmodule Cerberus.CoreBrowserExtensionsTest do
   end
 
   @tag browser: true
-  test "screenshot + keyboard + dialog + drag browser extensions work together" do
-    path =
-      Path.join(
-        System.tmp_dir!(),
-        "cerberus-browser-extensions-#{System.unique_integer([:positive])}.png"
-      )
+  @tag :tmp_dir
+  test "screenshot + keyboard + dialog + drag browser extensions work together", %{tmp_dir: tmp_dir} do
+    path = Path.join(tmp_dir, "cerberus-browser-extensions.png")
 
     session =
       :browser

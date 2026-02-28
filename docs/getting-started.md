@@ -15,7 +15,7 @@ session()
 > #### Info
 >
 > `session()` (or explicit `session(:phoenix)`) gives a PhoenixTest-style flow: static and live routes are handled automatically behind one API.
-> For browser mode, `session(:browser)` defaults to Chrome; use `session(:chrome)` or `session(:firefox)` for explicit targets.
+> For browser mode, `session(:browser)` defaults to Chrome; use `session(:chrome)` or `session(:firefox)` for explicit targets. Chrome and Firefox are both first-class supported targets.
 
 ## Step 1: First Useful Flow
 
@@ -136,9 +136,21 @@ config :cerberus, :browser,
   webdriver_url: "http://127.0.0.1:4444"
 ```
 
-Remote mode connects to an already-running WebDriver endpoint and skips local Chrome/ChromeDriver launch.
+Remote mode connects to an already-running WebDriver endpoint and skips local browser/WebDriver launch.
 
-## Step 10: Cross-Browser Conformance Runs
+## Step 10: Headed Browser and Runtime Launch Options
+
+```elixir
+config :cerberus, :browser,
+  show_browser: true
+```
+
+`show_browser: true` runs headed by default.
+If both are set, `headless` takes precedence over `show_browser`.
+
+Runtime launch settings (for example `show_browser`, `headless`, browser binaries, driver binaries, and `webdriver_url`) are runtime-level and should be configured globally per test invocation, not per test.
+
+## Step 11: Cross-Browser Conformance Runs
 
 ```bash
 mix test --only browser
