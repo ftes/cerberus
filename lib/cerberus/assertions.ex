@@ -217,7 +217,8 @@ defmodule Cerberus.Assertions do
         {%{locator | kind: :text, value: value}, Keyword.put(opts, :kind, :button)}
 
       %Locator{kind: :css, value: selector} ->
-        {%{locator | kind: :text, value: "", opts: Keyword.put(locator.opts, :selector, selector)}, opts}
+        updated_locator = %{locator | kind: :text, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
+        {updated_locator, Keyword.put(opts, :selector, selector)}
 
       %Locator{kind: :testid} ->
         raise InvalidLocatorError, locator: locator_input, message: "testid locators are not yet supported for click/3"
@@ -243,7 +244,8 @@ defmodule Cerberus.Assertions do
         {%Locator{kind: :label, value: value}, opts}
 
       %Locator{kind: :css, value: selector} ->
-        {%{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}, opts}
+        updated_locator = %{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
+        {updated_locator, Keyword.put(opts, :selector, selector)}
 
       %Locator{kind: :link} ->
         raise InvalidLocatorError, locator: locator_input, message: "link locators are not supported for fill_in/4"
@@ -275,7 +277,8 @@ defmodule Cerberus.Assertions do
         {%Locator{kind: :label, value: value}, opts}
 
       %Locator{kind: :css, value: selector} ->
-        {%{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}, opts}
+        updated_locator = %{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
+        {updated_locator, Keyword.put(opts, :selector, selector)}
 
       %Locator{kind: :link} ->
         raise InvalidLocatorError, locator: locator_input, message: "link locators are not supported for upload/4"
@@ -307,7 +310,8 @@ defmodule Cerberus.Assertions do
         {%Locator{kind: :label, value: value}, opts}
 
       %Locator{kind: :css, value: selector} ->
-        {%{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}, opts}
+        updated_locator = %{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
+        {updated_locator, Keyword.put(opts, :selector, selector)}
 
       %Locator{kind: :link} ->
         raise InvalidLocatorError, locator: locator_input, message: "link locators are not supported for #{op_name}"
@@ -332,7 +336,8 @@ defmodule Cerberus.Assertions do
         {%{locator | kind: :text, value: value}, opts}
 
       %Locator{kind: :css, value: selector} ->
-        {%{locator | kind: :text, value: "", opts: Keyword.put(locator.opts, :selector, selector)}, opts}
+        updated_locator = %{locator | kind: :text, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
+        {updated_locator, Keyword.put(opts, :selector, selector)}
 
       %Locator{kind: :label} ->
         raise InvalidLocatorError, locator: locator_input, message: "label locators are not supported for submit/3"
