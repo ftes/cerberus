@@ -27,7 +27,6 @@ jobs:
           elixir-version: '1.19.5-otp-28'
           otp-version: '28.3.3'
           rebar3-version: '3'
-          hexpm-mirrors: false
 
       - name: Cache deps and build
         uses: actions/cache@v4
@@ -77,7 +76,6 @@ jobs:
           elixir-version: '1.19.5-otp-28'
           otp-version: '28.3.3'
           rebar3-version: '3'
-          hexpm-mirrors: false
 
       - name: Cache deps and build
         uses: actions/cache@v4
