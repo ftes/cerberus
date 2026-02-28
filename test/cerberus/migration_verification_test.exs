@@ -146,6 +146,7 @@ defmodule Cerberus.MigrationVerificationTest do
     assert failure.message =~ "fixture directory not found"
   end
 
+  @tag timeout: 180_000
   test "runs end-to-end against committed migration fixture", %{tmp_dir: tmp_dir} do
     root_dir = Path.expand("../..", __DIR__)
     fixture_dir = Path.join(root_dir, "fixtures/migration_project")

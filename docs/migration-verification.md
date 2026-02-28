@@ -47,11 +47,11 @@ When a stage fails, the error payload includes:
 
 ## CI Integration
 
-The CI smoke job runs this suite:
+The CI job runs this suite:
 
-- `.github/workflows/ci.yml` → `Smoke (non-browser)` → `Run migration verification tests`
+- `.github/workflows/ci.yml` → `CI` → `Run non-browser tests`
 
-This keeps migration verification in non-browser CI by default and avoids browser runtime overhead in precommit/smoke lanes.
+This keeps migration verification in the non-browser phase by default and avoids coupling parity checks to browser-runtime setup.
 
 ## Intentional Boundaries
 

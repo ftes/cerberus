@@ -196,29 +196,6 @@ Because browser runtime + BiDi transport are shared, runtime launch options are 
 - [Architecture and Driver Model](docs/architecture.md)
 - [Browser Support Policy](docs/browser-support-policy.md)
 
-## Local Test Database
-
-Cerberus test suites use PostgreSQL in `MIX_ENV=test`.
-
-Default local connection values:
-- `POSTGRES_HOST=127.0.0.1`
-- `POSTGRES_PORT=5432`
-- `POSTGRES_USER=postgres`
-- `POSTGRES_PASSWORD=postgres`
-- `POSTGRES_DB=cerberus_test_<pid>` (auto-generated per test process unless overridden)
-
-Quick local Postgres via Docker:
-
-```bash
-docker run --rm -d \
-  --name cerberus-postgres \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=postgres \
-  -p 5432:5432 \
-  postgres:16
-```
-
 ## Browser Runtime Setup
 
 Cerberus browser tests use WebDriver BiDi.

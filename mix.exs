@@ -58,7 +58,7 @@ defmodule Cerberus.MixProject do
 
   defp cli do
     [
-      preferred_envs: [dialyzer: :test, precommit: :test, "test.websocket": :test]
+      preferred_envs: ["test.websocket": :test, dialyzer: :test, precommit: :test]
     ]
   end
 
