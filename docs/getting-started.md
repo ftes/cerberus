@@ -127,3 +127,12 @@ session(:browser,
 ```
 
 Use this when one test needs different browser characteristics (for example mobile viewport) without changing global config.
+
+## Step 9: Remote WebDriver Mode
+
+```elixir
+config :cerberus, :browser,
+  webdriver_url: "http://127.0.0.1:4444"
+```
+
+Remote mode connects to an already-running WebDriver endpoint and skips local Chrome/ChromeDriver launch.

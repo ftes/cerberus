@@ -112,7 +112,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   defp start_runtime_session(opts) do
     with {:ok, service} <- start_service(opts) do
-      case start_webdriver_session(service.url, opts) do
+      case start_webdriver_session(service, opts) do
         {:ok, session_id, web_socket_url} ->
           {:ok, %{service: service, session_id: session_id, web_socket_url: web_socket_url}}
 
@@ -132,13 +132,10 @@ defmodule Cerberus.Driver.Browser.Runtime do
   defp maybe_stop_runtime_session(_, _), do: :ok
 
   defp start_service(opts) do
-    chromedriver_url =
-      Keyword.get_lazy(opts, :chromedriver_url, fn ->
-        browser_opts(opts)[:chromedriver_url]
-      end)
+    webdriver_url = remote_webdriver_url(opts)
 
-    if is_binary(chromedriver_url) do
-      {:ok, %{url: chromedriver_url, managed?: false, process: nil}}
+    if is_binary(webdriver_url) do
+      {:ok, %{url: webdriver_url, managed?: false, process: nil}}
     else
       start_managed_service(opts)
     end
@@ -172,20 +169,10 @@ defmodule Cerberus.Driver.Browser.Runtime do
       {:error, Exception.message(error)}
   end
 
-  defp start_webdriver_session(service_url, opts) do
-    chrome_opts = chrome_options(opts)
+  defp start_webdriver_session(service, opts) do
+    payload = webdriver_session_payload(opts, service.managed?)
 
-    payload = %{
-      "capabilities" => %{
-        "alwaysMatch" => %{
-          "browserName" => "chrome",
-          "webSocketUrl" => true,
-          "goog:chromeOptions" => chrome_opts
-        }
-      }
-    }
-
-    with {:ok, 200, body} <- http_json(:post, service_url <> "/session", payload, opts),
+    with {:ok, 200, body} <- http_json(:post, service.url <> "/session", payload, opts),
          {:ok, session_id, web_socket_url} <- parse_session_response(body) do
       {:ok, session_id, web_socket_url}
     else
@@ -303,18 +290,60 @@ defmodule Cerberus.Driver.Browser.Runtime do
     |> normalize_positive_integer(@default_runtime_http_timeout_ms)
   end
 
-  defp chrome_options(opts) do
-    merged = browser_opts(opts)
-    args = chrome_args(opts, merged)
-    binary = chrome_binary!(opts, merged)
-    %{"args" => args, "binary" => binary}
+  @doc false
+  @spec remote_webdriver_url(keyword()) :: String.t() | nil
+  def remote_webdriver_url(opts) when is_list(opts) do
+    browser_opts = browser_opts(opts)
+
+    opts
+    |> Keyword.get(
+      :webdriver_url,
+      browser_opts[:webdriver_url] || opts[:chromedriver_url] || browser_opts[:chromedriver_url]
+    )
+    |> normalize_non_empty_string(nil)
   end
 
-  defp chrome_args(opts, merged) do
+  @doc false
+  @spec webdriver_session_payload(keyword(), boolean()) :: map()
+  def webdriver_session_payload(opts, managed?) when is_list(opts) and is_boolean(managed?) do
+    %{
+      "capabilities" => %{
+        "alwaysMatch" => %{
+          "browserName" => "chrome",
+          "webSocketUrl" => true,
+          "goog:chromeOptions" => chrome_options(opts, managed?)
+        }
+      }
+    }
+  end
+
+  defp chrome_options(opts, managed?) do
+    merged = browser_opts(opts)
+    args = chrome_args(opts, merged, managed?)
+
+    options =
+      if is_list(args) and args != [] do
+        %{"args" => args}
+      else
+        %{}
+      end
+
+    if managed? do
+      Map.put(options, "binary", chrome_binary!(opts, merged))
+    else
+      options
+    end
+  end
+
+  defp chrome_args(opts, merged, true) do
     headless? = headless?(opts, merged)
     custom_args = Keyword.get(opts, :chrome_args, Keyword.get(merged, :chrome_args, []))
     defaults = if headless?, do: ["--headless=new"], else: []
     defaults ++ ["--disable-gpu", "--no-sandbox"] ++ custom_args
+  end
+
+  defp chrome_args(opts, merged, false) do
+    Keyword.get(opts, :chrome_args, Keyword.get(merged, :chrome_args, []))
   end
 
   @doc false
@@ -360,6 +389,12 @@ defmodule Cerberus.Driver.Browser.Runtime do
     _ = :ssl.start()
     :ok
   end
+
+  defp normalize_non_empty_string(value, default) when is_binary(value) do
+    if byte_size(String.trim(value)) > 0, do: value, else: default
+  end
+
+  defp normalize_non_empty_string(_value, default), do: default
 
   defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
   defp normalize_positive_integer(_value, default), do: default

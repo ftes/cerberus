@@ -14,7 +14,8 @@ Current runtime assumptions are Chrome-specific:
 
 - WebDriver session handshake uses `browserName: "chrome"`.
 - Capabilities use `goog:chromeOptions`.
-- Runtime boot expects Chrome and ChromeDriver binaries (`CHROME`, `CHROMEDRIVER`).
+- Local managed runtime expects Chrome and ChromeDriver binaries (`CHROME`, `CHROMEDRIVER`).
+- Remote runtime mode (`webdriver_url`) connects to a pre-running WebDriver endpoint and skips local browser/chromedriver launch.
 
 ## Support Tiers
 
@@ -62,6 +63,4 @@ A browser moves to Tier 1 only when all conditions are met:
 
 This policy document does not implement:
 
-- remote browser connection mode (`cerberus-evmr`),
-- per-test/module browser override isolation (`cerberus-iq1g`),
 - global timeout/screenshot default knobs (`cerberus-kmpz`, `cerberus-qeus`, `cerberus-bflg`, `cerberus-dh5w`, `cerberus-fwox`).

@@ -194,15 +194,24 @@ Per-command `timeout:` still takes precedence when provided.
 
 ## Browser Runtime Setup
 
-Cerberus browser tests use WebDriver BiDi with explicit binaries.
+Cerberus browser tests use WebDriver BiDi.
 Current Tier 1 support is Chrome/Chromium via ChromeDriver; see the Browser Support Policy for broader target status.
 
-Required env vars:
+Local managed runtime (default) requires:
 - `CHROME`
 - `CHROMEDRIVER`
 
 Optional:
 - `SHOW_BROWSER=true` to run headed.
+
+Remote runtime mode:
+
+```elixir
+config :cerberus, :browser,
+  webdriver_url: "http://127.0.0.1:4444"
+```
+
+With `webdriver_url` set, Cerberus does not launch local Chrome/ChromeDriver and does not require `CHROME`/`CHROMEDRIVER` for runtime startup.
 
 Project helper:
 
