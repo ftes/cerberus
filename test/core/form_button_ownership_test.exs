@@ -87,6 +87,7 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
 
   @tag :static
   @tag :live
+  @tag browser: false
   test "active form state persists after non-submit and clears after submit", context do
     seed_conn = Plug.Conn.put_req_header(build_conn(), "x-flow-token", "active-form-state")
 
@@ -122,6 +123,7 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
 
   @tag :static
   @tag :live
+  @tag browser: false
   test "button-driven redirect submit preserves request headers", context do
     seed_conn = Plug.Conn.put_req_header(build_conn(), "x-flow-token", "flow-123")
 

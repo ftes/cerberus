@@ -21,6 +21,7 @@ defmodule Cerberus.CoreLiveTriggerActionBehaviorTest do
   end
 
   @tag :live
+  @tag browser: false
   test "live driver submits merged payload for trigger-action handoff" do
     session()
     |> visit("/live/trigger-action")
@@ -42,6 +43,7 @@ defmodule Cerberus.CoreLiveTriggerActionBehaviorTest do
   end
 
   @tag :live
+  @tag browser: false
   test "live driver keeps default hidden payload when triggered from outside form" do
     session()
     |> visit("/live/trigger-action")
@@ -52,6 +54,7 @@ defmodule Cerberus.CoreLiveTriggerActionBehaviorTest do
   end
 
   @tag :live
+  @tag browser: false
   test "phx-trigger-action runs after patch-producing phx-change", context do
     Harness.run!(context, fn session ->
       session
@@ -89,6 +92,7 @@ defmodule Cerberus.CoreLiveTriggerActionBehaviorTest do
   end
 
   @tag :live
+  @tag browser: false
   test "live driver submits dynamic form payload on trigger-action handoff" do
     session()
     |> visit("/live/trigger-action")
@@ -100,6 +104,7 @@ defmodule Cerberus.CoreLiveTriggerActionBehaviorTest do
   end
 
   @tag :live
+  @tag browser: false
   test "raises an error if multiple forms have phx-trigger-action" do
     assert_raise AssertionError, ~r/Found multiple forms with phx-trigger-action/, fn ->
       session()

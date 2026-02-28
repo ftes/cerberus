@@ -28,6 +28,7 @@ defmodule Cerberus.CoreSQLSandboxBehaviorTest do
 
   @tag :live
   @tag :browser
+  @tag static: false
   test "sandbox metadata keeps live DB reads isolated across drivers", context do
     Harness.run!(
       context,

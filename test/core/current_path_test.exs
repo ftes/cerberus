@@ -38,6 +38,7 @@ defmodule Cerberus.CoreCurrentPathTest do
 
   @tag :static
   @tag :browser
+  @tag live: false
   test "query strings are preserved in current_path tracking across drivers", context do
     Harness.run!(
       context,

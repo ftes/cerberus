@@ -55,6 +55,7 @@ defmodule Cerberus.CoreAutoModeTest do
   end
 
   @tag :browser
+  @tag auto: false
   test "browser mode stays browser across live and static navigation transitions", context do
     Harness.run!(context, fn session ->
       session = visit(session, "/articles")
