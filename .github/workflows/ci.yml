@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  MIX_ENV: test
+
+jobs:
+  smoke:
+    name: Smoke (non-browser)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup BEAM
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: '1.19.5-otp-28'
+          otp-version: '28.3.3'
+          rebar3-version: '3'
+          hexpm-mirrors: false
+
+      - name: Cache deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-
+
+      - name: Cache browser tools
+        uses: actions/cache@v4
+        with:
+          path: tmp/browser-tools
+          key: ${{ runner.os }}-browser-tools-${{ hashFiles('bin/check_bidi_ready.sh') }}
+
+      - name: Install deps
+        run: mix deps.get
+
+      - name: Prepare browser runtime env
+        run: |
+          bin/check_bidi_ready.sh --install
+          set -a
+          source tmp/browser-tools/env.sh
+          set +a
+          echo "CHROME=$CHROME" >> "$GITHUB_ENV"
+          echo "CHROMEDRIVER=$CHROMEDRIVER" >> "$GITHUB_ENV"
+
+      - name: Build fixture assets
+        run: mix assets.build
+
+      - name: Run smoke tests
+        run: mix test test/core/documentation_examples_test.exs --exclude browser
+
+  precommit:
+    name: Precommit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup BEAM
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: '1.19.5-otp-28'
+          otp-version: '28.3.3'
+          rebar3-version: '3'
+          hexpm-mirrors: false
+
+      - name: Cache deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-
+
+      - name: Cache Dialyzer PLTs
+        uses: actions/cache@v4
+        with:
+          path: |
+            _build/test/dialyxir_*.plt
+            _build/test/dialyxir_*.plt.hash
+          key: ${{ runner.os }}-plt-${{ hashFiles('mix.lock', 'mix.exs', '.tool-versions') }}
+          restore-keys: |
+            ${{ runner.os }}-plt-
+
+      - name: Cache browser tools
+        uses: actions/cache@v4
+        with:
+          path: tmp/browser-tools
+          key: ${{ runner.os }}-browser-tools-${{ hashFiles('bin/check_bidi_ready.sh') }}
+
+      - name: Install deps
+        run: mix deps.get
+
+      - name: Prepare browser runtime env
+        run: |
+          bin/check_bidi_ready.sh --install
+          set -a
+          source tmp/browser-tools/env.sh
+          set +a
+          echo "CHROME=$CHROME" >> "$GITHUB_ENV"
+          echo "CHROMEDRIVER=$CHROMEDRIVER" >> "$GITHUB_ENV"
+
+      - name: Build fixture assets
+        run: mix assets.build
+
+      - name: Run precommit
+        run: mix precommit
