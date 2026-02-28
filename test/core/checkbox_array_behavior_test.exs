@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreCheckboxArrayConformanceTest do
+defmodule Cerberus.CoreCheckboxArrayBehaviorTest do
   use ExUnit.Case, async: true
 
   import Cerberus

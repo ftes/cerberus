@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreOracleMismatchTest do
+defmodule Cerberus.CoreParityMismatchFixtureTest do
   use ExUnit.Case, async: true
 
   import Cerberus
@@ -8,7 +8,7 @@ defmodule Cerberus.CoreOracleMismatchTest do
   @moduletag :conformance
 
   @tag drivers: [:static, :browser]
-  test "oracle static mismatch fixture is reachable in static and browser drivers", context do
+  test "parity static mismatch fixture is reachable in static and browser drivers", context do
     Harness.run!(
       context,
       fn session ->
@@ -20,7 +20,7 @@ defmodule Cerberus.CoreOracleMismatchTest do
   end
 
   @tag drivers: [:live, :browser]
-  test "oracle live mismatch fixture is reachable in live and browser drivers", context do
+  test "parity live mismatch fixture is reachable in live and browser drivers", context do
     Harness.run!(
       context,
       fn session ->

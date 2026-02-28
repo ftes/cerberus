@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreScreenshotConformanceTest do
+defmodule Cerberus.CoreScreenshotBehaviorTest do
   use ExUnit.Case, async: true
 
   import Cerberus
@@ -32,7 +32,7 @@ defmodule Cerberus.CoreScreenshotConformanceTest do
       path =
         Path.join(
           System.tmp_dir!(),
-          "cerberus-conformance-screenshot-#{System.unique_integer([:positive])}.png"
+          "cerberus-screenshot-#{System.unique_integer([:positive])}.png"
         )
 
       session = screenshot(session, path: path)

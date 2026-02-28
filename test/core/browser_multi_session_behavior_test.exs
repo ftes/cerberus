@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreBrowserMultiSessionConformanceTest do
+defmodule Cerberus.CoreBrowserMultiSessionBehaviorTest do
   use ExUnit.Case, async: true
 
   import Cerberus
