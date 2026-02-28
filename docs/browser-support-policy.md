@@ -38,8 +38,6 @@ Current Tier 2 targets:
 
 - Firefox (`session(:firefox)`), currently experimental.
 
-Harness/browser matrix runs can be enabled with `CERBERUS_BROWSER_MATRIX=chrome,firefox`.
-
 ### Tier 3: Unsupported
 
 - No compatibility guarantees.

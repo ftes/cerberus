@@ -5,18 +5,6 @@ alias Cerberus.Fixtures.Repo
 
 sandbox_db_path = Path.expand("../tmp/cerberus_test.sqlite3", __DIR__)
 
-browser_matrix =
-  "CERBERUS_BROWSER_MATRIX"
-  |> System.get_env("browser")
-  |> String.split(",", trim: true)
-  |> Enum.map(&String.trim/1)
-  |> Enum.map(fn
-    "browser" -> :browser
-    "chrome" -> :chrome
-    "firefox" -> :firefox
-    other -> raise "invalid CERBERUS_BROWSER_MATRIX entry: #{inspect(other)}"
-  end)
-
 config :cerberus, Endpoint,
   server: true,
   http: [port: "PORT" |> System.get_env("4002") |> String.to_integer()],
@@ -36,7 +24,6 @@ config :cerberus, :browser,
   firefox_binary: System.get_env("FIREFOX"),
   geckodriver_binary: System.get_env("GECKODRIVER")
 
-config :cerberus, :browser_matrix, browser_matrix
 config :cerberus, :endpoint, Endpoint
 config :cerberus, :sql_sandbox, true
 config :cerberus, ecto_repos: [Repo]

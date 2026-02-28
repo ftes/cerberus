@@ -217,13 +217,13 @@ config :cerberus, :browser,
 
 With `webdriver_url` set, Cerberus does not launch local Chrome/ChromeDriver and does not require `CHROME`/`CHROMEDRIVER` for runtime startup.
 
-Cross-browser matrix (harness expansion):
+Cross-browser conformance run:
 
 ```bash
-CERBERUS_BROWSER_MATRIX=chrome,firefox mix test --only browser
+mix test --only browser
 ```
 
-`CERBERUS_BROWSER_MATRIX` defaults to `browser` (single default browser lane).
+`drivers: [:browser]` uses the default browser lane. You can opt specific tests into `:firefox` or `[:chrome, :firefox]` with ExUnit tags.
 
 Project helpers:
 

@@ -138,10 +138,24 @@ config :cerberus, :browser,
 
 Remote mode connects to an already-running WebDriver endpoint and skips local Chrome/ChromeDriver launch.
 
-## Step 10: Cross-Browser Matrix Runs
+## Step 10: Cross-Browser Conformance Runs
 
 ```bash
-CERBERUS_BROWSER_MATRIX=chrome,firefox mix test --only browser
+mix test --only browser
 ```
 
-This expands harness `:browser` lanes into explicit `:chrome` + `:firefox` runs.
+`drivers: [:browser]` runs the default browser lane. For targeted multi-browser coverage, add explicit tags at module/describe/test scope:
+
+```elixir
+@moduletag drivers: [:browser]
+
+describe "firefox-only flow" do
+  @describetag drivers: [:firefox]
+  test "..." do
+  end
+end
+
+@tag drivers: [:chrome, :firefox]
+test "run both browsers for this case only" do
+end
+```

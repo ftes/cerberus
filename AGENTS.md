@@ -21,6 +21,7 @@ Keep a log of what you did to present when you're done.
   - Run browser-tagged tests outside the Codex sandbox (escalated permissions), since Chrome startup can fail inside the sandbox.
 - If in doubt about static/live driver behavior, check PhoenixTest static and live driver implementations for reference patterns.
 - If in doubt about browser driver behavior, use Cuprite as the primary implementation reference; use Playwright JS as the secondary reference.
+- For refactors/renames, use Igniter when it helps.
 
 ## Docs check (final step)
 - At the end of implementation, right before `mix format` and `mix precommit`, do a docs impact check.

@@ -24,7 +24,6 @@ defmodule Cerberus.Harness do
   alias Phoenix.Ecto.SQL.Sandbox, as: PhoenixSandbox
 
   @default_drivers [:auto, :browser]
-  @default_browser_matrix [:browser]
 
   @type driver_kind :: Session.driver_kind()
 
@@ -47,7 +46,7 @@ defmodule Cerberus.Harness do
   def drivers(%{} = context) do
     context
     |> Map.get(:drivers, @default_drivers)
-    |> expand_browser_matrix(context)
+    |> Enum.uniq()
   end
 
   @spec run(map(), (Session.t() -> term()), keyword()) :: [result()]
@@ -168,34 +167,6 @@ defmodule Cerberus.Harness do
     end)
   end
 
-  defp expand_browser_matrix(drivers, context) when is_list(drivers) do
-    matrix = browser_matrix(context)
-
-    drivers
-    |> Enum.flat_map(fn
-      :browser -> matrix
-      driver -> [driver]
-    end)
-    |> Enum.uniq()
-  end
-
-  defp browser_matrix(context) do
-    context
-    |> Map.get(:browser_matrix, Application.get_env(:cerberus, :browser_matrix, @default_browser_matrix))
-    |> normalize_browser_matrix!()
-  end
-
-  defp normalize_browser_matrix!(matrix) when is_list(matrix) do
-    Enum.map(matrix, fn
-      driver when driver in [:browser, :chrome, :firefox] ->
-        driver
-
-      driver ->
-        raise ArgumentError,
-              "Harness.run/run! browser matrix must contain only :browser, :chrome, or :firefox, got: #{inspect(driver)}"
-    end)
-  end
-
   defp reject_driver_override!(opts) do
     if Keyword.has_key?(opts, :drivers) do
       raise ArgumentError,
@@ -216,7 +187,8 @@ defmodule Cerberus.Harness do
   @spec session_opts_for_driver(driver_kind(), map(), keyword()) :: keyword()
   def session_opts_for_driver(driver, context, session_opts \\ [])
 
-  def session_opts_for_driver(:browser, context, session_opts) when is_map(context) and is_list(session_opts) do
+  def session_opts_for_driver(driver, context, session_opts)
+      when driver in [:browser, :chrome, :firefox] and is_map(context) and is_list(session_opts) do
     session_opts
     |> merge_session_opts(context_session_opts(context))
     |> merge_session_opts(browser_tag_opts(context))
