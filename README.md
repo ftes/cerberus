@@ -9,6 +9,8 @@ Cerberus is designed for teams that want to write one feature-test flow and run 
 
 ## 30-Second Start
 
+Add `{:cerberus, github: "ftes/cerberus"}` to your `deps` list in `mix.exs`, then start with this flow:
+
 ```elixir
 import Cerberus
 
