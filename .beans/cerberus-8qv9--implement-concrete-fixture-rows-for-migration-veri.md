@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-28T15:08:23Z
-updated_at: 2026-02-28T16:31:42Z
+updated_at: 2026-02-28T16:41:30Z
 parent: cerberus-it5x
 ---
 
@@ -42,3 +42,15 @@ Missing-tests follow-up: migration verification matrix declares rows that are no
 
 - pt_form_fill and pt_submit_action currently use explicit PhoenixTest function calls in the Phoenix branch to keep post-migration runs deterministic with current API differences between PhoenixTest submit/fill_in and Cerberus submit/fill_in.
 - This triggers expected non-fatal direct-call migration warnings for those two files during migration runs.
+
+## Progress Update 2
+
+- Added matrix fixture row pt_checkbox_array with a dedicated checkbox fixture page and deterministic assertions for check/uncheck behavior.
+- Extended fixture app routes and controller handlers for checkbox flow.
+- Wired pt_checkbox_array into end-to-end migration verification rows and docs implemented list.
+- Verified with mix test test/cerberus/migration_verification_test.exs and mix precommit.
+
+## Notes 2
+
+- pt_checkbox_array uses explicit PhoenixTest submit in Phoenix mode and Cerberus submit in Cerberus mode because static button click behavior differs across drivers for this flow.
+- Migration run emits expected non-fatal direct-call warning for that explicit PhoenixTest submit branch.

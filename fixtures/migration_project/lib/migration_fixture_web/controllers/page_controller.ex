@@ -8,6 +8,7 @@ defmodule MigrationFixtureWeb.PageController do
       <h1>Migration fixture</h1>
       <a href=\"/counter\">Counter</a>
       <a href=\"/search\">Search</a>
+      <a href=\"/checkbox\">Checkbox</a>
       """
     )
   end
@@ -34,6 +35,49 @@ defmodule MigrationFixtureWeb.PageController do
       """
       <h1>Search Results</h1>
       <p>Search query: #{query}</p>
+      """
+    )
+  end
+
+  def checkbox(conn, _params) do
+    html(
+      conn,
+      """
+      <h1>Checkbox Array</h1>
+      <form action=\"/checkbox/save\" method=\"get\">
+        <label for=\"item_one\">One</label>
+        <input name=\"items[]\" type=\"hidden\" value=\"\" />
+        <input id=\"item_one\" name=\"items[]\" type=\"checkbox\" value=\"one\" checked />
+
+        <label for=\"item_two\">Two</label>
+        <input id=\"item_two\" name=\"items[]\" type=\"checkbox\" value=\"two\" />
+
+        <button type=\"submit\">Save Items</button>
+      </form>
+      """
+    )
+  end
+
+  def checkbox_save(conn, params) do
+    items =
+      case Map.get(params, "items", []) do
+        values when is_list(values) -> values
+        value when is_binary(value) -> [value]
+        _ -> []
+      end
+      |> Enum.reject(&(&1 in ["", "false"]))
+
+    selected =
+      case items do
+        [] -> "None"
+        values -> Enum.join(values, ",")
+      end
+
+    html(
+      conn,
+      """
+      <h1>Checkbox Result</h1>
+      <p>Selected Items: #{selected}</p>
       """
     )
   end

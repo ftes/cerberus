@@ -16,6 +16,8 @@ defmodule MigrationFixtureWeb.Router do
     get("/", PageController, :home)
     get("/search", PageController, :search)
     get("/search/results", PageController, :search_results)
+    get("/checkbox", PageController, :checkbox)
+    get("/checkbox/save", PageController, :checkbox_save)
     live("/counter", CounterLive, :index)
   end
 end

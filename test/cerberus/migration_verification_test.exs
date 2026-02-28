@@ -157,6 +157,7 @@ defmodule Cerberus.MigrationVerificationTest do
       %{id: "pt_text_refute", test_file: "test/features/pt_text_refute_test.exs"},
       %{id: "pt_click_navigation", test_file: "test/features/pt_click_navigation_test.exs"},
       %{id: "pt_form_fill", test_file: "test/features/pt_form_fill_test.exs"},
+      %{id: "pt_checkbox_array", test_file: "test/features/pt_checkbox_array_test.exs"},
       %{id: "pt_submit_action", test_file: "test/features/pt_submit_action_test.exs"},
       %{id: "pt_path_assert", test_file: "test/features/pt_path_assert_test.exs"},
       %{id: "pt_path_refute", test_file: "test/features/pt_path_refute_test.exs"},
