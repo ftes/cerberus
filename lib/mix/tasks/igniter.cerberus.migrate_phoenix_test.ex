@@ -1,6 +1,6 @@
 defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTest do
   @moduledoc """
-  Migrates PhoenixTest test files to Cerberus in a safe, preview-first workflow.
+  Migrates PhoenixTest test files to Cerberus in a preview-first workflow.
 
   By default this task runs in dry-run mode and prints a diff for each changed file.
   Use `--write` to apply changes.
@@ -19,26 +19,20 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTest do
     "test/**/*_test.ex"
   ]
 
-  @safe_rewrites [
-    {~r/\bimport\s+PhoenixTest\b/, "import Cerberus"},
-    {~r/\buse\s+PhoenixTest\b/, "use Cerberus"},
-    {~r/\balias\s+PhoenixTest\b(?!\.)/, "alias Cerberus"}
-  ]
+  @warning_playwright "PhoenixTest.Playwright calls need manual migration to browser-only Cerberus APIs."
+  @warning_test_helpers "PhoenixTest.TestHelpers import has no direct Cerberus equivalent and needs manual migration."
 
-  @unsupported_patterns [
-    {~r/\bPhoenixTest\.Playwright\b/,
-     "PhoenixTest.Playwright calls need manual migration to browser-only Cerberus APIs."},
-    {~r/\bimport\s+PhoenixTest\.TestHelpers\b/,
-     "PhoenixTest.TestHelpers import has no direct Cerberus equivalent and needs manual migration."},
-    {~r/\balias\s+PhoenixTest\.[A-Z][\w.]*/,
-     "PhoenixTest submodule alias detected; verify Cerberus module equivalents manually."},
-    {~r/\bPhoenixTest\.[a-z_]+\s*\(/,
-     "Direct PhoenixTest.<function> call detected; migrate to Cerberus session-first flow manually."},
-    {~r/\bconn\s*\|>\s*visit\s*\(/, "conn |> visit(...) PhoenixTest flow needs manual session bootstrap in Cerberus."},
-    {~r/\bvisit\s*\(\s*conn\b/, "visit(conn, ...) PhoenixTest flow needs manual session bootstrap in Cerberus."},
-    {~r/\b(with_dialog|screenshot|press|type|drag|cookie|session_cookie)\s*\(/,
-     "Browser helper call likely needs manual migration to Cerberus browser extensions."}
-  ]
+  @warning_submodule_alias "PhoenixTest submodule alias detected; verify Cerberus module equivalents manually."
+  @warning_direct_call "Direct PhoenixTest.<function> call detected; migrate to Cerberus session-first flow manually."
+  @warning_conn_pipe "conn |> visit(...) PhoenixTest flow needs manual session bootstrap in Cerberus."
+  @warning_visit_conn "visit(conn, ...) PhoenixTest flow needs manual session bootstrap in Cerberus."
+  @warning_browser_helper "Browser helper call likely needs manual migration to Cerberus browser extensions."
+  @browser_helpers [:with_dialog, :screenshot, :press, :type, :drag, :cookie, :session_cookie]
+
+  defmodule RewriteState do
+    @moduledoc false
+    defstruct changed?: false, warnings: [], seen: MapSet.new()
+  end
 
   def run(args) do
     {opts, positional, invalid} = OptionParser.parse(args, strict: @switches)
@@ -105,8 +99,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTest do
 
   defp migrate_file(file, dry_run, changed_acc, warning_acc) do
     original = File.read!(file)
-    rewritten = rewrite_safe(original)
-    warnings = collect_warnings(original)
+    {rewritten, warnings} = rewrite_with_ast(original)
 
     warning_count = warning_acc + length(warnings)
     print_warnings(file, warnings)
@@ -125,20 +118,178 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTest do
     end
   end
 
-  defp rewrite_safe(content) do
-    Enum.reduce(@safe_rewrites, content, fn {pattern, replacement}, acc ->
-      Regex.replace(pattern, acc, replacement)
-    end)
+  defp rewrite_with_ast(content) do
+    case Code.string_to_quoted(content, token_metadata: true, columns: true) do
+      {:ok, ast} ->
+        {rewritten_ast, state} = Macro.prewalk(ast, %RewriteState{}, &rewrite_node/2)
+
+        rewritten =
+          if state.changed? do
+            rewritten_ast
+            |> Macro.to_string()
+            |> Code.format_string!()
+            |> IO.iodata_to_binary()
+          else
+            content
+          end
+
+        {rewritten, Enum.reverse(state.warnings)}
+
+      {:error, {_line, error, _token}} ->
+        {content, ["Could not parse file for AST migration: #{error}"]}
+    end
   end
 
-  defp collect_warnings(content) do
-    Enum.flat_map(@unsupported_patterns, fn {pattern, message} ->
-      if Regex.match?(pattern, content) do
-        [message]
+  defp rewrite_node({:import, meta, args} = node, state) do
+    case args do
+      [module_ast | rest] ->
+        case alias_parts(module_ast) do
+          [:PhoenixTest] ->
+            updated = {:import, meta, [alias_ast(module_ast, [:Cerberus]) | rest]}
+            {updated, mark_changed(state)}
+
+          [:PhoenixTest, :TestHelpers] ->
+            {node, add_warning(state, @warning_test_helpers)}
+
+          [:PhoenixTest, :Playwright | _] ->
+            {node, add_warning(state, @warning_playwright)}
+
+          _ ->
+            {node, state}
+        end
+
+      _ ->
+        {node, state}
+    end
+  end
+
+  defp rewrite_node({:use, meta, args} = node, state) do
+    case args do
+      [module_ast | rest] ->
+        case alias_parts(module_ast) do
+          [:PhoenixTest | suffix] ->
+            updated = {:use, meta, [alias_ast(module_ast, [:Cerberus | suffix]) | rest]}
+
+            next_state =
+              state
+              |> mark_changed()
+              |> maybe_warn_playwright(suffix)
+
+            {updated, next_state}
+
+          _ ->
+            {node, state}
+        end
+
+      _ ->
+        {node, state}
+    end
+  end
+
+  defp rewrite_node({:alias, meta, args} = node, state) do
+    case args do
+      [module_ast | rest] ->
+        case alias_parts(module_ast) do
+          [:PhoenixTest] ->
+            updated = {:alias, meta, [alias_ast(module_ast, [:Cerberus]) | rest]}
+            {updated, mark_changed(state)}
+
+          [:PhoenixTest, :Playwright | _] ->
+            {node, add_warning(state, @warning_playwright)}
+
+          [:PhoenixTest | _] ->
+            {node, add_warning(state, @warning_submodule_alias)}
+
+          _ ->
+            {node, state}
+        end
+
+      _ ->
+        {node, state}
+    end
+  end
+
+  defp rewrite_node({:|>, _meta, [lhs, rhs]} = node, state) do
+    next_state =
+      if conn_arg?(lhs) and visit_call?(rhs) do
+        add_warning(state, @warning_conn_pipe)
       else
-        []
+        state
       end
-    end)
+
+    {node, next_state}
+  end
+
+  defp rewrite_node({{:., _dot_meta, [module_ast, fun]}, _call_meta, args} = node, state)
+       when is_atom(fun) and is_list(args) do
+    next_state =
+      state
+      |> maybe_warn_browser_helper(fun)
+      |> maybe_warn_visit_conn(fun, args)
+      |> maybe_warn_direct_phoenix_test_call(module_ast)
+      |> maybe_warn_playwright_call(module_ast)
+
+    {node, next_state}
+  end
+
+  defp rewrite_node({fun, _meta, args} = node, state) when is_atom(fun) and is_list(args) do
+    next_state =
+      state
+      |> maybe_warn_browser_helper(fun)
+      |> maybe_warn_visit_conn(fun, args)
+
+    {node, next_state}
+  end
+
+  defp rewrite_node(node, state), do: {node, state}
+
+  defp alias_parts({:__aliases__, _meta, parts}) when is_list(parts), do: parts
+  defp alias_parts(_module_ast), do: :unknown
+
+  defp alias_ast({:__aliases__, meta, _parts}, parts), do: {:__aliases__, meta, parts}
+  defp alias_ast(_module_ast, parts), do: {:__aliases__, [], parts}
+
+  defp maybe_warn_direct_phoenix_test_call(state, module_ast) do
+    case alias_parts(module_ast) do
+      [:PhoenixTest] -> add_warning(state, @warning_direct_call)
+      _ -> state
+    end
+  end
+
+  defp maybe_warn_playwright_call(state, module_ast) do
+    case alias_parts(module_ast) do
+      [:PhoenixTest, :Playwright | _] -> add_warning(state, @warning_playwright)
+      _ -> state
+    end
+  end
+
+  defp maybe_warn_playwright(state, [:Playwright | _]), do: add_warning(state, @warning_playwright)
+  defp maybe_warn_playwright(state, _suffix), do: state
+
+  defp maybe_warn_browser_helper(state, fun) when fun in @browser_helpers, do: add_warning(state, @warning_browser_helper)
+  defp maybe_warn_browser_helper(state, _fun), do: state
+
+  defp maybe_warn_visit_conn(state, :visit, [first | _rest]) do
+    if conn_arg?(first), do: add_warning(state, @warning_visit_conn), else: state
+  end
+
+  defp maybe_warn_visit_conn(state, _fun, _args), do: state
+
+  defp visit_call?({:visit, _meta, args}) when is_list(args), do: true
+  defp visit_call?({{:., _meta, [_module_ast, :visit]}, _call_meta, args}) when is_list(args), do: true
+  defp visit_call?(_other), do: false
+
+  defp conn_arg?({:conn, _meta, context}) when is_atom(context) or is_nil(context), do: true
+  defp conn_arg?(_other), do: false
+
+  defp mark_changed(%RewriteState{} = state), do: %{state | changed?: true}
+
+  defp add_warning(%RewriteState{} = state, warning) do
+    if MapSet.member?(state.seen, warning) do
+      state
+    else
+      %{state | warnings: [warning | state.warnings], seen: MapSet.put(state.seen, warning)}
+    end
   end
 
   defp print_warnings(_file, []), do: :ok
