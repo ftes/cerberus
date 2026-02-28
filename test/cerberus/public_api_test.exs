@@ -29,9 +29,9 @@ defmodule Cerberus.PublicApiTest do
     end
   end
 
-  test "driver module dispatch supports explicit browser aliases" do
-    assert Cerberus.driver_module!(:chrome) == BrowserSession
-    assert Cerberus.driver_module!(:firefox) == BrowserSession
+  test "chrome/firefox aliases construct browser sessions" do
+    assert %BrowserSession{} = session(:chrome)
+    assert %BrowserSession{} = session(:firefox)
   end
 
   test "open_user/open_tab/switch_tab API works for non-browser sessions" do

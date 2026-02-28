@@ -4,6 +4,9 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
   import Cerberus
   import Phoenix.ConnTest, only: [build_conn: 0]
 
+  alias Cerberus.Driver.Browser, as: BrowserSession
+  alias Cerberus.Driver.Live, as: LiveSession
+  alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.Harness
 
   @moduletag :conformance
@@ -13,7 +16,6 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
     Harness.run!(
       context,
       fn session ->
-        driver_module = Cerberus.driver_module!(session)
         reset_locator = Cerberus.Locator.normalize(text: "Reset")
         save_locator = Cerberus.Locator.normalize(text: "Save Owner Form")
 
@@ -23,10 +25,10 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
           |> fill_in("Name", "Aragorn")
 
         assert {:error, session_after_reset, _observed, _reason} =
-                 driver_module.submit(session, reset_locator, [])
+                 submit_for_session(session, reset_locator, [])
 
         assert {:ok, submitted_session, _observed} =
-                 driver_module.submit(session_after_reset, save_locator, [])
+                 submit_for_session(session_after_reset, save_locator, [])
 
         submitted_session
         |> assert_has(text: "name: Aragorn", exact: true)
@@ -99,18 +101,17 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
         assert %{active_form: active_before} = session.form_data
         assert is_binary(active_before)
 
-        driver_module = Cerberus.driver_module!(session)
         reset_locator = Cerberus.Locator.normalize(text: "Reset")
         save_locator = Cerberus.Locator.normalize(text: "Save Owner Form")
 
         assert {:error, after_reset, _observed, _reason} =
-                 driver_module.submit(session, reset_locator, [])
+                 submit_for_session(session, reset_locator, [])
 
         assert %{active_form: active_after_reset} = after_reset.form_data
         assert active_after_reset == active_before
 
         assert {:ok, after_submit, _observed} =
-                 driver_module.submit(after_reset, save_locator, [])
+                 submit_for_session(after_reset, save_locator, [])
 
         assert %{active_form: nil} = after_submit.form_data
         after_submit
@@ -139,5 +140,17 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
         session
       end
     )
+  end
+
+  defp submit_for_session(%StaticSession{} = session, locator, opts) do
+    StaticSession.submit(session, locator, opts)
+  end
+
+  defp submit_for_session(%LiveSession{} = session, locator, opts) do
+    LiveSession.submit(session, locator, opts)
+  end
+
+  defp submit_for_session(%BrowserSession{} = session, locator, opts) do
+    BrowserSession.submit(session, locator, opts)
   end
 end

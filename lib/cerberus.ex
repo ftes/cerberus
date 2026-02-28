@@ -90,12 +90,6 @@ defmodule Cerberus do
           "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser|:chrome|:firefox) for browser"
   end
 
-  @doc false
-  @spec session_for_driver(driver_kind(), keyword()) :: Session.t()
-  def session_for_driver(driver, opts \\ []) when is_atom(driver) and is_list(opts) do
-    driver_module!(driver).new_session(opts)
-  end
-
   @spec open_user(arg) :: arg when arg: var
   def open_user(%BrowserSession{} = session), do: BrowserSession.open_user(session)
   def open_user(%StaticSession{} = session), do: StaticSession.open_user(session)
@@ -178,7 +172,7 @@ defmodule Cerberus do
   @doc false
   @spec open_browser(arg, (String.t() -> term())) :: arg when arg: var
   def open_browser(session, open_fun) when is_function(open_fun, 1) do
-    driver_module!(session).open_browser(session, open_fun)
+    driver_module_for_session!(session).open_browser(session, open_fun)
   end
 
   def open_browser(_session, _open_fun) do
@@ -250,7 +244,7 @@ defmodule Cerberus do
 
   @spec visit(arg, String.t(), keyword()) :: arg when arg: var
   def visit(session, path, opts \\ []) when is_binary(path) do
-    driver_module!(session).visit(session, path, opts)
+    driver_module_for_session!(session).visit(session, path, opts)
   end
 
   @spec reload_page(arg, keyword()) :: arg when arg: var
@@ -431,23 +425,13 @@ defmodule Cerberus do
     Assertions.refute_has(session, locator, opts)
   end
 
-  @doc false
-  @spec driver_module!(driver_kind()) :: module()
-  def driver_module!(:auto), do: StaticSession
-  def driver_module!(:static), do: StaticSession
-  def driver_module!(:live), do: LiveSession
-  def driver_module!(:browser), do: BrowserSession
-  def driver_module!(:chrome), do: BrowserSession
-  def driver_module!(:firefox), do: BrowserSession
+  defp driver_module_for_session!(%StaticSession{}), do: StaticSession
+  defp driver_module_for_session!(%LiveSession{}), do: LiveSession
+  defp driver_module_for_session!(%BrowserSession{}), do: BrowserSession
 
-  @spec driver_module!(Session.t()) :: module()
-  def driver_module!(%StaticSession{}), do: StaticSession
-  def driver_module!(%LiveSession{}), do: LiveSession
-  def driver_module!(%BrowserSession{}), do: BrowserSession
-
-  def driver_module!(driver) do
+  defp driver_module_for_session!(session) do
     raise ArgumentError,
-          "unsupported driver #{inspect(driver)}; expected one of :auto, :static, :live, :browser"
+          "unsupported session #{inspect(session)}; expected a Cerberus session"
   end
 
   defp restore_scope(%{__struct__: _} = session, previous_scope) do

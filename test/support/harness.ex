@@ -95,7 +95,7 @@ defmodule Cerberus.Harness do
   end
 
   defp run_driver(driver, session_opts, scenario) do
-    session = Cerberus.session_for_driver(driver, session_opts)
+    session = session_for_driver(driver, session_opts)
 
     try do
       value = scenario.(session)
@@ -162,9 +162,25 @@ defmodule Cerberus.Harness do
 
   defp normalize_drivers!(drivers) when is_list(drivers) do
     Enum.map(drivers, fn driver ->
-      Cerberus.driver_module!(driver)
+      driver_module_for_kind!(driver)
       driver
     end)
+  end
+
+  defp session_for_driver(driver, opts) when is_atom(driver) and is_list(opts) do
+    driver_module_for_kind!(driver).new_session(opts)
+  end
+
+  defp driver_module_for_kind!(:auto), do: StaticSession
+  defp driver_module_for_kind!(:static), do: StaticSession
+  defp driver_module_for_kind!(:live), do: LiveSession
+  defp driver_module_for_kind!(:browser), do: BrowserSession
+  defp driver_module_for_kind!(:chrome), do: BrowserSession
+  defp driver_module_for_kind!(:firefox), do: BrowserSession
+
+  defp driver_module_for_kind!(driver) do
+    raise ArgumentError,
+          "unsupported driver #{inspect(driver)}; expected one of :auto, :static, :live, :browser"
   end
 
   defp reject_driver_override!(opts) do

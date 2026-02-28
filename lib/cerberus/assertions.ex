@@ -1,6 +1,9 @@
 defmodule Cerberus.Assertions do
   @moduledoc false
 
+  alias Cerberus.Driver.Browser, as: BrowserSession
+  alias Cerberus.Driver.Live, as: LiveSession
+  alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.InvalidLocatorError
   alias Cerberus.LiveViewTimeout
   alias Cerberus.Locator
@@ -13,7 +16,7 @@ defmodule Cerberus.Assertions do
   def click(session, locator_input, opts \\ []) do
     {locator, opts} = normalize_click_locator(locator_input, opts)
     opts = Options.validate_click!(opts)
-    driver = Cerberus.driver_module!(session)
+    driver = driver_module_for_session!(session)
 
     case driver.click(session, locator, opts) do
       {:ok, session, _observed} ->
@@ -29,7 +32,7 @@ defmodule Cerberus.Assertions do
   def fill_in(session, locator_input, value, opts \\ []) when is_list(opts) do
     {locator, opts} = normalize_fill_in_locator(locator_input, opts)
     opts = Options.validate_fill_in!(opts)
-    driver = Cerberus.driver_module!(session)
+    driver = driver_module_for_session!(session)
 
     case driver.fill_in(session, locator, to_string(value), opts) do
       {:ok, session, _observed} ->
@@ -45,7 +48,7 @@ defmodule Cerberus.Assertions do
   def select(session, locator_input, opts \\ []) when is_list(opts) do
     {locator, opts} = normalize_select_locator(locator_input, opts)
     opts = Options.validate_select!(opts)
-    driver = Cerberus.driver_module!(session)
+    driver = driver_module_for_session!(session)
 
     case driver.select(session, locator, opts) do
       {:ok, session, _observed} ->
@@ -61,7 +64,7 @@ defmodule Cerberus.Assertions do
   def choose(session, locator_input, opts \\ []) when is_list(opts) do
     {locator, opts} = normalize_choose_locator(locator_input, opts)
     opts = Options.validate_choose!(opts, "choose/3")
-    driver = Cerberus.driver_module!(session)
+    driver = driver_module_for_session!(session)
 
     case driver.choose(session, locator, opts) do
       {:ok, session, _observed} ->
@@ -77,7 +80,7 @@ defmodule Cerberus.Assertions do
   def check(session, locator_input, opts \\ []) when is_list(opts) do
     {locator, opts} = normalize_check_locator(locator_input, opts, "check/3")
     opts = Options.validate_check!(opts, "check/3")
-    driver = Cerberus.driver_module!(session)
+    driver = driver_module_for_session!(session)
 
     case driver.check(session, locator, opts) do
       {:ok, session, _observed} ->
@@ -93,7 +96,7 @@ defmodule Cerberus.Assertions do
   def uncheck(session, locator_input, opts \\ []) when is_list(opts) do
     {locator, opts} = normalize_check_locator(locator_input, opts, "uncheck/3")
     opts = Options.validate_check!(opts, "uncheck/3")
-    driver = Cerberus.driver_module!(session)
+    driver = driver_module_for_session!(session)
 
     case driver.uncheck(session, locator, opts) do
       {:ok, session, _observed} ->
@@ -112,7 +115,7 @@ defmodule Cerberus.Assertions do
     ensure_non_empty_upload_path!(path)
     {locator, opts} = normalize_upload_locator(locator_input, opts)
     opts = Options.validate_upload!(opts)
-    driver = Cerberus.driver_module!(session)
+    driver = driver_module_for_session!(session)
 
     case driver.upload(session, locator, path, opts) do
       {:ok, session, _observed} ->
@@ -132,7 +135,7 @@ defmodule Cerberus.Assertions do
   def submit(session, locator_input, opts \\ []) do
     {locator, opts} = normalize_submit_locator(locator_input, opts)
     opts = Options.validate_submit!(opts)
-    driver = Cerberus.driver_module!(session)
+    driver = driver_module_for_session!(session)
 
     case driver.submit(session, locator, opts) do
       {:ok, session, _observed} ->
@@ -192,7 +195,7 @@ defmodule Cerberus.Assertions do
   end
 
   defp run_assertion!(session, op, locator, locator_input, driver_opts, message_opts) do
-    driver = Cerberus.driver_module!(session)
+    driver = driver_module_for_session!(session)
 
     case apply(driver, op, [session, locator, driver_opts]) do
       {:ok, session, _observed} ->
@@ -236,6 +239,15 @@ defmodule Cerberus.Assertions do
 
   defp resolve_assert_timeout(_session, true, validated_timeout), do: validated_timeout
   defp resolve_assert_timeout(session, false, _validated_timeout), do: Session.assert_timeout_ms(session)
+
+  defp driver_module_for_session!(%StaticSession{}), do: StaticSession
+  defp driver_module_for_session!(%LiveSession{}), do: LiveSession
+  defp driver_module_for_session!(%BrowserSession{}), do: BrowserSession
+
+  defp driver_module_for_session!(session) do
+    raise ArgumentError,
+          "unsupported session #{inspect(session)}; expected a Cerberus session"
+  end
 
   defp normalize_click_locator(locator_input, opts) do
     locator = Locator.normalize(locator_input)
