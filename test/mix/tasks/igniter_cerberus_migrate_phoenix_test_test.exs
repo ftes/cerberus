@@ -107,7 +107,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
   end
 
   test "can run against committed nested Phoenix fixture project tests", %{tmp_dir: tmp_dir} do
-    fixture_dir = Path.expand("../../support/fixtures/migration_project", __DIR__)
+    fixture_dir = Path.expand("../../../fixtures/migration_project", __DIR__)
     project_copy = Path.join(tmp_dir, "migration_project")
     test_dir = Path.join(project_copy, "test/features")
     static_copy = Path.join(test_dir, "phoenix_test_baseline_test.exs")

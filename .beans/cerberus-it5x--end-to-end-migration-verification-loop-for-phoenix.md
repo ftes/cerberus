@@ -5,7 +5,7 @@ status: in-progress
 type: feature
 priority: normal
 created_at: 2026-02-28T07:18:58Z
-updated_at: 2026-02-28T13:41:59Z
+updated_at: 2026-02-28T13:52:45Z
 ---
 
 Close the loop on Igniter rewrite correctness by proving that representative PhoenixTest and PhoenixTestPlaywright suites pass both before and after migration to Cerberus.
@@ -27,7 +27,7 @@ Build an automated verification flow that demonstrates semantic equivalence of m
 ## Todo
 - [x] Define function/option coverage matrix for PhoenixTest and PhoenixTestPlaywright APIs.
 - [x] Build nested fixture Phoenix project and baseline passing tests for both libraries.
-- [ ] Implement test harness/task that executes pre-migration pass, rewrite, and post-migration pass.
+- [x] Implement test harness/task that executes pre-migration pass, rewrite, and post-migration pass.
 - [ ] Add assertions/reports proving both before and after are green.
 - [ ] Integrate into CI/test flow with practical runtime constraints.
 - [ ] Document verification approach and coverage boundaries.

@@ -12,7 +12,7 @@ parent: cerberus-it5x
 Create a nested Phoenix fixture project containing baseline PhoenixTest and PhoenixTestPlaywright tests that pass before migration.
 
 ## Summary of Changes
-- Added a committed nested Phoenix fixture project at test/support/fixtures/migration_project.
+- Added a committed nested Phoenix fixture project at fixtures/migration_project.
 - Added baseline pre-migration PhoenixTest and PhoenixTest.Playwright feature tests in the fixture project.
 - Added minimal fixture app wiring (endpoint, router, static page, live counter, conn case, config) to support those tests.
 - Updated migration task tests to use fixture project test files instead of standalone fixture snippets.

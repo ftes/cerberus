@@ -252,11 +252,10 @@ mix igniter.cerberus.migrate_phoenix_test --write test/my_app_web/features
 
 It performs safe rewrites, reports manual follow-ups, and defaults to dry-run diff output.
 
-Migration verification runner:
+Migration verification runs through ExUnit:
 
 ```bash
-mix cerberus.verify_migration
-mix cerberus.verify_migration --keep --work-dir tmp/migration_verify
+mix test test/cerberus/migration_verification_test.exs
 ```
 
-This runs a pre-migration fixture test, applies the rewrite, then runs the post-migration fixture test in an isolated copied workspace.
+The test orchestrates pre-migration fixture execution, rewrite, and post-migration execution in an isolated copied workspace.
