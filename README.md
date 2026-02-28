@@ -147,7 +147,8 @@ config :cerberus, :assert_timeout_ms, 300
 
 config :cerberus, :browser,
   ready_timeout_ms: 2_200,
-  bidi_command_timeout_ms: 5_000
+  bidi_command_timeout_ms: 5_000,
+  runtime_http_timeout_ms: 9_000
 ```
 
 Override precedence is:
@@ -157,6 +158,7 @@ Override precedence is:
 - hardcoded fallback
 
 `bidi_command_timeout_ms` is used as the default timeout for WebDriver BiDi commands.
+`runtime_http_timeout_ms` is used for browser runtime HTTP calls (for example WebDriver `/status` and session lifecycle requests).
 Per-command `timeout:` still takes precedence when provided.
 
 ## Learn More

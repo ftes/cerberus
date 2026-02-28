@@ -5,6 +5,7 @@ defmodule Cerberus.TimeoutDefaultsTest do
 
   alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Browser.BiDi
+  alias Cerberus.Driver.Browser.Runtime
   alias ExUnit.AssertionError
 
   defmodule TimeoutProbe do
@@ -94,5 +95,15 @@ defmodule Cerberus.TimeoutDefaultsTest do
 
     assert {:ok, %{"timeout" => 150}} ==
              BiDi.command(probe, "session.status", %{}, timeout: 150, browser: [bidi_command_timeout_ms: 2_400])
+  end
+
+  test "runtime http timeout falls back to global browser config and supports overrides" do
+    Application.put_env(:cerberus, :browser, runtime_http_timeout_ms: 9_000)
+
+    assert Runtime.runtime_http_timeout_ms([]) == 9_000
+    assert Runtime.runtime_http_timeout_ms(browser: [runtime_http_timeout_ms: 4_400]) == 4_400
+
+    assert Runtime.runtime_http_timeout_ms(runtime_http_timeout_ms: 3_300, browser: [runtime_http_timeout_ms: 4_400]) ==
+             3_300
   end
 end

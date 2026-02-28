@@ -3,7 +3,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   use GenServer
 
-  @status_timeout 5_000
+  @default_runtime_http_timeout_ms 5_000
   @startup_attempts 120
   @startup_sleep_ms 50
 
@@ -92,7 +92,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   @impl true
   def terminate(_reason, state) do
-    maybe_stop_runtime_session(state.runtime_session)
+    maybe_stop_runtime_session(state.runtime_session, state.opts)
     :ok
   end
 
@@ -123,13 +123,13 @@ defmodule Cerberus.Driver.Browser.Runtime do
     end
   end
 
-  defp maybe_stop_runtime_session(%{service: service, session_id: session_id}) do
-    maybe_delete_session(service, session_id)
+  defp maybe_stop_runtime_session(%{service: service, session_id: session_id}, opts) do
+    maybe_delete_session(service, session_id, opts)
     maybe_stop_service(service)
     :ok
   end
 
-  defp maybe_stop_runtime_session(_), do: :ok
+  defp maybe_stop_runtime_session(_, _), do: :ok
 
   defp start_service(opts) do
     chromedriver_url =
@@ -159,7 +159,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
     url = "http://127.0.0.1:#{port}"
 
-    case wait_for_service(url, @startup_attempts) do
+    case wait_for_service(url, @startup_attempts, opts) do
       :ok ->
         {:ok, %{url: url, managed?: true, process: process}}
 
@@ -185,7 +185,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
       }
     }
 
-    with {:ok, 200, body} <- http_json(:post, service_url <> "/session", payload),
+    with {:ok, 200, body} <- http_json(:post, service_url <> "/session", payload, opts),
          {:ok, session_id, web_socket_url} <- parse_session_response(body) do
       {:ok, session_id, web_socket_url}
     else
@@ -217,20 +217,20 @@ defmodule Cerberus.Driver.Browser.Runtime do
     {:error, "unexpected webdriver session response: #{inspect(response)}"}
   end
 
-  defp wait_for_service(_url, 0), do: {:error, "chromedriver did not become ready"}
+  defp wait_for_service(_url, 0, _opts), do: {:error, "chromedriver did not become ready"}
 
-  defp wait_for_service(url, attempts_left) do
-    case http_json(:get, url <> "/status", nil) do
+  defp wait_for_service(url, attempts_left, opts) do
+    case http_json(:get, url <> "/status", nil, opts) do
       {:ok, 200, _} ->
         :ok
 
       _ ->
         Process.sleep(@startup_sleep_ms)
-        wait_for_service(url, attempts_left - 1)
+        wait_for_service(url, attempts_left - 1, opts)
     end
   end
 
-  defp http_json(method, url, payload) do
+  defp http_json(method, url, payload, opts) do
     request =
       case method do
         :get ->
@@ -245,7 +245,9 @@ defmodule Cerberus.Driver.Browser.Runtime do
           {to_charlist(url), [{~c"content-type", ~c"application/json"}], ~c"application/json", body}
       end
 
-    case :httpc.request(method, request, [timeout: @status_timeout], body_format: :binary) do
+    timeout = runtime_http_timeout_ms(opts)
+
+    case :httpc.request(method, request, [timeout: timeout], body_format: :binary) do
       {:ok, {{_version, status, _reason}, _headers, response_body}} ->
         decode_body(status, response_body)
 
@@ -263,12 +265,13 @@ defmodule Cerberus.Driver.Browser.Runtime do
     end
   end
 
-  defp maybe_delete_session(%{url: service_url}, session_id) when is_binary(service_url) and is_binary(session_id) do
-    _ = http_json(:delete, service_url <> "/session/" <> session_id, nil)
+  defp maybe_delete_session(%{url: service_url}, session_id, opts)
+       when is_binary(service_url) and is_binary(session_id) do
+    _ = http_json(:delete, service_url <> "/session/" <> session_id, nil, opts)
     :ok
   end
 
-  defp maybe_delete_session(_, _), do: :ok
+  defp maybe_delete_session(_, _, _), do: :ok
 
   defp maybe_stop_service(%{managed?: true, process: process}) when is_port(process) do
     if Port.info(process) != nil, do: Port.close(process)
@@ -288,6 +291,16 @@ defmodule Cerberus.Driver.Browser.Runtime do
     :cerberus
     |> Application.get_env(:browser, [])
     |> Keyword.merge(Keyword.get(opts, :browser, []))
+  end
+
+  @doc false
+  @spec runtime_http_timeout_ms(keyword()) :: pos_integer()
+  def runtime_http_timeout_ms(opts) when is_list(opts) do
+    browser_opts = browser_opts(opts)
+
+    opts
+    |> Keyword.get(:runtime_http_timeout_ms, browser_opts[:runtime_http_timeout_ms])
+    |> normalize_positive_integer(@default_runtime_http_timeout_ms)
   end
 
   defp chrome_options(opts) do
@@ -347,4 +360,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
     _ = :ssl.start()
     :ok
   end
+
+  defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
+  defp normalize_positive_integer(_value, default), do: default
 end
