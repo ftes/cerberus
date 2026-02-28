@@ -51,7 +51,7 @@ defmodule Cerberus.LiveViewTimeout do
   end
 
   defp handle_watched_messages_with_timeout(session, timeout, action, fetch_redirect_info) do
-    wait_time = interval_wait_time()
+    wait_time = min(timeout, interval_wait_time())
     new_timeout = max(timeout - wait_time, 0)
     view_pid = session.view.pid
 

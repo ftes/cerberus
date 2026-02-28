@@ -54,6 +54,23 @@ defmodule Cerberus.LiveViewTimeoutTest do
     assert Process.get(attempt_key) == 3
   end
 
+  test "short timeout does not wait the full interval before retrying" do
+    session = dummy_live_session()
+    timeout = 20
+    interval = LiveViewTimeout.interval_wait_time()
+    max_expected = timeout + div(interval, 2)
+    started_at = System.monotonic_time(:millisecond)
+
+    assert_raise AssertionError, fn ->
+      LiveViewTimeout.with_timeout(session, timeout, fn _live_session ->
+        raise AssertionError, message: "example failure"
+      end)
+    end
+
+    elapsed = System.monotonic_time(:millisecond) - started_at
+    assert elapsed <= max_expected
+  end
+
   test "applies watcher redirect notifications while retrying" do
     session = dummy_live_session("/live/redirects")
     view_pid = session.view.pid

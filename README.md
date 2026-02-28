@@ -58,6 +58,8 @@ session(:live)
 |> assert_has(text("Title loaded async"), timeout: 350)
 ```
 
+Live assertions poll at a fixed cadence (`100ms` in this slice), but each wait is capped by the remaining timeout budget, so short timeouts are still honored.
+
 Path and scoped flow example:
 
 ```elixir
