@@ -256,7 +256,7 @@ Global remote-browser invocation (Docker required):
 ```bash
 mix test.websocket
 mix test.websocket --browsers chrome,firefox
-mix test.websocket test/core/browser_cross_browser_runtime_test.exs
+mix test.websocket test/core/explicit_browser_test.exs
 ```
 
 `mix test.websocket` starts/stops Selenium container(s) and runs one `mix test`
@@ -270,6 +270,12 @@ mix test --only browser
 ```
 
 `drivers: [:browser]` uses the default browser lane. You can opt specific tests into `:firefox` or `[:chrome, :firefox]` with ExUnit tags.
+
+Explicit browser-lane override coverage:
+
+```bash
+mix test --only explicit_browser
+```
 
 Project helpers:
 
