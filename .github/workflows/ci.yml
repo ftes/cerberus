@@ -94,16 +94,31 @@ jobs:
 
       - name: Run browser-driver tests in websocket Chrome lane
         run: |
-          BROWSER_DRIVER_FILES="$(rg -l --glob '*_test.exs' '@(module)?tag\s+:(browser|chrome|firefox)|@(module)?tag\s+(browser|chrome|firefox):\s*true' test | sort)"
+          BROWSER_DRIVER_FILES="$(
+            find test -name '*_test.exs' -print0 \
+              | xargs -0 grep -El '@(module)?tag[[:space:]]+:(browser|chrome|firefox)|@(module)?tag[[:space:]]+(browser|chrome|firefox):[[:space:]]*true' \
+              | sort
+          )"
+          [ -n "$BROWSER_DRIVER_FILES" ]
           mix test.websocket --browsers chrome $BROWSER_DRIVER_FILES
 
       - name: Run browser-driver tests in local Firefox lane
         continue-on-error: true
         run: |
-          BROWSER_DRIVER_FILES="$(rg -l --glob '*_test.exs' '@(module)?tag\s+:(browser|chrome|firefox)|@(module)?tag\s+(browser|chrome|firefox):\s*true' test | sort)"
+          BROWSER_DRIVER_FILES="$(
+            find test -name '*_test.exs' -print0 \
+              | xargs -0 grep -El '@(module)?tag[[:space:]]+:(browser|chrome|firefox)|@(module)?tag[[:space:]]+(browser|chrome|firefox):[[:space:]]*true' \
+              | sort
+          )"
+          [ -n "$BROWSER_DRIVER_FILES" ]
           CERBERUS_BROWSER_NAME=firefox mix test $BROWSER_DRIVER_FILES
 
       - name: Run browser-driver tests in websocket Firefox lane
         run: |
-          BROWSER_DRIVER_FILES="$(rg -l --glob '*_test.exs' '@(module)?tag\s+:(browser|chrome|firefox)|@(module)?tag\s+(browser|chrome|firefox):\s*true' test | sort)"
+          BROWSER_DRIVER_FILES="$(
+            find test -name '*_test.exs' -print0 \
+              | xargs -0 grep -El '@(module)?tag[[:space:]]+:(browser|chrome|firefox)|@(module)?tag[[:space:]]+(browser|chrome|firefox):[[:space:]]*true' \
+              | sort
+          )"
+          [ -n "$BROWSER_DRIVER_FILES" ]
           mix test.websocket --browsers firefox $BROWSER_DRIVER_FILES
