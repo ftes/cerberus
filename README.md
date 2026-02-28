@@ -241,11 +241,13 @@ Global remote-browser invocation (Docker required):
 
 ```bash
 mix test.websocket
+mix test.websocket --browsers chrome,firefox
 mix test.websocket test/core/remote_webdriver_behavior_test.exs
 ```
 
 `mix test.websocket` starts/stops a Selenium container and wires `webdriver_url`
-for the full test invocation.
+for the full test invocation. Use `--browsers` (`chrome`, `firefox`, or `all`)
+to run multiple websocket-backed browser passes in sequence.
 
 Cross-browser conformance run:
 

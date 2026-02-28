@@ -33,6 +33,23 @@ config :cerberus, Repo,
   pool_size: 10
 
 config :cerberus, :browser,
+  browser_name:
+    (case System.get_env("CERBERUS_BROWSER_NAME") do
+       nil ->
+         nil
+
+       "" ->
+         nil
+
+       "chrome" ->
+         :chrome
+
+       "firefox" ->
+         :firefox
+
+       other ->
+         raise "CERBERUS_BROWSER_NAME must be chrome or firefox, got: #{inspect(other)}"
+     end),
   show_browser: System.get_env("SHOW_BROWSER", "false") == "true",
   webdriver_url: System.get_env("WEBDRIVER_URL"),
   chrome_binary: System.get_env("CHROME"),

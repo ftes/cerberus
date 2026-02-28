@@ -138,6 +138,13 @@ config :cerberus, :browser,
 
 Remote mode connects to an already-running WebDriver endpoint and skips local browser/WebDriver launch.
 
+For containerized websocket-style remote runs:
+
+```bash
+mix test.websocket
+mix test.websocket --browsers chrome,firefox
+```
+
 ## Step 10: Headed Browser and Runtime Launch Options
 
 ```elixir

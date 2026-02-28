@@ -101,5 +101,5 @@ jobs:
       - name: Run browser conformance tests
         run: mix test --only conformance --only browser --exclude remote_webdriver
 
-      - name: Run remote webdriver integration test
-        run: mix test.websocket --only remote_webdriver
+      - name: Run websocket suite (chrome + firefox)
+        run: mix test.websocket --browsers chrome,firefox
