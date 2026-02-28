@@ -1,10 +1,11 @@
 ---
 # cerberus-r04r
 title: 'Browser config: global viewport, user-agent, and init JS hooks'
-status: todo
+status: in-progress
 type: task
+priority: normal
 created_at: 2026-02-28T07:07:18Z
-updated_at: 2026-02-28T07:07:18Z
+updated_at: 2026-02-28T07:31:14Z
 parent: cerberus-ykr0
 ---
 
