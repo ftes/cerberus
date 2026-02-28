@@ -26,8 +26,7 @@ defmodule Cerberus.CoreLiveClickBindingsConformanceTest do
 
   test "live driver excludes dispatch-only JS command bindings from server-actionable click resolution" do
     assert_raise AssertionError, ~r/no button matched locator/, fn ->
-      :live
-      |> session()
+      session()
       |> visit("/live/redirects")
       |> click_button(button("JS Dispatch only"), exact: true)
     end

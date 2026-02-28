@@ -7,10 +7,7 @@ defmodule Cerberus.CoreBrowserExtensionsTest do
   alias ExUnit.AssertionError
 
   test "browser-only APIs are explicit unsupported on static and live sessions" do
-    static =
-      :static
-      |> session()
-      |> visit("/articles")
+    static = visit(session(), "/articles")
 
     static_error =
       assert_raise AssertionError, fn ->
@@ -19,10 +16,7 @@ defmodule Cerberus.CoreBrowserExtensionsTest do
 
     assert static_error.message =~ "type is not implemented for :static driver"
 
-    live =
-      :live
-      |> session()
-      |> visit("/live/counter")
+    live = visit(session(), "/live/counter")
 
     live_error =
       assert_raise AssertionError, fn ->

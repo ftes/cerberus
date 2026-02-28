@@ -844,7 +844,8 @@ defmodule Cerberus.Driver.Browser do
     combined = "#{reason} #{inspect(details)}"
 
     String.contains?(combined, "Inspected target navigated or closed") or
-      String.contains?(combined, "Cannot find context with specified id")
+      String.contains?(combined, "Cannot find context with specified id") or
+      String.contains?(combined, "execution contexts cleared")
   end
 
   defp readiness_payload?(payload) when is_map(payload) do

@@ -22,8 +22,7 @@ defmodule Cerberus.CoreLiveTriggerActionConformanceTest do
 
   @tag drivers: [:live]
   test "live driver submits merged payload for trigger-action handoff" do
-    :live
-    |> session()
+    session()
     |> visit("/live/trigger-action")
     |> fill_in("Trigger action", "engage")
     |> submit(text: "Submit Trigger Form")
@@ -44,8 +43,7 @@ defmodule Cerberus.CoreLiveTriggerActionConformanceTest do
 
   @tag drivers: [:live]
   test "live driver keeps default hidden payload when triggered from outside form" do
-    :live
-    |> session()
+    session()
     |> visit("/live/trigger-action")
     |> click_button(text: "Trigger from elsewhere")
     |> assert_path("/trigger-action/result")
@@ -92,8 +90,7 @@ defmodule Cerberus.CoreLiveTriggerActionConformanceTest do
 
   @tag drivers: [:live]
   test "live driver submits dynamic form payload on trigger-action handoff" do
-    :live
-    |> session()
+    session()
     |> visit("/live/trigger-action")
     |> click_button(text: "Show Dynamic Form")
     |> fill_in("Message", "dynamic")
@@ -105,8 +102,7 @@ defmodule Cerberus.CoreLiveTriggerActionConformanceTest do
   @tag drivers: [:live]
   test "raises an error if multiple forms have phx-trigger-action" do
     assert_raise AssertionError, ~r/Found multiple forms with phx-trigger-action/, fn ->
-      :live
-      |> session()
+      session()
       |> visit("/live/trigger-action")
       |> click_button(text: "Trigger multiple")
     end

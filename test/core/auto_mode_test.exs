@@ -76,8 +76,7 @@ defmodule Cerberus.CoreAutoModeTest do
   test "failure output includes transition diagnostics in a consistent shape" do
     error =
       assert_raise ExUnit.AssertionError, fn ->
-        :auto
-        |> session()
+        session()
         |> visit("/articles")
         |> click_link(text: "Counter")
         |> assert_has([text: "no such text"], exact: true)
