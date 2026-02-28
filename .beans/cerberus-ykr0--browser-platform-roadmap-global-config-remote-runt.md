@@ -3,8 +3,9 @@
 title: 'Browser platform roadmap: global config, remote runtime, multi-browser matrix, and CI'
 status: in-progress
 type: feature
+priority: normal
 created_at: 2026-02-28T07:06:28Z
-updated_at: 2026-02-28T07:06:28Z
+updated_at: 2026-02-28T08:26:47Z
 ---
 
 Plan and implement the next browser-platform capabilities for Cerberus.
@@ -19,7 +20,7 @@ Support configurable browser runtime behavior (global and per-test), broaden bro
 - [ ] Add Firefox support and run harness conformance tests against all available supported browsers.
 - [ ] Evaluate which additional browsers should be supported via BiDi and document support policy.
 - [ ] Design CI setup for browser runs (browser installation, asset build requirements, orchestration); add mix tasks first if needed.
-- [ ] Support launching an individual test or module with browser-specific overrides (for example screen size), including isolation strategy for per-test browser instances.
+- [x] Support launching an individual test or module with browser-specific overrides (for example screen size), including isolation strategy for per-test browser instances.
 
 ## Notes
 - Keep browser-tagged tests runnable outside Codex sandbox constraints.

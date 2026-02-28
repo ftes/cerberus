@@ -8,6 +8,9 @@ defmodule Cerberus.Harness do
 
   v0 keeps the execution model intentionally small:
   - choose drivers from `context[:drivers]` tags (or defaults),
+  - optionally merge `context[:session_opts]` into all sessions,
+  - optionally merge browser-only overrides from `context[:browser]` (keyword form)
+    and `context[:browser_session_opts]`,
   - execute the same scenario for each driver,
   - return normalized result maps for reporting and assertions.
   """
@@ -61,7 +64,7 @@ defmodule Cerberus.Harness do
 
     try do
       drivers
-      |> Enum.map(&run_driver(&1, session_opts, scenario))
+      |> Enum.map(&run_driver(&1, session_opts_for_driver(&1, context, session_opts), scenario))
       |> sort_results()
     after
       stop_sandbox_owner.()
@@ -178,6 +181,21 @@ defmodule Cerberus.Harness do
     "driver conformance failures:\n" <> lines
   end
 
+  @doc false
+  @spec session_opts_for_driver(driver_kind(), map(), keyword()) :: keyword()
+  def session_opts_for_driver(driver, context, session_opts \\ [])
+
+  def session_opts_for_driver(:browser, context, session_opts) when is_map(context) and is_list(session_opts) do
+    session_opts
+    |> merge_session_opts(context_session_opts(context))
+    |> merge_session_opts(browser_tag_opts(context))
+    |> merge_session_opts(browser_session_opts(context))
+  end
+
+  def session_opts_for_driver(_driver, context, session_opts) when is_map(context) and is_list(session_opts) do
+    merge_session_opts(session_opts, context_session_opts(context))
+  end
+
   defp normalize_sandbox_repos(false), do: []
   defp normalize_sandbox_repos(nil), do: []
 
@@ -239,5 +257,94 @@ defmodule Cerberus.Harness do
       |> Plug.Conn.put_req_header("user-agent", metadata_header)
 
     Keyword.put(session_opts, :conn, conn)
+  end
+
+  defp context_session_opts(context) do
+    keyword_context_opt(context, :session_opts, "Harness.run/run! context :session_opts must be a keyword list")
+  end
+
+  defp browser_session_opts(context) do
+    keyword_context_opt(
+      context,
+      :browser_session_opts,
+      "Harness.run/run! context :browser_session_opts must be a keyword list"
+    )
+  end
+
+  defp browser_tag_opts(context) do
+    case Map.get(context, :browser) do
+      nil ->
+        []
+
+      true ->
+        []
+
+      false ->
+        []
+
+      browser_opts when is_list(browser_opts) ->
+        if Keyword.keyword?(browser_opts) do
+          [browser: browser_opts]
+        else
+          invalid_browser_tag!(browser_opts)
+        end
+
+      other ->
+        invalid_browser_tag!(other)
+    end
+  end
+
+  defp keyword_context_opt(context, key, error_message) do
+    case Map.get(context, key) do
+      nil ->
+        []
+
+      value when is_list(value) ->
+        if Keyword.keyword?(value) do
+          value
+        else
+          raise ArgumentError, "#{error_message}, got: #{inspect(value)}"
+        end
+
+      other ->
+        raise ArgumentError, "#{error_message}, got: #{inspect(other)}"
+    end
+  end
+
+  defp merge_session_opts(base, overrides) when is_list(base) and is_list(overrides) do
+    merged =
+      base
+      |> Keyword.delete(:browser)
+      |> Keyword.merge(Keyword.delete(overrides, :browser))
+
+    browser_opts =
+      base
+      |> Keyword.get(:browser, [])
+      |> merge_browser_opts(Keyword.get(overrides, :browser, []))
+
+    if browser_opts == [] do
+      merged
+    else
+      Keyword.put(merged, :browser, browser_opts)
+    end
+  end
+
+  defp merge_browser_opts(base, overrides) when is_list(base) and is_list(overrides) do
+    if Keyword.keyword?(base) and Keyword.keyword?(overrides) do
+      Keyword.merge(base, overrides)
+    else
+      raise ArgumentError,
+            "Harness.run/run! browser opts must be keyword lists, got base=#{inspect(base)} override=#{inspect(overrides)}"
+    end
+  end
+
+  defp merge_browser_opts(base, overrides) do
+    raise ArgumentError,
+          "Harness.run/run! browser opts must be keyword lists, got base=#{inspect(base)} override=#{inspect(overrides)}"
+  end
+
+  defp invalid_browser_tag!(value) do
+    raise ArgumentError,
+          "Harness.run/run! context :browser must be true/false or a keyword list of browser opts, got: #{inspect(value)}"
   end
 end

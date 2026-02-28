@@ -138,6 +138,23 @@ Most tests switch modes by changing only the first session line:
  |> assert_has(text("Count: 1"))
 ```
 
+## Per-Test Browser Overrides
+
+You can override browser defaults in one test by passing session opts:
+
+```elixir
+session(:browser,
+  ready_timeout_ms: 2_500,
+  browser: [viewport: {390, 844}, user_agent: "Cerberus Mobile Spec"]
+)
+|> visit("/live/counter")
+```
+
+Isolation strategy:
+- runtime process + BiDi transport stay shared,
+- each `session(:browser, ...)` creates an isolated browser user context,
+- context-level overrides (viewport/user-agent/init scripts) are isolated per session and do not require a dedicated browser process.
+
 ## Timeout Defaults
 
 You can configure default assertion and browser readiness timeouts once:

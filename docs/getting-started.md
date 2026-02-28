@@ -114,3 +114,16 @@ session
 > #### Warning
 >
 > `Cerberus.Browser.*` APIs are intentionally browser-only and raise explicit unsupported-operation assertions on non-browser sessions.
+
+## Step 8: Per-Test Browser Overrides
+
+```elixir
+session(:browser,
+  ready_timeout_ms: 2_500,
+  browser: [viewport: {390, 844}, user_agent: "Cerberus Mobile Spec"]
+)
+|> visit("/live/counter")
+|> assert_has(text("Count: 1"))
+```
+
+Use this when one test needs different browser characteristics (for example mobile viewport) without changing global config.

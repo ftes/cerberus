@@ -40,6 +40,13 @@ flowchart LR
 - Browser maps this to separate browsing contexts inside one user context.
 - Static/live map this to separate `Plug.Conn` sessions with shared cookie semantics for tabs.
 
+## Browser Overrides and Isolation
+
+- Browser runtime process and BiDi socket are shared for efficiency.
+- Each browser session (`session(:browser, ...)`) creates a dedicated browser user context.
+- Per-session browser overrides (`browser: [viewport: ..., user_agent: ..., init_script: ...]`) apply only to that session's user context.
+- Result: test/module overrides do not require dedicated browser processes unless you need different runtime-level launch settings.
+
 ## Escape Hatches
 
 - `unwrap/2`: direct access to underlying driver primitives when needed.
