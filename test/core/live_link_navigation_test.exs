@@ -6,8 +6,6 @@ defmodule Cerberus.CoreLiveLinkNavigationTest do
 
   alias Cerberus.Harness
 
-  @moduletag :conformance
-
   @tag drivers: [:live, :browser]
   test "click_link handles live navigate, patch, and non-live transitions", context do
     Harness.run!(

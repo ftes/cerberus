@@ -5,7 +5,6 @@ defmodule Cerberus.CoreCurrentPathTest do
 
   alias Cerberus.Harness
 
-  @moduletag :conformance
   @moduletag drivers: [:live, :browser]
 
   test "current_path is updated on live patch in live and browser drivers", context do

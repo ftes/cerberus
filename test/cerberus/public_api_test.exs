@@ -60,12 +60,10 @@ defmodule Cerberus.PublicApiTest do
     assert isolated_user.current_path == "/session/user"
   end
 
-  @tag browser: true
   test "session constructor returns a browser session" do
     assert %BrowserSession{} = session(:browser)
   end
 
-  @tag browser: true
   test "browser session applies init script and viewport defaults across new tabs" do
     session =
       :browser
@@ -96,7 +94,6 @@ defmodule Cerberus.PublicApiTest do
     assert Cerberus.Browser.evaluate_js(tab2, "window.__cerberusInit") == "ready"
   end
 
-  @tag browser: true
   test "switch_tab rejects mixed browser and non-browser sessions" do
     browser_tab =
       :browser
@@ -484,7 +481,6 @@ defmodule Cerberus.PublicApiTest do
     assert session.current_path == "/live/counter"
   end
 
-  @tag browser: true
   test "unwrap in browser mode exposes native tab handles" do
     session =
       :browser
@@ -502,7 +498,6 @@ defmodule Cerberus.PublicApiTest do
     assert tab_id != ""
   end
 
-  @tag browser: true
   test "open_browser creates an HTML snapshot for browser sessions" do
     session =
       :browser
@@ -519,7 +514,6 @@ defmodule Cerberus.PublicApiTest do
     File.rm(path)
   end
 
-  @tag browser: true
   @tag :tmp_dir
   test "screenshot captures browser PNG output to a requested path", %{tmp_dir: tmp_dir} do
     path = Path.join(tmp_dir, "cerberus-screenshot.png")
@@ -539,7 +533,6 @@ defmodule Cerberus.PublicApiTest do
     File.rm(path)
   end
 
-  @tag browser: true
   test "screenshot defaults to a temp PNG path and records it in last_result" do
     session =
       :browser
@@ -583,7 +576,6 @@ defmodule Cerberus.PublicApiTest do
     end
   end
 
-  @tag browser: true
   test "screenshot rejects invalid options" do
     assert_raise ArgumentError, ~r/:path must be a non-empty string path/, fn ->
       :browser
@@ -593,7 +585,6 @@ defmodule Cerberus.PublicApiTest do
     end
   end
 
-  @tag browser: true
   test "select and choose work for browser sessions" do
     browser_session =
       :browser

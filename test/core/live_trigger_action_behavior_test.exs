@@ -6,7 +6,6 @@ defmodule Cerberus.CoreLiveTriggerActionBehaviorTest do
   alias Cerberus.Harness
   alias ExUnit.AssertionError
 
-  @moduletag :conformance
   @moduletag drivers: [:live, :browser]
 
   test "phx-trigger-action submits to static endpoint after phx-submit", context do

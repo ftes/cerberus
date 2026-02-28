@@ -5,9 +5,6 @@ defmodule Cerberus.CoreLiveFormChangeBehaviorTest do
 
   alias Cerberus.Harness
 
-  @moduletag :conformance
-
-  @tag browser: true
   @tag drivers: [:live, :browser]
   test "fill_in emits _target for phx-change events", context do
     Harness.run!(context, fn session ->
@@ -19,7 +16,6 @@ defmodule Cerberus.CoreLiveFormChangeBehaviorTest do
     end)
   end
 
-  @tag browser: true
   @tag drivers: [:live, :browser]
   test "fill_in does not trigger server-side change when form has no phx-change", context do
     Harness.run!(context, fn session ->
@@ -32,7 +28,6 @@ defmodule Cerberus.CoreLiveFormChangeBehaviorTest do
     end)
   end
 
-  @tag browser: true
   @tag drivers: [:live, :browser]
   test "active form ordering preserves hidden defaults across sequential fill_in", context do
     Harness.run!(context, fn session ->
@@ -49,7 +44,6 @@ defmodule Cerberus.CoreLiveFormChangeBehaviorTest do
     end)
   end
 
-  @tag browser: true
   @tag drivers: [:live, :browser]
   test "fill_in matches wrapped nested label text in live and browser drivers", context do
     Harness.run!(context, fn session ->

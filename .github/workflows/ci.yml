@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  checks:
-    name: Checks
+  ci:
+    name: CI
     runs-on: ubuntu-latest
     env:
       POSTGRES_HOST: 127.0.0.1
@@ -71,123 +71,38 @@ jobs:
       - name: Run precommit
         run: mix precommit
 
-      - name: Run migration verification tests
-        run: mix test --only migration_verification
-
-  browser:
-    name: Browser ${{ matrix.name }}
-    runs-on: ubuntu-latest
-    needs: checks
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: local chrome
-            selector: regular
-            runtime: local
-            browser: chrome
-            default_browser: chrome
-            install_profile: chrome
-          - name: local firefox
-            selector: regular
-            runtime: local
-            browser: firefox
-            default_browser: firefox
-            install_profile: firefox
-          - name: websocket chrome
-            selector: regular
-            runtime: ws
-            browser: chrome
-            default_browser: chrome
-            install_profile: none
-          - name: websocket firefox
-            selector: regular
-            runtime: ws
-            browser: firefox
-            default_browser: firefox
-            install_profile: none
-          - name: explicit local (chrome+firefox)
-            selector: explicit
-            runtime: local
-            browser: all
-            default_browser: chrome
-            install_profile: both
-    env:
-      POSTGRES_HOST: 127.0.0.1
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      CERBERUS_BROWSER_NAME: ${{ matrix.default_browser }}
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 6
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup BEAM
-        uses: erlef/setup-beam@v1
-        with:
-          version-file: .tool-versions
-          version-type: strict
-
-      - name: Cache deps and build
-        uses: actions/cache@v4
-        with:
-          path: |
-            deps
-            _build
-          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-mix-
-
       - name: Cache browser tools
-        if: matrix.runtime == 'local'
         uses: actions/cache@v4
         with:
           path: tmp/browser-tools
-          key: ${{ runner.os }}-browser-tools-${{ matrix.install_profile }}-${{ hashFiles('bin/check_browser_bidi_ready.sh', 'bin/check_chrome_bidi_ready.sh', 'bin/check_firefox_bidi_ready.sh') }}
+          key: ${{ runner.os }}-browser-tools-ci-${{ hashFiles('bin/check_browser_bidi_ready.sh', 'bin/check_chrome_bidi_ready.sh', 'bin/check_firefox_bidi_ready.sh') }}
           restore-keys: |
-            ${{ runner.os }}-browser-tools-${{ matrix.install_profile }}-
             ${{ runner.os }}-browser-tools-
 
-      - name: Install deps
-        run: mix deps.get
-
-      - name: Build fixture assets
-        run: mix assets.build
-
       - name: Install local Chrome runtime
-        if: matrix.install_profile == 'chrome' || matrix.install_profile == 'both'
         run: |
           bin/check_browser_bidi_ready.sh chrome --install
           cat tmp/browser-tools/env.sh >> "$GITHUB_ENV"
 
       - name: Install local Firefox runtime
-        if: matrix.install_profile == 'firefox' || matrix.install_profile == 'both'
         run: |
           bin/check_browser_bidi_ready.sh firefox --install
           cat tmp/browser-tools/env.sh >> "$GITHUB_ENV"
 
-      - name: Run local browser conformance suite
-        if: matrix.selector == 'regular' && matrix.runtime == 'local'
-        run: mix test --only conformance --exclude explicit_browser
+      - name: Run full test suite (default local chrome)
+        run: mix test
 
-      - name: Run websocket browser conformance suite
-        if: matrix.selector == 'regular' && matrix.runtime == 'ws'
-        run: mix test.websocket --browsers ${{ matrix.browser }} --only conformance --exclude explicit_browser
+      - name: Run browser-driver tests in websocket Chrome lane
+        run: |
+          BROWSER_DRIVER_FILES="$(rg -l --glob '*_test.exs' 'drivers:\s*\[[^]]*:browser' test | sort)"
+          mix test.websocket --browsers chrome $BROWSER_DRIVER_FILES
 
-      - name: Run explicit browser override suite
-        if: matrix.selector == 'explicit'
-        run: mix test --only explicit_browser
+      - name: Run browser-driver tests in local Firefox lane
+        run: |
+          BROWSER_DRIVER_FILES="$(rg -l --glob '*_test.exs' 'drivers:\s*\[[^]]*:browser' test | sort)"
+          CERBERUS_BROWSER_NAME=firefox mix test $BROWSER_DRIVER_FILES
+
+      - name: Run browser-driver tests in websocket Firefox lane
+        run: |
+          BROWSER_DRIVER_FILES="$(rg -l --glob '*_test.exs' 'drivers:\s*\[[^]]*:browser' test | sort)"
+          mix test.websocket --browsers firefox $BROWSER_DRIVER_FILES

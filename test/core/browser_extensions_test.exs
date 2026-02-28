@@ -26,7 +26,6 @@ defmodule Cerberus.CoreBrowserExtensionsTest do
     assert live_error.message =~ "evaluate_js is not implemented for :live driver"
   end
 
-  @tag browser: true
   @tag :tmp_dir
   test "screenshot + keyboard + dialog + drag browser extensions work together", %{tmp_dir: tmp_dir} do
     path = Path.join(tmp_dir, "cerberus-browser-extensions.png")
@@ -59,7 +58,6 @@ defmodule Cerberus.CoreBrowserExtensionsTest do
     File.rm(path)
   end
 
-  @tag browser: true
   test "evaluate_js and cookie helpers cover add_cookie and session cookie semantics" do
     session =
       :browser

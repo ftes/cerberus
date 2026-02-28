@@ -5,8 +5,6 @@ defmodule Cerberus.CoreExplicitBrowserTest do
 
   alias Cerberus.Harness
 
-  @moduletag :conformance
-  @moduletag browser: true
   @moduletag explicit_browser: true
   @moduletag drivers: [:chrome, :firefox]
 

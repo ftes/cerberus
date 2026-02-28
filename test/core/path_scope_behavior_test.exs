@@ -5,8 +5,6 @@ defmodule Cerberus.CorePathScopeBehaviorTest do
 
   alias Cerberus.Harness
 
-  @moduletag :conformance
-
   @tag drivers: [:static, :browser]
   test "within scopes static operations and assertions across static and browser", context do
     Harness.run!(
@@ -42,7 +40,6 @@ defmodule Cerberus.CorePathScopeBehaviorTest do
     )
   end
 
-  @tag browser: true
   @tag drivers: [:live, :browser]
   test "within scopes live duplicate button clicks consistently in live and browser", context do
     Harness.run!(
@@ -62,7 +59,6 @@ defmodule Cerberus.CorePathScopeBehaviorTest do
     )
   end
 
-  @tag browser: true
   @tag drivers: [:live, :browser]
   test "path assertions track live patch query transitions across drivers", context do
     Harness.run!(

@@ -172,7 +172,7 @@ Runtime launch settings (for example `show_browser`, `headless`, browser binarie
 ## Step 11: Cross-Browser Conformance Runs
 
 ```bash
-mix test --only browser
+mix test --only drivers test/core --exclude explicit_browser
 ```
 
 `drivers: [:browser]` runs the default browser lane. For targeted multi-browser coverage, add explicit tags at module/describe/test scope:

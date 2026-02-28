@@ -5,8 +5,6 @@ defmodule Cerberus.CoreParityMismatchFixtureTest do
 
   alias Cerberus.Harness
 
-  @moduletag :conformance
-
   @tag drivers: [:static, :browser]
   test "parity static mismatch fixture is reachable in static and browser drivers", context do
     Harness.run!(

@@ -5,8 +5,6 @@ defmodule Cerberus.CoreHelperLocatorBehaviorTest do
 
   alias Cerberus.Harness
 
-  @moduletag :conformance
-
   @tag drivers: [:static, :browser]
   test "helper locators are consistent across static and browser for forms and navigation", context do
     Harness.run!(
@@ -47,7 +45,6 @@ defmodule Cerberus.CoreHelperLocatorBehaviorTest do
     )
   end
 
-  @tag browser: true
   @tag drivers: [:live, :browser]
   test "duplicate live button labels are disambiguated for render_click conversion", context do
     Harness.run!(
@@ -63,7 +60,6 @@ defmodule Cerberus.CoreHelperLocatorBehaviorTest do
     )
   end
 
-  @tag browser: true
   @tag drivers: [:live, :browser]
   test "css sigil selector disambiguates duplicate live button labels", context do
     Harness.run!(
@@ -77,7 +73,6 @@ defmodule Cerberus.CoreHelperLocatorBehaviorTest do
     )
   end
 
-  @tag browser: true
   @tag drivers: [:live, :browser]
   test "click_button handles multiline data-confirm attributes", context do
     Harness.run!(
@@ -91,7 +86,6 @@ defmodule Cerberus.CoreHelperLocatorBehaviorTest do
     )
   end
 
-  @tag browser: true
   @tag drivers: [:live, :browser]
   test "role link helper navigates from live route consistently", context do
     Harness.run!(

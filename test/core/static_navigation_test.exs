@@ -5,7 +5,6 @@ defmodule Cerberus.CoreStaticNavigationTest do
 
   alias Cerberus.Harness
 
-  @moduletag :conformance
   @moduletag drivers: [:static]
 
   test "static driver supports link navigation into deterministic page state", context do

@@ -5,8 +5,6 @@ defmodule Cerberus.CoreFormActionsTest do
 
   alias Cerberus.Harness
 
-  @moduletag :conformance
-
   @tag drivers: [:static, :browser]
   test "click_link, fill_in, and submit are consistent across static and browser drivers",
        context do
@@ -25,7 +23,6 @@ defmodule Cerberus.CoreFormActionsTest do
     )
   end
 
-  @tag browser: true
   @tag drivers: [:static, :browser]
   test "fill_in matches wrapped labels with nested inline text across static and browser drivers",
        context do
@@ -41,7 +38,6 @@ defmodule Cerberus.CoreFormActionsTest do
     )
   end
 
-  @tag browser: true
   @tag drivers: [:live, :browser]
   test "click_button works on live counter flow for live and browser drivers", context do
     Harness.run!(

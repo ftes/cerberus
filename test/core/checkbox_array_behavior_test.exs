@@ -5,9 +5,6 @@ defmodule Cerberus.CoreCheckboxArrayBehaviorTest do
 
   alias Cerberus.Harness
 
-  @moduletag :conformance
-
-  @tag browser: true
   @tag drivers: [:live, :browser]
   test "check supports array-named checkbox groups", context do
     Harness.run!(context, fn session ->
@@ -18,7 +15,6 @@ defmodule Cerberus.CoreCheckboxArrayBehaviorTest do
     end)
   end
 
-  @tag browser: true
   @tag drivers: [:live, :browser]
   test "uncheck supports array-named checkbox groups", context do
     Harness.run!(context, fn session ->
@@ -29,7 +25,6 @@ defmodule Cerberus.CoreCheckboxArrayBehaviorTest do
     end)
   end
 
-  @tag browser: true
   @tag drivers: [:static, :browser]
   test "static submit payload matches browser for checked array values", context do
     Harness.run!(context, fn session ->
@@ -41,7 +36,6 @@ defmodule Cerberus.CoreCheckboxArrayBehaviorTest do
     end)
   end
 
-  @tag browser: true
   @tag drivers: [:static, :browser]
   test "static submit payload matches browser for unchecked array values", context do
     Harness.run!(context, fn session ->

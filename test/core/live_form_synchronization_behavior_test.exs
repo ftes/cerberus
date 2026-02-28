@@ -5,9 +5,6 @@ defmodule Cerberus.CoreLiveFormSynchronizationBehaviorTest do
 
   alias Cerberus.Harness
 
-  @moduletag :conformance
-
-  @tag browser: true
   @tag drivers: [:live, :browser]
   test "conditional submissions exclude fields removed from the rendered form", context do
     Harness.run!(context, fn session ->
@@ -23,7 +20,6 @@ defmodule Cerberus.CoreLiveFormSynchronizationBehaviorTest do
     end)
   end
 
-  @tag browser: true
   @tag drivers: [:static, :browser]
   test "static submissions exclude stale fields after form-shape navigation", context do
     Harness.run!(context, fn session ->
@@ -39,7 +35,6 @@ defmodule Cerberus.CoreLiveFormSynchronizationBehaviorTest do
     end)
   end
 
-  @tag browser: true
   @tag drivers: [:live, :browser]
   test "dispatch(change) buttons inside forms drive add/remove semantics", context do
     Harness.run!(context, fn session ->
@@ -53,7 +48,6 @@ defmodule Cerberus.CoreLiveFormSynchronizationBehaviorTest do
     end)
   end
 
-  @tag browser: true
   @tag drivers: [:live, :browser]
   test "submit-only forms still submit filled values without phx-change", context do
     Harness.run!(context, fn session ->

@@ -6,7 +6,6 @@ defmodule Cerberus.CoreAutoModeTest do
   alias Cerberus.Harness
   alias Cerberus.Session
 
-  @moduletag :conformance
   @moduletag drivers: [:auto]
 
   test "auto mode starts static and switches to live when navigating to live routes", context do

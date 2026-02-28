@@ -5,8 +5,6 @@ defmodule Cerberus.CoreOpenBrowserBehaviorTest do
 
   alias Cerberus.Harness
 
-  @moduletag :conformance
-
   @tag drivers: [:static, :browser]
   test "open_browser snapshots static pages consistently in static and browser drivers", context do
     Harness.run!(context, fn session ->
@@ -20,7 +18,6 @@ defmodule Cerberus.CoreOpenBrowserBehaviorTest do
     end)
   end
 
-  @tag browser: true
   @tag drivers: [:live, :browser]
   test "open_browser snapshots live pages consistently in live and browser drivers", context do
     Harness.run!(context, fn session ->

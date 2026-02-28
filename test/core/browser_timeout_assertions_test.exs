@@ -5,8 +5,6 @@ defmodule Cerberus.CoreBrowserTimeoutAssertionsTest do
 
   alias Cerberus.Harness
 
-  @moduletag :conformance
-  @moduletag browser: true
   @moduletag drivers: [:browser]
 
   test "browser defaults use 500ms assertion timeout and wait for async text", context do

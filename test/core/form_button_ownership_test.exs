@@ -9,7 +9,6 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
   alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.Harness
 
-  @moduletag :conformance
   @moduletag drivers: [:static, :browser]
 
   test "non-submit controls do not clear active form values before submit", context do

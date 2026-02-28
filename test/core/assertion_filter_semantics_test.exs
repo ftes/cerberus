@@ -5,12 +5,10 @@ defmodule Cerberus.CoreAssertionFilterSemanticsTest do
 
   alias Cerberus.Harness
 
-  @moduletag :conformance
   @moduletag drivers: [:static, :live, :browser]
 
   @missing_label "Unknown Label"
 
-  @tag browser: true
   test "refute_has supports label-only locators when label text is missing", context do
     Harness.run!(context, fn session ->
       session
@@ -19,7 +17,6 @@ defmodule Cerberus.CoreAssertionFilterSemanticsTest do
     end)
   end
 
-  @tag browser: true
   test "assert_has with label-only locator fails when label text is missing", context do
     results =
       Harness.run(context, fn session ->

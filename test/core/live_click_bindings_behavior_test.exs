@@ -6,7 +6,6 @@ defmodule Cerberus.CoreLiveClickBindingsBehaviorTest do
   alias Cerberus.Harness
   alias ExUnit.AssertionError
 
-  @moduletag :conformance
   @moduletag drivers: [:live, :browser]
 
   test "click_button supports actionable JS command bindings across live and browser drivers", context do

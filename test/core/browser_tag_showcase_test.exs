@@ -5,8 +5,6 @@ defmodule Cerberus.CoreBrowserTagShowcaseTest do
 
   alias Cerberus.Harness
 
-  @moduletag :conformance
-  @moduletag browser: true
   @moduletag drivers: [:browser]
 
   test "module-level drivers tag uses default browser lane", context do
