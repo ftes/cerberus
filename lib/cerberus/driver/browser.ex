@@ -34,6 +34,7 @@ defmodule Cerberus.Driver.Browser do
 
   @default_ready_timeout_ms 1_500
   @default_ready_quiet_ms 40
+  @default_screenshot_full_page false
   @user_context_supervisor Cerberus.Driver.Browser.UserContextSupervisor
   @empty_browser_context_defaults %{viewport: nil, user_agent: nil, init_scripts: []}
 
@@ -206,7 +207,7 @@ defmodule Cerberus.Driver.Browser do
   def screenshot(%__MODULE__{} = session, opts \\ []) when is_list(opts) do
     state = state!(session)
     path = screenshot_path(opts)
-    full_page = Keyword.get(opts, :full_page, false)
+    full_page = screenshot_full_page(opts)
 
     case capture_screenshot(state.tab_id, full_page) do
       {:ok, %{"data" => data}} when is_binary(data) ->
@@ -1124,15 +1125,35 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp default_screenshot_path do
-    Path.join([System.tmp_dir!(), "cerberus-screenshot#{System.unique_integer([:monotonic])}.png"])
+  defp default_screenshot_path(browser_opts) do
+    artifact_dir =
+      browser_opts
+      |> Keyword.get(:screenshot_artifact_dir)
+      |> normalize_non_empty_string(System.tmp_dir!())
+
+    Path.join([artifact_dir, "cerberus-screenshot#{System.unique_integer([:monotonic])}.png"])
   end
 
-  defp screenshot_path(opts) do
+  @doc false
+  @spec screenshot_path(keyword()) :: String.t()
+  def screenshot_path(opts) when is_list(opts) do
+    browser_opts = merged_browser_opts(opts)
+
     case Keyword.get(opts, :path) do
-      nil -> default_screenshot_path()
+      path when is_binary(path) -> path
+      nil -> configured_screenshot_path(browser_opts) || default_screenshot_path(browser_opts)
       path -> path
     end
+  end
+
+  @doc false
+  @spec screenshot_full_page(keyword()) :: boolean()
+  def screenshot_full_page(opts) when is_list(opts) do
+    browser_opts = merged_browser_opts(opts)
+
+    opts
+    |> Keyword.get(:full_page, browser_opts[:screenshot_full_page])
+    |> normalize_boolean(@default_screenshot_full_page)
   end
 
   defp start_user_context(opts) do
@@ -1222,6 +1243,25 @@ defmodule Cerberus.Driver.Browser do
 
   defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
   defp normalize_positive_integer(_value, default), do: default
+
+  defp normalize_boolean(value, _default) when is_boolean(value), do: value
+  defp normalize_boolean(_value, default), do: default
+
+  defp normalize_non_empty_string(value, default) when is_binary(value) do
+    if byte_size(String.trim(value)) > 0, do: value, else: default
+  end
+
+  defp normalize_non_empty_string(_value, default), do: default
+
+  defp configured_screenshot_path(browser_opts) do
+    case Keyword.get(browser_opts, :screenshot_path) do
+      path when is_binary(path) ->
+        if byte_size(String.trim(path)) > 0, do: path
+
+      _ ->
+        nil
+    end
+  end
 
   defp normalize_browser_context_defaults!(defaults) when is_map(defaults) do
     %{

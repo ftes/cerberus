@@ -8,6 +8,7 @@
 | Real browser behavior | `session(:browser)` |
 | Session assertion timeout default | `session(assert_timeout_ms: 300)` |
 | Browser ready timeout default | `session(:browser, ready_timeout_ms: 2200)` |
+| Global screenshot defaults | `config :cerberus, :browser, screenshot_full_page: false, screenshot_artifact_dir: "tmp/screenshots"` |
 
 ## Core Navigation and Assertions
 

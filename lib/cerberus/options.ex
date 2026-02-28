@@ -96,7 +96,7 @@ defmodule Cerberus.Options do
 
   @screenshot_opts_schema [
     path: [type: :any, default: nil, doc: "Optional file path for the screenshot output."],
-    full_page: [type: :boolean, default: false, doc: "Captures the full document instead of only the viewport."]
+    full_page: [type: :boolean, doc: "Captures the full document instead of only the viewport."]
   ]
 
   @spec click_schema() :: keyword()

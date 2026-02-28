@@ -119,4 +119,30 @@ defmodule Cerberus.TimeoutDefaultsTest do
       Extensions.dialog_timeout_ms(timeout: 0)
     end
   end
+
+  test "screenshot full-page default falls back to global browser config and allows override" do
+    Application.put_env(:cerberus, :browser, screenshot_full_page: true)
+
+    assert Browser.screenshot_full_page([]) == true
+    assert Browser.screenshot_full_page(browser: [screenshot_full_page: false]) == false
+    assert Browser.screenshot_full_page(full_page: false, browser: [screenshot_full_page: true]) == false
+  end
+
+  test "screenshot path uses configured policy and allows per-call override" do
+    artifact_dir = Path.join(System.tmp_dir!(), "cerberus-screenshot-defaults")
+
+    Application.put_env(:cerberus, :browser,
+      screenshot_artifact_dir: artifact_dir,
+      screenshot_path: Path.join(artifact_dir, "global.png")
+    )
+
+    assert Browser.screenshot_path([]) == Path.join(artifact_dir, "global.png")
+    assert Browser.screenshot_path(path: "tmp/override.png") == "tmp/override.png"
+
+    Application.put_env(:cerberus, :browser, screenshot_artifact_dir: artifact_dir)
+
+    generated = Browser.screenshot_path([])
+    assert String.starts_with?(generated, artifact_dir <> "/")
+    assert String.ends_with?(generated, ".png")
+  end
 end
