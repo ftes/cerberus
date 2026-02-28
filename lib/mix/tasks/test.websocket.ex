@@ -18,12 +18,12 @@ defmodule Mix.Tasks.Test.Websocket do
   Optional flag:
 
   - `--browsers` comma-separated list of `chrome`, `firefox`, or `all`
-    (default: `chrome`)
+    (default: `all`)
 
   Optional env vars:
 
   - `CERBERUS_REMOTE_SELENIUM_BROWSERS` fallback when `--browsers` is not set
-    (default: `chrome`)
+    (default: `all`)
   - `CERBERUS_REMOTE_SELENIUM_IMAGE` fallback image for all browsers
   - `CERBERUS_REMOTE_SELENIUM_IMAGE_CHROME`
     (default: `selenium/standalone-chromium:126.0`)
@@ -133,7 +133,7 @@ defmodule Mix.Tasks.Test.Websocket do
 
   defp extract_task_args!(args) when is_list(args) do
     {browsers_arg, test_args} = take_browsers_arg(args, nil, [])
-    browsers = parse_browsers!(browsers_arg || System.get_env("CERBERUS_REMOTE_SELENIUM_BROWSERS", "chrome"))
+    browsers = parse_browsers!(browsers_arg || System.get_env("CERBERUS_REMOTE_SELENIUM_BROWSERS", "all"))
     {browsers, test_args}
   end
 

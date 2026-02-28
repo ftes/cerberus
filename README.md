@@ -257,7 +257,7 @@ mix test.websocket test/core/remote_webdriver_behavior_test.exs
 
 `mix test.websocket` starts/stops Selenium container(s) and runs one `mix test`
 invocation with remote browser lane wiring. Use `--browsers` (`chrome`,
-`firefox`, or `all`) to provision multiple websocket-backed lanes together.
+`firefox`, or `all`) to control lane provisioning; default is `all`.
 
 Cross-browser conformance run:
 
@@ -266,7 +266,6 @@ mix test --only browser
 ```
 
 `drivers: [:browser]` uses the default browser lane. You can opt specific tests into `:firefox` or `[:chrome, :firefox]` with ExUnit tags.
-CI keeps chrome as the baseline browser lane and includes targeted firefox-tagged conformance coverage.
 
 Project helpers:
 

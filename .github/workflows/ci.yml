@@ -62,12 +62,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-plt-
 
-      - name: Cache browser tools
-        uses: actions/cache@v4
-        with:
-          path: tmp/browser-tools
-          key: ${{ runner.os }}-browser-tools-${{ hashFiles('bin/check_chrome_bidi_ready.sh', 'bin/check_firefox_bidi_ready.sh', 'bin/check_browser_bidi_ready.sh') }}
-
       - name: Install deps
         run: mix deps.get
 
@@ -80,26 +74,8 @@ jobs:
       - name: Run non-browser conformance tests
         run: mix test --only conformance --exclude browser
 
-      - name: Run migration verification tests
-        run: mix test --only migration_verification
-
-      - name: Prepare explicit browser runtime env
-        run: |
-          CHROME_OUTPUT="$(bin/check_chrome_bidi_ready.sh --install)"
-          FIREFOX_OUTPUT="$(bin/check_firefox_bidi_ready.sh --install)"
-
-          CHROME_BIN="$(printf '%s\n' "$CHROME_OUTPUT" | sed -n 's/^chrome_binary=//p' | tail -n1)"
-          CHROMEDRIVER_BIN="$(printf '%s\n' "$CHROME_OUTPUT" | sed -n 's/^chromedriver_binary=//p' | tail -n1)"
-          FIREFOX_BIN="$(printf '%s\n' "$FIREFOX_OUTPUT" | sed -n 's/^firefox_binary=//p' | tail -n1)"
-          GECKODRIVER_BIN="$(printf '%s\n' "$FIREFOX_OUTPUT" | sed -n 's/^geckodriver_binary=//p' | tail -n1)"
-
-          echo "CHROME=$CHROME_BIN" >> "$GITHUB_ENV"
-          echo "CHROMEDRIVER=$CHROMEDRIVER_BIN" >> "$GITHUB_ENV"
-          echo "FIREFOX=$FIREFOX_BIN" >> "$GITHUB_ENV"
-          echo "GECKODRIVER=$GECKODRIVER_BIN" >> "$GITHUB_ENV"
-
-      - name: Run browser conformance tests
-        run: mix test --only conformance --only browser --exclude remote_webdriver
-
       - name: Run websocket suite (chrome + firefox)
         run: mix test.websocket --browsers chrome,firefox
+
+      - name: Run migration verification tests
+        run: mix test --only migration_verification

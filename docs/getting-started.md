@@ -155,6 +155,8 @@ mix test.websocket
 mix test.websocket --browsers chrome,firefox
 ```
 
+`mix test.websocket` defaults to `--browsers all`.
+
 ## Step 10: Headed Browser and Runtime Launch Options
 
 ```elixir
