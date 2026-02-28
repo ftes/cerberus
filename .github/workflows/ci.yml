@@ -20,7 +20,7 @@ jobs:
       POSTGRES_PASSWORD: postgres
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -79,9 +79,10 @@ jobs:
         run: mix precommit
 
       - name: Run non-browser tests
-        run: |
-          mix test test/core/documentation_examples_test.exs --exclude browser
-          mix test test/cerberus/migration_verification_test.exs
+        run: mix test test/core/documentation_examples_test.exs --exclude browser
+
+      - name: Run migration verification tests
+        run: mix test test/cerberus/migration_verification_test.exs
 
       - name: Prepare explicit browser runtime env
         run: |
