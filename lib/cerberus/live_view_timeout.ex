@@ -1,6 +1,7 @@
 defmodule Cerberus.LiveViewTimeout do
   @moduledoc false
 
+  alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Live
   alias Cerberus.Driver.Static
   alias Cerberus.LiveViewWatcher
@@ -38,6 +39,16 @@ defmodule Cerberus.LiveViewTimeout do
     after
       Process.exit(watcher, :normal)
     end
+  end
+
+  def with_timeout(%Browser{} = session, timeout, action, _fetch_redirect_info)
+      when timeout <= 0 and is_function(action) do
+    action.(session)
+  end
+
+  def with_timeout(%Browser{} = session, timeout, action, _fetch_redirect_info) when is_function(action) do
+    deadline = timeout_deadline(timeout)
+    handle_browser_messages_until(session, deadline, action)
   end
 
   def with_timeout(session, _timeout, action, _fetch_redirect_info) when is_function(action) do
@@ -119,6 +130,35 @@ defmodule Cerberus.LiveViewTimeout do
   defp check_for_redirect(session, action, fetch_redirect_info) when is_function(action) do
     path = fetch_redirect_path(fetch_redirect_info.(session))
     session |> Live.follow_redirect(path) |> then(action)
+  end
+
+  defp handle_browser_messages_until(session, deadline, action) do
+    remaining = remaining_timeout(deadline)
+
+    if remaining <= 0 do
+      action.(session)
+    else
+      with_browser_retry(session, action, fn retried_session ->
+        wait_for_next_browser_event(retried_session, deadline, action)
+      end)
+    end
+  end
+
+  defp wait_for_next_browser_event(session, deadline, action) do
+    remaining = remaining_timeout(deadline)
+    wait_time = max(min(remaining, interval_wait_time()), 0)
+    updated_session = Browser.wait_for_assertion_signal(session, wait_time)
+    handle_browser_messages_until(updated_session, deadline, action)
+  end
+
+  defp with_browser_retry(session, action, retry_fun) when is_function(action) and is_function(retry_fun) do
+    action.(session)
+  rescue
+    AssertionError ->
+      retry_fun.(session)
+  catch
+    :exit, _error ->
+      retry_fun.(session)
   end
 
   defp fetch_redirect_path({path, _flash}) when is_binary(path), do: path

@@ -30,8 +30,8 @@ For execution flow and boundaries, see `docs/migration-verification.md`.
 | `check/2` and `uncheck/2` | checkbox arrays (`name[]`) | `pt_checkbox_array` | expected checked values in payload/UI | same payload ordering/values |
 | `submit/1` | active-form submit, submit-button name/value inclusion | `pt_submit_action` | submit reaches expected destination with expected payload | same destination and payload semantics |
 | `upload/3` | file input by label + path | `pt_upload` | uploaded filename/state visible | same uploaded filename/state semantics |
-| `assert_path/2` and `assert_path/3` | wildcard paths + `query_params:` subset | `pt_path_assert` | path/query expectations pass | same path/query semantics |
-| `refute_path/2` and `refute_path/3` | wildcard paths + `query_params:` subset | `pt_path_refute` | mismatch expectations pass | same mismatch semantics |
+| `assert_path/2` and `assert_path/3` | wildcard paths + `query_params:` subset + `timeout:` | `pt_path_assert` | path/query expectations pass | same path/query+timeout semantics |
+| `refute_path/2` and `refute_path/3` | wildcard paths + `query_params:` subset + `timeout:` | `pt_path_refute` | mismatch expectations pass | same mismatch+timeout semantics |
 | `within/3` | nested scope selectors | `pt_scope_nested` | scoped assertions/actions limited to scope | same scope behavior |
 | `unwrap/2` | static `conn` callback + live `view` callback | `pt_unwrap` | callback return values continue pipeline correctly | same continuation/redirect semantics |
 

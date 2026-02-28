@@ -16,6 +16,7 @@ defmodule Cerberus do
   alias Cerberus.Driver.Conn, as: DriverConn
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.Static, as: StaticSession
+  alias Cerberus.LiveViewTimeout
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
   alias Cerberus.Options
@@ -299,52 +300,68 @@ defmodule Cerberus do
 
   @spec assert_path(arg, String.t() | Regex.t(), Options.path_opts()) :: arg when arg: var
   def assert_path(session, expected, opts \\ []) when is_binary(expected) or is_struct(expected, Regex) do
+    call_has_timeout = Keyword.has_key?(opts, :timeout)
     opts = Options.validate_path!(opts, "assert_path/3")
-    actual_path = current_path(session)
-    path_match? = Path.match_path?(actual_path, expected, exact: Keyword.fetch!(opts, :exact))
-    query_match? = Path.query_matches?(actual_path, Keyword.get(opts, :query))
-    matches? = path_match? and query_match?
+    {validated_timeout, opts} = Keyword.pop(opts, :timeout, 0)
+    timeout = resolve_path_timeout(session, call_has_timeout, validated_timeout)
 
-    observed = %{
-      path: actual_path,
-      scope: Session.scope(session),
-      expected: expected,
-      query: Path.normalize_expected_query(Keyword.get(opts, :query)),
-      exact: Keyword.fetch!(opts, :exact),
-      path_match?: path_match?,
-      query_match?: query_match?
-    }
+    LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
+      timed_session = refresh_path_assertion_session(timed_session)
+      actual_path = current_path(timed_session)
+      path_match? = Path.match_path?(actual_path, expected, exact: Keyword.fetch!(opts, :exact))
+      query_match? = Path.query_matches?(actual_path, Keyword.get(opts, :query))
+      matches? = path_match? and query_match?
 
-    if matches? do
-      update_last_result(session, :assert_path, observed)
-    else
-      raise AssertionError, message: format_path_error("assert_path", observed)
-    end
+      observed = %{
+        path: actual_path,
+        scope: Session.scope(timed_session),
+        expected: expected,
+        query: Path.normalize_expected_query(Keyword.get(opts, :query)),
+        exact: Keyword.fetch!(opts, :exact),
+        timeout: timeout,
+        path_match?: path_match?,
+        query_match?: query_match?
+      }
+
+      if matches? do
+        update_last_result(timed_session, :assert_path, observed)
+      else
+        raise AssertionError, message: format_path_error("assert_path", observed)
+      end
+    end)
   end
 
   @spec refute_path(arg, String.t() | Regex.t(), Options.path_opts()) :: arg when arg: var
   def refute_path(session, expected, opts \\ []) when is_binary(expected) or is_struct(expected, Regex) do
+    call_has_timeout = Keyword.has_key?(opts, :timeout)
     opts = Options.validate_path!(opts, "refute_path/3")
-    actual_path = current_path(session)
-    path_match? = Path.match_path?(actual_path, expected, exact: Keyword.fetch!(opts, :exact))
-    query_match? = Path.query_matches?(actual_path, Keyword.get(opts, :query))
-    matches? = path_match? and query_match?
+    {validated_timeout, opts} = Keyword.pop(opts, :timeout, 0)
+    timeout = resolve_path_timeout(session, call_has_timeout, validated_timeout)
 
-    observed = %{
-      path: actual_path,
-      scope: Session.scope(session),
-      expected: expected,
-      query: Path.normalize_expected_query(Keyword.get(opts, :query)),
-      exact: Keyword.fetch!(opts, :exact),
-      path_match?: path_match?,
-      query_match?: query_match?
-    }
+    LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
+      timed_session = refresh_path_assertion_session(timed_session)
+      actual_path = current_path(timed_session)
+      path_match? = Path.match_path?(actual_path, expected, exact: Keyword.fetch!(opts, :exact))
+      query_match? = Path.query_matches?(actual_path, Keyword.get(opts, :query))
+      matches? = path_match? and query_match?
 
-    if matches? do
-      raise AssertionError, message: format_path_error("refute_path", observed)
-    else
-      update_last_result(session, :refute_path, observed)
-    end
+      observed = %{
+        path: actual_path,
+        scope: Session.scope(timed_session),
+        expected: expected,
+        query: Path.normalize_expected_query(Keyword.get(opts, :query)),
+        exact: Keyword.fetch!(opts, :exact),
+        timeout: timeout,
+        path_match?: path_match?,
+        query_match?: query_match?
+      }
+
+      if matches? do
+        raise AssertionError, message: format_path_error("refute_path", observed)
+      else
+        update_last_result(timed_session, :refute_path, observed)
+      end
+    end)
   end
 
   @spec click(arg, term(), Options.click_opts()) :: arg when arg: var
@@ -485,6 +502,17 @@ defmodule Cerberus do
   defp update_last_result(%{last_result: _} = session, op, observed) do
     %{session | last_result: %{op: op, observed: observed}}
   end
+
+  defp resolve_path_timeout(_session, true, validated_timeout), do: validated_timeout
+  defp resolve_path_timeout(%LiveSession{} = session, false, _validated_timeout), do: Session.assert_timeout_ms(session)
+
+  defp resolve_path_timeout(%BrowserSession{} = session, false, _validated_timeout),
+    do: Session.assert_timeout_ms(session)
+
+  defp resolve_path_timeout(_session, false, _validated_timeout), do: 0
+
+  defp refresh_path_assertion_session(%BrowserSession{} = session), do: BrowserSession.refresh_path(session)
+  defp refresh_path_assertion_session(session), do: session
 
   defp unwrap_conn_result(%Plug.Conn{} = conn, session, from_driver) when from_driver in [:static, :live] do
     case redirect_target(conn) do
@@ -705,6 +733,7 @@ defmodule Cerberus do
     expected_query: #{inspect(observed.query)}
     scope: #{inspect(observed.scope)}
     exact: #{inspect(observed.exact)}
+    timeout: #{inspect(observed.timeout)}
     path_match?: #{inspect(observed.path_match?)}
     query_match?: #{inspect(observed.query_match?)}
     """

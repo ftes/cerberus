@@ -88,7 +88,7 @@ defmodule Cerberus.Driver.Browser do
       tab_id: tab_id,
       browser_name: browser_name,
       base_url: base_url,
-      assert_timeout_ms: Session.assert_timeout_from_opts!(opts),
+      assert_timeout_ms: Session.assert_timeout_from_opts!(opts, Session.live_browser_assert_timeout_default_ms()),
       ready_timeout_ms: ready_timeout_ms(opts),
       ready_quiet_ms: ready_quiet_ms(opts),
       browser_context_defaults: context_defaults,
@@ -207,6 +207,39 @@ defmodule Cerberus.Driver.Browser do
       {:error, reason, details} ->
         raise ArgumentError, "failed to capture browser screenshot: #{reason} (#{inspect(details)})"
     end
+  end
+
+  @doc false
+  @spec refresh_path(t()) :: t()
+  def refresh_path(%__MODULE__{} = session) do
+    state = state!(session)
+
+    case eval_json(state, current_path_expression()) do
+      {:ok, %{"path" => path}} when is_binary(path) ->
+        %{session | current_path: path}
+
+      _ ->
+        session
+    end
+  end
+
+  @doc false
+  @spec wait_for_assertion_signal(t(), non_neg_integer()) :: t()
+  def wait_for_assertion_signal(%__MODULE__{} = session, timeout_ms) when is_integer(timeout_ms) and timeout_ms >= 0 do
+    state = state!(session)
+
+    if timeout_ms > 0 do
+      quiet_ms = max(min(session.ready_quiet_ms, timeout_ms), 1)
+
+      _ =
+        UserContextProcess.await_ready(
+          state.user_context_pid,
+          [timeout_ms: timeout_ms, quiet_ms: quiet_ms],
+          state.tab_id
+        )
+    end
+
+    refresh_path(session)
   end
 
   @impl true
@@ -1549,6 +1582,12 @@ defmodule Cerberus.Driver.Browser do
 
   defp scripts_from(value, label) do
     raise ArgumentError, ":#{label} must be a string or list of strings, got: #{inspect(value)}"
+  end
+
+  defp current_path_expression do
+    """
+    (() => JSON.stringify({ path: window.location.pathname + window.location.search }))()
+    """
   end
 
   defp snapshot_expression(scope) do

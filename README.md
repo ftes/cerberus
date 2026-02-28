@@ -180,6 +180,10 @@ Override precedence is:
 - app config
 - hardcoded fallback
 
+Assertion-timeout fallback:
+- Live and Browser assertions (`assert_*`/`refute_*`, including `assert_path`/`refute_path`) default to `500ms`.
+- Static assertions remain immediate unless you pass explicit call/session/app timeout overrides.
+
 Option scopes:
 - Per-session context options: `ready_timeout_ms`, `ready_quiet_ms`, `browser: [viewport: ..., user_agent: ..., init_script: ... | init_scripts: [...]]`.
 - Global runtime launch options: `browser_name`, `webdriver_url`, `webdriver_urls`, `show_browser`, `headless`, `chrome_args`, `firefox_args`, `chrome_binary`, `firefox_binary`, `chromedriver_binary`, `geckodriver_binary`.

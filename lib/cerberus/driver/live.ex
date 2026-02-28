@@ -42,7 +42,7 @@ defmodule Cerberus.Driver.Live do
     %__MODULE__{
       endpoint: Conn.endpoint!(opts),
       conn: initial_conn(opts),
-      assert_timeout_ms: Session.assert_timeout_from_opts!(opts)
+      assert_timeout_ms: Session.assert_timeout_from_opts!(opts, Session.live_browser_assert_timeout_default_ms())
     }
   end
 

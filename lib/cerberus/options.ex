@@ -55,7 +55,8 @@ defmodule Cerberus.Options do
   @type path_query :: map() | keyword() | nil
   @type path_opts :: [
           exact: boolean(),
-          query: path_query()
+          query: path_query(),
+          timeout: non_neg_integer()
         ]
 
   @click_opts_schema [
@@ -108,6 +109,11 @@ defmodule Cerberus.Options do
       type: :any,
       default: nil,
       doc: "Optionally validates query params as a subset map/keyword."
+    ],
+    timeout: [
+      type: :non_neg_integer,
+      default: 0,
+      doc: "Retries path assertions for up to this many milliseconds."
     ]
   ]
 

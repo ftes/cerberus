@@ -85,13 +85,13 @@ primary
 ```elixir
 session()
 |> visit("/live/async_page")
-|> assert_has(text("Title loaded async"), timeout: 500)
+|> assert_has(text("Title loaded async"))
 ```
 
 > #### Tip
 >
-> Prefer timeout-bounded assertions for async LiveView states. Cerberus reacts to watched updates and still respects hard timeout budgets.
-> You can also set defaults with `config :cerberus, :assert_timeout_ms, 300` and override per session via `session(assert_timeout_ms: ...)`.
+> Live and browser assertion APIs default to a `500ms` timeout budget (`assert_*` and `refute_*`, including path assertions).
+> You can override per call (`timeout: ...`), per session (`session(assert_timeout_ms: ...)`), or globally (`config :cerberus, :assert_timeout_ms, ...`).
 
 ## Step 7: Browser-Only Extensions
 

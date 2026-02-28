@@ -430,6 +430,14 @@ defmodule Cerberus.PublicApiTest do
     end
   end
 
+  test "invalid assert_path timeout option is rejected" do
+    assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
+      session()
+      |> visit("/articles")
+      |> assert_path("/articles", timeout: -1)
+    end
+  end
+
   test "unwrap provides static conn escape hatch and keeps pipeline state" do
     session =
       session()

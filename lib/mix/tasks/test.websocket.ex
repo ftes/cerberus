@@ -124,10 +124,25 @@ defmodule Mix.Tasks.Test.Websocket do
   end
 
   defp default_browser_lane(browsers) when is_list(browsers) do
-    if :chrome in browsers do
-      :chrome
-    else
-      List.first(browsers)
+    env_browser = preferred_default_browser_from_env()
+
+    cond do
+      env_browser in browsers ->
+        env_browser
+
+      :chrome in browsers ->
+        :chrome
+
+      true ->
+        List.first(browsers)
+    end
+  end
+
+  defp preferred_default_browser_from_env do
+    case System.get_env("CERBERUS_BROWSER_NAME") do
+      "chrome" -> :chrome
+      "firefox" -> :firefox
+      _ -> nil
     end
   end
 
