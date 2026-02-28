@@ -225,18 +225,20 @@ CERBERUS_BROWSER_MATRIX=chrome,firefox mix test --only browser
 
 `CERBERUS_BROWSER_MATRIX` defaults to `browser` (single default browser lane).
 
-Project helper:
+Project helpers:
 
 ```bash
-bin/check_bidi_ready.sh --install
+bin/check_browser_bidi_ready.sh chrome --install
+bin/check_browser_bidi_ready.sh firefox --install
 ```
 
-The helper installs pinned local Chrome for Testing + ChromeDriver under `tmp/browser-tools`, validates version parity, and verifies `webSocketUrl` BiDi handshake support.
+These helpers install browser/runtime binaries under `tmp/browser-tools`, write `tmp/browser-tools/env.sh`, and verify `webSocketUrl` BiDi handshake support.
 
-Firefox readiness helper:
+Direct browser-specific entrypoints:
 
 ```bash
-FIREFOX=/path/to/firefox GECKODRIVER=/path/to/geckodriver bin/check_gecko_bidi_ready.sh
+bin/check_chrome_bidi_ready.sh --install
+bin/check_firefox_bidi_ready.sh --install
 ```
 
 ## Migration Task
@@ -249,3 +251,12 @@ mix igniter.cerberus.migrate_phoenix_test --write test/my_app_web/features
 ```
 
 It performs safe rewrites, reports manual follow-ups, and defaults to dry-run diff output.
+
+Migration verification runner:
+
+```bash
+mix cerberus.verify_migration
+mix cerberus.verify_migration --keep --work-dir tmp/migration_verify
+```
+
+This runs a pre-migration fixture test, applies the rewrite, then runs the post-migration fixture test in an isolated copied workspace.

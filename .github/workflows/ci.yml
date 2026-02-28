@@ -38,11 +38,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: tmp/browser-tools
-          key: ${{ runner.os }}-browser-tools-${{ hashFiles('bin/check_bidi_ready.sh') }}
+          key: ${{ runner.os }}-browser-tools-chrome-${{ hashFiles('bin/check_chrome_bidi_ready.sh', 'bin/check_browser_bidi_ready.sh') }}
 
       - name: Prepare browser runtime env
         run: |
-          bin/check_bidi_ready.sh --install
+          bin/check_browser_bidi_ready.sh chrome --install
           set -a
           source tmp/browser-tools/env.sh
           set +a
@@ -96,11 +96,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: tmp/browser-tools
-          key: ${{ runner.os }}-browser-tools-${{ hashFiles('bin/check_bidi_ready.sh') }}
+          key: ${{ runner.os }}-browser-tools-chrome-${{ hashFiles('bin/check_chrome_bidi_ready.sh', 'bin/check_browser_bidi_ready.sh') }}
 
       - name: Prepare browser runtime env
         run: |
-          bin/check_bidi_ready.sh --install
+          bin/check_browser_bidi_ready.sh chrome --install
           set -a
           source tmp/browser-tools/env.sh
           set +a
@@ -145,26 +145,15 @@ jobs:
             ${{ runner.os }}-mix-
 
       - name: Cache browser tools
-        if: matrix.browser == 'chrome'
         uses: actions/cache@v4
         with:
           path: tmp/browser-tools
-          key: ${{ runner.os }}-browser-tools-${{ hashFiles('bin/check_bidi_ready.sh') }}
-
-      - name: Setup Firefox
-        if: matrix.browser == 'firefox'
-        uses: browser-actions/setup-firefox@v1
-
-      - name: Setup GeckoDriver
-        if: matrix.browser == 'firefox'
-        uses: browser-actions/setup-geckodriver@v1
-        with:
-          geckodriver-version: 0.36.0
+          key: ${{ runner.os }}-browser-tools-${{ matrix.browser }}-${{ hashFiles('bin/check_chrome_bidi_ready.sh', 'bin/check_firefox_bidi_ready.sh', 'bin/check_browser_bidi_ready.sh') }}
 
       - name: Prepare browser runtime env
         run: |
           if [ "${{ matrix.browser }}" = "chrome" ]; then
-            bin/check_bidi_ready.sh --install
+            bin/check_browser_bidi_ready.sh chrome --install
             set -a
             source tmp/browser-tools/env.sh
             set +a
@@ -172,13 +161,12 @@ jobs:
             echo "CHROMEDRIVER=$CHROMEDRIVER" >> "$GITHUB_ENV"
             echo "CERBERUS_BROWSER_MATRIX=chrome" >> "$GITHUB_ENV"
           else
-            FIREFOX_BIN="$(command -v firefox)"
-            GECKODRIVER_BIN="$(command -v geckodriver)"
-            export FIREFOX="$FIREFOX_BIN"
-            export GECKODRIVER="$GECKODRIVER_BIN"
-            bin/check_gecko_bidi_ready.sh
-            echo "FIREFOX=$FIREFOX_BIN" >> "$GITHUB_ENV"
-            echo "GECKODRIVER=$GECKODRIVER_BIN" >> "$GITHUB_ENV"
+            bin/check_browser_bidi_ready.sh firefox --install
+            set -a
+            source tmp/browser-tools/env.sh
+            set +a
+            echo "FIREFOX=$FIREFOX" >> "$GITHUB_ENV"
+            echo "GECKODRIVER=$GECKODRIVER" >> "$GITHUB_ENV"
             echo "CERBERUS_BROWSER_MATRIX=firefox" >> "$GITHUB_ENV"
           fi
 
