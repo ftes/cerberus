@@ -5,7 +5,8 @@ defmodule Cerberus.CoreCrossDriverTextTest do
 
   alias Cerberus.Harness
 
-  @moduletag drivers: [:static, :browser]
+  @moduletag :static
+  @moduletag :browser
 
   test "text assertions behave consistently for static pages in static and browser drivers", context do
     Harness.run!(context, fn session ->

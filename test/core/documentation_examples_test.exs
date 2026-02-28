@@ -6,7 +6,8 @@ defmodule Cerberus.CoreDocumentationExamplesTest do
   alias Cerberus.Browser
   alias Cerberus.Harness
 
-  @tag drivers: [:auto, :browser]
+  @tag :auto
+  @tag :browser
   test "quickstart counter flow from docs works across auto and browser", context do
     Harness.run!(context, fn session ->
       session
@@ -17,7 +18,8 @@ defmodule Cerberus.CoreDocumentationExamplesTest do
     end)
   end
 
-  @tag drivers: [:auto, :browser]
+  @tag :auto
+  @tag :browser
   test "form plus path flow from docs works across auto and browser", context do
     Harness.run!(context, fn session ->
       session
@@ -29,7 +31,8 @@ defmodule Cerberus.CoreDocumentationExamplesTest do
     end)
   end
 
-  @tag drivers: [:auto, :browser]
+  @tag :auto
+  @tag :browser
   test "scoped navigation flow from docs works across auto and browser", context do
     Harness.run!(context, fn session ->
       session
@@ -43,7 +46,8 @@ defmodule Cerberus.CoreDocumentationExamplesTest do
     end)
   end
 
-  @tag drivers: [:auto, :browser]
+  @tag :auto
+  @tag :browser
   test "multi-user and multi-tab flow from docs preserves isolation semantics", context do
     Harness.run!(context, fn session ->
       primary =
@@ -65,7 +69,7 @@ defmodule Cerberus.CoreDocumentationExamplesTest do
     end)
   end
 
-  @tag drivers: [:auto]
+  @tag :auto
   test "async live assertion flow from docs works with timeout", context do
     Harness.run!(context, fn session ->
       session

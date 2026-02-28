@@ -5,7 +5,8 @@ defmodule Cerberus.CoreStaticUploadBehaviorTest do
 
   alias Cerberus.Harness
 
-  @tag drivers: [:static, :live]
+  @tag :static
+  @tag :live
   test "upload submits file inputs on static routes in phoenix mode", context do
     jpg = upload_fixture_path("elixir.jpg")
 

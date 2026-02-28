@@ -5,7 +5,7 @@ defmodule Cerberus.CoreLiveUploadBehaviorTest do
 
   alias Cerberus.Harness
 
-  @tag drivers: [:live]
+  @tag :live
   test "upload keeps active form unset and raises translated upload errors", context do
     jpg = upload_fixture_path("elixir.jpg")
     png = upload_fixture_path("phoenix.png")
@@ -53,7 +53,8 @@ defmodule Cerberus.CoreLiveUploadBehaviorTest do
     )
   end
 
-  @tag drivers: [:live, :browser]
+  @tag :live
+  @tag :browser
   test "upload triggers phx-change validations on file selection", context do
     jpg = upload_fixture_path("elixir.jpg")
 
@@ -70,7 +71,8 @@ defmodule Cerberus.CoreLiveUploadBehaviorTest do
     )
   end
 
-  @tag drivers: [:live, :browser]
+  @tag :live
+  @tag :browser
   test "upload follows redirects from progress callbacks", context do
     jpg = upload_fixture_path("elixir.jpg")
 

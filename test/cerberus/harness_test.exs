@@ -6,7 +6,7 @@ defmodule Cerberus.HarnessTest do
   alias Cerberus.Harness
 
   test "run executes one scenario per tagged driver" do
-    context = %{drivers: [:browser, :static, :live]}
+    context = %{browser: true, static: true, live: true}
 
     results =
       Harness.run(context, fn session ->
@@ -20,17 +20,33 @@ defmodule Cerberus.HarnessTest do
     assert Enum.all?(results, &(&1.operation == :assert_has))
   end
 
-  test "drivers preserves explicit driver order without browser matrix expansion" do
-    assert Harness.drivers(%{drivers: [:auto, :browser]}) == [:auto, :browser]
+  test "drivers defaults to auto + browser when no tags are present" do
+    assert Harness.drivers(%{}) == [:auto, :browser]
   end
 
-  test "drivers de-duplicates repeated entries" do
-    assert Harness.drivers(%{drivers: [:auto, :browser, :browser]}) ==
-             [:auto, :browser]
+  test "drivers derives tagged lanes in canonical order" do
+    assert Harness.drivers(%{browser: true, static: true, live: true}) == [:static, :live, :browser]
+    assert Harness.drivers(%{chrome: true, firefox: true}) == [:chrome, :firefox]
+  end
+
+  test "drivers supports disabling a module-level browser lane with false" do
+    assert Harness.drivers(%{chrome: false, firefox: true}) == [:firefox]
+  end
+
+  test "drivers raises when explicit driver tags disable every driver lane" do
+    assert_raise ArgumentError, ~r/explicit driver tags require at least one enabled tag/, fn ->
+      Harness.drivers(%{chrome: false, firefox: false})
+    end
+  end
+
+  test "drivers rejects legacy drivers tag" do
+    assert_raise ArgumentError, ~r/no longer supports the legacy :drivers tag/, fn ->
+      Harness.drivers(%{drivers: [:auto, :browser]})
+    end
   end
 
   test "run captures failures with common result shape" do
-    context = %{drivers: [:static, :live]}
+    context = %{static: true, live: true}
 
     results =
       Harness.run(context, fn session ->
@@ -45,7 +61,7 @@ defmodule Cerberus.HarnessTest do
   end
 
   test "run! raises one aggregated error when any driver fails" do
-    context = %{drivers: [:static, :browser]}
+    context = %{static: true, browser: true}
 
     assert_raise ExUnit.AssertionError, ~r/driver conformance failures/, fn ->
       Harness.run!(context, fn session ->
@@ -57,7 +73,7 @@ defmodule Cerberus.HarnessTest do
   end
 
   test "run rejects drivers opt override and requires tag/context selection" do
-    context = %{drivers: [:static]}
+    context = %{static: true}
 
     assert_raise ArgumentError, ~r/no longer supports :drivers opt/, fn ->
       Harness.run(

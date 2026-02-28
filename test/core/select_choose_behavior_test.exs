@@ -5,7 +5,8 @@ defmodule Cerberus.CoreSelectChooseBehaviorTest do
 
   alias Cerberus.Harness
 
-  @tag drivers: [:static, :browser]
+  @tag :static
+  @tag :browser
   test "select submits a chosen option across static and browser drivers", context do
     Harness.run!(context, fn session ->
       session
@@ -16,7 +17,8 @@ defmodule Cerberus.CoreSelectChooseBehaviorTest do
     end)
   end
 
-  @tag drivers: [:static, :browser]
+  @tag :static
+  @tag :browser
   test "select preserves prior multi-select values across repeated calls", context do
     Harness.run!(context, fn session ->
       session
@@ -28,7 +30,8 @@ defmodule Cerberus.CoreSelectChooseBehaviorTest do
     end)
   end
 
-  @tag drivers: [:static, :browser]
+  @tag :static
+  @tag :browser
   test "submit keeps default select and radio values when untouched", context do
     Harness.run!(context, fn session ->
       session
@@ -39,7 +42,8 @@ defmodule Cerberus.CoreSelectChooseBehaviorTest do
     end)
   end
 
-  @tag drivers: [:static, :browser]
+  @tag :static
+  @tag :browser
   test "choose sets the selected radio value across static and browser drivers", context do
     Harness.run!(context, fn session ->
       session
@@ -50,7 +54,8 @@ defmodule Cerberus.CoreSelectChooseBehaviorTest do
     end)
   end
 
-  @tag drivers: [:static, :browser]
+  @tag :static
+  @tag :browser
   test "select rejects disabled options", context do
     results =
       Harness.run(context, fn session ->
@@ -63,7 +68,8 @@ defmodule Cerberus.CoreSelectChooseBehaviorTest do
     assert Enum.all?(results, &String.contains?(&1.message || "", "disabled"))
   end
 
-  @tag drivers: [:live, :browser]
+  @tag :live
+  @tag :browser
   test "select on LiveView triggers change payload updates", context do
     Harness.run!(context, fn session ->
       session
@@ -74,7 +80,8 @@ defmodule Cerberus.CoreSelectChooseBehaviorTest do
     end)
   end
 
-  @tag drivers: [:live, :browser]
+  @tag :live
+  @tag :browser
   test "choose on LiveView updates the selected radio", context do
     Harness.run!(context, fn session ->
       session
@@ -84,7 +91,8 @@ defmodule Cerberus.CoreSelectChooseBehaviorTest do
     end)
   end
 
-  @tag drivers: [:live, :browser]
+  @tag :live
+  @tag :browser
   test "LiveView select preserves multi-select values across repeated calls", context do
     Harness.run!(context, fn session ->
       session
@@ -95,7 +103,8 @@ defmodule Cerberus.CoreSelectChooseBehaviorTest do
     end)
   end
 
-  @tag drivers: [:live, :browser]
+  @tag :live
+  @tag :browser
   test "LiveView submit keeps default select and radio values when untouched", context do
     Harness.run!(context, fn session ->
       session

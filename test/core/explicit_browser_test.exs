@@ -6,9 +6,10 @@ defmodule Cerberus.CoreExplicitBrowserTest do
   alias Cerberus.Harness
 
   @moduletag explicit_browser: true
-  @moduletag drivers: [:chrome, :firefox]
 
-  test "module-level explicit drivers run both browser lanes", context do
+  @tag :chrome
+  @tag :firefox
+  test "explicit chrome/firefox tags run both browser lanes", context do
     results =
       Harness.run!(context, fn session ->
         session =
@@ -26,8 +27,9 @@ defmodule Cerberus.CoreExplicitBrowserTest do
     assert browser_names_by_driver == %{chrome: :chrome, firefox: :firefox}
   end
 
-  @tag drivers: [:firefox]
-  test "test-level explicit drivers can force firefox only", context do
+  @tag firefox: true
+  @tag chrome: false
+  test "test-level tags can force firefox only", context do
     results =
       Harness.run!(context, fn session ->
         session
@@ -38,6 +40,8 @@ defmodule Cerberus.CoreExplicitBrowserTest do
     assert Enum.map(results, & &1.driver) == [:firefox]
   end
 
+  @tag :chrome
+  @tag :firefox
   test "explicit chrome/firefox drivers map to the matching runtime browser", context do
     results =
       Harness.run!(context, fn session ->

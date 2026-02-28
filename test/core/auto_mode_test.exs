@@ -6,7 +6,7 @@ defmodule Cerberus.CoreAutoModeTest do
   alias Cerberus.Harness
   alias Cerberus.Session
 
-  @moduletag drivers: [:auto]
+  @moduletag :auto
 
   test "auto mode starts static and switches to live when navigating to live routes", context do
     Harness.run!(context, fn session ->
@@ -54,7 +54,7 @@ defmodule Cerberus.CoreAutoModeTest do
     end)
   end
 
-  @tag drivers: [:browser]
+  @tag :browser
   test "browser mode stays browser across live and static navigation transitions", context do
     Harness.run!(context, fn session ->
       session = visit(session, "/articles")

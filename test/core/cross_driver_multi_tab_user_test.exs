@@ -5,7 +5,9 @@ defmodule Cerberus.CoreCrossDriverMultiTabUserTest do
 
   alias Cerberus.Harness
 
-  @moduletag drivers: [:static, :live, :browser]
+  @moduletag :static
+  @moduletag :live
+  @moduletag :browser
 
   test "multi-tab sharing and multi-user isolation work with one API across drivers", context do
     Harness.run!(context, fn session ->

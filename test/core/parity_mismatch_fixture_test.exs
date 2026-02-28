@@ -5,7 +5,8 @@ defmodule Cerberus.CoreParityMismatchFixtureTest do
 
   alias Cerberus.Harness
 
-  @tag drivers: [:static, :browser]
+  @tag :static
+  @tag :browser
   test "parity static mismatch fixture is reachable in static and browser drivers", context do
     Harness.run!(
       context,
@@ -17,7 +18,8 @@ defmodule Cerberus.CoreParityMismatchFixtureTest do
     )
   end
 
-  @tag drivers: [:live, :browser]
+  @tag :live
+  @tag :browser
   test "parity live mismatch fixture is reachable in live and browser drivers", context do
     Harness.run!(
       context,

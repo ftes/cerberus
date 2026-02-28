@@ -5,7 +5,8 @@ defmodule Cerberus.CoreLiveNavigationTest do
 
   alias Cerberus.Harness
 
-  @moduletag drivers: [:live, :browser]
+  @moduletag :live
+  @moduletag :browser
 
   test "dynamic counter updates are consistent between live and browser drivers", context do
     Harness.run!(context, fn session ->

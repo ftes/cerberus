@@ -7,7 +7,7 @@ defmodule Cerberus.CoreRemoteWebdriverBehaviorTest do
   alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Harness
 
-  @moduletag drivers: [:browser]
+  @moduletag :browser
 
   setup_all do
     case remote_webdriver_skip_reason() do

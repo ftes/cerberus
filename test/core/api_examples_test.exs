@@ -5,7 +5,8 @@ defmodule Cerberus.CoreApiExamplesTest do
 
   alias Cerberus.Harness
 
-  @tag drivers: [:static, :browser]
+  @tag :static
+  @tag :browser
   test "static page text presence and absence use public API example flow", context do
     Harness.run!(
       context,
@@ -19,12 +20,14 @@ defmodule Cerberus.CoreApiExamplesTest do
     )
   end
 
-  @tag drivers: [:live, :browser]
+  @tag :live
+  @tag :browser
   test "same counter click example runs in live and browser drivers", context do
     Harness.run!(context, &counter_increment_flow/1)
   end
 
-  @tag drivers: [:static, :browser]
+  @tag :static
+  @tag :browser
   test "failure messages include locator and options for reproducible debugging", context do
     results =
       Harness.run(

@@ -7,7 +7,9 @@ defmodule Cerberus.CoreSQLSandboxBehaviorTest do
   alias Cerberus.Harness
   alias Cerberus.Session
 
-  @moduletag drivers: [:static, :live, :browser]
+  @moduletag :static
+  @moduletag :live
+  @moduletag :browser
 
   test "sandbox metadata keeps static DB reads isolated across drivers", context do
     Harness.run!(
@@ -24,7 +26,8 @@ defmodule Cerberus.CoreSQLSandboxBehaviorTest do
     )
   end
 
-  @tag drivers: [:live, :browser]
+  @tag :live
+  @tag :browser
   test "sandbox metadata keeps live DB reads isolated across drivers", context do
     Harness.run!(
       context,

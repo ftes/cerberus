@@ -6,7 +6,8 @@ defmodule Cerberus.CoreScreenshotBehaviorTest do
   alias Cerberus.Harness
   alias ExUnit.AssertionError
 
-  @tag drivers: [:static, :live]
+  @tag :static
+  @tag :live
   test "screenshot is explicit unsupported for static/live drivers", context do
     Harness.run!(context, fn session ->
       session = visit(session, "/articles")
@@ -22,7 +23,7 @@ defmodule Cerberus.CoreScreenshotBehaviorTest do
   end
 
   @tag :tmp_dir
-  @tag drivers: [:browser]
+  @tag :browser
   test "screenshot emits PNG output in browser driver", %{tmp_dir: tmp_dir} = context do
     Harness.run!(context, fn session ->
       session = visit(session, "/articles")

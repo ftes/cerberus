@@ -7,7 +7,7 @@ defmodule Cerberus.Harness do
     when comparing static/live behavior.
 
   v0 keeps the execution model intentionally small:
-  - choose drivers from `context[:drivers]` tags (or defaults),
+  - choose drivers from top-level ExUnit tags (`:auto`, `:static`, `:live`, `:browser`, `:chrome`, `:firefox`),
   - optionally merge `context[:session_opts]` into all sessions,
   - optionally merge browser-only overrides from `context[:browser]` (keyword form)
     and `context[:browser_session_opts]`,
@@ -24,6 +24,7 @@ defmodule Cerberus.Harness do
   alias Phoenix.Ecto.SQL.Sandbox, as: PhoenixSandbox
 
   @default_drivers [:auto, :browser]
+  @driver_tags [:auto, :static, :live, :browser, :chrome, :firefox]
 
   @type driver_kind :: Session.driver_kind()
 
@@ -44,9 +45,40 @@ defmodule Cerberus.Harness do
   def drivers(context \\ %{})
 
   def drivers(%{} = context) do
-    context
-    |> Map.get(:drivers, @default_drivers)
-    |> Enum.uniq()
+    tagged_or_default_drivers(context)
+  end
+
+  defp tagged_or_default_drivers(context) do
+    reject_legacy_drivers_tag!(context)
+
+    explicit = explicit_tag_drivers(context)
+
+    cond do
+      explicit == [] and has_explicit_driver_tags?(context) ->
+        raise ArgumentError,
+              "Harness.run/run! explicit driver tags require at least one enabled tag from #{Enum.map_join(@driver_tags, ", ", &inspect/1)}"
+
+      explicit != [] ->
+        Enum.uniq(explicit)
+
+      true ->
+        @default_drivers
+    end
+  end
+
+  defp explicit_tag_drivers(context) do
+    Enum.filter(@driver_tags, &Map.get(context, &1, false))
+  end
+
+  defp has_explicit_driver_tags?(context) do
+    Enum.any?(@driver_tags, &Map.has_key?(context, &1))
+  end
+
+  defp reject_legacy_drivers_tag!(context) do
+    if Map.has_key?(context, :drivers) do
+      raise ArgumentError,
+            "Harness.run/run! no longer supports the legacy :drivers tag; use top-level ExUnit tags like @tag :browser or @tag :live"
+    end
   end
 
   @spec run(map(), (Session.t() -> term()), keyword()) :: [result()]
@@ -188,13 +220,13 @@ defmodule Cerberus.Harness do
 
   defp driver_module_for_kind!(driver) do
     raise ArgumentError,
-          "unsupported driver #{inspect(driver)}; expected one of :auto, :static, :live, :browser"
+          "unsupported driver #{inspect(driver)}; expected one of :auto, :static, :live, :browser, :chrome, :firefox"
   end
 
   defp reject_driver_override!(opts) do
     if Keyword.has_key?(opts, :drivers) do
       raise ArgumentError,
-            "Harness.run/run! no longer supports :drivers opt; use @tag/@moduletag drivers in ExUnit context"
+            "Harness.run/run! no longer supports :drivers opt; use top-level ExUnit driver tags in context"
     end
   end
 

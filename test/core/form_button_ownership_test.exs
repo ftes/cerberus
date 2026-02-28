@@ -9,7 +9,8 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
   alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.Harness
 
-  @moduletag drivers: [:static, :browser]
+  @moduletag :static
+  @moduletag :browser
 
   test "non-submit controls do not clear active form values before submit", context do
     Harness.run!(
@@ -84,7 +85,8 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
     )
   end
 
-  @tag drivers: [:static, :live]
+  @tag :static
+  @tag :live
   test "active form state persists after non-submit and clears after submit", context do
     seed_conn = Plug.Conn.put_req_header(build_conn(), "x-flow-token", "active-form-state")
 
@@ -118,7 +120,8 @@ defmodule Cerberus.CoreFormButtonOwnershipTest do
     )
   end
 
-  @tag drivers: [:static, :live]
+  @tag :static
+  @tag :live
   test "button-driven redirect submit preserves request headers", context do
     seed_conn = Plug.Conn.put_req_header(build_conn(), "x-flow-token", "flow-123")
 

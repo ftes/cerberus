@@ -5,7 +5,8 @@ defmodule Cerberus.CoreCurrentPathTest do
 
   alias Cerberus.Harness
 
-  @moduletag drivers: [:live, :browser]
+  @moduletag :live
+  @moduletag :browser
 
   test "current_path is updated on live patch in live and browser drivers", context do
     Harness.run!(
@@ -35,7 +36,8 @@ defmodule Cerberus.CoreCurrentPathTest do
     )
   end
 
-  @tag drivers: [:static, :browser]
+  @tag :static
+  @tag :browser
   test "query strings are preserved in current_path tracking across drivers", context do
     Harness.run!(
       context,

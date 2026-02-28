@@ -6,7 +6,8 @@ defmodule Cerberus.CoreLiveLinkNavigationTest do
 
   alias Cerberus.Harness
 
-  @tag drivers: [:live, :browser]
+  @tag :live
+  @tag :browser
   test "click_link handles live navigate, patch, and non-live transitions", context do
     Harness.run!(
       context,
@@ -27,7 +28,8 @@ defmodule Cerberus.CoreLiveLinkNavigationTest do
     )
   end
 
-  @tag drivers: [:live, :browser]
+  @tag :live
+  @tag :browser
   test "click_link follows navigation that redirects back with flash", context do
     Harness.run!(
       context,
@@ -42,7 +44,7 @@ defmodule Cerberus.CoreLiveLinkNavigationTest do
     )
   end
 
-  @tag drivers: [:live]
+  @tag :live
   test "live click_link preserves request headers across non-live navigation", context do
     seed_conn = Plug.Conn.put_req_header(build_conn(), "x-custom-header", "Some-Value")
 
@@ -64,7 +66,7 @@ defmodule Cerberus.CoreLiveLinkNavigationTest do
     )
   end
 
-  @tag drivers: [:live]
+  @tag :live
   test "live click_link preserves connect_params across live navigation", context do
     seed_conn = Phoenix.LiveViewTest.put_connect_params(build_conn(), %{"timezone" => "Europe/Berlin"})
 

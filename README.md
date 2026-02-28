@@ -266,10 +266,10 @@ invocation with remote browser lane wiring. Use `--browsers` (`chrome`,
 Cross-browser conformance run:
 
 ```bash
-mix test --only drivers test/core --exclude explicit_browser
+mix test --only browser test/core --exclude explicit_browser
 ```
 
-`drivers: [:browser]` uses the default browser lane. You can opt specific tests into `:firefox` or `[:chrome, :firefox]` with ExUnit tags.
+`@tag :browser` uses the default browser lane. For explicit browser selection, use top-level tags (`@tag :chrome`, `@tag :firefox`) and disable a lane at test scope with `@tag chrome: false` or `@tag firefox: false`.
 
 Explicit browser-lane override coverage:
 

@@ -6,7 +6,8 @@ defmodule Cerberus.CoreLiveTriggerActionBehaviorTest do
   alias Cerberus.Harness
   alias ExUnit.AssertionError
 
-  @moduletag drivers: [:live, :browser]
+  @moduletag :live
+  @moduletag :browser
 
   test "phx-trigger-action submits to static endpoint after phx-submit", context do
     Harness.run!(context, fn session ->
@@ -19,7 +20,7 @@ defmodule Cerberus.CoreLiveTriggerActionBehaviorTest do
     end)
   end
 
-  @tag drivers: [:live]
+  @tag :live
   test "live driver submits merged payload for trigger-action handoff" do
     session()
     |> visit("/live/trigger-action")
@@ -40,7 +41,7 @@ defmodule Cerberus.CoreLiveTriggerActionBehaviorTest do
     end)
   end
 
-  @tag drivers: [:live]
+  @tag :live
   test "live driver keeps default hidden payload when triggered from outside form" do
     session()
     |> visit("/live/trigger-action")
@@ -50,7 +51,7 @@ defmodule Cerberus.CoreLiveTriggerActionBehaviorTest do
     |> refute_has(text("trigger_action_input: engage", exact: true))
   end
 
-  @tag drivers: [:live]
+  @tag :live
   test "phx-trigger-action runs after patch-producing phx-change", context do
     Harness.run!(context, fn session ->
       session
@@ -87,7 +88,7 @@ defmodule Cerberus.CoreLiveTriggerActionBehaviorTest do
     end)
   end
 
-  @tag drivers: [:live]
+  @tag :live
   test "live driver submits dynamic form payload on trigger-action handoff" do
     session()
     |> visit("/live/trigger-action")
@@ -98,7 +99,7 @@ defmodule Cerberus.CoreLiveTriggerActionBehaviorTest do
     |> assert_has(text("message: dynamic", exact: true))
   end
 
-  @tag drivers: [:live]
+  @tag :live
   test "raises an error if multiple forms have phx-trigger-action" do
     assert_raise AssertionError, ~r/Found multiple forms with phx-trigger-action/, fn ->
       session()

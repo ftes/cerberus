@@ -5,7 +5,8 @@ defmodule Cerberus.CoreFormActionsTest do
 
   alias Cerberus.Harness
 
-  @tag drivers: [:static, :browser]
+  @tag :static
+  @tag :browser
   test "click_link, fill_in, and submit are consistent across static and browser drivers",
        context do
     Harness.run!(
@@ -23,7 +24,8 @@ defmodule Cerberus.CoreFormActionsTest do
     )
   end
 
-  @tag drivers: [:static, :browser]
+  @tag :static
+  @tag :browser
   test "fill_in matches wrapped labels with nested inline text across static and browser drivers",
        context do
     Harness.run!(
@@ -38,7 +40,8 @@ defmodule Cerberus.CoreFormActionsTest do
     )
   end
 
-  @tag drivers: [:live, :browser]
+  @tag :live
+  @tag :browser
   test "click_button works on live counter flow for live and browser drivers", context do
     Harness.run!(
       context,
@@ -51,7 +54,7 @@ defmodule Cerberus.CoreFormActionsTest do
     )
   end
 
-  @tag drivers: [:live]
+  @tag :live
   test "live driver reports missing fields for fill_in and missing submit controls on counter page", context do
     fill_results =
       Harness.run(

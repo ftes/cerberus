@@ -5,7 +5,9 @@ defmodule Cerberus.CoreLiveNestedScopeBehaviorTest do
 
   alias Cerberus.Harness
 
-  @tag drivers: [:static, :live, :browser]
+  @tag :static
+  @tag :live
+  @tag :browser
   test "within preserves nested scope stack and isolates nested child actions", context do
     Harness.run!(
       context,
@@ -26,7 +28,8 @@ defmodule Cerberus.CoreLiveNestedScopeBehaviorTest do
     )
   end
 
-  @tag drivers: [:live, :browser]
+  @tag :live
+  @tag :browser
   test "scoped not-found failures include scope details", context do
     results =
       Harness.run(

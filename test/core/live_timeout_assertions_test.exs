@@ -5,7 +5,7 @@ defmodule Cerberus.CoreLiveTimeoutAssertionsTest do
 
   alias Cerberus.Harness
 
-  @moduletag drivers: [:live]
+  @moduletag :live
 
   test "timeout waits for async assigns", context do
     Harness.run!(context, fn session ->

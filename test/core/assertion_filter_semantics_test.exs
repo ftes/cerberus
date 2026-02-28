@@ -5,7 +5,9 @@ defmodule Cerberus.CoreAssertionFilterSemanticsTest do
 
   alias Cerberus.Harness
 
-  @moduletag drivers: [:static, :live, :browser]
+  @moduletag :static
+  @moduletag :live
+  @moduletag :browser
 
   @missing_label "Unknown Label"
 
