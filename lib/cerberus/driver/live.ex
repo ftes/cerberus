@@ -205,6 +205,35 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
+  def select(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
+    session = with_latest_html(session)
+    match_opts = locator_match_opts(locator, opts)
+    option = Keyword.fetch!(opts, :option)
+
+    case route_kind(session) do
+      :live ->
+        do_live_select(session, expected, option, match_opts)
+
+      :static ->
+        select_in_static_mode(session, expected, option, match_opts)
+    end
+  end
+
+  @impl true
+  def choose(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
+    session = with_latest_html(session)
+    match_opts = locator_match_opts(locator, opts)
+
+    case route_kind(session) do
+      :live ->
+        do_live_choose(session, expected, match_opts)
+
+      :static ->
+        choose_in_static_mode(session, expected, match_opts)
+    end
+  end
+
+  @impl true
   def check(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
     session = with_latest_html(session)
     match_opts = locator_match_opts(locator, opts)
@@ -1270,6 +1299,266 @@ defmodule Cerberus.Driver.Live do
     {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
   end
 
+  defp select_in_static_mode(session, expected, option, opts) do
+    case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+      {:ok, %{name: name, input_type: "select"} = field} when is_binary(name) and name != "" ->
+        case Html.select_values(session.html, field, option, opts, Session.scope(session)) do
+          {:ok, %{values: values, multiple?: multiple?}} ->
+            value = select_value_for_update(session, field, option, values, multiple?, :static)
+            updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
+
+            observed = %{
+              action: :select,
+              path: session.current_path,
+              mode: route_kind(session),
+              field: field,
+              option: option,
+              value: value,
+              transition: Session.transition(session)
+            }
+
+            {:ok, update_session(updated, :select, observed), observed}
+
+          {:error, reason} ->
+            observed = %{
+              action: :select,
+              path: session.current_path,
+              mode: route_kind(session),
+              field: field,
+              option: option,
+              transition: Session.transition(session)
+            }
+
+            {:error, session, observed, reason}
+        end
+
+      {:ok, %{name: name}} when is_binary(name) and name != "" ->
+        observed = %{
+          action: :select,
+          path: session.current_path,
+          mode: route_kind(session),
+          transition: Session.transition(session)
+        }
+
+        {:error, session, observed, "matched field is not a select element"}
+
+      {:ok, _field} ->
+        observed = %{
+          action: :select,
+          path: session.current_path,
+          mode: route_kind(session),
+          transition: Session.transition(session)
+        }
+
+        {:error, session, observed, "matched field does not include a name attribute"}
+
+      :error ->
+        observed = %{
+          action: :select,
+          path: session.current_path,
+          mode: route_kind(session),
+          transition: Session.transition(session)
+        }
+
+        {:error, session, observed, "no form field matched locator"}
+    end
+  end
+
+  defp choose_in_static_mode(session, expected, opts) do
+    case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+      {:ok, %{name: name, input_type: "radio"} = field} when is_binary(name) and name != "" ->
+        value = field[:input_value] || "on"
+        updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
+
+        observed = %{
+          action: :choose,
+          path: session.current_path,
+          mode: route_kind(session),
+          field: field,
+          value: value,
+          transition: Session.transition(session)
+        }
+
+        {:ok, update_session(updated, :choose, observed), observed}
+
+      {:ok, %{name: name}} when is_binary(name) and name != "" ->
+        observed = %{
+          action: :choose,
+          path: session.current_path,
+          mode: route_kind(session),
+          transition: Session.transition(session)
+        }
+
+        {:error, session, observed, "matched field is not a radio input"}
+
+      {:ok, _field} ->
+        observed = %{
+          action: :choose,
+          path: session.current_path,
+          mode: route_kind(session),
+          transition: Session.transition(session)
+        }
+
+        {:error, session, observed, "matched field does not include a name attribute"}
+
+      :error ->
+        observed = %{
+          action: :choose,
+          path: session.current_path,
+          mode: route_kind(session),
+          transition: Session.transition(session)
+        }
+
+        {:error, session, observed, "no form field matched locator"}
+    end
+  end
+
+  defp do_live_select(session, expected, option, opts) do
+    with {:ok, field} <- find_live_select_field(session, expected, opts),
+         {:ok, %{values: values, multiple?: multiple?}} <-
+           Html.select_values(session.html, field, option, opts, Session.scope(session)) do
+      value = select_value_for_update(session, field, option, values, multiple?, :live)
+      form_data = put_form_value(session.form_data, field.form, field.name, value)
+      updated = %{session | form_data: form_data}
+      handle_live_select_change(session, updated, field, option, value)
+    else
+      {:error, reason} ->
+        live_select_error(session, option, reason)
+    end
+  end
+
+  defp do_live_choose(session, expected, opts) do
+    case find_live_radio_field(session, expected, opts) do
+      {:ok, field} ->
+        value = field[:input_value] || "on"
+        form_data = put_form_value(session.form_data, field.form, field.name, value)
+        updated = %{session | form_data: form_data}
+        handle_live_choose_change(session, updated, field, value)
+
+      {:error, reason} ->
+        live_choose_error(session, reason)
+    end
+  end
+
+  defp find_live_select_field(session, expected, opts) do
+    case LiveViewHtml.find_form_field(session.html, expected, opts, Session.scope(session)) do
+      {:ok, %{name: name, input_type: "select"} = field} when is_binary(name) and name != "" ->
+        {:ok, field}
+
+      {:ok, %{name: name}} when is_binary(name) and name != "" ->
+        {:error, "matched field is not a select element"}
+
+      {:ok, _field} ->
+        {:error, "matched field does not include a name attribute"}
+
+      :error ->
+        {:error, "no form field matched locator"}
+    end
+  end
+
+  defp find_live_radio_field(session, expected, opts) do
+    case LiveViewHtml.find_form_field(session.html, expected, opts, Session.scope(session)) do
+      {:ok, %{name: name, input_type: "radio"} = field} when is_binary(name) and name != "" ->
+        {:ok, field}
+
+      {:ok, %{name: name}} when is_binary(name) and name != "" ->
+        {:error, "matched field is not a radio input"}
+
+      {:ok, _field} ->
+        {:error, "matched field does not include a name attribute"}
+
+      :error ->
+        {:error, "no form field matched locator"}
+    end
+  end
+
+  defp handle_live_select_change(session, updated, field, option, value) do
+    case maybe_trigger_live_change(updated, field) do
+      {:ok, changed_session, change} ->
+        observed = %{
+          action: :select,
+          path: Session.current_path(changed_session),
+          mode: Session.driver_kind(changed_session),
+          field: field,
+          option: option,
+          value: value,
+          phx_change: change.triggered,
+          target: change.target,
+          transition: change.transition || Session.transition(changed_session)
+        }
+
+        {:ok, update_last_result(changed_session, :select, observed), observed}
+
+      {:error, failed_session, reason, details} ->
+        observed = %{
+          action: :select,
+          path: session.current_path,
+          mode: route_kind(session),
+          field: field,
+          option: option,
+          value: value,
+          details: details,
+          transition: Session.transition(session)
+        }
+
+        {:error, failed_session, observed, reason}
+    end
+  end
+
+  defp handle_live_choose_change(session, updated, field, value) do
+    case maybe_trigger_live_change(updated, field) do
+      {:ok, changed_session, change} ->
+        observed = %{
+          action: :choose,
+          path: Session.current_path(changed_session),
+          mode: Session.driver_kind(changed_session),
+          field: field,
+          value: value,
+          phx_change: change.triggered,
+          target: change.target,
+          transition: change.transition || Session.transition(changed_session)
+        }
+
+        {:ok, update_last_result(changed_session, :choose, observed), observed}
+
+      {:error, failed_session, reason, details} ->
+        observed = %{
+          action: :choose,
+          path: session.current_path,
+          mode: route_kind(session),
+          field: field,
+          value: value,
+          details: details,
+          transition: Session.transition(session)
+        }
+
+        {:error, failed_session, observed, reason}
+    end
+  end
+
+  defp live_select_error(session, option, reason) do
+    observed = %{
+      action: :select,
+      path: session.current_path,
+      mode: route_kind(session),
+      option: option,
+      transition: Session.transition(session)
+    }
+
+    {:error, session, observed, reason}
+  end
+
+  defp live_choose_error(session, reason) do
+    observed = %{
+      action: :choose,
+      path: session.current_path,
+      mode: route_kind(session),
+      transition: Session.transition(session)
+    }
+
+    {:error, session, observed, reason}
+  end
+
   defp do_live_fill_in(session, expected, value, opts) do
     case LiveViewHtml.find_form_field(session.html, expected, opts, Session.scope(session)) do
       {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
@@ -1745,6 +2034,25 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
+  defp select_value_for_update(_session, _field, _option, values, false, _route_kind) do
+    List.first(values)
+  end
+
+  defp select_value_for_update(_session, _field, option, values, true, _route_kind) when is_list(option) do
+    values
+  end
+
+  defp select_value_for_update(session, field, _option, values, true, _route_kind) do
+    defaults = form_defaults_for_change(session, field)
+    active = pruned_active_form_values(session, field)
+    current = Map.get(active, field.name, Map.get(defaults, field.name))
+
+    current
+    |> checkbox_value_list()
+    |> Enum.concat(values)
+    |> Enum.uniq()
+  end
+
   defp checkbox_value_list(nil), do: []
   defp checkbox_value_list(value) when is_list(value), do: value
   defp checkbox_value_list(value), do: [value]
@@ -1904,12 +2212,21 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp params_for_submit(session, button, form_selector) do
-    params = pruned_params_for_form(session, button.form, form_selector)
+    params =
+      session
+      |> submit_defaults_for_selector(form_selector)
+      |> Map.merge(pruned_params_for_form(session, button.form, form_selector))
 
     case button_payload(button) do
       nil -> params
       {name, value} -> Map.put(params, name, value)
     end
+  end
+
+  defp submit_defaults_for_selector(_session, selector) when selector in [nil, ""], do: %{}
+
+  defp submit_defaults_for_selector(session, selector) when is_binary(selector) do
+    Html.form_defaults(session.html, selector, Session.scope(session))
   end
 
   defp pruned_params_for_form(session, form, form_selector) do

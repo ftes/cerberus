@@ -20,6 +20,8 @@
 | Visit page | `visit(session, "/articles")` |
 | Click link/button | `click(session, link("Counter"))` |
 | Fill input | `fill_in(session, label("Search term"), "Aragorn")` |
+| Select option | `select(session, label("Race"), option: "Elf")` |
+| Choose radio | `choose(session, label("Email Choice"))` |
 | Submit form | `submit(session, button("Run Search"))` |
 | Assert text present | `assert_has(session, text("Articles", exact: true))` |
 | Assert text absent | `refute_has(session, text("Error", exact: true))` |

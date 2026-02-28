@@ -186,6 +186,19 @@ defmodule Cerberus.Driver.Static do
   end
 
   @impl true
+  def select(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
+    match_opts = locator_match_opts(locator, opts)
+    option = Keyword.fetch!(opts, :option)
+    select_field(session, expected, match_opts, option, :select)
+  end
+
+  @impl true
+  def choose(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
+    match_opts = locator_match_opts(locator, opts)
+    choose_radio(session, expected, match_opts)
+  end
+
+  @impl true
   def check(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
     match_opts = locator_match_opts(locator, opts)
     toggle_checkbox(session, expected, match_opts, true, :check)
@@ -511,6 +524,81 @@ defmodule Cerberus.Driver.Static do
     end
   end
 
+  defp choose_radio(session, expected, opts) do
+    case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+      {:ok, %{name: name, input_type: "radio"} = field} when is_binary(name) and name != "" ->
+        value = field[:input_value] || "on"
+        updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
+
+        observed = %{
+          action: :choose,
+          path: session.current_path,
+          field: field,
+          value: value,
+          transition: Session.transition(session)
+        }
+
+        {:ok, update_session(updated, :choose, observed), observed}
+
+      {:ok, %{name: name}} when is_binary(name) and name != "" ->
+        observed = %{action: :choose, path: session.current_path, transition: Session.transition(session)}
+        {:error, session, observed, "matched field is not a radio input"}
+
+      {:ok, _field} ->
+        observed = %{action: :choose, path: session.current_path, transition: Session.transition(session)}
+        {:error, session, observed, "matched field does not include a name attribute"}
+
+      :error ->
+        observed = %{action: :choose, path: session.current_path, transition: Session.transition(session)}
+        {:error, session, observed, "no form field matched locator"}
+    end
+  end
+
+  defp select_field(session, expected, opts, option, op) do
+    case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+      {:ok, %{name: name, input_type: "select"} = field} when is_binary(name) and name != "" ->
+        case Html.select_values(session.html, field, option, opts, Session.scope(session)) do
+          {:ok, %{values: values, multiple?: multiple?}} ->
+            value = select_value_for_update(session, field, option, values, multiple?)
+            updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
+
+            observed = %{
+              action: op,
+              path: session.current_path,
+              field: field,
+              option: option,
+              value: value,
+              transition: Session.transition(session)
+            }
+
+            {:ok, update_session(updated, op, observed), observed}
+
+          {:error, reason} ->
+            observed = %{
+              action: op,
+              path: session.current_path,
+              field: field,
+              option: option,
+              transition: Session.transition(session)
+            }
+
+            {:error, session, observed, reason}
+        end
+
+      {:ok, %{name: name}} when is_binary(name) and name != "" ->
+        observed = %{action: op, path: session.current_path, transition: Session.transition(session)}
+        {:error, session, observed, "matched field is not a select element"}
+
+      {:ok, _field} ->
+        observed = %{action: op, path: session.current_path, transition: Session.transition(session)}
+        {:error, session, observed, "matched field does not include a name attribute"}
+
+      :error ->
+        observed = %{action: op, path: session.current_path, transition: Session.transition(session)}
+        {:error, session, observed, "no form field matched locator"}
+    end
+  end
+
   defp put_form_value(form_data, form, name, value) do
     %{active_form: active_form, values: values} = normalize_form_data(form_data)
     key = form_key(form, active_form)
@@ -520,12 +608,24 @@ defmodule Cerberus.Driver.Static do
   end
 
   defp params_for_submit(session, button, form_selector) do
-    params = pruned_params_for_form(session, button.form, form_selector)
+    params = submit_form_payload(session, button, form_selector)
 
     case button_payload(button) do
       nil -> params
       {name, value} -> Map.put(params, name, value)
     end
+  end
+
+  defp submit_form_payload(session, button, form_selector) do
+    defaults = submit_form_defaults(session, button, form_selector)
+    active = pruned_params_for_form(session, button.form, form_selector)
+    Map.merge(defaults, active)
+  end
+
+  defp submit_form_defaults(_session, _button, selector) when selector in [nil, ""], do: %{}
+
+  defp submit_form_defaults(session, _button, selector) when is_binary(selector) do
+    Html.form_defaults(session.html, selector, Session.scope(session))
   end
 
   defp submit_form_selector(%{form_selector: selector}) when is_binary(selector) and selector != "", do: selector
@@ -585,6 +685,25 @@ defmodule Cerberus.Driver.Static do
   defp checkbox_value_list(nil), do: []
   defp checkbox_value_list(value) when is_list(value), do: value
   defp checkbox_value_list(value), do: [value]
+
+  defp select_value_for_update(_session, _field, _option, values, false) do
+    List.first(values)
+  end
+
+  defp select_value_for_update(_session, _field, option, values, true) when is_list(option) do
+    values
+  end
+
+  defp select_value_for_update(session, field, _option, values, true) do
+    defaults = submit_defaults_for_field(session, field)
+    active = pruned_params_for_form(session, field.form, field[:form_selector])
+    current = Map.get(active, field.name, Map.get(defaults, field.name))
+
+    current
+    |> checkbox_value_list()
+    |> Enum.concat(values)
+    |> Enum.uniq()
+  end
 
   defp ensure_checkbox_value(values, input_value) do
     if Enum.any?(values, &(&1 == input_value)) do

@@ -260,6 +260,43 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @impl true
+  def select(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
+    state = state!(session)
+    match_opts = locator_match_opts(locator, opts)
+    selector = Keyword.get(match_opts, :selector)
+    option = Keyword.fetch!(opts, :option)
+
+    with_driver_ready(session, state, :select, fn ready_state ->
+      case form_fields(ready_state, selector) do
+        {:ok, fields_data} ->
+          do_select(session, ready_state, fields_data, expected, option, match_opts, selector)
+
+        {:error, reason, details} ->
+          observed = %{path: ready_state.current_path, details: details}
+          {:error, session, observed, "failed to inspect form fields: #{reason}"}
+      end
+    end)
+  end
+
+  @impl true
+  def choose(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
+    state = state!(session)
+    match_opts = locator_match_opts(locator, opts)
+    selector = Keyword.get(match_opts, :selector)
+
+    with_driver_ready(session, state, :choose, fn ready_state ->
+      case form_fields(ready_state, selector) do
+        {:ok, fields_data} ->
+          do_choose_radio(session, ready_state, fields_data, expected, match_opts, selector)
+
+        {:error, reason, details} ->
+          observed = %{path: ready_state.current_path, details: details}
+          {:error, session, observed, "failed to inspect form fields: #{reason}"}
+      end
+    end)
+  end
+
+  @impl true
   def check(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
     state = state!(session)
     match_opts = locator_match_opts(locator, opts)
@@ -424,6 +461,56 @@ defmodule Cerberus.Driver.Browser do
 
       field ->
         fill_field(session, state, field, value, selector)
+    end
+  end
+
+  defp do_select(session, state, fields_data, expected, option, opts, selector) do
+    fields = Map.get(fields_data, "fields", [])
+
+    case find_matching_by_label(fields, expected, opts) do
+      nil ->
+        observed = %{action: :select, path: state.current_path, fields: fields_data, option: option}
+        {:error, session, observed, "no form field matched locator"}
+
+      field ->
+        cond do
+          not select_field?(field) ->
+            observed = %{action: :select, path: state.current_path, field: field, option: option}
+            {:error, session, observed, "matched field is not a select element"}
+
+          field_disabled?(field) ->
+            observed = %{action: :select, path: state.current_path, field: field, option: option}
+            {:error, session, observed, "matched select field is disabled"}
+
+          true ->
+            preserve_existing = select_field_multiple?(field) and not is_list(option)
+            exact_option = Keyword.get(opts, :exact_option, true)
+            select_field_option(session, state, field, option, exact_option, preserve_existing, selector)
+        end
+    end
+  end
+
+  defp do_choose_radio(session, state, fields_data, expected, opts, selector) do
+    fields = Map.get(fields_data, "fields", [])
+
+    case find_matching_by_label(fields, expected, opts) do
+      nil ->
+        observed = %{action: :choose, path: state.current_path, fields: fields_data}
+        {:error, session, observed, "no form field matched locator"}
+
+      field ->
+        cond do
+          not radio_field?(field) ->
+            observed = %{action: :choose, path: state.current_path, field: field}
+            {:error, session, observed, "matched field is not a radio input"}
+
+          field_disabled?(field) ->
+            observed = %{action: :choose, path: state.current_path, field: field}
+            {:error, session, observed, "matched field is disabled"}
+
+          true ->
+            choose_radio_field(session, state, field, selector)
+        end
     end
   end
 
@@ -631,6 +718,37 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
+  defp select_field_option(session, state, field, option, exact_option, preserve_existing, selector) do
+    index = field["index"] || 0
+    options = List.wrap(option)
+
+    expression =
+      select_set_expression(index, options, exact_option, preserve_existing, Session.scope(state), selector)
+
+    case eval_json(state, expression) do
+      {:ok, result} ->
+        select_field_result(session, state, field, option, result)
+
+      {:error, reason, details} ->
+        observed = %{action: :select, path: state.current_path, field: field, option: option, details: details}
+        {:error, session, observed, "browser select failed: #{reason}"}
+    end
+  end
+
+  defp choose_radio_field(session, state, field, selector) do
+    index = field["index"] || 0
+    expression = radio_set_expression(index, Session.scope(state), selector)
+
+    case eval_json(state, expression) do
+      {:ok, result} ->
+        choose_radio_result(session, state, field, result)
+
+      {:error, reason, details} ->
+        observed = %{action: :choose, path: state.current_path, field: field, details: details}
+        {:error, session, observed, "browser choose failed: #{reason}"}
+    end
+  end
+
   defp fill_field_result(session, state, field, value, %{"ok" => true} = result) do
     case await_driver_ready(state) do
       {:ok, readiness} ->
@@ -695,6 +813,70 @@ defmodule Cerberus.Driver.Browser do
     {:error, session, observed, "browser checkbox toggle failed: #{reason}"}
   end
 
+  defp select_field_result(session, state, field, option, %{"ok" => true} = result) do
+    case await_driver_ready(state) do
+      {:ok, readiness} ->
+        observed = %{
+          action: :select,
+          path: Map.get(result, "path", state.current_path),
+          field: field,
+          option: option,
+          value: Map.get(result, "value"),
+          readiness: readiness
+        }
+
+        {:ok, update_last_result(session, :select, observed), observed}
+
+      {:error, reason, readiness} ->
+        observed = %{
+          action: :select,
+          path: state.current_path,
+          field: field,
+          option: option,
+          readiness: readiness
+        }
+
+        {:error, session, observed, readiness_error(reason, readiness)}
+    end
+  end
+
+  defp select_field_result(session, state, field, option, result) do
+    reason = Map.get(result, "reason", "select_failed")
+    observed = %{action: :select, path: state.current_path, field: field, option: option, result: result}
+    {:error, session, observed, "browser select failed: #{reason}"}
+  end
+
+  defp choose_radio_result(session, state, field, %{"ok" => true} = result) do
+    case await_driver_ready(state) do
+      {:ok, readiness} ->
+        observed = %{
+          action: :choose,
+          path: Map.get(result, "path", state.current_path),
+          field: field,
+          value: Map.get(result, "value"),
+          readiness: readiness
+        }
+
+        {:ok, update_last_result(session, :choose, observed), observed}
+
+      {:error, reason, readiness} ->
+        observed = %{
+          action: :choose,
+          path: state.current_path,
+          field: field,
+          readiness: readiness
+        }
+
+        {:error, session, observed, readiness_error(reason, readiness)}
+    end
+  end
+
+  defp choose_radio_result(session, state, field, result) do
+    reason = Map.get(result, "reason", "choose_failed")
+    observed = %{action: :choose, path: state.current_path, field: field, result: result}
+    {:error, session, observed, "browser choose failed: #{reason}"}
+  end
+
   defp navigate_link(session, state, link, url) do
     case navigate_browser(state, url) do
       {:ok, _} ->
@@ -740,6 +922,22 @@ defmodule Cerberus.Driver.Browser do
 
   defp checkbox_field?(field) do
     (field["type"] || "") |> to_string() |> String.downcase() == "checkbox"
+  end
+
+  defp radio_field?(field) do
+    (field["type"] || "") |> to_string() |> String.downcase() == "radio"
+  end
+
+  defp select_field?(field) do
+    (field["tag"] || "") |> to_string() |> String.downcase() == "select"
+  end
+
+  defp select_field_multiple?(field) do
+    field["multiple"] == true
+  end
+
+  defp field_disabled?(field) do
+    field["disabled"] == true
   end
 
   defp click_button(session, state, button, selector) do
@@ -1562,15 +1760,26 @@ defmodule Cerberus.Driver.Browser do
           return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
         })
         .map((element, index) => {
-          const type = (element.getAttribute("type") || "").toLowerCase();
+          const tag = (element.tagName || "").toLowerCase();
+          const rawType = (element.getAttribute("type") || "").toLowerCase();
+          const type = tag === "select" ? (element.multiple ? "select-multiple" : "select-one") : rawType;
+          const value = tag === "select"
+            ? (element.multiple
+              ? Array.from(element.selectedOptions || []).map((option) => option.value || option.textContent || "")
+              : (element.value || ""))
+            : (element.value || "");
+
           return {
             index,
             id: element.id || "",
             name: element.name || "",
             label: labelForControl(element),
             type,
-            value: element.value || "",
-            checked: element.checked === true
+            value,
+            checked: element.checked === true,
+            tag,
+            multiple: tag === "select" && element.multiple === true,
+            disabled: element.disabled === true
           };
         });
 
@@ -1825,6 +2034,156 @@ defmodule Cerberus.Driver.Browser do
     """
   end
 
+  defp select_set_expression(index, options, exact_option, preserve_existing, scope, selector) do
+    encoded_options = JSON.encode!(options)
+    encoded_exact_option = JSON.encode!(exact_option)
+    encoded_preserve_existing = JSON.encode!(preserve_existing)
+    encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
+
+    """
+    (() => {
+      const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
+      const requestedOptions = #{encoded_options};
+      const exactOption = #{encoded_exact_option};
+      const preserveExisting = #{encoded_preserve_existing};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").replace(/\\s+/g, " ").trim();
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
+      const fields = queryWithinRoots("input, textarea, select")
+        .filter((element) => {
+          const type = (element.getAttribute("type") || "").toLowerCase();
+          return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
+        });
+
+      const field = fields[#{index}];
+      if (!field) {
+        return JSON.stringify({ ok: false, reason: "field_not_found" });
+      }
+
+      if ((field.tagName || "").toLowerCase() !== "select") {
+        return JSON.stringify({ ok: false, reason: "field_not_select" });
+      }
+
+      if (field.disabled) {
+        return JSON.stringify({ ok: false, reason: "field_disabled" });
+      }
+
+      if (!field.multiple && requestedOptions.length > 1) {
+        return JSON.stringify({ ok: false, reason: "select_not_multiple" });
+      }
+
+      const matchOption = (option, requested) => {
+        const optionText = normalize(option.textContent);
+        const requestedText = normalize(requested);
+
+        if (exactOption) {
+          return optionText === requestedText;
+        }
+
+        return optionText.includes(requestedText);
+      };
+
+      const matched = [];
+
+      for (const requested of requestedOptions) {
+        const enabled = Array.from(field.options || []).find((option) => matchOption(option, requested) && !option.disabled);
+
+        if (enabled) {
+          matched.push(enabled);
+          continue;
+        }
+
+        const disabled = Array.from(field.options || []).find((option) => matchOption(option, requested) && option.disabled);
+
+        if (disabled) {
+          return JSON.stringify({ ok: false, reason: "option_disabled", option: requested });
+        }
+
+        return JSON.stringify({ ok: false, reason: "option_not_found", option: requested });
+      }
+
+      if (field.multiple) {
+        const selectedValues = preserveExisting
+          ? new Set(Array.from(field.selectedOptions || []).map((option) => option.value || normalize(option.textContent)))
+          : new Set();
+
+        for (const option of matched) {
+          selectedValues.add(option.value || normalize(option.textContent));
+        }
+
+        for (const option of Array.from(field.options || [])) {
+          const value = option.value || normalize(option.textContent);
+          option.selected = selectedValues.has(value);
+        }
+      } else {
+        for (const option of Array.from(field.options || [])) {
+          option.selected = false;
+        }
+
+        if (matched[0]) {
+          matched[0].selected = true;
+          field.value = matched[0].value || normalize(matched[0].textContent);
+        }
+      }
+
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+
+      const value = field.multiple
+        ? Array.from(field.selectedOptions || []).map((option) => option.value || normalize(option.textContent))
+        : field.value;
+
+      return JSON.stringify({
+        ok: true,
+        path: window.location.pathname + window.location.search,
+        value
+      });
+    })()
+    """
+  end
+
   defp checkbox_set_expression(index, checked, scope, selector) do
     encoded_checked = JSON.encode!(checked)
     encoded_scope = JSON.encode!(scope)
@@ -1894,6 +2253,83 @@ defmodule Cerberus.Driver.Browser do
       return JSON.stringify({
         ok: true,
         path: window.location.pathname + window.location.search
+      });
+    })()
+    """
+  end
+
+  defp radio_set_expression(index, scope, selector) do
+    encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
+
+    """
+    (() => {
+      const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
+      const fields = queryWithinRoots("input")
+        .filter((element) => {
+          const type = (element.getAttribute("type") || "").toLowerCase();
+          return type === "radio" && selectorMatches(element);
+        });
+
+      const field = fields[#{index}];
+      if (!field) {
+        return JSON.stringify({ ok: false, reason: "field_not_found" });
+      }
+
+      if (field.disabled) {
+        return JSON.stringify({ ok: false, reason: "field_disabled" });
+      }
+
+      field.checked = true;
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+
+      return JSON.stringify({
+        ok: true,
+        path: window.location.pathname + window.location.search,
+        value: field.value || "on"
       });
     })()
     """

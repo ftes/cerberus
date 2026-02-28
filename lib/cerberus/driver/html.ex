@@ -72,6 +72,18 @@ defmodule Cerberus.Driver.Html do
     end
   end
 
+  @spec select_values(String.t(), map(), String.t() | [String.t()], keyword(), String.t() | nil) ::
+          {:ok, %{values: [String.t()], multiple?: boolean()}} | {:error, String.t()}
+  def select_values(html, field, option, opts, scope \\ nil) when is_binary(html) and is_map(field) do
+    case parse_document(html) do
+      {:ok, lazy_html} ->
+        select_values_in_doc(lazy_html, field, option, opts, scope)
+
+      _ ->
+        {:error, "failed to parse html while matching select options"}
+    end
+  end
+
   @spec form_defaults(String.t(), String.t(), String.t() | nil) :: map()
   def form_defaults(html, form_selector, scope \\ nil) when is_binary(html) and is_binary(form_selector) do
     case parse_document(html) do
@@ -167,6 +179,114 @@ defmodule Cerberus.Driver.Html do
         :error -> find_submit_button_in_owner_form(root_node, expected, opts, selector)
       end
     end)
+  end
+
+  defp select_values_in_doc(lazy_html, field, option, opts, scope) do
+    lazy_html
+    |> scoped_nodes(scope)
+    |> Enum.find_value({:error, "no select field matched locator"}, fn root_node ->
+      case find_select_node(root_node, field) do
+        {:ok, select_node} -> select_values_for_node(select_node, option, opts)
+        :error -> false
+      end
+    end)
+  end
+
+  defp select_values_for_node(select_node, option, opts) do
+    if disabled?(select_node) do
+      {:error, "matched select field is disabled"}
+    else
+      multiple? = is_binary(attr(select_node, "multiple"))
+      requested = List.wrap(option)
+
+      cond do
+        requested == [] ->
+          {:error, "select requires at least one option value"}
+
+        not multiple? and length(requested) > 1 ->
+          {:error, "matched select does not support selecting multiple options"}
+
+        true ->
+          option_opts = [exact: Keyword.get(opts, :exact_option, true)]
+          match_select_values(select_node, requested, option_opts, multiple?)
+      end
+    end
+  end
+
+  defp match_select_values(select_node, requested, option_opts, multiple?) do
+    options = safe_query(select_node, "option")
+
+    case collect_select_values(options, requested, option_opts) do
+      {:ok, values} ->
+        {:ok, %{values: values, multiple?: multiple?}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp collect_select_values(options, requested, option_opts) do
+    Enum.reduce_while(requested, {:ok, []}, fn requested_option, {:ok, values} ->
+      append_select_value(options, requested_option, option_opts, values)
+    end)
+  end
+
+  defp append_select_value(options, requested_option, option_opts, values) do
+    case match_select_option(options, requested_option, option_opts) do
+      {:ok, value} -> {:cont, {:ok, values ++ [value]}}
+      {:error, reason} -> {:halt, {:error, reason}}
+    end
+  end
+
+  defp match_select_option(options, requested_option, option_opts) do
+    predicate = fn option ->
+      Query.match_text?(node_text(option), requested_option, option_opts)
+    end
+
+    enabled_match =
+      Enum.find(options, fn option ->
+        predicate.(option) and not disabled?(option)
+      end)
+
+    cond do
+      not is_nil(enabled_match) ->
+        {:ok, attr(enabled_match, "value") || node_text(enabled_match)}
+
+      Enum.any?(options, predicate) ->
+        {:error, "matched select option is disabled"}
+
+      true ->
+        {:error, "no select option matched the requested option text"}
+    end
+  end
+
+  defp find_select_node(root_node, field) do
+    selectors =
+      []
+      |> maybe_add_select_selector(field[:id], &~s([id="#{css_attr_escape(&1)}"]))
+      |> maybe_add_select_selector(field[:selector], & &1)
+      |> maybe_add_select_selector(field[:name], &~s([name="#{css_attr_escape(&1)}"]))
+
+    Enum.find_value(selectors, :error, fn selector ->
+      case root_node |> safe_query(selector) |> Enum.find(&(node_tag(&1) == "select")) do
+        nil -> false
+        select_node -> {:ok, select_node}
+      end
+    end)
+  end
+
+  defp maybe_add_select_selector(selectors, value, builder) when is_function(builder, 1) do
+    case value do
+      candidate when is_binary(candidate) ->
+        if String.trim(candidate) != "" and candidate != "*" do
+          selectors ++ [builder.(candidate)]
+        else
+          selectors
+        end
+
+      _ ->
+        selectors
+    end
   end
 
   defp find_submit_button_in_forms(root_node, expected, opts, selector) do
@@ -644,7 +764,7 @@ defmodule Cerberus.Driver.Html do
   defp collect_form_defaults(form_node) do
     inputs =
       form_node
-      |> safe_query("input[name],textarea[name],select[name]")
+      |> safe_query("input[name]:not([disabled]),textarea[name]:not([disabled]),select[name]:not([disabled])")
       |> Enum.reduce(%{}, &put_control_value(&2, &1))
 
     owner_controls =
@@ -653,7 +773,7 @@ defmodule Cerberus.Driver.Html do
           parent = form_node
 
           parent
-          |> safe_query(~s([form="#{form_id}"][name]))
+          |> safe_query(~s|[form="#{form_id}"][name]:not([disabled])|)
           |> Enum.reduce(inputs, &put_control_value(&2, &1))
 
         _ ->
@@ -748,28 +868,53 @@ defmodule Cerberus.Driver.Html do
   end
 
   defp put_select_default(acc, node, name) do
-    selected_values =
-      node
-      |> safe_query("option")
-      |> Enum.filter(&checked?/1)
-      |> Enum.map(&(attr(&1, "value") || node_text(&1)))
-
-    selected_values =
-      if selected_values == [] do
-        case node |> safe_query("option") |> Enum.at(0) do
-          nil -> []
-          option -> [attr(option, "value") || node_text(option)]
-        end
-      else
-        selected_values
-      end
-
-    case selected_values do
+    case select_default_values(node) do
       [] -> acc
       [single] -> put_name_value(acc, name, single)
       many -> put_name_value(acc, name, many)
     end
   end
+
+  defp select_default_values(node) do
+    multiple? = is_binary(attr(node, "multiple"))
+    selected_values = selected_option_values(node)
+
+    resolve_select_default_values(node, multiple?, selected_values)
+  end
+
+  defp selected_option_values(node) do
+    node
+    |> enabled_options()
+    |> Enum.filter(&checked?/1)
+    |> Enum.map(&option_value/1)
+  end
+
+  defp resolve_select_default_values(_node, _multiple?, selected_values) when selected_values != [] do
+    selected_values
+  end
+
+  defp resolve_select_default_values(_node, true, []), do: []
+
+  defp resolve_select_default_values(node, false, []) do
+    case first_enabled_option(node) do
+      nil -> []
+      option -> [option_value(option)]
+    end
+  end
+
+  defp enabled_options(node) do
+    node
+    |> safe_query("option")
+    |> Enum.reject(&disabled?/1)
+  end
+
+  defp first_enabled_option(node) do
+    node
+    |> enabled_options()
+    |> Enum.at(0)
+  end
+
+  defp option_value(node), do: attr(node, "value") || node_text(node)
 
   defp put_name_value(acc, name, values) when is_list(values) do
     Enum.reduce(values, acc, &put_name_value(&2, name, &1))

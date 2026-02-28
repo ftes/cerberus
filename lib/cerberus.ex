@@ -389,20 +389,20 @@ defmodule Cerberus do
     Assertions.submit(session, locator, opts)
   end
 
-  @spec select(Session.t(), term()) :: no_return()
+  @spec select(arg, term()) :: arg when arg: var
   def select(session, locator), do: select(session, locator, [])
 
-  @spec select(Session.t(), term(), keyword()) :: no_return()
+  @spec select(arg, term(), Options.select_opts()) :: arg when arg: var
   def select(session, locator, opts) when is_list(opts) do
-    Assertions.unsupported(session, :select, [locator: locator] ++ opts)
+    Assertions.select(session, locator, opts)
   end
 
-  @spec choose(Session.t(), term()) :: no_return()
+  @spec choose(arg, term()) :: arg when arg: var
   def choose(session, locator), do: choose(session, locator, [])
 
-  @spec choose(Session.t(), term(), keyword()) :: no_return()
+  @spec choose(arg, term(), Options.choose_opts()) :: arg when arg: var
   def choose(session, locator, opts) when is_list(opts) do
-    Assertions.unsupported(session, :choose, [locator: locator] ++ opts)
+    Assertions.choose(session, locator, opts)
   end
 
   @spec check(arg, term()) :: arg when arg: var

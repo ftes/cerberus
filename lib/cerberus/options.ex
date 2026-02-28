@@ -9,6 +9,7 @@ defmodule Cerberus.Options do
   @type click_kind :: :any | :link | :button
   @type visibility_filter :: boolean() | :any
   @type fill_in_value :: String.t() | integer() | float() | boolean()
+  @type select_value :: String.t() | [String.t()]
 
   @type click_opts :: [
           kind: click_kind(),
@@ -25,6 +26,16 @@ defmodule Cerberus.Options do
         ]
 
   @type check_opts :: [
+          selector: String.t() | nil
+        ]
+
+  @type select_opts :: [
+          option: select_value(),
+          exact_option: boolean(),
+          selector: String.t() | nil
+        ]
+
+  @type choose_opts :: [
           selector: String.t() | nil
         ]
 
@@ -85,6 +96,12 @@ defmodule Cerberus.Options do
     selector: [type: :any, default: nil, doc: "Limits file-input lookup to elements that satisfy the CSS selector."]
   ]
 
+  @select_opts_schema [
+    option: [type: :any, required: true, doc: "Option text to select; list form targets multi-select inputs."],
+    exact_option: [type: :boolean, default: true, doc: "Requires exact option-text matches unless disabled."],
+    selector: [type: :any, default: nil, doc: "Limits select lookup to elements that satisfy the CSS selector."]
+  ]
+
   @path_opts_schema [
     exact: [type: :boolean, default: true, doc: "Requires an exact path match unless disabled."],
     query: [
@@ -114,6 +131,9 @@ defmodule Cerberus.Options do
   @spec upload_schema() :: keyword()
   def upload_schema, do: @upload_opts_schema
 
+  @spec select_schema() :: keyword()
+  def select_schema, do: @select_opts_schema
+
   @spec path_schema() :: keyword()
   def path_schema, do: @path_opts_schema
 
@@ -131,6 +151,17 @@ defmodule Cerberus.Options do
 
   @spec validate_check!(keyword(), String.t()) :: check_opts()
   def validate_check!(opts, op_name), do: opts |> validate!(@fill_in_opts_schema, op_name) |> validate_selector!(op_name)
+
+  @spec validate_choose!(keyword(), String.t()) :: choose_opts()
+  def validate_choose!(opts, op_name), do: opts |> validate!(@fill_in_opts_schema, op_name) |> validate_selector!(op_name)
+
+  @spec validate_select!(keyword()) :: select_opts()
+  def validate_select!(opts) do
+    opts
+    |> validate!(@select_opts_schema, "select/3")
+    |> validate_selector!("select/3")
+    |> validate_select_option!("select/3")
+  end
 
   @spec validate_submit!(keyword()) :: submit_opts()
   def validate_submit!(opts), do: opts |> validate!(@submit_opts_schema, "submit/3") |> validate_selector!("submit/3")
@@ -210,6 +241,32 @@ defmodule Cerberus.Options do
 
       _other ->
         raise ArgumentError, "#{op_name} invalid options: :#{key} must be a non-empty string path"
+    end
+  end
+
+  defp validate_select_option!(opts, op_name) do
+    case Keyword.get(opts, :option) do
+      option when is_binary(option) ->
+        if String.trim(option) == "" do
+          raise ArgumentError,
+                "#{op_name} invalid options: :option must be a non-empty string or list of non-empty strings"
+        else
+          opts
+        end
+
+      [_ | _] = options ->
+        if Enum.all?(options, &(is_binary(&1) and String.trim(&1) != "")) do
+          opts
+        else
+          raise ArgumentError,
+                "#{op_name} invalid options: :option list must contain only non-empty strings"
+        end
+
+      [] ->
+        raise ArgumentError, "#{op_name} invalid options: :option list must contain at least one value"
+
+      _ ->
+        raise ArgumentError, "#{op_name} invalid options: :option must be a non-empty string or list of non-empty strings"
     end
   end
 end

@@ -342,24 +342,44 @@ defmodule Cerberus.PublicApiTest do
     assert live_error.message =~ "screenshot is not implemented for :live driver"
   end
 
-  test "select and choose are explicit unsupported for non-browser sessions" do
-    static_select_error =
+  test "select and choose work for static and live sessions" do
+    static_session =
+      session()
+      |> visit("/controls")
+      |> select("Race", option: "Elf")
+      |> choose("Email Choice")
+      |> submit(text("Save Controls"))
+
+    assert String.starts_with?(static_session.current_path, "/controls/result")
+    assert_has(static_session, text("race: elf", exact: true))
+    assert_has(static_session, text("contact: email", exact: true))
+
+    live_session =
+      session()
+      |> visit("/live/controls")
+      |> select("Race", option: "Dwarf")
+      |> choose("Phone Choice")
+
+    assert live_session.current_path == "/live/controls"
+    assert_has(live_session, text("race: dwarf", exact: true))
+    assert_has(live_session, text("contact: phone", exact: true))
+  end
+
+  test "select validates required option and choose validates radio targets" do
+    assert_raise ArgumentError, ~r/select\/3 invalid options: required :option option/, fn ->
+      session()
+      |> visit("/controls")
+      |> select("Race")
+    end
+
+    choose_error =
       assert_raise AssertionError, fn ->
         session()
-        |> visit("/search")
-        |> select("Search term")
+        |> visit("/controls")
+        |> choose("Race")
       end
 
-    assert static_select_error.message =~ "select is not implemented for :static driver"
-
-    live_choose_error =
-      assert_raise AssertionError, fn ->
-        session()
-        |> visit("/live/counter")
-        |> choose("Counter")
-      end
-
-    assert live_choose_error.message =~ "choose is not implemented for :live driver"
+    assert choose_error.message =~ "matched field is not a radio input"
   end
 
   test "assert_path and refute_path support query matching" do
@@ -566,25 +586,17 @@ defmodule Cerberus.PublicApiTest do
   end
 
   @tag browser: true
-  test "select and choose are explicit unsupported for browser sessions" do
-    browser_select_error =
-      assert_raise AssertionError, fn ->
-        :browser
-        |> session()
-        |> visit("/search")
-        |> select("Search term")
-      end
+  test "select and choose work for browser sessions" do
+    browser_session =
+      :browser
+      |> session()
+      |> visit("/controls")
+      |> select("Race", option: "Dwarf")
+      |> choose("Email Choice")
+      |> submit(text("Save Controls"))
 
-    assert browser_select_error.message =~ "select is not implemented for :browser driver"
-
-    browser_choose_error =
-      assert_raise AssertionError, fn ->
-        :browser
-        |> session()
-        |> visit("/search")
-        |> choose("Search term")
-      end
-
-    assert browser_choose_error.message =~ "choose is not implemented for :browser driver"
+    assert String.starts_with?(browser_session.current_path, "/controls/result")
+    assert_has(browser_session, text("race: dwarf", exact: true))
+    assert_has(browser_session, text("contact: email", exact: true))
   end
 end

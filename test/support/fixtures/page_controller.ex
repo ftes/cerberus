@@ -176,6 +176,87 @@ defmodule Cerberus.Fixtures.PageController do
     """)
   end
 
+  def controls_form(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Controls Form</title>
+      </head>
+      <body>
+        <main>
+          <h1>Controls</h1>
+
+          <form id="controls-form" action="/controls/result" method="get">
+            <label for="controls_race">Race</label>
+            <select id="controls_race" name="race">
+              <option value="human">Human</option>
+              <option value="elf">Elf</option>
+              <option value="dwarf">Dwarf</option>
+              <option value="disabled_race" disabled>Disabled Race</option>
+            </select>
+
+            <label for="controls_race_2">Race 2</label>
+            <select id="controls_race_2" name="race_2[]" multiple>
+              <option value="elf">Elf</option>
+              <option value="dwarf">Dwarf</option>
+              <option value="orc">Orc</option>
+            </select>
+
+            <fieldset>
+              <legend>Contact</legend>
+              <input type="radio" id="controls_contact_email" name="contact" value="email" />
+              <label for="controls_contact_email">Email Choice</label>
+
+              <input type="radio" id="controls_contact_phone" name="contact" value="phone" />
+              <label for="controls_contact_phone">Phone Choice</label>
+
+              <input type="radio" id="controls_contact_mail" name="contact" value="mail" checked />
+              <label for="controls_contact_mail">Mail Choice</label>
+            </fieldset>
+
+            <label for="controls_disabled_select">Disabled select</label>
+            <select id="controls_disabled_select" name="disabled_select" disabled>
+              <option value="cannot_submit">Cannot submit</option>
+            </select>
+
+            <button type="submit">Save Controls</button>
+          </form>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def controls_result(conn, params) do
+    params = merged_request_params(conn, params)
+    race = Map.get(params, "race", "")
+    race_2 = params |> Map.get("race_2", []) |> List.wrap() |> Enum.reject(&(&1 == ""))
+    contact = Map.get(params, "contact", "")
+    disabled_select = Map.get(params, "disabled_select", "")
+
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Controls Result</title>
+      </head>
+      <body>
+        <main>
+          <div id="form-data">
+            <p>race: #{race}</p>
+            <p>race_2: [#{Enum.join(race_2, ",")}]</p>
+            <p>contact: #{contact}</p>
+            <p>disabled_select: #{disabled_select}</p>
+          </div>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
   def profile_version_a(conn, _params) do
     html(conn, """
     <!doctype html>
