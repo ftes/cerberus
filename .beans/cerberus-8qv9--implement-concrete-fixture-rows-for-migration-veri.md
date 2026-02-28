@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-28T15:08:23Z
-updated_at: 2026-02-28T19:20:18Z
+updated_at: 2026-02-28T19:27:17Z
 parent: cerberus-it5x
 ---
 
@@ -106,3 +106,10 @@ Missing-tests follow-up: migration verification matrix declares rows that are no
 - Added explicit Igniter migration verification coverage for upload by introducing a focused upload-row end-to-end test in test/cerberus/migration_verification_test.exs.
 - Added a task-level migration test in test/mix/tasks/igniter_cerberus_migrate_phoenix_test_test.exs that verifies upload pipelines remain callable after import rewrite from PhoenixTest to Cerberus.
 - Verified with mix test test/mix/tasks/igniter_cerberus_migrate_phoenix_test_test.exs, mix test test/cerberus/migration_verification_test.exs, and mix precommit.
+
+## Progress Update 11
+
+- Fixed CI migration verification failure from run 22527296483 by committing missing fixture sources referenced by runnable rows.
+- Added missing migration fixture feature files: pt_select, pt_choose, pt_unwrap, pt_live_change, pt_live_nav, and pt_live_async_timeout.
+- Added missing fixture LiveView modules: LiveChangeLive, LiveNavLive, and LiveAsyncLive.
+- Verified locally with mix test test/cerberus/migration_verification_test.exs and mix precommit.
