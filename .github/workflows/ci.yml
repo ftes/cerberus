@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   checks:
-    name: Checks (non-browser)
+    name: Checks
     runs-on: ubuntu-latest
     env:
       POSTGRES_HOST: 127.0.0.1
@@ -70,12 +70,6 @@ jobs:
 
       - name: Run precommit
         run: mix precommit
-
-      - name: Run non-browser conformance tests
-        run: mix test --only conformance --exclude browser
-
-      - name: Run websocket suite (chrome + firefox)
-        run: mix test.websocket --browsers chrome,firefox
 
       - name: Run migration verification tests
         run: mix test --only migration_verification
@@ -188,11 +182,11 @@ jobs:
 
       - name: Run local browser conformance suite
         if: matrix.selector == 'regular' && matrix.runtime == 'local'
-        run: mix test --only browser --exclude explicit_browser
+        run: mix test --only conformance --exclude explicit_browser
 
       - name: Run websocket browser conformance suite
         if: matrix.selector == 'regular' && matrix.runtime == 'ws'
-        run: mix test.websocket --browsers ${{ matrix.browser }} --only browser --exclude explicit_browser
+        run: mix test.websocket --browsers ${{ matrix.browser }} --only conformance --exclude explicit_browser
 
       - name: Run explicit browser override suite
         if: matrix.selector == 'explicit'

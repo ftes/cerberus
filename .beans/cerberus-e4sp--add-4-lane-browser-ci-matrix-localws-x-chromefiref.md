@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-28T20:40:01Z
-updated_at: 2026-02-28T20:52:35Z
+updated_at: 2026-02-28T20:58:41Z
 ---
 
 Restructure CI to run browser-tagged tests in four lanes: local chrome, local firefox, websocket chrome, websocket firefox. Minimize duplicate setup via shared non-browser setup and reusable matrix job steps.
@@ -24,3 +24,5 @@ Restructure CI to run browser-tagged tests in four lanes: local chrome, local fi
 - Reviewed existing CI workflow, browser install scripts, and current explicit browser-tagged tests.
 
 - Ran validation: mix precommit; mix test.websocket --browsers chrome,firefox test/core/explicit_browser_test.exs; mix test.websocket --browsers chrome test/core/browser_tag_showcase_test.exs; local chrome lane for browser_tag_showcase passes.
+
+- After first CI run failed, removed leftover websocket/non-browser conformance steps from Checks job and switched matrix regular lanes to run conformance (excluding explicit_browser).
