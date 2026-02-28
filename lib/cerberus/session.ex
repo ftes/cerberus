@@ -9,7 +9,7 @@ defmodule Cerberus.Session do
 
   @type driver_kind :: :auto | :static | :live | :browser | :chrome | :firefox
   @type last_result :: %{op: atom(), observed: map()} | nil
-  @type t :: Static.t() | Live.t() | Browser.t()
+  @type t :: struct()
 
   @spec driver_kind(t()) :: :static | :live | :browser
   def driver_kind(%Static{}), do: :static

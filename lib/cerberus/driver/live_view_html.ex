@@ -1,11 +1,5 @@
 defmodule Cerberus.Driver.LiveViewHtml do
-  @moduledoc """
-  Phoenix/LiveView-specific HTML semantics layered on top of `Cerberus.Driver.Html`.
-
-  This module handles framework behavior derived from `phx-*` attributes:
-  clickable `phx-click` buttons, `phx-change`/`phx-submit` bindings, and
-  `phx-trigger-action` follow-up form submissions.
-  """
+  @moduledoc false
 
   alias Cerberus.Driver.Html
   alias Cerberus.LiveViewBindings

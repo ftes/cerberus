@@ -1,15 +1,5 @@
 defmodule Cerberus.Driver.Html do
-  @moduledoc """
-  HTML-platform semantics used by all non-browser drivers.
-
-  This module intentionally models browser/HTML behavior only and does not
-  include Phoenix/LiveView semantics.
-
-  Reference specs:
-  - WHATWG forms and submission model: https://html.spec.whatwg.org/multipage/forms.html
-  - WHATWG form-associated elements and ownership: https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#association-of-controls-and-forms
-  - WHATWG labels: https://html.spec.whatwg.org/multipage/forms.html#the-label-element
-  """
+  @moduledoc false
 
   alias Cerberus.Query
 

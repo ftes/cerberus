@@ -1,10 +1,11 @@
 ---
 # cerberus-h2h2
 title: Implement select/choose API parity slice
-status: todo
+status: in-progress
 type: feature
+priority: normal
 created_at: 2026-02-28T15:08:28Z
-updated_at: 2026-02-28T15:08:28Z
+updated_at: 2026-02-28T16:13:33Z
 ---
 
 Feature-gap follow-up: select/choose form interaction APIs are currently placeholders and not implemented.

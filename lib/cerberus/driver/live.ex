@@ -1,5 +1,5 @@
 defmodule Cerberus.Driver.Live do
-  @moduledoc "Live driver adapter backed by a real Phoenix endpoint via LiveViewTest."
+  @moduledoc false
 
   @behaviour Cerberus.Driver
 

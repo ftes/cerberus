@@ -195,12 +195,11 @@ Because browser runtime + BiDi transport are shared, runtime launch options are 
 - [Cheat Sheet](docs/cheatsheet.md)
 - [Architecture and Driver Model](docs/architecture.md)
 - [Browser Support Policy](docs/browser-support-policy.md)
-- [Migration Verification Matrix](docs/migration-verification-matrix.md)
 
 ## Browser Runtime Setup
 
 Cerberus browser tests use WebDriver BiDi.
-Chrome and Firefox are both fully supported browser targets.
+Chrome and Firefox are supported browser targets.
 
 Local managed runtime (default) uses configured browser and WebDriver binaries:
 
@@ -236,6 +235,7 @@ mix test --only browser
 ```
 
 `drivers: [:browser]` uses the default browser lane. You can opt specific tests into `:firefox` or `[:chrome, :firefox]` with ExUnit tags.
+CI keeps chrome as the baseline browser lane and includes targeted firefox-tagged conformance coverage.
 
 Project helpers:
 
@@ -264,11 +264,4 @@ mix igniter.cerberus.migrate_phoenix_test --write test/my_app_web/features
 
 It performs safe rewrites, reports manual follow-ups, and defaults to dry-run diff output.
 
-Migration verification runs through ExUnit:
-
-```bash
-mix test test/cerberus/migration_verification_test.exs
-```
-
-The test orchestrates pre-migration fixture execution, rewrite, and post-migration execution in an isolated copied workspace.
-See `docs/migration-verification.md` for row-level parity report semantics and current scope boundaries.
+Migration verification docs are maintainer-focused and kept in the repository under `docs/migration-verification*.md`.

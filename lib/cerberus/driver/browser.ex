@@ -1,25 +1,5 @@
 defmodule Cerberus.Driver.Browser do
-  @moduledoc """
-  Browser driver adapter backed by WebDriver BiDi.
-  Cerberus treats BiDi as the primary browser protocol (not CDP).
-
-  Supervision topology (see ADR-0004):
-
-      Cerberus.Driver.Browser.Supervisor (rest_for_one)
-      |- Cerberus.Driver.Browser.Runtime
-      |- Cerberus.Driver.Browser.BiDiSupervisor (one_for_all)
-      |  |- Cerberus.Driver.Browser.BiDiSocket
-      |  `- Cerberus.Driver.Browser.BiDi
-      `- Cerberus.Driver.Browser.UserContextSupervisor (DynamicSupervisor)
-         `- Cerberus.Driver.Browser.UserContextProcess (per test, temporary)
-            `- Cerberus.Driver.Browser.BrowsingContextSupervisor
-               `- Cerberus.Driver.Browser.BrowsingContextProcess (per browsingContext, temporary)
-
-  Restart behavior:
-  - `rest_for_one` at the top level restarts transport and test-scoped workers when runtime fails.
-  - `one_for_all` in `BiDiSupervisor` restarts socket and connection together.
-  - `UserContextProcess` and `BrowsingContextProcess` are temporary to avoid silent self-healing in tests.
-  """
+  @moduledoc false
 
   @behaviour Cerberus.Driver
 

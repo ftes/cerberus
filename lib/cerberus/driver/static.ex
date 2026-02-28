@@ -1,5 +1,5 @@
 defmodule Cerberus.Driver.Static do
-  @moduledoc "Static driver adapter backed by a real Phoenix endpoint via ConnTest."
+  @moduledoc false
 
   @behaviour Cerberus.Driver
 

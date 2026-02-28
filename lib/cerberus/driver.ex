@@ -1,12 +1,5 @@
 defmodule Cerberus.Driver do
-  @moduledoc """
-  Driver contract for static/live/browser implementations.
-
-  Architectural boundary (ADR-0001):
-  - Drivers execute side effects and gather observations.
-  - Shared semantics (locator normalization, text matching semantics) live in
-    Cerberus core modules, not in individual drivers.
-  """
+  @moduledoc false
 
   alias Cerberus.Locator
   alias Cerberus.Options

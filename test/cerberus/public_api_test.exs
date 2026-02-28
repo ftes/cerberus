@@ -342,6 +342,26 @@ defmodule Cerberus.PublicApiTest do
     assert live_error.message =~ "screenshot is not implemented for :live driver"
   end
 
+  test "select and choose are explicit unsupported for non-browser sessions" do
+    static_select_error =
+      assert_raise AssertionError, fn ->
+        session()
+        |> visit("/search")
+        |> select("Search term")
+      end
+
+    assert static_select_error.message =~ "select is not implemented for :static driver"
+
+    live_choose_error =
+      assert_raise AssertionError, fn ->
+        session()
+        |> visit("/live/counter")
+        |> choose("Counter")
+      end
+
+    assert live_choose_error.message =~ "choose is not implemented for :live driver"
+  end
+
   test "assert_path and refute_path support query matching" do
     assert is_struct(
              session()
@@ -543,5 +563,28 @@ defmodule Cerberus.PublicApiTest do
       |> visit("/articles")
       |> screenshot(path: "")
     end
+  end
+
+  @tag browser: true
+  test "select and choose are explicit unsupported for browser sessions" do
+    browser_select_error =
+      assert_raise AssertionError, fn ->
+        :browser
+        |> session()
+        |> visit("/search")
+        |> select("Search term")
+      end
+
+    assert browser_select_error.message =~ "select is not implemented for :browser driver"
+
+    browser_choose_error =
+      assert_raise AssertionError, fn ->
+        :browser
+        |> session()
+        |> visit("/search")
+        |> choose("Search term")
+      end
+
+    assert browser_choose_error.message =~ "choose is not implemented for :browser driver"
   end
 end

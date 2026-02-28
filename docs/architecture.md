@@ -26,8 +26,8 @@ flowchart LR
 
 ## Semantic Boundaries
 
-- `Cerberus.Driver.Html`: platform behavior (labels, form ownership, control defaults, text extraction).
-- `Cerberus.Driver.LiveViewHtml`: framework behavior (`phx-click`, `phx-change`, `phx-submit`, `phx-trigger-action`).
+- HTML semantics layer: platform behavior (labels, form ownership, control defaults, text extraction).
+- LiveView semantics layer: framework behavior (`phx-click`, `phx-change`, `phx-submit`, `phx-trigger-action`).
 
 > #### Info
 >
