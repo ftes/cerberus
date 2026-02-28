@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-28T07:07:19Z
-updated_at: 2026-02-28T07:30:45Z
+updated_at: 2026-02-28T07:31:54Z
 parent: cerberus-ykr0
 ---
 
@@ -34,3 +34,8 @@ Define CI setup for browser tests (install browsers, build assets, runtime wirin
 
 - [x] Reworked CI to a standard setup-beam pattern: use `version-file: .tool-versions` with strict resolution, disable action-managed hex/rebar install, and install via `mix local.hex --force` + `mix local.rebar --force`.
 - [ ] Push this normalization and verify CI passes.
+
+
+- [x] CI failure root cause identified from run logs: `mix` evaluated `config/test.exs` before browser env setup, causing `System.fetch_env!("CHROME")` failure.
+- [x] Reordered workflow so browser runtime env is prepared before any `mix` command (including `mix local.hex`/`mix deps.get`).
+- [ ] Push ordering fix and verify CI passes.

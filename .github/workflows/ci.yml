@@ -45,12 +45,6 @@ jobs:
           path: tmp/browser-tools
           key: ${{ runner.os }}-browser-tools-${{ hashFiles('bin/check_bidi_ready.sh') }}
 
-      - name: Install deps
-        run: |
-          mix local.hex --force
-          mix local.rebar --force
-          mix deps.get
-
       - name: Prepare browser runtime env
         run: |
           bin/check_bidi_ready.sh --install
@@ -59,6 +53,12 @@ jobs:
           set +a
           echo "CHROME=$CHROME" >> "$GITHUB_ENV"
           echo "CHROMEDRIVER=$CHROMEDRIVER" >> "$GITHUB_ENV"
+
+      - name: Install deps
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+          mix deps.get
 
       - name: Build fixture assets
         run: mix assets.build
@@ -108,12 +108,6 @@ jobs:
           path: tmp/browser-tools
           key: ${{ runner.os }}-browser-tools-${{ hashFiles('bin/check_bidi_ready.sh') }}
 
-      - name: Install deps
-        run: |
-          mix local.hex --force
-          mix local.rebar --force
-          mix deps.get
-
       - name: Prepare browser runtime env
         run: |
           bin/check_bidi_ready.sh --install
@@ -122,6 +116,12 @@ jobs:
           set +a
           echo "CHROME=$CHROME" >> "$GITHUB_ENV"
           echo "CHROMEDRIVER=$CHROMEDRIVER" >> "$GITHUB_ENV"
+
+      - name: Install deps
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+          mix deps.get
 
       - name: Build fixture assets
         run: mix assets.build
