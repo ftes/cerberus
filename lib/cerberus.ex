@@ -40,9 +40,15 @@ defmodule Cerberus do
   @spec session(:browser) :: Session.t()
   def session(:browser), do: session(:browser, [])
 
+  @spec session(:chrome) :: Session.t()
+  def session(:chrome), do: session(:chrome, [])
+
+  @spec session(:firefox) :: Session.t()
+  def session(:firefox), do: session(:firefox, [])
+
   def session(driver) when is_atom(driver) do
     raise ArgumentError,
-          "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser) for browser"
+          "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser|:chrome|:firefox) for browser"
   end
 
   @spec session(:phoenix, keyword()) :: Session.t()
@@ -65,9 +71,23 @@ defmodule Cerberus do
     BrowserSession.new_session(opts)
   end
 
+  @spec session(:chrome, keyword()) :: Session.t()
+  def session(:chrome, opts) when is_list(opts) do
+    opts
+    |> Keyword.put(:browser_name, :chrome)
+    |> BrowserSession.new_session()
+  end
+
+  @spec session(:firefox, keyword()) :: Session.t()
+  def session(:firefox, opts) when is_list(opts) do
+    opts
+    |> Keyword.put(:browser_name, :firefox)
+    |> BrowserSession.new_session()
+  end
+
   def session(driver, opts) when is_atom(driver) and is_list(opts) do
     raise ArgumentError,
-          "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser) for browser"
+          "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser|:chrome|:firefox) for browser"
   end
 
   @doc false
@@ -417,6 +437,8 @@ defmodule Cerberus do
   def driver_module!(:static), do: StaticSession
   def driver_module!(:live), do: LiveSession
   def driver_module!(:browser), do: BrowserSession
+  def driver_module!(:chrome), do: BrowserSession
+  def driver_module!(:firefox), do: BrowserSession
 
   @spec driver_module!(Session.t()) :: module()
   def driver_module!(%StaticSession{}), do: StaticSession

@@ -3,18 +3,21 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   use GenServer
 
+  @default_browser_name :chrome
   @default_runtime_http_timeout_ms 5_000
   @startup_attempts 120
   @startup_sleep_ms 50
 
   @type service :: %{
           url: String.t(),
+          browser_name: :chrome | :firefox,
           managed?: boolean(),
           process: port() | nil
         }
 
   @type runtime_session :: %{
           service: service(),
+          browser_name: :chrome | :firefox,
           session_id: String.t(),
           web_socket_url: String.t()
         }
@@ -35,14 +38,14 @@ defmodule Cerberus.Driver.Browser.Runtime do
     GenServer.call(__MODULE__, :base_url)
   end
 
-  @spec web_socket_url() :: {:ok, String.t()} | {:error, String.t()}
-  def web_socket_url do
-    GenServer.call(__MODULE__, :web_socket_url, 20_000)
+  @spec web_socket_url(keyword()) :: {:ok, String.t()} | {:error, String.t()}
+  def web_socket_url(opts \\ []) when is_list(opts) do
+    GenServer.call(__MODULE__, {:web_socket_url, opts}, 20_000)
   end
 
-  @spec session_id() :: {:ok, String.t()} | {:error, String.t()}
-  def session_id do
-    GenServer.call(__MODULE__, :session_id, 20_000)
+  @spec session_id(keyword()) :: {:ok, String.t()} | {:error, String.t()}
+  def session_id(opts \\ []) when is_list(opts) do
+    GenServer.call(__MODULE__, {:session_id, opts}, 20_000)
   end
 
   @impl true
@@ -57,8 +60,8 @@ defmodule Cerberus.Driver.Browser.Runtime do
     {:reply, base_url, %{state | base_url: base_url}}
   end
 
-  def handle_call(:web_socket_url, _from, state) do
-    case ensure_runtime_session(state) do
+  def handle_call({:web_socket_url, opts}, _from, state) do
+    case ensure_runtime_session(state, opts) do
       {:ok, runtime_session, state} ->
         {:reply, {:ok, runtime_session.web_socket_url}, state}
 
@@ -67,8 +70,8 @@ defmodule Cerberus.Driver.Browser.Runtime do
     end
   end
 
-  def handle_call(:session_id, _from, state) do
-    case ensure_runtime_session(state) do
+  def handle_call({:session_id, opts}, _from, state) do
+    case ensure_runtime_session(state, opts) do
       {:ok, runtime_session, state} ->
         {:reply, {:ok, runtime_session.session_id}, state}
 
@@ -96,12 +99,23 @@ defmodule Cerberus.Driver.Browser.Runtime do
     :ok
   end
 
-  defp ensure_runtime_session(%{runtime_session: runtime_session} = state) when is_map(runtime_session) do
-    {:ok, runtime_session, state}
+  defp ensure_runtime_session(%{runtime_session: runtime_session} = state, opts) when is_map(runtime_session) do
+    case requested_browser_name(opts) do
+      nil ->
+        {:ok, runtime_session, state}
+
+      requested when requested == runtime_session.browser_name ->
+        {:ok, runtime_session, state}
+
+      requested ->
+        {:error,
+         "browser runtime already started for #{runtime_session.browser_name}; requested #{requested}. " <>
+           "Run each browser matrix in a separate test invocation.", state}
+    end
   end
 
-  defp ensure_runtime_session(state) do
-    case start_runtime_session(state.opts) do
+  defp ensure_runtime_session(state, opts) do
+    case start_runtime_session(merge_runtime_opts(state.opts, opts)) do
       {:ok, runtime_session} ->
         {:ok, runtime_session, %{state | runtime_session: runtime_session}}
 
@@ -114,7 +128,13 @@ defmodule Cerberus.Driver.Browser.Runtime do
     with {:ok, service} <- start_service(opts) do
       case start_webdriver_session(service, opts) do
         {:ok, session_id, web_socket_url} ->
-          {:ok, %{service: service, session_id: session_id, web_socket_url: web_socket_url}}
+          {:ok,
+           %{
+             service: service,
+             browser_name: service.browser_name,
+             session_id: session_id,
+             web_socket_url: web_socket_url
+           }}
 
         {:error, reason} ->
           maybe_stop_service(service)
@@ -132,17 +152,18 @@ defmodule Cerberus.Driver.Browser.Runtime do
   defp maybe_stop_runtime_session(_, _), do: :ok
 
   defp start_service(opts) do
+    browser_name = browser_name(opts)
     webdriver_url = remote_webdriver_url(opts)
 
     if is_binary(webdriver_url) do
-      {:ok, %{url: webdriver_url, managed?: false, process: nil}}
+      {:ok, %{url: webdriver_url, browser_name: browser_name, managed?: false, process: nil}}
     else
-      start_managed_service(opts)
+      start_managed_service(opts, browser_name)
     end
   end
 
-  defp start_managed_service(opts) do
-    binary = opts |> chromedriver_binary!() |> Path.expand()
+  defp start_managed_service(opts, browser_name) do
+    binary = opts |> webdriver_binary!(browser_name) |> Path.expand()
     port = Keyword.get(opts, :chromedriver_port) || random_port!()
     args = [to_charlist("--port=#{port}")]
 
@@ -158,7 +179,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
     case wait_for_service(url, @startup_attempts, opts) do
       :ok ->
-        {:ok, %{url: url, managed?: true, process: process}}
+        {:ok, %{url: url, browser_name: browser_name, managed?: true, process: process}}
 
       {:error, reason} ->
         Port.close(process)
@@ -170,7 +191,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
   end
 
   defp start_webdriver_session(service, opts) do
-    payload = webdriver_session_payload(opts, service.managed?)
+    payload = webdriver_session_payload(opts, service.managed?, service.browser_name)
 
     with {:ok, 200, body} <- http_json(:post, service.url <> "/session", payload, opts),
          {:ok, session_id, web_socket_url} <- parse_session_response(body) do
@@ -204,7 +225,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
     {:error, "unexpected webdriver session response: #{inspect(response)}"}
   end
 
-  defp wait_for_service(_url, 0, _opts), do: {:error, "chromedriver did not become ready"}
+  defp wait_for_service(_url, 0, _opts), do: {:error, "webdriver service did not become ready"}
 
   defp wait_for_service(url, attempts_left, opts) do
     case http_json(:get, url <> "/status", nil, opts) do
@@ -304,18 +325,44 @@ defmodule Cerberus.Driver.Browser.Runtime do
   end
 
   @doc false
-  @spec webdriver_session_payload(keyword(), boolean()) :: map()
-  def webdriver_session_payload(opts, managed?) when is_list(opts) and is_boolean(managed?) do
+  @spec browser_name(keyword()) :: :chrome | :firefox
+  def browser_name(opts) when is_list(opts) do
+    browser_opts = browser_opts(opts)
+
+    opts
+    |> Keyword.get(:browser_name, browser_opts[:browser_name])
+    |> normalize_browser_name(@default_browser_name)
+  end
+
+  @doc false
+  @spec webdriver_session_payload(keyword(), boolean(), :chrome | :firefox) :: map()
+  def webdriver_session_payload(opts, managed?, browser_name) when is_list(opts) and is_boolean(managed?) do
+    capabilities =
+      maybe_put_browser_options(
+        %{"browserName" => Atom.to_string(browser_name), "webSocketUrl" => true},
+        browser_options(opts, managed?, browser_name),
+        browser_name
+      )
+
     %{
       "capabilities" => %{
-        "alwaysMatch" => %{
-          "browserName" => "chrome",
-          "webSocketUrl" => true,
-          "goog:chromeOptions" => chrome_options(opts, managed?)
-        }
+        "alwaysMatch" => capabilities
       }
     }
   end
+
+  defp maybe_put_browser_options(capabilities, options, _browser_name) when options == %{}, do: capabilities
+
+  defp maybe_put_browser_options(capabilities, options, :chrome) do
+    Map.put(capabilities, "goog:chromeOptions", options)
+  end
+
+  defp maybe_put_browser_options(capabilities, options, :firefox) do
+    Map.put(capabilities, "moz:firefoxOptions", options)
+  end
+
+  defp browser_options(opts, managed?, :chrome), do: chrome_options(opts, managed?)
+  defp browser_options(opts, managed?, :firefox), do: firefox_options(opts, managed?)
 
   defp chrome_options(opts, managed?) do
     merged = browser_opts(opts)
@@ -346,6 +393,35 @@ defmodule Cerberus.Driver.Browser.Runtime do
     Keyword.get(opts, :chrome_args, Keyword.get(merged, :chrome_args, []))
   end
 
+  defp firefox_options(opts, managed?) do
+    merged = browser_opts(opts)
+    args = firefox_args(opts, merged, managed?)
+
+    options =
+      if is_list(args) and args != [] do
+        %{"args" => args}
+      else
+        %{}
+      end
+
+    if managed? do
+      Map.put(options, "binary", firefox_binary!(opts, merged))
+    else
+      options
+    end
+  end
+
+  defp firefox_args(opts, merged, true) do
+    headless? = headless?(opts, merged)
+    custom_args = Keyword.get(opts, :firefox_args, Keyword.get(merged, :firefox_args, []))
+    defaults = if headless?, do: ["-headless"], else: []
+    defaults ++ custom_args
+  end
+
+  defp firefox_args(opts, merged, false) do
+    Keyword.get(opts, :firefox_args, Keyword.get(merged, :firefox_args, []))
+  end
+
   @doc false
   @spec headless?(keyword(), keyword()) :: boolean()
   def headless?(opts, merged) do
@@ -364,6 +440,20 @@ defmodule Cerberus.Driver.Browser.Runtime do
     end
   end
 
+  defp firefox_binary!(opts, merged) do
+    binary = Keyword.get(opts, :firefox_binary) || Keyword.get(merged, :firefox_binary)
+
+    if is_binary(binary) and File.exists?(binary) do
+      binary
+    else
+      raise ArgumentError,
+            "firefox binary not configured; set :cerberus, :browser firefox_binary (or pass :firefox_binary)"
+    end
+  end
+
+  defp webdriver_binary!(opts, :chrome), do: chromedriver_binary!(opts)
+  defp webdriver_binary!(opts, :firefox), do: geckodriver_binary!(opts)
+
   defp chromedriver_binary!(opts) do
     binary =
       Keyword.get(opts, :chromedriver_binary) ||
@@ -374,6 +464,19 @@ defmodule Cerberus.Driver.Browser.Runtime do
     else
       raise ArgumentError,
             "chromedriver binary not configured; set :cerberus, :browser chromedriver_binary (or pass :chromedriver_binary)"
+    end
+  end
+
+  defp geckodriver_binary!(opts) do
+    binary =
+      Keyword.get(opts, :geckodriver_binary) ||
+        browser_opts(opts)[:geckodriver_binary]
+
+    if is_binary(binary) and File.exists?(binary) do
+      binary
+    else
+      raise ArgumentError,
+            "geckodriver binary not configured; set :cerberus, :browser geckodriver_binary (or pass :geckodriver_binary)"
     end
   end
 
@@ -388,6 +491,56 @@ defmodule Cerberus.Driver.Browser.Runtime do
     _ = :inets.start()
     _ = :ssl.start()
     :ok
+  end
+
+  defp requested_browser_name(opts) when is_list(opts) do
+    with :error <- Keyword.fetch(opts, :browser_name),
+         browser_opts when is_list(browser_opts) <- Keyword.get(opts, :browser),
+         true <- Keyword.keyword?(browser_opts),
+         true <- Keyword.has_key?(browser_opts, :browser_name) do
+      browser_opts
+      |> Keyword.get(:browser_name)
+      |> normalize_browser_name(nil)
+    else
+      {:ok, value} -> normalize_browser_name(value, nil)
+      _ -> nil
+    end
+  end
+
+  defp merge_runtime_opts(base, overrides) when is_list(base) and is_list(overrides) do
+    merged =
+      base
+      |> Keyword.delete(:browser)
+      |> Keyword.merge(Keyword.delete(overrides, :browser))
+
+    browser_merged =
+      base
+      |> Keyword.get(:browser, [])
+      |> merge_browser_opts(Keyword.get(overrides, :browser, []))
+
+    if browser_merged == [] do
+      merged
+    else
+      Keyword.put(merged, :browser, browser_merged)
+    end
+  end
+
+  defp merge_browser_opts(base, overrides) when is_list(base) and is_list(overrides) do
+    if Keyword.keyword?(base) and Keyword.keyword?(overrides) do
+      Keyword.merge(base, overrides)
+    else
+      base
+    end
+  end
+
+  defp merge_browser_opts(base, _overrides), do: base
+
+  defp normalize_browser_name(value, _default) when value in [:chrome, "chrome"], do: :chrome
+  defp normalize_browser_name(value, _default) when value in [:firefox, "firefox"], do: :firefox
+  defp normalize_browser_name(nil, default), do: default
+
+  defp normalize_browser_name(value, _default) do
+    raise ArgumentError, "browser_name must be :chrome or :firefox, got: #{inspect(value)}"
   end
 
   defp normalize_non_empty_string(value, default) when is_binary(value) do

@@ -20,6 +20,17 @@ defmodule Cerberus.HarnessTest do
     assert Enum.all?(results, &(&1.operation == :assert_has))
   end
 
+  test "drivers expands :browser into configured browser matrix" do
+    assert Harness.drivers(%{drivers: [:auto, :browser], browser_matrix: [:chrome, :firefox]}) ==
+             [:auto, :chrome, :firefox]
+  end
+
+  test "drivers rejects invalid browser matrix entries" do
+    assert_raise ArgumentError, ~r/browser matrix must contain only :browser, :chrome, or :firefox/, fn ->
+      Harness.drivers(%{drivers: [:browser], browser_matrix: [:webkit]})
+    end
+  end
+
   test "run captures failures with common result shape" do
     context = %{drivers: [:static, :live]}
 

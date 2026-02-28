@@ -5,7 +5,7 @@ status: in-progress
 type: feature
 priority: normal
 created_at: 2026-02-28T07:06:28Z
-updated_at: 2026-02-28T08:29:52Z
+updated_at: 2026-02-28T08:36:41Z
 ---
 
 Plan and implement the next browser-platform capabilities for Cerberus.
@@ -17,7 +17,7 @@ Support configurable browser runtime behavior (global and per-test), broaden bro
 - [x] Add global browser configuration for display size, user agent, and JavaScript to run on every new session and/or tab.
 - [x] Prepare a concrete gap list of helpful PhoenixTestPlaywright and vanilla Playwright features currently missing in Cerberus.
 - [x] Define and implement remote browser mode: connect to an already-running remote browser instead of starting local Chrome; clarify whether local chromedriver is needed in remote mode.
-- [ ] Add Firefox support and run harness conformance tests against all available supported browsers.
+- [x] Add Firefox support and run harness conformance tests against all available supported browsers.
 - [ ] Evaluate which additional browsers should be supported via BiDi and document support policy.
 - [ ] Design CI setup for browser runs (browser installation, asset build requirements, orchestration); add mix tasks first if needed.
 - [x] Support launching an individual test or module with browser-specific overrides (for example screen size), including isolation strategy for per-test browser instances.

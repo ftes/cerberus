@@ -24,6 +24,7 @@ defmodule Cerberus.Harness do
   alias Phoenix.Ecto.SQL.Sandbox, as: PhoenixSandbox
 
   @default_drivers [:auto, :browser]
+  @default_browser_matrix [:browser]
 
   @type driver_kind :: Session.driver_kind()
 
@@ -44,7 +45,9 @@ defmodule Cerberus.Harness do
   def drivers(context \\ %{})
 
   def drivers(%{} = context) do
-    Map.get(context, :drivers, @default_drivers)
+    context
+    |> Map.get(:drivers, @default_drivers)
+    |> expand_browser_matrix(context)
   end
 
   @spec run(map(), (Session.t() -> term()), keyword()) :: [result()]
@@ -162,6 +165,34 @@ defmodule Cerberus.Harness do
     Enum.map(drivers, fn driver ->
       Cerberus.driver_module!(driver)
       driver
+    end)
+  end
+
+  defp expand_browser_matrix(drivers, context) when is_list(drivers) do
+    matrix = browser_matrix(context)
+
+    drivers
+    |> Enum.flat_map(fn
+      :browser -> matrix
+      driver -> [driver]
+    end)
+    |> Enum.uniq()
+  end
+
+  defp browser_matrix(context) do
+    context
+    |> Map.get(:browser_matrix, Application.get_env(:cerberus, :browser_matrix, @default_browser_matrix))
+    |> normalize_browser_matrix!()
+  end
+
+  defp normalize_browser_matrix!(matrix) when is_list(matrix) do
+    Enum.map(matrix, fn
+      driver when driver in [:browser, :chrome, :firefox] ->
+        driver
+
+      driver ->
+        raise ArgumentError,
+              "Harness.run/run! browser matrix must contain only :browser, :chrome, or :firefox, got: #{inspect(driver)}"
     end)
   end
 

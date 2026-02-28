@@ -15,6 +15,7 @@ session()
 > #### Info
 >
 > `session()` (or explicit `session(:phoenix)`) gives a PhoenixTest-style flow: static and live routes are handled automatically behind one API.
+> For browser mode, `session(:browser)` defaults to Chrome; use `session(:chrome)` or `session(:firefox)` for explicit targets.
 
 ## Step 1: First Useful Flow
 

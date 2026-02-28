@@ -41,9 +41,19 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
     end
   end
 
-  describe "webdriver_session_payload/2" do
+  describe "browser_name/1" do
+    test "defaults to chrome and accepts browser config/session overrides" do
+      assert Runtime.browser_name([]) == :chrome
+
+      Application.put_env(:cerberus, :browser, browser_name: :firefox)
+      assert Runtime.browser_name([]) == :firefox
+      assert Runtime.browser_name(browser_name: :chrome) == :chrome
+    end
+  end
+
+  describe "webdriver_session_payload/3" do
     test "remote payload does not require local browser binary" do
-      payload = Runtime.webdriver_session_payload([chrome_args: ["--remote-flag"]], false)
+      payload = Runtime.webdriver_session_payload([chrome_args: ["--remote-flag"]], false, :chrome)
       always_match = payload["capabilities"]["alwaysMatch"]
       chrome_opts = always_match["goog:chromeOptions"]
 
@@ -61,11 +71,21 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
         File.rm(chrome_path)
       end)
 
-      payload = Runtime.webdriver_session_payload([chrome_binary: chrome_path], true)
+      payload = Runtime.webdriver_session_payload([chrome_binary: chrome_path], true, :chrome)
       chrome_opts = payload["capabilities"]["alwaysMatch"]["goog:chromeOptions"]
 
       assert chrome_opts["binary"] == chrome_path
       assert is_list(chrome_opts["args"])
+    end
+
+    test "firefox payload uses moz:firefoxOptions and browserName firefox" do
+      payload = Runtime.webdriver_session_payload([firefox_args: ["-private"]], false, :firefox)
+      always_match = payload["capabilities"]["alwaysMatch"]
+
+      assert always_match["browserName"] == "firefox"
+      assert always_match["webSocketUrl"] == true
+      assert always_match["moz:firefoxOptions"]["args"] == ["-private"]
+      refute Map.has_key?(always_match, "goog:chromeOptions")
     end
   end
 end

@@ -36,7 +36,7 @@ Current Tier 1 browser:
 
 Current Tier 2 targets:
 
-- Firefox (tracked by `cerberus-8935`).
+- Firefox (`session(:firefox)`), currently experimental.
 
 ### Tier 3: Unsupported
 

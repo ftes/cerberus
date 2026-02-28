@@ -34,7 +34,14 @@ defmodule Cerberus.Driver.Browser.BiDi do
         :error -> default_command_timeout_ms(opts)
       end
 
-    GenServer.call(pid, {:command, method, params, timeout}, timeout + 1_000)
+    message =
+      if pid == __MODULE__ do
+        {:command, method, params, timeout, opts}
+      else
+        {:command, method, params, timeout}
+      end
+
+    GenServer.call(pid, message, timeout + 1_000)
   end
 
   @spec close(GenServer.server()) :: :ok
@@ -68,8 +75,8 @@ defmodule Cerberus.Driver.Browser.BiDi do
     {:reply, :ok, state}
   end
 
-  def handle_call({:command, method, params, timeout}, from, state) do
-    with {:ok, web_socket_url} <- Runtime.web_socket_url(),
+  def handle_call({:command, method, params, timeout, opts}, from, state) do
+    with {:ok, web_socket_url} <- Runtime.web_socket_url(opts),
          {:ok, socket} <- BiDiSocket.ensure_connected(web_socket_url),
          {:ok, next_state} <- send_command(state, socket, method, params, timeout, from) do
       {:noreply, next_state}

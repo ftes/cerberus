@@ -7,7 +7,7 @@ defmodule Cerberus.Session do
 
   @default_assert_timeout_ms 0
 
-  @type driver_kind :: :auto | :static | :live | :browser
+  @type driver_kind :: :auto | :static | :live | :browser | :chrome | :firefox
   @type last_result :: %{op: atom(), observed: map()} | nil
   @type t :: Static.t() | Live.t() | Browser.t()
 
