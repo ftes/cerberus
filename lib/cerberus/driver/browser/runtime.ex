@@ -194,7 +194,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
     payload = webdriver_session_payload(opts, service.managed?, service.browser_name)
 
     with {:ok, 200, body} <- http_json(:post, service.url <> "/session", payload, opts),
-         {:ok, session_id, web_socket_url} <- parse_session_response(body) do
+         {:ok, session_id, web_socket_url} <- parse_session_response(body, service.url) do
       {:ok, session_id, web_socket_url}
     else
       {:ok, status, body} ->
@@ -205,14 +205,14 @@ defmodule Cerberus.Driver.Browser.Runtime do
     end
   end
 
-  defp parse_session_response(%{"value" => %{"error" => error} = value}) do
+  defp parse_session_response(%{"value" => %{"error" => error} = value}, _service_url) do
     message = value["message"] || error
     {:error, message}
   end
 
-  defp parse_session_response(%{"value" => %{"sessionId" => session_id, "capabilities" => caps}})
+  defp parse_session_response(%{"value" => %{"sessionId" => session_id, "capabilities" => caps}}, service_url)
        when is_binary(session_id) and is_map(caps) do
-    web_socket_url = caps["webSocketUrl"]
+    web_socket_url = normalize_web_socket_url(caps["webSocketUrl"], service_url)
 
     if is_binary(web_socket_url) and byte_size(web_socket_url) > 0 do
       {:ok, session_id, web_socket_url}
@@ -221,8 +221,47 @@ defmodule Cerberus.Driver.Browser.Runtime do
     end
   end
 
-  defp parse_session_response(response) do
+  defp parse_session_response(response, _service_url) do
     {:error, "unexpected webdriver session response: #{inspect(response)}"}
+  end
+
+  @doc false
+  @spec normalize_web_socket_url(String.t() | nil, String.t() | nil) :: String.t() | nil
+  def normalize_web_socket_url(web_socket_url, service_url) when is_binary(web_socket_url) and is_binary(service_url) do
+    with %URI{scheme: scheme, host: ws_host, port: ws_port} = ws_uri <- URI.parse(web_socket_url),
+         true <- scheme in ["ws", "wss"],
+         true <- is_binary(ws_host),
+         true <- is_integer(ws_port),
+         %URI{host: service_host, port: service_port} <- URI.parse(service_url),
+         true <- is_binary(service_host),
+         true <- is_integer(service_port),
+         true <- rewrite_web_socket_url?(ws_host, service_host, ws_port, service_port) do
+      ws_uri
+      |> Map.put(:host, service_host)
+      |> Map.put(:port, service_port)
+      |> URI.to_string()
+    else
+      _ -> web_socket_url
+    end
+  end
+
+  def normalize_web_socket_url(web_socket_url, _service_url), do: web_socket_url
+
+  defp rewrite_web_socket_url?(ws_host, service_host, ws_port, service_port) do
+    (ws_host != service_host or ws_port != service_port) and
+      (local_or_private_host?(ws_host) or ws_host == "localhost")
+  end
+
+  defp local_or_private_host?(host) when host in ["localhost", "127.0.0.1"], do: true
+
+  defp local_or_private_host?(host) when is_binary(host) do
+    case :inet.parse_address(String.to_charlist(host)) do
+      {:ok, {10, _, _, _}} -> true
+      {:ok, {127, _, _, _}} -> true
+      {:ok, {172, second, _, _}} when second in 16..31 -> true
+      {:ok, {192, 168, _, _}} -> true
+      _ -> false
+    end
   end
 
   defp wait_for_service(_url, 0, _opts), do: {:error, "webdriver service did not become ready"}

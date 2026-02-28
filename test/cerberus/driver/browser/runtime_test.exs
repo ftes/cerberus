@@ -85,4 +85,21 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
       refute Map.has_key?(always_match, "goog:chromeOptions")
     end
   end
+
+  describe "normalize_web_socket_url/2" do
+    test "rewrites private selenium websocket endpoint to service host/port" do
+      web_socket_url = "ws://172.17.0.2:4444/session/abc/se/bidi"
+      service_url = "http://127.0.0.1:61532"
+
+      assert Runtime.normalize_web_socket_url(web_socket_url, service_url) ==
+               "ws://127.0.0.1:61532/session/abc/se/bidi"
+    end
+
+    test "keeps websocket url when host/port are already routable" do
+      web_socket_url = "ws://127.0.0.1:4444/session/abc/se/bidi"
+      service_url = "http://127.0.0.1:4444"
+
+      assert Runtime.normalize_web_socket_url(web_socket_url, service_url) == web_socket_url
+    end
+  end
 end
