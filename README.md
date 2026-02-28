@@ -58,7 +58,8 @@ session(:live)
 |> assert_has(text("Title loaded async"), timeout: 350)
 ```
 
-Live assertions poll at a fixed cadence (`100ms` in this slice), but each wait is capped by the remaining timeout budget, so short timeouts are still honored.
+Live assertions retry immediately on watched LiveView updates and otherwise fall back to a fixed poll cadence (`100ms` in this slice). Each wait is capped by the remaining timeout budget, so short timeouts are still honored.
+Current update-watcher wiring observes LiveViewTest `ClientProxy` diff/reply messages, so major Phoenix LiveView test-client internals changes may require adaptation.
 
 Path and scoped flow example:
 

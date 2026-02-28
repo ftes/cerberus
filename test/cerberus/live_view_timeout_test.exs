@@ -54,6 +54,33 @@ defmodule Cerberus.LiveViewTimeoutTest do
     assert Process.get(attempt_key) == 3
   end
 
+  test "retries immediately when watcher reports live view diff" do
+    session = dummy_live_session()
+    attempt_key = make_ref()
+    started_at = System.monotonic_time(:millisecond)
+    view_pid = session.view.pid
+
+    Process.send_after(self(), {:watcher, view_pid, :live_view_diff}, 10)
+
+    action = fn live_session ->
+      attempt = Process.get(attempt_key, 0) + 1
+      Process.put(attempt_key, attempt)
+
+      if attempt < 2 do
+        raise AssertionError, message: "example failure"
+      else
+        DummyLiveView.render_html(live_session.view.pid)
+      end
+    end
+
+    rendered = LiveViewTimeout.with_timeout(session, 1_000, action)
+    elapsed = System.monotonic_time(:millisecond) - started_at
+
+    assert rendered == "rendered HTML"
+    assert Process.get(attempt_key) == 2
+    assert elapsed < LiveViewTimeout.interval_wait_time()
+  end
+
   test "short timeout does not wait the full interval before retrying" do
     session = dummy_live_session()
     timeout = 20

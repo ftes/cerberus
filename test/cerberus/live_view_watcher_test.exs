@@ -2,6 +2,7 @@ defmodule Cerberus.LiveViewWatcherTest do
   use ExUnit.Case, async: true
 
   alias Cerberus.LiveViewWatcher
+  alias Phoenix.Socket.Message
 
   defmodule DummyLiveView do
     use GenServer, restart: :temporary
@@ -21,6 +22,27 @@ defmodule Cerberus.LiveViewWatcherTest do
     def handle_call(:redirect, _from, state) do
       reason = {:shutdown, {:redirect, %{to: "/articles"}}}
       {:stop, reason, state}
+    end
+  end
+
+  defmodule DummyProxy do
+    @moduledoc false
+    use GenServer, restart: :temporary
+
+    def start_link(opts \\ []) do
+      GenServer.start_link(__MODULE__, opts)
+    end
+
+    def push(pid, message) do
+      send(pid, message)
+    end
+
+    def init(opts) do
+      {:ok, opts}
+    end
+
+    def handle_info(_message, state) do
+      {:noreply, state}
     end
   end
 
@@ -90,5 +112,48 @@ defmodule Cerberus.LiveViewWatcherTest do
 
     assert view_pid_1 in watched_views
     assert view_pid_2 in watched_views
+  end
+
+  test "sends :live_view_diff when traced proxy receives diff message for watched topic" do
+    {:ok, view_pid} = start_supervised(DummyLiveView)
+    {:ok, proxy_pid} = start_supervised(DummyProxy)
+    topic = "lv:main"
+    view = %{pid: view_pid, topic: topic, proxy: {make_ref(), topic, proxy_pid}}
+    {:ok, watcher} = start_supervised({LiveViewWatcher, %{caller: self(), view: view}})
+
+    :ok = LiveViewWatcher.watch_view(watcher, view)
+
+    DummyProxy.push(proxy_pid, %Message{event: "diff", topic: topic, payload: %{}})
+
+    assert_receive {:watcher, ^view_pid, :live_view_diff}
+  end
+
+  test "sends :live_view_diff when traced proxy receives reply payload containing diff" do
+    {:ok, view_pid} = start_supervised(DummyLiveView)
+    {:ok, proxy_pid} = start_supervised(DummyProxy)
+    topic = "lv:main"
+    view = %{pid: view_pid, topic: topic, proxy: {make_ref(), topic, proxy_pid}}
+    {:ok, watcher} = start_supervised({LiveViewWatcher, %{caller: self(), view: view}})
+
+    :ok = LiveViewWatcher.watch_view(watcher, view)
+
+    DummyProxy.push(proxy_pid, %Phoenix.Socket.Reply{topic: topic, payload: %{diff: %{}}, ref: "1", status: :ok})
+
+    assert_receive {:watcher, ^view_pid, :live_view_diff}
+  end
+
+  test "ignores traced diff messages for non-watched topics" do
+    {:ok, view_pid} = start_supervised(DummyLiveView)
+    {:ok, proxy_pid} = start_supervised(DummyProxy)
+    watched_topic = "lv:watched"
+    other_topic = "lv:other"
+    view = %{pid: view_pid, topic: watched_topic, proxy: {make_ref(), watched_topic, proxy_pid}}
+    {:ok, watcher} = start_supervised({LiveViewWatcher, %{caller: self(), view: view}})
+
+    :ok = LiveViewWatcher.watch_view(watcher, view)
+
+    DummyProxy.push(proxy_pid, %Message{event: "diff", topic: other_topic, payload: %{}})
+
+    refute_receive {:watcher, ^view_pid, :live_view_diff}
   end
 end

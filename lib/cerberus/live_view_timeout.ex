@@ -30,10 +30,11 @@ defmodule Cerberus.LiveViewTimeout do
 
   def with_timeout(%Live{} = session, timeout, action, fetch_redirect_info) when is_function(action) do
     {:ok, watcher} = LiveViewWatcher.start_link(%{caller: self(), view: session.view})
+    deadline = timeout_deadline(timeout)
 
     try do
       :ok = LiveViewWatcher.watch_view(watcher, session.view)
-      handle_watched_messages_with_timeout(session, timeout, action, fetch_redirect_info)
+      handle_watched_messages_until(session, deadline, action, fetch_redirect_info)
     after
       Process.exit(watcher, :normal)
     end
@@ -43,29 +44,44 @@ defmodule Cerberus.LiveViewTimeout do
     action.(session)
   end
 
-  defp handle_watched_messages_with_timeout(session, timeout, action, fetch_redirect_info) when timeout <= 0 do
+  defp handle_watched_messages_until(session, deadline, action, fetch_redirect_info) do
+    remaining = remaining_timeout(deadline)
+
+    if remaining <= 0 do
+      handle_watched_messages_timeout_exhausted(session, action, fetch_redirect_info)
+    else
+      with_retry(session, action, fn retried_session ->
+        wait_for_next_liveview_event(retried_session, deadline, action, fetch_redirect_info)
+      end)
+    end
+  end
+
+  defp handle_watched_messages_timeout_exhausted(session, action, fetch_redirect_info) do
     action.(session)
   catch
     :exit, _error ->
       check_for_redirect(session, action, fetch_redirect_info)
   end
 
-  defp handle_watched_messages_with_timeout(session, timeout, action, fetch_redirect_info) do
-    wait_time = min(timeout, interval_wait_time())
-    new_timeout = max(timeout - wait_time, 0)
+  defp wait_for_next_liveview_event(session, deadline, action, fetch_redirect_info) do
+    remaining = remaining_timeout(deadline)
+    wait_time = max(min(remaining, interval_wait_time()), 0)
     view_pid = session.view.pid
 
     receive do
       {:watcher, ^view_pid, {:live_view_redirected, redirect_tuple}} ->
         session
         |> apply_redirect(redirect_tuple)
-        |> with_timeout(new_timeout, action, fetch_redirect_info)
+        |> handle_watched_messages_until(deadline, action, fetch_redirect_info)
+
+      {:watcher, ^view_pid, :live_view_diff} ->
+        handle_watched_messages_until(session, deadline, action, fetch_redirect_info)
 
       {:watcher, ^view_pid, :live_view_died} ->
         check_for_redirect(session, action, fetch_redirect_info)
     after
       wait_time ->
-        with_retry(session, action, &handle_watched_messages_with_timeout(&1, new_timeout, action, fetch_redirect_info))
+        handle_watched_messages_until(session, deadline, action, fetch_redirect_info)
     end
   end
 
@@ -85,6 +101,14 @@ defmodule Cerberus.LiveViewTimeout do
   end
 
   defp ping_view(_session), do: :ok
+
+  defp timeout_deadline(timeout_ms) do
+    System.monotonic_time(:millisecond) + timeout_ms
+  end
+
+  defp remaining_timeout(deadline) do
+    deadline - System.monotonic_time(:millisecond)
+  end
 
   defp apply_redirect(session, {kind, %{to: path}}) when kind in [:redirect, :live_redirect] and is_binary(path) do
     Live.follow_redirect(session, path)
