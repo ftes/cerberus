@@ -70,13 +70,15 @@ defmodule Cerberus.MixProject do
         "docs/getting-started.md",
         "docs/cheatsheet.md",
         "docs/architecture.md",
-        "docs/browser-support-policy.md"
+        "docs/browser-support-policy.md",
+        "docs/migration-verification-matrix.md"
       ],
       groups_for_extras: [
         Guides: [
           "docs/getting-started.md",
           "docs/architecture.md",
-          "docs/browser-support-policy.md"
+          "docs/browser-support-policy.md",
+          "docs/migration-verification-matrix.md"
         ],
         Reference: ["docs/cheatsheet.md"]
       ],

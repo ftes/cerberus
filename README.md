@@ -192,6 +192,7 @@ Per-command `timeout:` still takes precedence when provided.
 - [Cheat Sheet](docs/cheatsheet.md)
 - [Architecture and Driver Model](docs/architecture.md)
 - [Browser Support Policy](docs/browser-support-policy.md)
+- [Migration Verification Matrix](docs/migration-verification-matrix.md)
 
 ## Browser Runtime Setup
 
