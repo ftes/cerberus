@@ -5,6 +5,7 @@ defmodule Cerberus.TimeoutDefaultsTest do
 
   alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Browser.BiDi
+  alias Cerberus.Driver.Browser.Extensions
   alias Cerberus.Driver.Browser.Runtime
   alias ExUnit.AssertionError
 
@@ -105,5 +106,17 @@ defmodule Cerberus.TimeoutDefaultsTest do
 
     assert Runtime.runtime_http_timeout_ms(runtime_http_timeout_ms: 3_300, browser: [runtime_http_timeout_ms: 4_400]) ==
              3_300
+  end
+
+  test "dialog timeout falls back to global browser config and supports overrides" do
+    Application.put_env(:cerberus, :browser, dialog_timeout_ms: 2_200)
+
+    assert Extensions.dialog_timeout_ms([]) == 2_200
+    assert Extensions.dialog_timeout_ms(browser: [dialog_timeout_ms: 2_400]) == 2_400
+    assert Extensions.dialog_timeout_ms(timeout: 1_100, browser: [dialog_timeout_ms: 2_400]) == 1_100
+
+    assert_raise ArgumentError, ~r/with_dialog\/3 :timeout must be a positive integer/, fn ->
+      Extensions.dialog_timeout_ms(timeout: 0)
+    end
   end
 end

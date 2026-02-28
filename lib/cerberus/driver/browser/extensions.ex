@@ -266,11 +266,28 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  defp dialog_timeout_ms(opts) do
-    case Keyword.get(opts, :timeout, @default_dialog_timeout_ms) do
-      timeout when is_integer(timeout) and timeout > 0 -> timeout
-      timeout -> raise ArgumentError, "with_dialog/3 :timeout must be a positive integer, got: #{inspect(timeout)}"
+  @doc false
+  @spec dialog_timeout_ms(keyword()) :: pos_integer()
+  def dialog_timeout_ms(opts) when is_list(opts) do
+    case Keyword.fetch(opts, :timeout) do
+      {:ok, timeout} when is_integer(timeout) and timeout > 0 ->
+        timeout
+
+      {:ok, timeout} ->
+        raise ArgumentError, "with_dialog/3 :timeout must be a positive integer, got: #{inspect(timeout)}"
+
+      :error ->
+        opts
+        |> merged_browser_opts()
+        |> Keyword.get(:dialog_timeout_ms)
+        |> normalize_positive_integer(@default_dialog_timeout_ms)
     end
+  end
+
+  defp merged_browser_opts(opts) do
+    :cerberus
+    |> Application.get_env(:browser, [])
+    |> Keyword.merge(Keyword.get(opts, :browser, []))
   end
 
   defp subscribe_dialog_events!(session) do
@@ -345,6 +362,9 @@ defmodule Cerberus.Driver.Browser.Extensions do
   defp update_last_result(session, op, observed) do
     %{session | last_result: %{op: op, observed: observed}}
   end
+
+  defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
+  defp normalize_positive_integer(_value, default), do: default
 
   defp type_expression(selector, text, clear?) do
     encoded_selector = JSON.encode!(selector)
