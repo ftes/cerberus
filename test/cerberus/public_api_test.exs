@@ -10,16 +10,28 @@ defmodule Cerberus.PublicApiTest do
   alias Cerberus.InvalidLocatorError
   alias ExUnit.AssertionError
 
-  test "session constructor returns per-driver structs for non-browser drivers" do
-    assert %StaticSession{} = session(:static)
-    assert %LiveSession{} = session(:live)
-    assert %StaticSession{} = session(:auto)
+  test "session constructor defaults to phoenix non-browser sessions" do
+    assert %StaticSession{} = session()
+    assert %StaticSession{} = session(:phoenix)
+  end
+
+  test "session constructor rejects explicit auto/static/live driver selection" do
+    assert_raise ArgumentError, ~r/unsupported public driver :auto/, fn ->
+      session(:auto)
+    end
+
+    assert_raise ArgumentError, ~r/unsupported public driver :static/, fn ->
+      session(:static)
+    end
+
+    assert_raise ArgumentError, ~r/unsupported public driver :live/, fn ->
+      session(:live)
+    end
   end
 
   test "open_user/open_tab/switch_tab API works for non-browser sessions" do
     primary =
-      :static
-      |> session()
+      session()
       |> visit("/session/user/alice")
       |> assert_has(text("Session user: alice"), exact: true)
 
@@ -55,10 +67,7 @@ defmodule Cerberus.PublicApiTest do
       |> session()
       |> visit("/articles")
 
-    static_tab =
-      :static
-      |> session()
-      |> visit("/articles")
+    static_tab = visit(session(), "/articles")
 
     assert_raise ArgumentError, ~r/cannot switch browser tab to a non-browser session/, fn ->
       switch_tab(browser_tab, static_tab)
@@ -67,8 +76,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "assert_has with unsupported locator raises InvalidLocatorError" do
     assert_raise InvalidLocatorError, fn ->
-      :static
-      |> session()
+      session()
       |> visit("/articles")
       |> assert_has(foo: "bar")
     end
@@ -76,8 +84,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "assert_has accepts text sigil locator" do
     assert is_struct(
-             :static
-             |> session()
+             session()
              |> visit("/articles")
              |> assert_has(~l"Articles")
            )
@@ -85,8 +92,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "sigil modifiers support role and css locator flows" do
     session =
-      :static
-      |> session()
+      session()
       |> visit("/articles")
       |> click(~l"link:Counter"r)
       |> assert_has(~l"button:Increment"re)
@@ -100,15 +106,13 @@ defmodule Cerberus.PublicApiTest do
 
   test "label locators are explicit to fill_in; click rejects while assertions treat as text" do
     assert_raise InvalidLocatorError, ~r/label locators target form-field lookup/, fn ->
-      :static
-      |> session()
+      session()
       |> visit("/search")
       |> click(label("Search term"))
     end
 
     assert is_struct(
-             :static
-             |> session()
+             session()
              |> visit("/search")
              |> assert_has(label("Search term"))
            )
@@ -116,8 +120,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "helper locators work with click/assert/fill_in flows" do
     session =
-      :static
-      |> session()
+      session()
       |> visit("/articles")
       |> click(link("Counter"))
       |> assert_has(role(:button, name: "Increment"))
@@ -127,8 +130,7 @@ defmodule Cerberus.PublicApiTest do
     assert session.current_path == "/live/counter"
 
     assert is_struct(
-             :static
-             |> session()
+             session()
              |> visit("/search")
              |> fill_in(label("Search term"), "phoenix")
            )
@@ -136,23 +138,21 @@ defmodule Cerberus.PublicApiTest do
 
   test "testid helper is explicit about unsupported operations in this slice" do
     assert_raise InvalidLocatorError, ~r/testid locators are not yet supported/, fn ->
-      :static
-      |> session()
+      session()
       |> visit("/articles")
       |> assert_has(testid("articles-title"))
     end
   end
 
   test "unsupported driver is rejected" do
-    assert_raise ArgumentError, ~r/unsupported driver/, fn ->
+    assert_raise ArgumentError, ~r/unsupported public driver/, fn ->
       session(:unknown)
     end
   end
 
   test "fill_in accepts positional value argument as a label shorthand" do
     assert is_struct(
-             :static
-             |> session()
+             session()
              |> visit("/search")
              |> fill_in("Search term", "phoenix")
            )
@@ -160,8 +160,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "fill_in rejects explicit text locators to keep label semantics explicit" do
     assert_raise InvalidLocatorError, ~r/text locators are not supported for fill_in\/4/, fn ->
-      :static
-      |> session()
+      session()
       |> visit("/search")
       |> fill_in(text("Search term"), "phoenix")
     end
@@ -169,8 +168,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "check and uncheck support label shorthand on checkbox groups" do
     checked =
-      :static
-      |> session()
+      session()
       |> visit("/checkbox-array")
       |> check("Two")
       |> submit(text("Save Items"))
@@ -178,8 +176,7 @@ defmodule Cerberus.PublicApiTest do
     assert_has(checked, text("Selected Items: one,two"), exact: true)
 
     unchecked =
-      :static
-      |> session()
+      session()
       |> visit("/checkbox-array")
       |> uncheck("One")
       |> submit(text("Save Items"))
@@ -189,8 +186,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "check rejects explicit text locators to keep label semantics explicit" do
     assert_raise InvalidLocatorError, ~r/text locators are not supported for check\/3/, fn ->
-      :static
-      |> session()
+      session()
       |> visit("/checkbox-array")
       |> check(text("Two"))
     end
@@ -200,8 +196,7 @@ defmodule Cerberus.PublicApiTest do
     jpg = Path.expand("../support/files/elixir.jpg", __DIR__)
 
     assert is_struct(
-             :live
-             |> session()
+             session()
              |> visit("/live/uploads")
              |> within("#upload-change-form", fn scoped ->
                upload(scoped, "Avatar", jpg)
@@ -209,8 +204,7 @@ defmodule Cerberus.PublicApiTest do
            )
 
     assert_raise InvalidLocatorError, ~r/text locators are not supported for upload\/4/, fn ->
-      :live
-      |> session()
+      session()
       |> visit("/live/uploads")
       |> within("#upload-change-form", fn scoped ->
         upload(scoped, text("Avatar"), jpg)
@@ -220,8 +214,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "invalid keyword options are rejected via NimbleOptions" do
     assert_raise ArgumentError, ~r/invalid options/, fn ->
-      :static
-      |> session()
+      session()
       |> visit("/articles")
       |> click([text: "Articles"], kind: :nope)
     end
@@ -229,18 +222,14 @@ defmodule Cerberus.PublicApiTest do
 
   test "assert_has timeout option must be non-negative integer" do
     assert_raise ArgumentError, ~r/invalid options/, fn ->
-      :static
-      |> session()
+      session()
       |> visit("/articles")
       |> assert_has(text("Articles"), timeout: -1)
     end
   end
 
   test "reload_page revisits the current path" do
-    session =
-      :static
-      |> session()
-      |> visit("/articles")
+    session = visit(session(), "/articles")
 
     reloaded = reload_page(session)
 
@@ -249,8 +238,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "open_browser creates an HTML snapshot for static sessions" do
     session =
-      :static
-      |> session()
+      session()
       |> visit("/articles")
       |> open_browser(fn path ->
         send(self(), {:open_browser_snapshot, path})
@@ -265,8 +253,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "open_browser creates an HTML snapshot for live sessions" do
     session =
-      :live
-      |> session()
+      session()
       |> visit("/live/counter")
       |> open_browser(fn path ->
         send(self(), {:open_browser_snapshot, path})
@@ -282,8 +269,7 @@ defmodule Cerberus.PublicApiTest do
   test "screenshot is explicit unsupported for static and live sessions" do
     static_error =
       assert_raise AssertionError, fn ->
-        :static
-        |> session()
+        session()
         |> visit("/articles")
         |> screenshot()
       end
@@ -292,8 +278,7 @@ defmodule Cerberus.PublicApiTest do
 
     live_error =
       assert_raise AssertionError, fn ->
-        :live
-        |> session()
+        session()
         |> visit("/live/counter")
         |> screenshot(path: "tmp/ignored.png")
       end
@@ -303,8 +288,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "assert_path and refute_path support query matching" do
     assert is_struct(
-             :static
-             |> session()
+             session()
              |> visit("/search")
              |> fill_in(label("Search term"), "phoenix")
              |> submit(button("Run Search"))
@@ -315,8 +299,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "within scopes operations and restores session scope after callback" do
     session =
-      :static
-      |> session()
+      session()
       |> visit("/scoped")
       |> within("#secondary-panel", fn scoped ->
         scoped
@@ -331,8 +314,7 @@ defmodule Cerberus.PublicApiTest do
   test "assert_path failures include normalized path and scope details" do
     error =
       assert_raise AssertionError, fn ->
-        :static
-        |> session()
+        session()
         |> visit("/scoped")
         |> within("#secondary-panel", fn scoped ->
           assert_path(scoped, "/articles")
@@ -346,8 +328,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "invalid assert_path query option is rejected" do
     assert_raise ArgumentError, ~r/:query must be a map, keyword list, or nil/, fn ->
-      :static
-      |> session()
+      session()
       |> visit("/articles")
       |> assert_path("/articles", query: "bad")
     end
@@ -355,8 +336,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "unwrap provides static conn escape hatch and keeps pipeline state" do
     session =
-      :static
-      |> session()
+      session()
       |> visit("/articles")
       |> unwrap(fn conn ->
         Plug.Conn.put_req_header(conn, "x-custom-header", "unwrap-flow")
@@ -369,8 +349,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "unwrap follows static redirects returned from callback conn actions" do
     session =
-      :static
-      |> session()
+      session()
       |> visit("/articles")
       |> unwrap(fn conn ->
         Phoenix.ConnTest.dispatch(
@@ -389,8 +368,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "unwrap in live mode follows live redirects from render actions" do
     session =
-      :live
-      |> session()
+      session()
       |> visit("/live/redirects")
       |> unwrap(fn view ->
         view
@@ -472,8 +450,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "unwrap rejects invalid callback arity" do
     assert_raise ArgumentError, ~r/callback with arity 1/, fn ->
-      :static
-      |> session()
+      session()
       |> visit("/articles")
       |> unwrap(fn -> :ok end)
     end
@@ -481,8 +458,7 @@ defmodule Cerberus.PublicApiTest do
 
   test "unwrap rejects invalid static callback result values" do
     assert_raise ArgumentError, ~r/must return a Plug.Conn in static mode/, fn ->
-      :static
-      |> session()
+      session()
       |> visit("/articles")
       |> unwrap(fn _conn -> :invalid end)
     end
@@ -490,16 +466,13 @@ defmodule Cerberus.PublicApiTest do
 
   test "unwrap rejects live sessions without an active LiveView" do
     assert_raise ArgumentError, ~r/requires an active LiveView/, fn ->
-      :live
-      |> session()
-      |> unwrap(fn view -> view end)
+      unwrap(LiveSession.new_session(), fn view -> view end)
     end
   end
 
   test "open_browser rejects invalid callback arity" do
     assert_raise ArgumentError, ~r/callback with arity 1/, fn ->
-      :static
-      |> session()
+      session()
       |> visit("/articles")
       |> open_browser(fn -> :ok end)
     end

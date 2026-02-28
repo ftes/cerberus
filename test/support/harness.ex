@@ -90,7 +90,7 @@ defmodule Cerberus.Harness do
   end
 
   defp run_driver(driver, session_opts, scenario) do
-    session = Cerberus.session(driver, session_opts)
+    session = Cerberus.session_for_driver(driver, session_opts)
 
     try do
       value = scenario.(session)

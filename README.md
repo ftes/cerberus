@@ -2,8 +2,8 @@
 ![Cerberus hero artwork](docs/hero.png)
 
 Cerberus is an experimental Phoenix testing harness with one API across:
-- `:auto` (default non-browser mode with static/live auto-detection and switching),
-- `:browser` (WebDriver BiDi browser-oracle mode).
+- non-browser Phoenix mode (`session()` / `session(:phoenix)`, with static/live auto-detection and switching),
+- `:browser` mode (`session(:browser)`, WebDriver BiDi browser-oracle execution).
 
 Cerberus is designed for teams that want to write one feature-test flow and run it in browser and non-browser modes with minimal rewrites.
 
@@ -12,7 +12,7 @@ Cerberus is designed for teams that want to write one feature-test flow and run 
 ```elixir
 import Cerberus
 
-session(:auto)
+session()
 |> visit("/live/counter")
 |> click(button("Increment"))
 |> assert_has(text("Count: 1"), exact: true)
@@ -20,14 +20,14 @@ session(:auto)
 
 > #### Tip
 >
-> Start with `:auto` for most scenarios. Move to `:browser` when validating real browser behavior, keyboard/mouse APIs, or browser-only assertions.
+> Start with `session()` for most scenarios. Move to `session(:browser)` when validating real browser behavior, keyboard/mouse APIs, or browser-only assertions.
 
 ## Progressive Examples
 
 ### 1. Static Text Assertions
 
 ```elixir
-session(:auto)
+session()
 |> visit("/articles")
 |> assert_has(text("Articles"), exact: true)
 |> refute_has(text("500 Internal Server Error"), exact: true)
@@ -36,7 +36,7 @@ session(:auto)
 ### 2. LiveView Interaction
 
 ```elixir
-session(:auto)
+session()
 |> visit("/live/counter")
 |> click(role(:button, name: "Increment"))
 |> assert_has(text("Count: 1"), exact: true)
@@ -45,7 +45,7 @@ session(:auto)
 ### 3. Form + Path Assertions
 
 ```elixir
-session(:auto)
+session()
 |> visit("/search")
 |> fill_in(label("Search term"), "Aragorn")
 |> submit(button("Run Search"))
@@ -56,7 +56,7 @@ session(:auto)
 ### 4. Scope + Navigation
 
 ```elixir
-session(:auto)
+session()
 |> visit("/scoped")
 |> within("#secondary-panel", fn scoped ->
   scoped
@@ -70,7 +70,7 @@ end)
 
 ```elixir
 primary =
-  session(:auto)
+  session()
   |> visit("/session/user/alice")
 
 tab2 =
@@ -120,18 +120,14 @@ session
 
 ## Switching Modes
 
-The same flow usually works in both modes:
+Most tests switch modes by changing only the first session line:
 
-```elixir
-flow = fn mode ->
-  session(mode)
-  |> visit("/live/counter")
-  |> click(button("Increment"))
-  |> assert_has(text("Count: 1"), exact: true)
-end
-
-flow.(:auto)
-flow.(:browser)
+```diff
+-session()
++session(:browser)
+ |> visit("/live/counter")
+ |> click(button("Increment"))
+ |> assert_has(text("Count: 1"), exact: true)
 ```
 
 ## Learn More

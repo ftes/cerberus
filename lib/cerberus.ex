@@ -1,6 +1,6 @@
 defmodule Cerberus do
   @moduledoc """
-  Session-first test API for static, live, and browser execution.
+  Session-first test API for non-browser Phoenix mode and browser execution.
 
   Architecture contract (ADR-0001 + ADR-0002):
   - The public API is driver-agnostic and session-first.
@@ -26,8 +26,41 @@ defmodule Cerberus do
 
   @type driver_kind :: Session.driver_kind()
 
-  @spec session(driver_kind(), keyword()) :: Session.t()
-  def session(driver, opts \\ []) do
+  @spec session() :: Session.t()
+  def session, do: session([])
+
+  @spec session(keyword()) :: Session.t()
+  def session(opts) when is_list(opts) do
+    StaticSession.new_session(opts)
+  end
+
+  @spec session(:phoenix) :: Session.t()
+  def session(:phoenix), do: session([])
+
+  @spec session(:browser) :: Session.t()
+  def session(:browser), do: session(:browser, [])
+
+  def session(driver) when is_atom(driver) do
+    raise ArgumentError,
+          "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser) for browser"
+  end
+
+  @spec session(:phoenix, keyword()) :: Session.t()
+  def session(:phoenix, opts) when is_list(opts), do: session(opts)
+
+  @spec session(:browser, keyword()) :: Session.t()
+  def session(:browser, opts) when is_list(opts) do
+    BrowserSession.new_session(opts)
+  end
+
+  def session(driver, opts) when is_atom(driver) and is_list(opts) do
+    raise ArgumentError,
+          "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser) for browser"
+  end
+
+  @doc false
+  @spec session_for_driver(driver_kind(), keyword()) :: Session.t()
+  def session_for_driver(driver, opts \\ []) when is_atom(driver) and is_list(opts) do
     driver_module!(driver).new_session(opts)
   end
 
@@ -356,6 +389,7 @@ defmodule Cerberus do
     Assertions.refute_has(session, locator, opts)
   end
 
+  @doc false
   @spec driver_module!(driver_kind()) :: module()
   def driver_module!(:auto), do: StaticSession
   def driver_module!(:static), do: StaticSession

@@ -1,7 +1,7 @@
 # Architecture and Driver Model
 
-Cerberus is built around one session-first API and two user-facing modes (`:auto`, `:browser`).
-Internally, `:auto` dispatches between static and live execution backends.
+Cerberus is built around one session-first API and two user-facing modes (`:phoenix`, `:browser`).
+Internally, Phoenix mode dispatches between static and live execution backends.
 
 ## Layering
 

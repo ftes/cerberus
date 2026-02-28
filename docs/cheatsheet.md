@@ -4,7 +4,7 @@
 
 | Goal | Call |
 | --- | --- |
-| Auto static/live switching | `session(:auto)` |
+| Phoenix mode (auto static/live switching) | `session()` or `session(:phoenix)` |
 | Real browser behavior | `session(:browser)` |
 
 ## Core Navigation and Assertions
@@ -69,13 +69,9 @@ Use `Cerberus.Browser` only with `session(:browser)`.
 
 ## Mode Switching Pattern
 
-```elixir
-flow = fn mode ->
-  session(mode)
-  |> visit("/articles")
-  |> assert_has(text("Articles"), exact: true)
-end
-
-flow.(:auto)
-flow.(:browser)
+```diff
+-session()
++session(:browser)
+ |> visit("/articles")
+ |> assert_has(text("Articles"), exact: true)
 ```
