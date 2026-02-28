@@ -14,6 +14,8 @@ defmodule MigrationFixtureWeb.Router do
     pipe_through(:browser)
 
     get("/", PageController, :home)
+    get("/search", PageController, :search)
+    get("/search/results", PageController, :search_results)
     live("/counter", CounterLive, :index)
   end
 end

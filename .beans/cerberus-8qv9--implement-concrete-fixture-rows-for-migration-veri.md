@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-28T15:08:23Z
-updated_at: 2026-02-28T15:18:20Z
+updated_at: 2026-02-28T16:31:42Z
 parent: cerberus-it5x
 ---
 
@@ -29,3 +29,16 @@ Missing-tests follow-up: migration verification matrix declares rows that are no
 
 - Add fixture scenarios for the still-unimplemented matrix rows (form/check/upload/submit/multi-user-tab/live navigation/async timeout, plus Playwright rows).
 - Decide whether/when expanded rows should become default runner rows vs integration-test-only rows.
+
+## Progress Update
+
+- Added matrix fixture rows pt_form_fill and pt_submit_action with deterministic pre/post assertions.
+- Extended fixture app with search routes and form endpoints in router and page controller.
+- Wired new rows into the real-system migration verification rows list.
+- Updated migration verification matrix documentation to list these rows as implemented.
+- Verified with mix test test/cerberus/migration_verification_test.exs and mix precommit.
+
+## Notes
+
+- pt_form_fill and pt_submit_action currently use explicit PhoenixTest function calls in the Phoenix branch to keep post-migration runs deterministic with current API differences between PhoenixTest submit/fill_in and Cerberus submit/fill_in.
+- This triggers expected non-fatal direct-call migration warnings for those two files during migration runs.

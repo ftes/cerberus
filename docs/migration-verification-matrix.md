@@ -69,6 +69,8 @@ These scenario ids are now exercised in the committed fixture and verified end-t
 - `pt_text_assert`
 - `pt_text_refute`
 - `pt_click_navigation`
+- `pt_form_fill`
+- `pt_submit_action`
 - `pt_path_assert`
 - `pt_path_refute`
 - `pt_scope_nested`
