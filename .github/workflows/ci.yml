@@ -13,6 +13,25 @@ jobs:
   ci:
     name: CI
     runs-on: ubuntu-latest
+    env:
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
 
     steps:
       - name: Checkout
@@ -81,3 +100,6 @@ jobs:
 
       - name: Run browser conformance tests
         run: mix test --only conformance --only browser
+
+      - name: Run remote webdriver integration test
+        run: mix test.websocket test/core/remote_webdriver_behavior_test.exs

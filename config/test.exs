@@ -3,22 +3,38 @@ import Config
 alias Cerberus.Fixtures.Endpoint
 alias Cerberus.Fixtures.Repo
 
-sandbox_db_path = Path.expand("../tmp/cerberus_test.sqlite3", __DIR__)
+test_instance =
+  System.get_env("CERBERUS_TEST_INSTANCE") ||
+    "pid" <> List.to_string(:os.getpid())
+
+default_port =
+  4_002 +
+    rem(
+      :erlang.phash2(test_instance),
+      1_000
+    )
 
 config :cerberus, Endpoint,
   server: true,
-  http: [port: "PORT" |> System.get_env("4002") |> String.to_integer()],
+  http: [port: "PORT" |> System.get_env(Integer.to_string(default_port)) |> String.to_integer()],
   secret_key_base: String.duplicate("cerberus-secret-key-base-", 5),
   live_view: [signing_salt: "cerberus-live-view-signing-salt"],
   pubsub_server: Cerberus.Fixtures.PubSub
 
 config :cerberus, Repo,
-  database: sandbox_db_path,
+  username: System.get_env("POSTGRES_USER", "postgres"),
+  password: System.get_env("POSTGRES_PASSWORD", "postgres"),
+  hostname: System.get_env("POSTGRES_HOST", "127.0.0.1"),
+  port: "POSTGRES_PORT" |> System.get_env("5432") |> String.to_integer(),
+  database: System.get_env("POSTGRES_DB", "cerberus_test_#{test_instance}"),
+  maintenance_database: System.get_env("POSTGRES_MAINTENANCE_DB", "postgres"),
+  ssl: false,
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: 10
 
 config :cerberus, :browser,
   show_browser: System.get_env("SHOW_BROWSER", "false") == "true",
+  webdriver_url: System.get_env("WEBDRIVER_URL"),
   chrome_binary: System.get_env("CHROME"),
   chromedriver_binary: System.get_env("CHROMEDRIVER"),
   firefox_binary: System.get_env("FIREFOX"),

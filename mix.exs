@@ -33,7 +33,7 @@ defmodule Cerberus.MixProject do
       {:phoenix_live_view, "~> 1.0"},
       {:phoenix_ecto, "~> 4.6", only: :test},
       {:ecto_sql, "~> 3.13", only: :test},
-      {:ecto_sqlite3, "~> 0.22", only: :test},
+      {:postgrex, "~> 0.19", only: :test},
       {:websockex, "~> 0.4.3"},
       {:lazy_html, ">= 0.1.0"},
       {:nimble_options, "~> 1.1"},
@@ -58,7 +58,7 @@ defmodule Cerberus.MixProject do
 
   defp cli do
     [
-      preferred_envs: [dialyzer: :test, precommit: :test]
+      preferred_envs: [dialyzer: :test, precommit: :test, "test.websocket": :test]
     ]
   end
 
