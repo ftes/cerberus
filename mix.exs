@@ -94,7 +94,6 @@ defmodule Cerberus.MixProject do
 
   defp package do
     [
-      name: "fluffy",
       licenses: ["MIT"],
       links: %{
         "GitHub" => "https://github.com/ftes/cerberus"

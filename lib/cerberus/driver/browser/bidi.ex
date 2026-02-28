@@ -6,7 +6,7 @@ defmodule Cerberus.Driver.Browser.BiDi do
   alias Cerberus.Driver.Browser.BiDiSocket
   alias Cerberus.Driver.Browser.Runtime
 
-  @default_command_timeout 5_000
+  @default_command_timeout_ms 5_000
 
   @type state :: %{
           next_id: pos_integer(),
@@ -28,7 +28,12 @@ defmodule Cerberus.Driver.Browser.BiDi do
   @spec command(GenServer.server(), String.t(), map(), keyword()) ::
           {:ok, map()} | {:error, String.t(), map()}
   def command(pid, method, params, opts) when is_binary(method) and is_map(params) do
-    timeout = Keyword.get(opts, :timeout, @default_command_timeout)
+    timeout =
+      case Keyword.fetch(opts, :timeout) do
+        {:ok, value} -> value
+        :error -> default_command_timeout_ms(opts)
+      end
+
     GenServer.call(pid, {:command, method, params, timeout}, timeout + 1_000)
   end
 
@@ -220,4 +225,20 @@ defmodule Cerberus.Driver.Browser.BiDi do
       send(subscriber, {:cerberus_bidi_event, event})
     end)
   end
+
+  defp default_command_timeout_ms(opts) when is_list(opts) do
+    opts
+    |> merged_browser_opts()
+    |> Keyword.get(:bidi_command_timeout_ms)
+    |> normalize_non_negative_integer(@default_command_timeout_ms)
+  end
+
+  defp merged_browser_opts(opts) do
+    :cerberus
+    |> Application.get_env(:browser, [])
+    |> Keyword.merge(Keyword.get(opts, :browser, []))
+  end
+
+  defp normalize_non_negative_integer(value, _default) when is_integer(value) and value >= 0, do: value
+  defp normalize_non_negative_integer(_value, default), do: default
 end

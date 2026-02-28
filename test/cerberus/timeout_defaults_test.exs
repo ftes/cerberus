@@ -4,7 +4,25 @@ defmodule Cerberus.TimeoutDefaultsTest do
   import Cerberus
 
   alias Cerberus.Driver.Browser
+  alias Cerberus.Driver.Browser.BiDi
   alias ExUnit.AssertionError
+
+  defmodule TimeoutProbe do
+    @moduledoc false
+    use GenServer
+
+    def start_link(opts \\ []) do
+      GenServer.start_link(__MODULE__, opts)
+    end
+
+    @impl true
+    def init(_opts), do: {:ok, %{}}
+
+    @impl true
+    def handle_call({:command, _method, _params, timeout}, _from, state) do
+      {:reply, {:ok, %{"timeout" => timeout}}, state}
+    end
+  end
 
   setup do
     previous_assert_timeout = Application.get_env(:cerberus, :assert_timeout_ms)
@@ -58,5 +76,23 @@ defmodule Cerberus.TimeoutDefaultsTest do
     assert Browser.ready_timeout_ms([]) == 2_200
     assert Browser.ready_timeout_ms(browser: [ready_timeout_ms: 2_400]) == 2_400
     assert Browser.ready_timeout_ms(ready_timeout_ms: 1_800, browser: [ready_timeout_ms: 2_400]) == 1_800
+  end
+
+  test "bidi command timeout falls back to global browser config and supports browser opts override" do
+    Application.put_env(:cerberus, :browser, bidi_command_timeout_ms: 2_200)
+    {:ok, probe} = TimeoutProbe.start_link()
+
+    assert {:ok, %{"timeout" => 2_200}} == BiDi.command(probe, "session.status", %{}, [])
+
+    assert {:ok, %{"timeout" => 2_400}} ==
+             BiDi.command(probe, "session.status", %{}, browser: [bidi_command_timeout_ms: 2_400])
+  end
+
+  test "bidi command timeout option overrides configured defaults" do
+    Application.put_env(:cerberus, :browser, bidi_command_timeout_ms: 2_200)
+    {:ok, probe} = TimeoutProbe.start_link()
+
+    assert {:ok, %{"timeout" => 150}} ==
+             BiDi.command(probe, "session.status", %{}, timeout: 150, browser: [bidi_command_timeout_ms: 2_400])
   end
 end

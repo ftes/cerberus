@@ -146,7 +146,8 @@ You can configure default assertion and browser readiness timeouts once:
 config :cerberus, :assert_timeout_ms, 300
 
 config :cerberus, :browser,
-  ready_timeout_ms: 2_200
+  ready_timeout_ms: 2_200,
+  bidi_command_timeout_ms: 5_000
 ```
 
 Override precedence is:
@@ -154,6 +155,9 @@ Override precedence is:
 - session opts (`session(assert_timeout_ms: ...)`, `session(:browser, ready_timeout_ms: ...)`)
 - app config
 - hardcoded fallback
+
+`bidi_command_timeout_ms` is used as the default timeout for WebDriver BiDi commands.
+Per-command `timeout:` still takes precedence when provided.
 
 ## Learn More
 
