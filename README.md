@@ -6,10 +6,10 @@
 ![Cerberus hero artwork](docs/hero.png)
 
 Cerberus is an experimental Phoenix testing harness with one API across:
-- non-browser Phoenix mode (`session()` / `session(:phoenix)`, with static/live auto-detection and switching),
-- browser mode (`session(:browser)` defaulting to Chrome, plus `session(:chrome)` / `session(:firefox)`), WebDriver BiDi browser-oracle execution.
+- non-browser Phoenix mode with static/live auto-detection and switching,
+- browser mode defaulting to Chrome, optionally with Firefox via WebDriver BiDi.
 
-Cerberus is designed for teams that want to write one feature-test flow and run it in browser and non-browser modes with minimal rewrites.
+Minimal API: You control your tests. Easily run single tests/describe blocks/entire modules in one or more browsers.
 
 ## 30-Second Start
 ```ex
