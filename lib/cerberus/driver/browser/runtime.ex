@@ -23,7 +23,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
         }
 
   @type state :: %{
-          runtime_session: runtime_session() | nil,
+          runtime_sessions: %{optional(:chrome | :firefox) => runtime_session()},
           base_url: String.t() | nil,
           opts: keyword()
         }
@@ -51,7 +51,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
   @impl true
   def init(opts) do
     ensure_http_stack!()
-    {:ok, %{runtime_session: nil, base_url: Keyword.get(opts, :base_url), opts: opts}}
+    {:ok, %{runtime_sessions: %{}, base_url: Keyword.get(opts, :base_url), opts: opts}}
   end
 
   @impl true
@@ -95,32 +95,27 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   @impl true
   def terminate(_reason, state) do
-    maybe_stop_runtime_session(state.runtime_session, state.opts)
+    maybe_stop_runtime_sessions(state.runtime_sessions, state.opts)
     :ok
   end
 
-  defp ensure_runtime_session(%{runtime_session: runtime_session} = state, opts) when is_map(runtime_session) do
-    case requested_browser_name(opts) do
-      nil ->
-        {:ok, runtime_session, state}
-
-      requested when requested == runtime_session.browser_name ->
-        {:ok, runtime_session, state}
-
-      requested ->
-        {:error,
-         "browser runtime already started for #{runtime_session.browser_name}; requested #{requested}. " <>
-           "Run each browser matrix in a separate test invocation.", state}
-    end
-  end
-
   defp ensure_runtime_session(state, opts) do
-    case start_runtime_session(merge_runtime_opts(state.opts, opts)) do
-      {:ok, runtime_session} ->
-        {:ok, runtime_session, %{state | runtime_session: runtime_session}}
+    merged_opts = merge_runtime_opts(state.opts, opts)
+    browser_name = browser_name(merged_opts)
 
-      {:error, reason} ->
-        {:error, reason, state}
+    case Map.fetch(state.runtime_sessions, browser_name) do
+      {:ok, runtime_session} ->
+        {:ok, runtime_session, state}
+
+      :error ->
+        case start_runtime_session(merged_opts) do
+          {:ok, runtime_session} ->
+            runtime_sessions = Map.put(state.runtime_sessions, browser_name, runtime_session)
+            {:ok, runtime_session, %{state | runtime_sessions: runtime_sessions}}
+
+          {:error, reason} ->
+            {:error, reason, state}
+        end
     end
   end
 
@@ -150,6 +145,12 @@ defmodule Cerberus.Driver.Browser.Runtime do
   end
 
   defp maybe_stop_runtime_session(_, _), do: :ok
+
+  defp maybe_stop_runtime_sessions(runtime_sessions, opts) when is_map(runtime_sessions) do
+    Enum.each(runtime_sessions, fn {_browser_name, runtime_session} ->
+      maybe_stop_runtime_session(runtime_session, opts)
+    end)
+  end
 
   defp start_service(opts) do
     browser_name = browser_name(opts)
@@ -353,12 +354,18 @@ defmodule Cerberus.Driver.Browser.Runtime do
   @doc false
   @spec remote_webdriver_url(keyword()) :: String.t() | nil
   def remote_webdriver_url(opts) when is_list(opts) do
+    browser_name = browser_name(opts)
     browser_opts = browser_opts(opts)
+
+    webdriver_urls =
+      opts
+      |> Keyword.get(:webdriver_urls, browser_opts[:webdriver_urls])
+      |> normalize_webdriver_urls(browser_name)
 
     opts
     |> Keyword.get(
       :webdriver_url,
-      browser_opts[:webdriver_url] || opts[:chromedriver_url] || browser_opts[:chromedriver_url]
+      webdriver_urls || browser_opts[:webdriver_url] || opts[:chromedriver_url] || browser_opts[:chromedriver_url]
     )
     |> normalize_non_empty_string(nil)
   end
@@ -532,20 +539,6 @@ defmodule Cerberus.Driver.Browser.Runtime do
     :ok
   end
 
-  defp requested_browser_name(opts) when is_list(opts) do
-    with :error <- Keyword.fetch(opts, :browser_name),
-         browser_opts when is_list(browser_opts) <- Keyword.get(opts, :browser),
-         true <- Keyword.keyword?(browser_opts),
-         true <- Keyword.has_key?(browser_opts, :browser_name) do
-      browser_opts
-      |> Keyword.get(:browser_name)
-      |> normalize_browser_name(nil)
-    else
-      {:ok, value} -> normalize_browser_name(value, nil)
-      _ -> nil
-    end
-  end
-
   defp merge_runtime_opts(base, overrides) when is_list(base) and is_list(overrides) do
     merged =
       base
@@ -573,6 +566,16 @@ defmodule Cerberus.Driver.Browser.Runtime do
   end
 
   defp merge_browser_opts(base, _overrides), do: base
+
+  defp normalize_webdriver_urls(urls, browser_name) when is_list(urls) and is_atom(browser_name) do
+    if Keyword.keyword?(urls), do: urls[browser_name]
+  end
+
+  defp normalize_webdriver_urls(urls, browser_name) when is_map(urls) and is_atom(browser_name) do
+    Map.get(urls, browser_name) || Map.get(urls, Atom.to_string(browser_name))
+  end
+
+  defp normalize_webdriver_urls(_urls, _browser_name), do: nil
 
   defp normalize_browser_name(value, _default) when value in [:chrome, "chrome"], do: :chrome
   defp normalize_browser_name(value, _default) when value in [:firefox, "firefox"], do: :firefox

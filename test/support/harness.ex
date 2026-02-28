@@ -167,6 +167,14 @@ defmodule Cerberus.Harness do
     end)
   end
 
+  defp session_for_driver(:chrome, opts) when is_list(opts) do
+    BrowserSession.new_session(Keyword.put(opts, :browser_name, :chrome))
+  end
+
+  defp session_for_driver(:firefox, opts) when is_list(opts) do
+    BrowserSession.new_session(Keyword.put(opts, :browser_name, :firefox))
+  end
+
   defp session_for_driver(driver, opts) when is_atom(driver) and is_list(opts) do
     driver_module_for_kind!(driver).new_session(opts)
   end
@@ -203,16 +211,31 @@ defmodule Cerberus.Harness do
   @spec session_opts_for_driver(driver_kind(), map(), keyword()) :: keyword()
   def session_opts_for_driver(driver, context, session_opts \\ [])
 
-  def session_opts_for_driver(driver, context, session_opts)
-      when driver in [:browser, :chrome, :firefox] and is_map(context) and is_list(session_opts) do
-    session_opts
-    |> merge_session_opts(context_session_opts(context))
-    |> merge_session_opts(browser_tag_opts(context))
-    |> merge_session_opts(browser_session_opts(context))
+  def session_opts_for_driver(:chrome, context, session_opts) when is_map(context) and is_list(session_opts) do
+    context
+    |> browser_driver_session_opts(session_opts)
+    |> Keyword.put(:browser_name, :chrome)
+  end
+
+  def session_opts_for_driver(:firefox, context, session_opts) when is_map(context) and is_list(session_opts) do
+    context
+    |> browser_driver_session_opts(session_opts)
+    |> Keyword.put(:browser_name, :firefox)
+  end
+
+  def session_opts_for_driver(:browser, context, session_opts) when is_map(context) and is_list(session_opts) do
+    browser_driver_session_opts(context, session_opts)
   end
 
   def session_opts_for_driver(_driver, context, session_opts) when is_map(context) and is_list(session_opts) do
     merge_session_opts(session_opts, context_session_opts(context))
+  end
+
+  defp browser_driver_session_opts(context, session_opts) when is_map(context) and is_list(session_opts) do
+    session_opts
+    |> merge_session_opts(context_session_opts(context))
+    |> merge_session_opts(browser_tag_opts(context))
+    |> merge_session_opts(browser_session_opts(context))
   end
 
   defp normalize_sandbox_repos(false), do: []

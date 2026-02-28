@@ -110,6 +110,30 @@ defmodule Cerberus.HarnessTest do
              )
   end
 
+  test "explicit chrome/firefox drivers set browser_name while keeping browser option merges" do
+    chrome_opts =
+      Harness.session_opts_for_driver(
+        :chrome,
+        %{browser: [viewport: {1280, 720}], browser_session_opts: [browser: [user_agent: "chrome-agent"]]},
+        []
+      )
+
+    assert chrome_opts[:browser_name] == :chrome
+    assert chrome_opts[:browser][:viewport] == {1280, 720}
+    assert chrome_opts[:browser][:user_agent] == "chrome-agent"
+
+    firefox_opts =
+      Harness.session_opts_for_driver(
+        :firefox,
+        %{browser: [viewport: {1024, 768}], browser_session_opts: [browser: [user_agent: "firefox-agent"]]},
+        []
+      )
+
+    assert firefox_opts[:browser_name] == :firefox
+    assert firefox_opts[:browser][:viewport] == {1024, 768}
+    assert firefox_opts[:browser][:user_agent] == "firefox-agent"
+  end
+
   test "browser_session_opts overrides base and browser tag values" do
     merged =
       Harness.session_opts_for_driver(

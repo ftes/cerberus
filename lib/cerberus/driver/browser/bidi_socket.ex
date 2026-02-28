@@ -3,12 +3,12 @@ defmodule Cerberus.Driver.Browser.BiDiSocket do
 
   use GenServer
 
+  alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.WS
 
   @type state :: %{
           owner: pid() | atom(),
-          socket: pid() | nil,
-          monitor_ref: reference() | nil
+          sockets: %{optional(:chrome | :firefox) => %{socket: pid(), url: String.t(), monitor_ref: reference()}}
         }
 
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -16,14 +16,14 @@ defmodule Cerberus.Driver.Browser.BiDiSocket do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @spec ensure_connected(String.t()) :: {:ok, pid()} | {:error, term()}
-  def ensure_connected(url) when is_binary(url) do
-    GenServer.call(__MODULE__, {:ensure_connected, url}, 5_000)
+  @spec ensure_connected(:chrome | :firefox, String.t()) :: {:ok, pid()} | {:error, term()}
+  def ensure_connected(browser_name, url) when browser_name in [:chrome, :firefox] and is_binary(url) do
+    GenServer.call(__MODULE__, {:ensure_connected, browser_name, url}, 5_000)
   end
 
-  @spec send_text(binary()) :: :ok | {:error, term()}
-  def send_text(payload) when is_binary(payload) do
-    GenServer.call(__MODULE__, {:send_text, payload})
+  @spec send_text(:chrome | :firefox, binary()) :: :ok | {:error, term()}
+  def send_text(browser_name, payload) when browser_name in [:chrome, :firefox] and is_binary(payload) do
+    GenServer.call(__MODULE__, {:send_text, browser_name, payload})
   end
 
   @spec close() :: :ok
@@ -31,70 +31,89 @@ defmodule Cerberus.Driver.Browser.BiDiSocket do
     GenServer.call(__MODULE__, :close)
   end
 
-  @spec clear(pid()) :: :ok
-  def clear(socket) when is_pid(socket) do
-    GenServer.cast(__MODULE__, {:clear, socket})
+  @spec clear(:chrome | :firefox, pid()) :: :ok
+  def clear(browser_name, socket) when browser_name in [:chrome, :firefox] and is_pid(socket) do
+    GenServer.cast(__MODULE__, {:clear, browser_name, socket})
   end
 
   @impl true
   def init(opts) do
     owner = Keyword.get(opts, :owner, Cerberus.Driver.Browser.BiDi)
-    {:ok, %{owner: owner, socket: nil, monitor_ref: nil}}
+    {:ok, %{owner: owner, sockets: %{}}}
   end
 
   @impl true
-  def handle_call({:ensure_connected, _url}, _from, %{socket: socket} = state) when is_pid(socket) do
-    if Process.alive?(socket) do
-      {:reply, {:ok, socket}, state}
-    else
-      {:reply, {:error, :socket_not_alive}, clear_state(state)}
+  def handle_call({:ensure_connected, browser_name, url}, _from, state) do
+    case Map.get(state.sockets, browser_name) do
+      %{socket: socket, url: ^url} = entry ->
+        if Process.alive?(socket) do
+          {:reply, {:ok, socket}, state}
+        else
+          sockets = drop_entry(state.sockets, browser_name, entry)
+          connect_socket(state, browser_name, url, sockets)
+        end
+
+      %{socket: socket} = entry when is_pid(socket) ->
+        _ = WS.close(socket)
+        sockets = drop_entry(state.sockets, browser_name, entry)
+        connect_socket(state, browser_name, url, sockets)
+
+      _ ->
+        connect_socket(state, browser_name, url, state.sockets)
     end
   end
 
-  def handle_call({:ensure_connected, url}, _from, state) do
-    with {:ok, owner} <- resolve_owner(state.owner),
-         {:ok, socket} <- WS.start_link(url, owner) do
-      monitor_ref = Process.monitor(socket)
-      {:reply, {:ok, socket}, %{state | socket: socket, monitor_ref: monitor_ref}}
-    else
-      {:error, reason} -> {:reply, {:error, reason}, state}
+  def handle_call({:send_text, browser_name, payload}, _from, state) do
+    case Map.get(state.sockets, browser_name) do
+      %{socket: socket} when is_pid(socket) ->
+        if Process.alive?(socket) do
+          :ok = WS.send_text(socket, payload)
+          {:reply, :ok, state}
+        else
+          sockets = drop_entry(state.sockets, browser_name, Map.fetch!(state.sockets, browser_name))
+          {:reply, {:error, :socket_not_alive}, %{state | sockets: sockets}}
+        end
+
+      _ ->
+        {:reply, {:error, :not_connected}, state}
     end
-  end
-
-  def handle_call({:send_text, payload}, _from, %{socket: socket} = state) when is_pid(socket) do
-    if Process.alive?(socket) do
-      :ok = WS.send_text(socket, payload)
-      {:reply, :ok, state}
-    else
-      {:reply, {:error, :socket_not_alive}, clear_state(state)}
-    end
-  end
-
-  def handle_call({:send_text, _payload}, _from, state) do
-    {:reply, {:error, :not_connected}, state}
-  end
-
-  def handle_call(:close, _from, %{socket: socket} = state) when is_pid(socket) do
-    _ = WS.close(socket)
-    {:reply, :ok, clear_state(state)}
   end
 
   def handle_call(:close, _from, state) do
-    {:reply, :ok, state}
+    Enum.each(state.sockets, fn {_browser_name, %{socket: socket}} ->
+      _ = WS.close(socket)
+    end)
+
+    {:reply, :ok, %{state | sockets: %{}}}
   end
 
   @impl true
-  def handle_cast({:clear, socket}, %{socket: socket} = state) do
-    {:noreply, clear_state(state)}
-  end
+  def handle_cast({:clear, browser_name, socket}, state) do
+    case Map.get(state.sockets, browser_name) do
+      %{socket: ^socket} = entry ->
+        sockets = drop_entry(state.sockets, browser_name, entry)
+        {:noreply, %{state | sockets: sockets}}
 
-  def handle_cast({:clear, _socket}, state) do
-    {:noreply, state}
+      _ ->
+        {:noreply, state}
+    end
   end
 
   @impl true
-  def handle_info({:DOWN, monitor_ref, :process, socket, _reason}, %{monitor_ref: monitor_ref, socket: socket} = state) do
-    {:noreply, clear_state(state)}
+  def handle_info({:DOWN, monitor_ref, :process, socket, _reason}, state) do
+    browser_name =
+      Enum.find_value(state.sockets, fn {browser_name, entry} ->
+        if entry.monitor_ref == monitor_ref and entry.socket == socket, do: browser_name
+      end)
+
+    if browser_name do
+      entry = Map.fetch!(state.sockets, browser_name)
+      sockets = drop_entry(state.sockets, browser_name, entry)
+
+      {:noreply, %{state | sockets: sockets}}
+    else
+      {:noreply, state}
+    end
   end
 
   def handle_info(_message, state) do
@@ -112,8 +131,26 @@ defmodule Cerberus.Driver.Browser.BiDiSocket do
     end
   end
 
-  defp clear_state(state) do
-    if is_reference(state.monitor_ref), do: Process.demonitor(state.monitor_ref, [:flush])
-    %{state | socket: nil, monitor_ref: nil}
+  defp connect_socket(state, browser_name, url, sockets) do
+    with {:ok, owner} <- resolve_owner(state.owner),
+         {:ok, normalized_browser} <- normalize_browser_name(browser_name),
+         {:ok, socket} <- WS.start_link(url, owner) do
+      monitor_ref = Process.monitor(socket)
+      sockets = Map.put(sockets, normalized_browser, %{socket: socket, url: url, monitor_ref: monitor_ref})
+      {:reply, {:ok, socket}, %{state | sockets: sockets}}
+    else
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
+  end
+
+  defp drop_entry(sockets, browser_name, %{monitor_ref: monitor_ref}) do
+    if is_reference(monitor_ref), do: Process.demonitor(monitor_ref, [:flush])
+    Map.delete(sockets, browser_name)
+  end
+
+  defp normalize_browser_name(browser_name) do
+    {:ok, Runtime.browser_name(browser_name: browser_name)}
+  rescue
+    _ -> {:error, :invalid_browser_name}
   end
 end

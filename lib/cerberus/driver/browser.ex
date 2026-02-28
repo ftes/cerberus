@@ -4,6 +4,7 @@ defmodule Cerberus.Driver.Browser do
   @behaviour Cerberus.Driver
 
   alias Cerberus.Driver.Browser.BiDi
+  alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
@@ -28,6 +29,7 @@ defmodule Cerberus.Driver.Browser do
   @type t :: %__MODULE__{
           user_context_pid: pid(),
           tab_id: String.t(),
+          browser_name: :chrome | :firefox,
           base_url: String.t(),
           assert_timeout_ms: non_neg_integer(),
           ready_timeout_ms: pos_integer(),
@@ -41,6 +43,7 @@ defmodule Cerberus.Driver.Browser do
 
   defstruct user_context_pid: nil,
             tab_id: nil,
+            browser_name: :chrome,
             base_url: nil,
             assert_timeout_ms: 0,
             ready_timeout_ms: @default_ready_timeout_ms,
@@ -55,10 +58,12 @@ defmodule Cerberus.Driver.Browser do
   def new_session(opts \\ []) do
     owner = self()
     context_defaults = browser_context_defaults(opts)
+    browser_name = Runtime.browser_name(opts)
 
     start_opts =
       opts
       |> Keyword.put(:owner, owner)
+      |> Keyword.put(:browser_name, browser_name)
       |> Keyword.put(:browser_context_defaults, context_defaults)
 
     {user_context_pid, base_url} =
@@ -81,6 +86,7 @@ defmodule Cerberus.Driver.Browser do
     %__MODULE__{
       user_context_pid: user_context_pid,
       tab_id: tab_id,
+      browser_name: browser_name,
       base_url: base_url,
       assert_timeout_ms: Session.assert_timeout_from_opts!(opts),
       ready_timeout_ms: ready_timeout_ms(opts),
@@ -93,6 +99,7 @@ defmodule Cerberus.Driver.Browser do
   @spec open_user(t()) :: t()
   def open_user(%__MODULE__{} = session) do
     opts = [
+      browser_name: session.browser_name,
       assert_timeout_ms: session.assert_timeout_ms,
       ready_timeout_ms: session.ready_timeout_ms,
       ready_quiet_ms: session.ready_quiet_ms,
@@ -189,7 +196,7 @@ defmodule Cerberus.Driver.Browser do
     path = screenshot_path(opts)
     full_page = screenshot_full_page(opts)
 
-    case capture_screenshot(state.tab_id, full_page) do
+    case capture_screenshot(state.tab_id, full_page, bidi_opts(state)) do
       {:ok, %{"data" => data}} when is_binary(data) ->
         write_screenshot!(path, data)
         update_last_result(session, :screenshot, %{path: path, full_page: full_page})
@@ -1214,6 +1221,7 @@ defmodule Cerberus.Driver.Browser do
       session
       | user_context_pid: state.user_context_pid,
         tab_id: state.tab_id,
+        browser_name: state.browser_name,
         base_url: state.base_url,
         assert_timeout_ms: state.assert_timeout_ms,
         ready_timeout_ms: state.ready_timeout_ms,
@@ -1282,11 +1290,13 @@ defmodule Cerberus.Driver.Browser do
 
   defp snapshot_base_url(default_base_url, _url), do: default_base_url
 
-  defp capture_screenshot(context_id, full_page) do
+  defp capture_screenshot(context_id, full_page, bidi_opts) do
     params = maybe_full_page_origin(%{"context" => context_id}, full_page)
 
-    BiDi.command("browsingContext.captureScreenshot", params)
+    BiDi.command("browsingContext.captureScreenshot", params, bidi_opts)
   end
+
+  defp bidi_opts(%{browser_name: browser_name}), do: [browser_name: browser_name]
 
   defp maybe_full_page_origin(params, true), do: Map.put(params, "origin", "document")
   defp maybe_full_page_origin(params, _full_page), do: params

@@ -182,12 +182,12 @@ Override precedence is:
 
 Option scopes:
 - Per-session context options: `ready_timeout_ms`, `ready_quiet_ms`, `browser: [viewport: ..., user_agent: ..., init_script: ... | init_scripts: [...]]`.
-- Global runtime launch options: `browser_name`, `webdriver_url`, `show_browser`, `headless`, `chrome_args`, `firefox_args`, `chrome_binary`, `firefox_binary`, `chromedriver_binary`, `geckodriver_binary`.
+- Global runtime launch options: `browser_name`, `webdriver_url`, `webdriver_urls`, `show_browser`, `headless`, `chrome_args`, `firefox_args`, `chrome_binary`, `firefox_binary`, `chromedriver_binary`, `geckodriver_binary`.
 - Global browser defaults: `bidi_command_timeout_ms`, `runtime_http_timeout_ms`, `dialog_timeout_ms`, `screenshot_full_page`, `screenshot_artifact_dir`, `screenshot_path`.
 
 `show_browser: true` runs headed by default. `headless` has higher precedence if both are set.
 
-Because browser runtime + BiDi transport are shared, runtime launch options are fixed when the runtime starts and should be treated as invocation-level config (not per-test toggles).
+Because browser runtime + BiDi transport are shared per browser lane, runtime launch options should be treated as invocation-level config (not per-test toggles).
 
 ## Learn More
 
@@ -228,6 +228,16 @@ config :cerberus, :browser,
 
 With `webdriver_url` set, Cerberus does not launch local browser/WebDriver processes.
 
+For explicit multi-browser remote lanes in one invocation:
+
+```elixir
+config :cerberus, :browser,
+  webdriver_urls: [
+    chrome: "http://127.0.0.1:4444",
+    firefox: "http://127.0.0.1:5555"
+  ]
+```
+
 Remote `webdriver_url` integration smoke test (Docker required):
 
 ```bash
@@ -245,9 +255,9 @@ mix test.websocket --browsers chrome,firefox
 mix test.websocket test/core/remote_webdriver_behavior_test.exs
 ```
 
-`mix test.websocket` starts/stops a Selenium container and wires `webdriver_url`
-for the full test invocation. Use `--browsers` (`chrome`, `firefox`, or `all`)
-to run multiple websocket-backed browser passes in sequence.
+`mix test.websocket` starts/stops Selenium container(s) and runs one `mix test`
+invocation with remote browser lane wiring. Use `--browsers` (`chrome`,
+`firefox`, or `all`) to provision multiple websocket-backed lanes together.
 
 Cross-browser conformance run:
 

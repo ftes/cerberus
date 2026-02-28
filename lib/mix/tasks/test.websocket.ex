@@ -2,7 +2,8 @@ defmodule Mix.Tasks.Test.Websocket do
   @shortdoc "Runs tests against a containerized remote WebDriver endpoint"
   @moduledoc """
   Starts Selenium standalone container(s), configures Cerberus to use remote
-  WebDriver (`webdriver_url`), and runs `mix test` with forwarded args.
+  WebDriver endpoint(s), and runs `mix test` with forwarded args in a single
+  invocation.
 
   This gives a global remote-browser invocation similar to websocket-based
   remote test flows in companion projects.
@@ -44,21 +45,30 @@ defmodule Mix.Tasks.Test.Websocket do
       ensure_docker!()
       docker_host = docker_host_address()
 
-      Enum.each(browsers, fn browser ->
-        image = selenium_image(browser)
-        container_id = start_selenium_container!(image)
-
-        try do
+      browser_containers =
+        Map.new(browsers, fn browser ->
+          image = selenium_image(browser)
+          container_id = start_selenium_container!(image)
           webdriver_url = "http://127.0.0.1:#{mapped_port!(container_id)}"
           wait_for_webdriver_ready!(webdriver_url)
+          {browser, %{container_id: container_id, webdriver_url: webdriver_url}}
+        end)
 
-          Mix.shell().info("Running tests for browser=#{browser} with remote webdriver_url=#{webdriver_url}")
+      default_browser = default_browser_lane(browsers)
+      browser_urls = Map.new(browser_containers, fn {browser, info} -> {browser, info.webdriver_url} end)
 
-          run_test_suite!(test_args, browser, webdriver_url, docker_host)
-        after
+      try do
+        Mix.shell().info(
+          "Running tests with remote websocket browsers=#{Enum.map_join(browsers, ",", &Atom.to_string/1)} " <>
+            "(default browser lane=#{default_browser})"
+        )
+
+        run_test_suite!(test_args, browser_urls, default_browser, docker_host)
+      after
+        Enum.each(browser_containers, fn {_browser, %{container_id: container_id}} ->
           _ = docker_rm_force(container_id)
-        end
-      end)
+        end)
+      end
     else
       rerun_in_test_env!(args)
     end
@@ -80,17 +90,25 @@ defmodule Mix.Tasks.Test.Websocket do
     end
   end
 
-  defp run_test_suite!(test_args, browser, webdriver_url, docker_host)
-       when is_list(test_args) and browser in [:chrome, :firefox] and is_binary(webdriver_url) do
+  defp run_test_suite!(test_args, browser_urls, default_browser, docker_host)
+       when is_list(test_args) and is_map(browser_urls) and default_browser in [:chrome, :firefox] and
+              is_binary(docker_host) do
     mix_executable = System.find_executable("mix") || "mix"
     command_args = ["test" | test_args]
+    default_webdriver_url = Map.fetch!(browser_urls, default_browser)
+
+    browser_url_envs =
+      Enum.map(browser_urls, fn {browser, webdriver_url} ->
+        {"WEBDRIVER_URL_" <> (browser |> Atom.to_string() |> String.upcase()), webdriver_url}
+      end)
 
     env = [
       {"MIX_ENV", "test"},
       {"CERBERUS_REMOTE_WEBDRIVER", "1"},
-      {"CERBERUS_BROWSER_NAME", Atom.to_string(browser)},
-      {"WEBDRIVER_URL", webdriver_url},
+      {"CERBERUS_BROWSER_NAME", Atom.to_string(default_browser)},
+      {"WEBDRIVER_URL", default_webdriver_url},
       {"CERBERUS_BASE_URL_HOST", docker_host}
+      | browser_url_envs
     ]
 
     {_, status} =
@@ -101,7 +119,15 @@ defmodule Mix.Tasks.Test.Websocket do
       )
 
     if status != 0 do
-      Mix.raise("mix test.websocket failed for #{browser} with status #{status}")
+      Mix.raise("mix test.websocket failed with status #{status}")
+    end
+  end
+
+  defp default_browser_lane(browsers) when is_list(browsers) do
+    if :chrome in browsers do
+      :chrome
+    else
+      List.first(browsers)
     end
   end
 

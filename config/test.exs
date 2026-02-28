@@ -14,6 +14,21 @@ default_port =
       1_000
     )
 
+webdriver_urls =
+  []
+  |> then(fn urls ->
+    case System.get_env("WEBDRIVER_URL_CHROME") do
+      value when is_binary(value) and value != "" -> Keyword.put(urls, :chrome, value)
+      _ -> urls
+    end
+  end)
+  |> then(fn urls ->
+    case System.get_env("WEBDRIVER_URL_FIREFOX") do
+      value when is_binary(value) and value != "" -> Keyword.put(urls, :firefox, value)
+      _ -> urls
+    end
+  end)
+
 config :cerberus, Endpoint,
   server: true,
   http: [port: "PORT" |> System.get_env(Integer.to_string(default_port)) |> String.to_integer()],
@@ -51,6 +66,7 @@ config :cerberus, :browser,
          raise "CERBERUS_BROWSER_NAME must be chrome or firefox, got: #{inspect(other)}"
      end),
   show_browser: System.get_env("SHOW_BROWSER", "false") == "true",
+  webdriver_urls: webdriver_urls,
   webdriver_url: System.get_env("WEBDRIVER_URL"),
   chrome_binary: System.get_env("CHROME"),
   chromedriver_binary: System.get_env("CHROMEDRIVER"),

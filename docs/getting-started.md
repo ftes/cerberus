@@ -138,6 +138,16 @@ config :cerberus, :browser,
 
 Remote mode connects to an already-running WebDriver endpoint and skips local browser/WebDriver launch.
 
+To point specific browser lanes at different remote endpoints:
+
+```elixir
+config :cerberus, :browser,
+  webdriver_urls: [
+    chrome: "http://127.0.0.1:4444",
+    firefox: "http://127.0.0.1:5555"
+  ]
+```
+
 For containerized websocket-style remote runs:
 
 ```bash
@@ -155,7 +165,7 @@ config :cerberus, :browser,
 `show_browser: true` runs headed by default.
 If both are set, `headless` takes precedence over `show_browser`.
 
-Runtime launch settings (for example `show_browser`, `headless`, browser binaries, driver binaries, and `webdriver_url`) are runtime-level and should be configured globally per test invocation, not per test.
+Runtime launch settings (for example `show_browser`, `headless`, browser binaries, driver binaries, `webdriver_url`, and `webdriver_urls`) are runtime-level and should be configured globally per test invocation, not per test.
 
 ## Step 11: Cross-Browser Conformance Runs
 

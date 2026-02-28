@@ -4,6 +4,7 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   use GenServer
 
   alias Cerberus.Driver.Browser.BiDi
+  alias Cerberus.Driver.Browser.Runtime
 
   @default_ready_timeout_ms 1_500
   @default_ready_quiet_ms 40
@@ -59,15 +60,21 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   def init(opts) do
     user_context_id = Keyword.fetch!(opts, :user_context_id)
     viewport = Keyword.get(opts, :viewport)
+    bidi_opts = Keyword.get(opts, :bidi_opts, opts)
+    browser_name = Runtime.browser_name(bidi_opts)
+    bidi_opts = Keyword.put_new(bidi_opts, :browser_name, browser_name)
 
-    with {:ok, browsing_context_id} <- create_browsing_context(user_context_id),
-         :ok <- maybe_set_viewport(browsing_context_id, viewport),
-         :ok <- BiDi.subscribe(self()),
-         {:ok, _} <- BiDi.command("session.subscribe", %{"events" => @bidi_events, "contexts" => [browsing_context_id]}) do
+    with {:ok, browsing_context_id} <- create_browsing_context(user_context_id, bidi_opts),
+         :ok <- maybe_set_viewport(browsing_context_id, viewport, bidi_opts),
+         :ok <- BiDi.subscribe(self(), bidi_opts),
+         {:ok, _} <-
+           BiDi.command("session.subscribe", %{"events" => @bidi_events, "contexts" => [browsing_context_id]}, bidi_opts) do
       {:ok,
        %{
          id: browsing_context_id,
          user_context_id: user_context_id,
+         browser_name: browser_name,
+         bidi_opts: bidi_opts,
          last_bidi_event: nil,
          last_readiness: %{}
        }}
@@ -91,11 +98,15 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   def handle_call({:navigate, url}, _from, state) do
     result =
-      BiDi.command("browsingContext.navigate", %{
-        "context" => state.id,
-        "url" => url,
-        "wait" => "complete"
-      })
+      BiDi.command(
+        "browsingContext.navigate",
+        %{
+          "context" => state.id,
+          "url" => url,
+          "wait" => "complete"
+        },
+        state.bidi_opts
+      )
 
     {:reply, result, state}
   end
@@ -104,7 +115,7 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     timeout_ms = normalize_positive_integer(Keyword.get(opts, :timeout_ms), @default_ready_timeout_ms)
     quiet_ms = normalize_positive_integer(Keyword.get(opts, :quiet_ms), @default_ready_quiet_ms)
 
-    case evaluate_json(state.id, readiness_expression(timeout_ms, quiet_ms)) do
+    case evaluate_json(state.id, readiness_expression(timeout_ms, quiet_ms), state.bidi_opts) do
       {:ok, %{"ok" => true} = readiness} ->
         readiness = Map.put_new(readiness, "lastBidiEvent", state.last_bidi_event)
         {:reply, {:ok, readiness}, %{state | last_readiness: readiness}}
@@ -119,7 +130,7 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   end
 
   def handle_call({:evaluate, expression}, _from, state) do
-    result = evaluate_script(state.id, expression)
+    result = evaluate_script(state.id, expression, state.bidi_opts)
 
     {:reply, result, state}
   end
@@ -151,18 +162,22 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   @impl true
   def terminate(_reason, state) do
-    _ = BiDi.command("session.unsubscribe", %{"events" => @bidi_events, "contexts" => [state.id]})
-    _ = BiDi.unsubscribe(self())
-    _ = BiDi.command("browsingContext.close", %{"context" => state.id})
+    _ = BiDi.command("session.unsubscribe", %{"events" => @bidi_events, "contexts" => [state.id]}, state.bidi_opts)
+    _ = BiDi.unsubscribe(self(), state.bidi_opts)
+    _ = BiDi.command("browsingContext.close", %{"context" => state.id}, state.bidi_opts)
     :ok
   end
 
-  defp create_browsing_context(user_context_id) do
+  defp create_browsing_context(user_context_id, bidi_opts) do
     with {:ok, result} <-
-           BiDi.command("browsingContext.create", %{
-             "type" => "tab",
-             "userContext" => user_context_id
-           }),
+           BiDi.command(
+             "browsingContext.create",
+             %{
+               "type" => "tab",
+               "userContext" => user_context_id
+             },
+             bidi_opts
+           ),
          browsing_context_id when is_binary(browsing_context_id) <- result["context"] do
       {:ok, browsing_context_id}
     else
@@ -174,16 +189,16 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     end
   end
 
-  defp maybe_set_viewport(_context_id, nil), do: :ok
+  defp maybe_set_viewport(_context_id, nil, _bidi_opts), do: :ok
 
-  defp maybe_set_viewport(context_id, %{width: width, height: height})
+  defp maybe_set_viewport(context_id, %{width: width, height: height}, bidi_opts)
        when is_integer(width) and is_integer(height) and width > 0 and height > 0 do
     params = %{
       "context" => context_id,
       "viewport" => %{"width" => width, "height" => height}
     }
 
-    case BiDi.command("browsingContext.setViewport", params) do
+    case BiDi.command("browsingContext.setViewport", params, bidi_opts) do
       {:ok, _result} ->
         :ok
 
@@ -192,21 +207,25 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     end
   end
 
-  defp maybe_set_viewport(_context_id, viewport) do
+  defp maybe_set_viewport(_context_id, viewport, _bidi_opts) do
     {:error, "invalid viewport", %{viewport: inspect(viewport)}}
   end
 
-  defp evaluate_script(context_id, expression) do
-    BiDi.command("script.evaluate", %{
-      "target" => %{"context" => context_id},
-      "expression" => expression,
-      "awaitPromise" => true,
-      "resultOwnership" => "none"
-    })
+  defp evaluate_script(context_id, expression, bidi_opts) do
+    BiDi.command(
+      "script.evaluate",
+      %{
+        "target" => %{"context" => context_id},
+        "expression" => expression,
+        "awaitPromise" => true,
+        "resultOwnership" => "none"
+      },
+      bidi_opts
+    )
   end
 
-  defp evaluate_json(context_id, expression) do
-    with {:ok, result} <- evaluate_script(context_id, expression),
+  defp evaluate_json(context_id, expression, bidi_opts) do
+    with {:ok, result} <- evaluate_script(context_id, expression, bidi_opts),
          {:ok, json} <- decode_remote_json(result) do
       {:ok, json}
     else

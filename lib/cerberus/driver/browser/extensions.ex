@@ -92,7 +92,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
       assert_dialog_message!(observed, expected_message)
       update_last_result(next_session, :with_dialog, observed)
     after
-      unsubscribe_dialog_events(subscription_id)
+      unsubscribe_dialog_events(subscription_id, session)
     end
   end
 
@@ -114,7 +114,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
   def cookies(%BrowserSession{} = session) do
     params = %{"partition" => %{"type" => "context", "context" => session.tab_id}}
 
-    case BiDi.command("storage.getCookies", params) do
+    case BiDi.command("storage.getCookies", params, bidi_opts(session)) do
       {:ok, %{"cookies" => cookies}} when is_list(cookies) ->
         Enum.map(cookies, &normalize_cookie/1)
 
@@ -164,7 +164,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
       "partition" => %{"type" => "context", "context" => session.tab_id}
     }
 
-    case BiDi.command("storage.setCookie", params) do
+    case BiDi.command("storage.setCookie", params, bidi_opts(session)) do
       {:ok, _} ->
         update_last_result(session, :add_cookie, %{
           name: name,
@@ -291,9 +291,10 @@ defmodule Cerberus.Driver.Browser.Extensions do
   end
 
   defp subscribe_dialog_events!(session) do
-    :ok = BiDi.subscribe(self())
+    bidi_opts = bidi_opts(session)
+    :ok = BiDi.subscribe(self(), bidi_opts)
 
-    case BiDi.command("session.subscribe", %{"events" => @dialog_events, "contexts" => [session.tab_id]}) do
+    case BiDi.command("session.subscribe", %{"events" => @dialog_events, "contexts" => [session.tab_id]}, bidi_opts) do
       {:ok, %{"subscription" => subscription_id}} when is_binary(subscription_id) ->
         subscription_id
 
@@ -305,9 +306,10 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  defp unsubscribe_dialog_events(subscription_id) do
-    _ = BiDi.command("session.unsubscribe", %{"subscriptions" => [subscription_id]})
-    _ = BiDi.unsubscribe(self())
+  defp unsubscribe_dialog_events(subscription_id, session) do
+    opts = bidi_opts(session)
+    _ = BiDi.command("session.unsubscribe", %{"subscriptions" => [subscription_id]}, opts)
+    _ = BiDi.unsubscribe(self(), opts)
     :ok
   end
 
@@ -362,6 +364,8 @@ defmodule Cerberus.Driver.Browser.Extensions do
   defp update_last_result(session, op, observed) do
     %{session | last_result: %{op: op, observed: observed}}
   end
+
+  defp bidi_opts(%BrowserSession{browser_name: browser_name}), do: [browser_name: browser_name]
 
   defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
   defp normalize_positive_integer(_value, default), do: default
