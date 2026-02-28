@@ -259,3 +259,4 @@ mix test test/cerberus/migration_verification_test.exs
 ```
 
 The test orchestrates pre-migration fixture execution, rewrite, and post-migration execution in an isolated copied workspace.
+See `docs/migration-verification.md` for row-level parity report semantics and current scope boundaries.

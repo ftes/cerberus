@@ -71,6 +71,7 @@ defmodule Cerberus.MixProject do
         "docs/cheatsheet.md",
         "docs/architecture.md",
         "docs/browser-support-policy.md",
+        "docs/migration-verification.md",
         "docs/migration-verification-matrix.md"
       ],
       groups_for_extras: [
@@ -78,6 +79,7 @@ defmodule Cerberus.MixProject do
           "docs/getting-started.md",
           "docs/architecture.md",
           "docs/browser-support-policy.md",
+          "docs/migration-verification.md",
           "docs/migration-verification-matrix.md"
         ],
         Reference: ["docs/cheatsheet.md"]

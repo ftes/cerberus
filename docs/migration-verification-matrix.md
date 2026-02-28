@@ -5,6 +5,8 @@ This matrix defines the minimum PhoenixTest and PhoenixTestPlaywright API covera
 
 Goal: prove that representative tests pass both before and after Igniter rewrites.
 
+For execution flow and boundaries, see `docs/migration-verification.md`.
+
 ## Coverage Rules
 
 - Each API family must be exercised at least once pre-migration and post-migration.
@@ -56,4 +58,4 @@ Goal: prove that representative tests pass both before and after Igniter rewrite
 - [ ] Every matrix row has a concrete fixture test case.
 - [ ] Every fixture test passes pre-migration in PhoenixTest/PhoenixTestPlaywright mode.
 - [ ] Every fixture test passes post-migration in Cerberus mode.
-- [ ] CI report includes row-level pass/fail summary for before/after runs.
+- [x] CI report includes row-level pass/fail summary for before/after runs.
