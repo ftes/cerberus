@@ -34,21 +34,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-mix-
 
-      - name: Cache browser tools
-        uses: actions/cache@v4
-        with:
-          path: tmp/browser-tools
-          key: ${{ runner.os }}-browser-tools-chrome-${{ hashFiles('bin/check_chrome_bidi_ready.sh', 'bin/check_browser_bidi_ready.sh') }}
-
-      - name: Prepare browser runtime env
-        run: |
-          bin/check_browser_bidi_ready.sh chrome --install
-          set -a
-          source tmp/browser-tools/env.sh
-          set +a
-          echo "CHROME=$CHROME" >> "$GITHUB_ENV"
-          echo "CHROMEDRIVER=$CHROMEDRIVER" >> "$GITHUB_ENV"
-
       - name: Install deps
         run: mix deps.get
 
@@ -57,6 +42,9 @@ jobs:
 
       - name: Run smoke tests
         run: mix test test/core/documentation_examples_test.exs --exclude browser
+
+      - name: Run migration verification tests
+        run: mix test test/cerberus/migration_verification_test.exs
 
   precommit:
     name: Precommit
@@ -91,21 +79,6 @@ jobs:
           key: ${{ runner.os }}-plt-${{ hashFiles('mix.lock', 'mix.exs', '.tool-versions') }}
           restore-keys: |
             ${{ runner.os }}-plt-
-
-      - name: Cache browser tools
-        uses: actions/cache@v4
-        with:
-          path: tmp/browser-tools
-          key: ${{ runner.os }}-browser-tools-chrome-${{ hashFiles('bin/check_chrome_bidi_ready.sh', 'bin/check_browser_bidi_ready.sh') }}
-
-      - name: Prepare browser runtime env
-        run: |
-          bin/check_browser_bidi_ready.sh chrome --install
-          set -a
-          source tmp/browser-tools/env.sh
-          set +a
-          echo "CHROME=$CHROME" >> "$GITHUB_ENV"
-          echo "CHROMEDRIVER=$CHROMEDRIVER" >> "$GITHUB_ENV"
 
       - name: Install deps
         run: mix deps.get
