@@ -48,6 +48,16 @@ defmodule Cerberus do
   @spec session(:phoenix, keyword()) :: Session.t()
   def session(:phoenix, opts) when is_list(opts), do: session(opts)
 
+  @doc """
+  Starts a browser session.
+
+  Browser context defaults can be configured globally via `config :cerberus, :browser`
+  and overridden per session with:
+
+  - `browser: [viewport: [width: ..., height: ...] | {w, h}]`
+  - `browser: [user_agent: "..."]`
+  - `browser: [init_script: "..."]` or `browser: [init_scripts: ["...", ...]]`
+  """
   @spec session(:browser, keyword()) :: Session.t()
   def session(:browser, opts) when is_list(opts) do
     BrowserSession.new_session(opts)

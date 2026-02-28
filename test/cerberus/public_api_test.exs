@@ -61,6 +61,37 @@ defmodule Cerberus.PublicApiTest do
   end
 
   @tag browser: true
+  test "browser session applies init script and viewport defaults across new tabs" do
+    session =
+      :browser
+      |> session(
+        browser: [
+          viewport: {900, 650},
+          init_script: "window.__cerberusInit = 'ready';"
+        ]
+      )
+      |> visit("/articles")
+
+    assert Cerberus.Browser.evaluate_js(session, "window.__cerberusInit") == "ready"
+
+    dimensions =
+      Cerberus.Browser.evaluate_js(
+        session,
+        "({ width: window.innerWidth, height: window.innerHeight })"
+      )
+
+    assert is_integer(dimensions["width"]) and dimensions["width"] >= 880
+    assert is_integer(dimensions["height"]) and dimensions["height"] >= 620
+
+    tab2 =
+      session
+      |> open_tab()
+      |> visit("/articles")
+
+    assert Cerberus.Browser.evaluate_js(tab2, "window.__cerberusInit") == "ready"
+  end
+
+  @tag browser: true
   test "switch_tab rejects mixed browser and non-browser sessions" do
     browser_tab =
       :browser

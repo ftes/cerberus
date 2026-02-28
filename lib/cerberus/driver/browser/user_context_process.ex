@@ -104,10 +104,14 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     owner = Keyword.fetch!(opts, :owner)
     owner_ref = Process.monitor(owner)
 
+    browser_context_defaults =
+      Keyword.get(opts, :browser_context_defaults, %{viewport: nil, user_agent: nil, init_scripts: []})
+
     with {:ok, browsing_context_supervisor} <- BrowsingContextSupervisor.start_link(),
          {:ok, user_context_id} <- create_user_context(),
+         :ok <- configure_user_context_defaults(user_context_id, browser_context_defaults),
          {:ok, browsing_context_pid} <-
-           start_browsing_context(browsing_context_supervisor, user_context_id) do
+           start_browsing_context(browsing_context_supervisor, user_context_id, browser_context_defaults) do
       {:ok, first_tab_id, browsing_contexts} =
         add_browsing_context(%{}, browsing_context_pid)
 
@@ -118,6 +122,7 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
          base_url: Runtime.base_url(),
          user_context_id: user_context_id,
          browsing_context_supervisor: browsing_context_supervisor,
+         browser_context_defaults: browser_context_defaults,
          browsing_contexts: browsing_contexts,
          active_browsing_context_id: first_tab_id
        }}
@@ -179,7 +184,11 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
   def handle_call(:open_tab, _from, state) do
     with {:ok, browsing_context_pid} <-
-           start_browsing_context(state.browsing_context_supervisor, state.user_context_id),
+           start_browsing_context(
+             state.browsing_context_supervisor,
+             state.user_context_id,
+             state.browser_context_defaults
+           ),
          {:ok, tab_id, browsing_contexts} <- add_browsing_context(state.browsing_contexts, browsing_context_pid) do
       {:reply, {:ok, tab_id}, %{state | browsing_contexts: browsing_contexts, active_browsing_context_id: tab_id}}
     else
@@ -297,10 +306,10 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
   defp remove_user_context(_), do: :ok
 
-  defp start_browsing_context(browsing_context_supervisor, user_context_id) do
+  defp start_browsing_context(browsing_context_supervisor, user_context_id, defaults) do
     DynamicSupervisor.start_child(
       browsing_context_supervisor,
-      {BrowsingContextProcess, user_context_id: user_context_id}
+      {BrowsingContextProcess, user_context_id: user_context_id, viewport: defaults.viewport}
     )
   end
 
@@ -389,5 +398,45 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
              }}
         end
     end
+  end
+
+  defp configure_user_context_defaults(user_context_id, defaults) do
+    with :ok <- maybe_set_user_agent(user_context_id, defaults.user_agent) do
+      maybe_add_init_scripts(user_context_id, defaults.init_scripts)
+    end
+  end
+
+  defp maybe_set_user_agent(_user_context_id, nil), do: :ok
+  defp maybe_set_user_agent(user_context_id, user_agent), do: set_user_agent_override(user_context_id, user_agent)
+
+  defp maybe_add_init_scripts(_user_context_id, []), do: :ok
+
+  defp maybe_add_init_scripts(user_context_id, scripts) when is_list(scripts) do
+    Enum.reduce_while(scripts, :ok, fn script, :ok ->
+      case add_preload_script(user_context_id, script) do
+        :ok -> {:cont, :ok}
+        {:error, reason, details} -> {:halt, {:error, reason, details}}
+      end
+    end)
+  end
+
+  defp add_preload_script(user_context_id, script) when is_binary(script) do
+    params = %{
+      "functionDeclaration" => preload_function_declaration(script),
+      "userContexts" => [user_context_id]
+    }
+
+    case BiDi.command("script.addPreloadScript", params) do
+      {:ok, _result} -> :ok
+      {:error, reason, details} -> {:error, reason, details}
+    end
+  end
+
+  defp preload_function_declaration(script) do
+    """
+    () => {
+      #{script}
+    }
+    """
   end
 end

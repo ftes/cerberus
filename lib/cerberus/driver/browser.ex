@@ -35,6 +35,14 @@ defmodule Cerberus.Driver.Browser do
   @default_ready_timeout_ms 1_500
   @default_ready_quiet_ms 40
   @user_context_supervisor Cerberus.Driver.Browser.UserContextSupervisor
+  @empty_browser_context_defaults %{viewport: nil, user_agent: nil, init_scripts: []}
+
+  @type viewport :: %{width: pos_integer(), height: pos_integer()}
+  @type browser_context_defaults :: %{
+          viewport: viewport() | nil,
+          user_agent: String.t() | nil,
+          init_scripts: [String.t()]
+        }
 
   @type t :: %__MODULE__{
           user_context_pid: pid(),
@@ -42,6 +50,7 @@ defmodule Cerberus.Driver.Browser do
           base_url: String.t(),
           ready_timeout_ms: pos_integer(),
           ready_quiet_ms: pos_integer(),
+          browser_context_defaults: browser_context_defaults(),
           sandbox_metadata: String.t() | nil,
           scope: String.t() | nil,
           current_path: String.t() | nil,
@@ -53,6 +62,7 @@ defmodule Cerberus.Driver.Browser do
             base_url: nil,
             ready_timeout_ms: @default_ready_timeout_ms,
             ready_quiet_ms: @default_ready_quiet_ms,
+            browser_context_defaults: @empty_browser_context_defaults,
             sandbox_metadata: nil,
             scope: nil,
             current_path: nil,
@@ -61,7 +71,12 @@ defmodule Cerberus.Driver.Browser do
   @impl true
   def new_session(opts \\ []) do
     owner = self()
-    start_opts = Keyword.put(opts, :owner, owner)
+    context_defaults = browser_context_defaults(opts)
+
+    start_opts =
+      opts
+      |> Keyword.put(:owner, owner)
+      |> Keyword.put(:browser_context_defaults, context_defaults)
 
     {user_context_pid, base_url} =
       case start_user_context(start_opts) do
@@ -86,6 +101,7 @@ defmodule Cerberus.Driver.Browser do
       base_url: base_url,
       ready_timeout_ms: ready_timeout_ms(opts),
       ready_quiet_ms: ready_quiet_ms(opts),
+      browser_context_defaults: context_defaults,
       sandbox_metadata: Keyword.get(opts, :sandbox_metadata)
     }
   end
@@ -94,7 +110,8 @@ defmodule Cerberus.Driver.Browser do
   def open_user(%__MODULE__{} = session) do
     opts = [
       ready_timeout_ms: session.ready_timeout_ms,
-      ready_quiet_ms: session.ready_quiet_ms
+      ready_quiet_ms: session.ready_quiet_ms,
+      browser_context_defaults: session.browser_context_defaults
     ]
 
     opts =
@@ -1110,6 +1127,31 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
+  @doc false
+  @spec browser_context_defaults(keyword()) :: browser_context_defaults()
+  def browser_context_defaults(opts) when is_list(opts) do
+    case Keyword.get(opts, :browser_context_defaults) do
+      %{} = defaults ->
+        normalize_browser_context_defaults!(defaults)
+
+      nil ->
+        browser_opts = merged_browser_opts(opts)
+
+        %{
+          viewport: normalize_viewport(opt_value(opts, browser_opts, :viewport)),
+          user_agent: normalize_user_agent(opt_value(opts, browser_opts, :user_agent)),
+          init_scripts:
+            normalize_init_scripts(
+              opt_value(opts, browser_opts, :init_scripts),
+              opt_value(opts, browser_opts, :init_script)
+            )
+        }
+
+      other ->
+        raise ArgumentError, ":browser_context_defaults must be a map, got: #{inspect(other)}"
+    end
+  end
+
   defp maybe_configure_sandbox_metadata!(user_context_pid, opts) do
     case Keyword.get(opts, :sandbox_metadata) do
       nil ->
@@ -1154,6 +1196,106 @@ defmodule Cerberus.Driver.Browser do
 
   defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
   defp normalize_positive_integer(_value, default), do: default
+
+  defp normalize_browser_context_defaults!(defaults) when is_map(defaults) do
+    %{
+      viewport: normalize_viewport(Map.get(defaults, :viewport)),
+      user_agent: normalize_user_agent(Map.get(defaults, :user_agent)),
+      init_scripts: normalize_init_scripts(Map.get(defaults, :init_scripts), nil)
+    }
+  end
+
+  defp merged_browser_opts(opts) do
+    :cerberus
+    |> Application.get_env(:browser, [])
+    |> Keyword.merge(Keyword.get(opts, :browser, []))
+  end
+
+  defp opt_value(opts, browser_opts, key) do
+    if Keyword.has_key?(opts, key), do: Keyword.get(opts, key), else: Keyword.get(browser_opts, key)
+  end
+
+  defp normalize_viewport(nil), do: nil
+
+  defp normalize_viewport({width, height}) when is_integer(width) and is_integer(height) do
+    viewport_dimensions!(width, height)
+  end
+
+  defp normalize_viewport(%{width: width, height: height}) when is_integer(width) and is_integer(height) do
+    viewport_dimensions!(width, height)
+  end
+
+  defp normalize_viewport(viewport) when is_list(viewport) do
+    width = Keyword.get(viewport, :width)
+    height = Keyword.get(viewport, :height)
+
+    if is_integer(width) and is_integer(height) do
+      viewport_dimensions!(width, height)
+    else
+      raise ArgumentError,
+            ":viewport must include integer :width and :height values, got: #{inspect(viewport)}"
+    end
+  end
+
+  defp normalize_viewport(viewport) do
+    raise ArgumentError, ":viewport must be nil, {width, height}, map, or keyword list, got: #{inspect(viewport)}"
+  end
+
+  defp viewport_dimensions!(width, height) when width > 0 and height > 0 do
+    %{width: width, height: height}
+  end
+
+  defp viewport_dimensions!(width, height) do
+    raise ArgumentError, ":viewport dimensions must be positive integers, got: {#{inspect(width)}, #{inspect(height)}}"
+  end
+
+  defp normalize_user_agent(nil), do: nil
+
+  defp normalize_user_agent(user_agent) when is_binary(user_agent) do
+    if String.trim(user_agent) == "" do
+      raise ArgumentError, ":user_agent must be a non-empty string"
+    else
+      user_agent
+    end
+  end
+
+  defp normalize_user_agent(user_agent) do
+    raise ArgumentError, ":user_agent must be a string, got: #{inspect(user_agent)}"
+  end
+
+  defp normalize_init_scripts(scripts, script) do
+    scripts_from(scripts, :init_scripts) ++ scripts_from(script, :init_script)
+  end
+
+  defp scripts_from(nil, _label), do: []
+
+  defp scripts_from(value, _label) when is_binary(value) do
+    script = String.trim(value)
+
+    if script == "" do
+      raise ArgumentError, ":init_scripts and :init_script values must be non-empty strings"
+    else
+      [value]
+    end
+  end
+
+  defp scripts_from(values, label) when is_list(values) do
+    Enum.map(values, fn
+      value when is_binary(value) ->
+        if String.trim(value) == "" do
+          raise ArgumentError, ":#{label} entries must be non-empty strings"
+        else
+          value
+        end
+
+      value ->
+        raise ArgumentError, ":#{label} must contain only strings, got: #{inspect(value)}"
+    end)
+  end
+
+  defp scripts_from(value, label) do
+    raise ArgumentError, ":#{label} must be a string or list of strings, got: #{inspect(value)}"
+  end
 
   defp snapshot_expression(scope) do
     encoded_scope = JSON.encode!(scope)

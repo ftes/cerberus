@@ -58,8 +58,10 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   @impl true
   def init(opts) do
     user_context_id = Keyword.fetch!(opts, :user_context_id)
+    viewport = Keyword.get(opts, :viewport)
 
     with {:ok, browsing_context_id} <- create_browsing_context(user_context_id),
+         :ok <- maybe_set_viewport(browsing_context_id, viewport),
          :ok <- BiDi.subscribe(self()),
          {:ok, _} <- BiDi.command("session.subscribe", %{"events" => @bidi_events, "contexts" => [browsing_context_id]}) do
       {:ok,
@@ -170,6 +172,28 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
       _ ->
         {:error, "unexpected browsingContext.create response", %{}}
     end
+  end
+
+  defp maybe_set_viewport(_context_id, nil), do: :ok
+
+  defp maybe_set_viewport(context_id, %{width: width, height: height})
+       when is_integer(width) and is_integer(height) and width > 0 and height > 0 do
+    params = %{
+      "context" => context_id,
+      "viewport" => %{"width" => width, "height" => height}
+    }
+
+    case BiDi.command("browsingContext.setViewport", params) do
+      {:ok, _result} ->
+        :ok
+
+      {:error, reason, details} ->
+        {:error, reason, details}
+    end
+  end
+
+  defp maybe_set_viewport(_context_id, viewport) do
+    {:error, "invalid viewport", %{viewport: inspect(viewport)}}
   end
 
   defp evaluate_script(context_id, expression) do
