@@ -244,7 +244,6 @@ session handshake with `webSocketUrl: true`.
 After install, it writes `tmp/browser-tools/env.sh` with:
 - `CHROME`
 - `CHROMEDRIVER`
-- `CERBERUS_CHROME_VERSION`
 
 The script will:
 - use pinned local Chrome for Testing when `--install` is set,
