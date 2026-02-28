@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-28T15:08:23Z
-updated_at: 2026-02-28T17:20:06Z
+updated_at: 2026-02-28T19:20:18Z
 parent: cerberus-it5x
 ---
 
@@ -61,3 +61,48 @@ Missing-tests follow-up: migration verification matrix declares rows that are no
 - Extended fixture routes/controllers for the session-counter endpoints.
 - Wired pt_multi_user_tab into migration verification rows and the implemented-row list in the matrix doc.
 - Validated row integration with migration verification test run in this branch context.
+
+## Progress Update 4
+
+- Tightened docs/migration-verification-matrix.md to align rows with source PhoenixTest/PhoenixTestPlaywright APIs (not Cerberus call shapes).
+- Removed migration-row treatment of multi-user/tab APIs after validating PhoenixTest does not provide open_user/open_tab/switch_tab/close_tab.
+- Added missing migration rows for unwrap/2 (PhoenixTest and Playwright) and clarified distinct LiveView row expectations to avoid overlap.
+- Added a Source API Gaps (Manual Migration) section for select, choose, and open_browser so these omissions are explicit.
+
+## Progress Update 5
+
+- Removed pt_multi_user_tab from test/cerberus/migration_verification_test.exs row list so executable migration rows match source-API matrix scope.
+- Multi-user/tab remains a Cerberus capability but is no longer treated as a PhoenixTest migration parity row.
+
+## Progress Update 6
+
+- Audited matrix rows for missing Cerberus implementation blockers.
+- Identified upload static-route parity as a concrete Cerberus gap.
+- Added matrix-table annotation on pt_upload and Source API Gaps entry referencing bean cerberus-xou2.
+- Created bean cerberus-xou2 to implement static upload support in :phoenix sessions.
+
+## Progress Update 7
+
+- Added pt_unwrap fixture row and wired it into migration verification runner.
+- Added pt_live_nav fixture row (patch + navigate flow) and wired it into runner.
+- Added pt_live_change fixture row (phx-change form update) and wired it into runner.
+- Removed blocked pt_upload row from runnable migration rows while keeping matrix row explicitly marked as blocked by cerberus-xou2.
+- Updated fixture home route labels to keep link-text matches deterministic.
+- Verified with mix test test/cerberus/migration_verification_test.exs (passes).
+
+## Progress Update 8
+
+- Added pt_live_async_timeout fixture row based on LiveView start_async/handle_async behavior and timeout-aware assertions.
+- Wired pt_live_async_timeout into migration verification rows and matrix implemented list.
+- Verified with mix test test/cerberus/migration_verification_test.exs (passes).\n
+
+## Progress Update 9
+
+- Reworked pt_select and pt_choose fixtures to submit via mode-aware helper (`PhoenixTest.submit/1` pre-migration, `Cerberus.submit/2` post-migration) instead of `click_button`, avoiding static-driver button-click limitations during post-migration runs.
+- Validated end-to-end parity for these two rows via `Cerberus.MigrationVerification.run/1` (rows: pt_select, pt_choose), with both pre and post phases passing.
+
+## Progress Update 10
+
+- Added explicit Igniter migration verification coverage for upload by introducing a focused upload-row end-to-end test in test/cerberus/migration_verification_test.exs.
+- Added a task-level migration test in test/mix/tasks/igniter_cerberus_migrate_phoenix_test_test.exs that verifies upload pipelines remain callable after import rewrite from PhoenixTest to Cerberus.
+- Verified with mix test test/mix/tasks/igniter_cerberus_migrate_phoenix_test_test.exs, mix test test/cerberus/migration_verification_test.exs, and mix precommit.

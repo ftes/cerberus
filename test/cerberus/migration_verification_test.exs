@@ -194,6 +194,36 @@ defmodule Cerberus.MigrationVerificationTest do
     refute File.exists?(work_dir)
   end
 
+  test "runs upload row end-to-end against committed migration fixture", %{tmp_dir: tmp_dir} do
+    root_dir = Path.expand("../..", __DIR__)
+    fixture_dir = Path.join(root_dir, "fixtures/migration_project")
+    work_dir = Path.join(tmp_dir, "work_upload")
+
+    rows = [
+      %{id: "pt_upload", test_file: "test/features/pt_upload_test.exs"}
+    ]
+
+    assert {:ok, result} =
+             MigrationVerification.run(
+               [
+                 root_dir: root_dir,
+                 fixture_dir: fixture_dir,
+                 work_dir: work_dir,
+                 rows: rows,
+                 keep: false
+               ],
+               &System.cmd/3
+             )
+
+    assert result.report.summary.total_rows == 1
+    assert result.report.summary.pre_pass_rows == 1
+    assert result.report.summary.post_pass_rows == 1
+    assert result.report.summary.parity_pass_rows == 1
+    assert result.report.summary.all_parity_pass?
+    assert [%{id: "pt_upload", parity: true, pre_status: :pass, post_status: :pass}] = result.report.rows
+    refute File.exists?(work_dir)
+  end
+
   defp build_fixture_project(tmp_dir) do
     fixture_dir = Path.join(tmp_dir, "fixture")
     test_dir = Path.join(fixture_dir, "test/features")

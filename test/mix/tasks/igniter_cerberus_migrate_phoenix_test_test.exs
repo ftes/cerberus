@@ -131,6 +131,45 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
              "WARNING #{file}: PhoenixTest.Playwright calls need manual migration to browser-only Cerberus APIs."
   end
 
+  test "write mode preserves upload pipelines and makes them Cerberus-callable", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_upload_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleUploadTest do
+        import PhoenixTest
+
+        test "example", %{conn: conn} do
+          conn
+          |> visit("/upload")
+          |> within("#upload-form", fn scoped ->
+            scoped
+            |> upload("Avatar", "/tmp/avatar.jpg")
+            |> submit()
+          end)
+        end
+      end
+      """
+    )
+
+    output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ "import Cerberus"
+    assert rewritten =~ ~s{|> upload("Avatar", "/tmp/avatar.jpg")}
+    assert rewritten =~ "|> submit()"
+    refute rewritten =~ "import PhoenixTest"
+    refute output =~ "Direct PhoenixTest.<function> call detected"
+    assert output =~ "updated #{file}"
+    assert output =~ "Mode: write"
+  end
+
   test "can run against committed nested Phoenix fixture project tests", %{tmp_dir: tmp_dir} do
     fixture_dir = Path.expand("../../../fixtures/migration_project", __DIR__)
     project_copy = Path.join(tmp_dir, "migration_project")
