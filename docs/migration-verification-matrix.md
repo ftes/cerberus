@@ -59,3 +59,17 @@ For execution flow and boundaries, see `docs/migration-verification.md`.
 - [ ] Every fixture test passes pre-migration in PhoenixTest/PhoenixTestPlaywright mode.
 - [ ] Every fixture test passes post-migration in Cerberus mode.
 - [x] CI report includes row-level pass/fail summary for before/after runs.
+
+## Implemented So Far
+
+These scenario ids are now exercised in the committed fixture and verified end-to-end in
+`test/cerberus/migration_verification_test.exs`:
+
+- `pt_static_nav`
+- `pt_text_assert`
+- `pt_text_refute`
+- `pt_click_navigation`
+- `pt_path_assert`
+- `pt_path_refute`
+- `pt_scope_nested`
+- `pt_live_click`

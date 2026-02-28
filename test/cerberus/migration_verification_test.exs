@@ -149,12 +149,15 @@ defmodule Cerberus.MigrationVerificationTest do
     root_dir = Path.expand("../..", __DIR__)
     fixture_dir = Path.join(root_dir, "fixtures/migration_project")
     work_dir = Path.join(tmp_dir, "work")
+
     rows = [
       %{id: "pt_migration_ready", test_file: "test/features/migration_ready_test.exs"},
       %{id: "pt_static_nav", test_file: "test/features/pt_static_nav_test.exs"},
       %{id: "pt_text_assert", test_file: "test/features/pt_text_assert_test.exs"},
       %{id: "pt_text_refute", test_file: "test/features/pt_text_refute_test.exs"},
       %{id: "pt_click_navigation", test_file: "test/features/pt_click_navigation_test.exs"},
+      %{id: "pt_path_assert", test_file: "test/features/pt_path_assert_test.exs"},
+      %{id: "pt_path_refute", test_file: "test/features/pt_path_refute_test.exs"},
       %{id: "pt_live_click", test_file: "test/features/pt_live_click_test.exs"},
       %{id: "pt_scope_nested", test_file: "test/features/pt_scope_nested_test.exs"}
     ]
@@ -162,14 +165,14 @@ defmodule Cerberus.MigrationVerificationTest do
     assert {:ok, result} =
              MigrationVerification.run(
                [
-                  root_dir: root_dir,
-                  fixture_dir: fixture_dir,
-                  work_dir: work_dir,
-                  rows: rows,
-                  keep: false
-                ],
-                &System.cmd/3
-              )
+                 root_dir: root_dir,
+                 fixture_dir: fixture_dir,
+                 work_dir: work_dir,
+                 rows: rows,
+                 keep: false
+               ],
+               &System.cmd/3
+             )
 
     assert result.report.summary.total_rows == length(rows)
     assert result.report.summary.pre_pass_rows == length(rows)
