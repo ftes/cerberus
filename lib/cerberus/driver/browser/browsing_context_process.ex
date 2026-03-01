@@ -47,8 +47,8 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   @spec await_ready(pid(), keyword()) :: {:ok, map()} | {:error, String.t(), map()}
   def await_ready(pid, opts \\ []) when is_pid(pid) and is_list(opts) do
-    timeout_ms = Keyword.get(opts, :timeout_ms, @default_ready_timeout_ms)
-    GenServer.call(pid, {:await_ready, opts}, timeout_ms + 1_000)
+    timeout_ms = normalize_positive_integer(Keyword.get(opts, :timeout_ms), @default_ready_timeout_ms)
+    GenServer.call(pid, {:await_ready, opts}, timeout_ms + 5_000)
   end
 
   @spec last_readiness(pid()) :: map()
@@ -115,7 +115,7 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     timeout_ms = normalize_positive_integer(Keyword.get(opts, :timeout_ms), @default_ready_timeout_ms)
     quiet_ms = normalize_positive_integer(Keyword.get(opts, :quiet_ms), @default_ready_quiet_ms)
 
-    case evaluate_json(state.id, readiness_expression(timeout_ms, quiet_ms), state.bidi_opts) do
+    case evaluate_readiness(state.id, timeout_ms, quiet_ms, state.bidi_opts) do
       {:ok, %{"ok" => true} = readiness} ->
         readiness = Map.put_new(readiness, "lastBidiEvent", state.last_bidi_event)
         {:reply, {:ok, readiness}, %{state | last_readiness: readiness}}
@@ -169,6 +169,11 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   end
 
   defp create_browsing_context(user_context_id, bidi_opts) do
+    create_browsing_context(user_context_id, bidi_opts, 2)
+  end
+
+  defp create_browsing_context(user_context_id, bidi_opts, retries_left)
+       when is_integer(retries_left) and retries_left >= 0 do
     with {:ok, result} <-
            BiDi.command(
              "browsingContext.create",
@@ -182,11 +187,24 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
       {:ok, browsing_context_id}
     else
       {:error, reason, details} ->
-        {:error, reason, details}
+        if retries_left > 0 and transient_create_browsing_context_error?(reason, details) do
+          Process.sleep(25)
+          create_browsing_context(user_context_id, bidi_opts, retries_left - 1)
+        else
+          {:error, reason, details}
+        end
 
       _ ->
         {:error, "unexpected browsingContext.create response", %{}}
     end
+  end
+
+  defp transient_create_browsing_context_error?(reason, details) do
+    combined = "#{reason} #{inspect(details)}"
+
+    String.contains?(combined, "DiscardedBrowsingContextError") or
+      String.contains?(combined, "no such frame") or
+      String.contains?(combined, "argument is not a global object")
   end
 
   defp maybe_set_viewport(_context_id, nil, _bidi_opts), do: :ok
@@ -237,6 +255,40 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     end
   end
 
+  defp evaluate_readiness(context_id, timeout_ms, quiet_ms, bidi_opts) do
+    expression = readiness_expression(timeout_ms, quiet_ms)
+
+    case evaluate_json(context_id, expression, bidi_opts) do
+      {:error, reason, details} ->
+        if transient_readiness_error?(reason, details) do
+          Process.sleep(25)
+          evaluate_json(context_id, expression, bidi_opts)
+        else
+          {:error, reason, details}
+        end
+
+      result ->
+        result
+    end
+  end
+
+  defp transient_readiness_error?(reason, details) do
+    combined = "#{reason} #{inspect(details)}"
+
+    Enum.any?(
+      [
+        "JSWindowActorChild cannot send",
+        "argument is not a global object",
+        "Inspected target navigated or closed",
+        "Cannot find context with specified id",
+        "execution contexts cleared",
+        "DiscardedBrowsingContextError",
+        "no such frame"
+      ],
+      &String.contains?(combined, &1)
+    )
+  end
+
   defp decode_remote_json(%{"result" => %{"type" => "string", "value" => payload}}) when is_binary(payload) do
     case JSON.decode(payload) do
       {:ok, json} -> {:ok, json}
@@ -253,7 +305,7 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   defp readiness_expression(timeout_ms, quiet_ms) do
     """
-    (() => new Promise((resolve) => {
+    (() => {
       const timeoutMs = #{timeout_ms};
       const quietMs = #{quiet_ms};
       const awaited = [
@@ -264,124 +316,207 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
         "liveview-down"
       ];
 
-      let inFlight = false;
-      let resolved = false;
-      let quietTimer = null;
-      let timeoutTimer = null;
-      let lastSignal = "initial";
-
-      const roots = () => Array.from(document.querySelectorAll("[data-phx-session]"));
-      const liveState = () => {
-        const currentRoots = roots();
-        if (currentRoots.length === 0) return "down";
-        return currentRoots.every((root) => root.classList.contains("phx-connected"))
-          ? "connected"
-          : "disconnected";
+      const safePath = () => {
+        try {
+          return window.location.pathname + window.location.search;
+        } catch (_error) {
+          return "";
+        }
       };
 
-      const cleanupFns = [];
-      const cleanup = () => {
-        cleanupFns.forEach((fn) => {
-          try {
-            fn();
-          } catch (_error) {
-            // ignored
+      const payload = (ok, reason, lastSignal, liveState, details = {}) => JSON.stringify({
+        ok,
+        reason,
+        path: safePath(),
+        awaited,
+        lastSignal,
+        lastLiveState: liveState,
+        details
+      });
+
+      try {
+        return new Promise((resolve) => {
+          let inFlight = false;
+          let resolved = false;
+          let quietTimer = null;
+          let timeoutTimer = null;
+          let lastSignal = "initial";
+          const cleanupFns = [];
+
+          const roots = () => {
+            try {
+              return Array.from(document.querySelectorAll("[data-phx-session]"));
+            } catch (_error) {
+              return [];
+            }
+          };
+
+          const liveState = () => {
+            try {
+              const currentRoots = roots();
+              if (currentRoots.length === 0) return "down";
+
+              const allConnected = currentRoots.every((root) => {
+                try {
+                  return !!(root && root.classList && root.classList.contains("phx-connected"));
+                } catch (_error) {
+                  return false;
+                }
+              });
+
+              return allConnected ? "connected" : "disconnected";
+            } catch (_error) {
+              return "unknown";
+            }
+          };
+
+          const cleanup = () => {
+            cleanupFns.forEach((fn) => {
+              try {
+                fn();
+              } catch (_error) {
+                // ignored
+              }
+            });
+            cleanupFns.length = 0;
+            clearTimeout(quietTimer);
+            clearTimeout(timeoutTimer);
+          };
+
+          const finish = (ok, reason, details = {}) => {
+            if (resolved) return;
+            resolved = true;
+            const currentState = liveState();
+            cleanup();
+            resolve(payload(ok, reason, lastSignal, currentState, details));
+          };
+
+          const scheduleQuiet = () => {
+            clearTimeout(quietTimer);
+            quietTimer = setTimeout(() => finish(true, "settled"), quietMs);
+          };
+
+          const note = (signal) => {
+            lastSignal = signal;
+          };
+
+          const handleStateChange = (sourceSignal) => {
+            const currentState = liveState();
+
+            if (currentState === "down") {
+              note("liveview-down");
+              scheduleQuiet();
+              return;
+            }
+
+            if (currentState === "connected") {
+              note(sourceSignal);
+              if (!inFlight) scheduleQuiet();
+              return;
+            }
+
+            if (currentState === "unknown") {
+              note("liveview-state-unknown");
+              clearTimeout(quietTimer);
+              return;
+            }
+
+            note("liveview-disconnected");
+            clearTimeout(quietTimer);
+          };
+
+          const onPageLoadingStart = () => {
+            inFlight = true;
+            note("phx:page-loading-start");
+            clearTimeout(quietTimer);
+          };
+
+          const onPageLoadingStop = () => {
+            inFlight = false;
+            note("phx:page-loading-stop");
+            if (liveState() !== "disconnected") scheduleQuiet();
+          };
+
+          window.addEventListener("phx:page-loading-start", onPageLoadingStart);
+          window.addEventListener("phx:page-loading-stop", onPageLoadingStop);
+          cleanupFns.push(() => window.removeEventListener("phx:page-loading-start", onPageLoadingStart));
+          cleanupFns.push(() => window.removeEventListener("phx:page-loading-stop", onPageLoadingStop));
+
+          const onLoad = () => {
+            note("window-load");
+            if (!inFlight) scheduleQuiet();
+          };
+          window.addEventListener("load", onLoad);
+          cleanupFns.push(() => window.removeEventListener("load", onLoad));
+
+          const setupObserver = () => {
+            try {
+              const root = document.documentElement || document.body || document;
+              if (!root || typeof root.nodeType !== "number") {
+                note("observer-root-missing");
+                return false;
+              }
+
+              const observer = new MutationObserver(() => {
+                try {
+                  handleStateChange("dom-mutation");
+                } catch (_error) {
+                  note("observer-callback-error");
+                }
+              });
+
+              observer.observe(root, {
+                subtree: true,
+                childList: true,
+                attributes: true,
+                characterData: true
+              });
+
+              cleanupFns.push(() => observer.disconnect());
+              note("observer-attached");
+              return true;
+            } catch (_error) {
+              note("observer-attach-error");
+              return false;
+            }
+          };
+
+          if (!setupObserver()) {
+            const pollDelayMs = Math.max(quietMs, 50);
+            const pollRef = setInterval(() => {
+              if (resolved) return;
+
+              try {
+                handleStateChange("dom-poll");
+              } catch (_error) {
+                note("poll-error");
+              }
+            }, pollDelayMs);
+
+            cleanupFns.push(() => clearInterval(pollRef));
           }
+
+          const initialState = liveState();
+          if (initialState === "connected") {
+            note("liveview-connected");
+          } else if (initialState === "down") {
+            note("liveview-down");
+          } else if (initialState === "unknown") {
+            note("liveview-state-unknown");
+          } else {
+            note("liveview-disconnected");
+          }
+
+          if (!inFlight && initialState !== "disconnected" && initialState !== "unknown") {
+            scheduleQuiet();
+          }
+
+          timeoutTimer = setTimeout(() => finish(false, "timeout"), timeoutMs);
         });
-        cleanupFns.length = 0;
-        clearTimeout(quietTimer);
-        clearTimeout(timeoutTimer);
-      };
-
-      const finish = (ok, reason) => {
-        if (resolved) return;
-        resolved = true;
-        const currentState = liveState();
-        cleanup();
-        resolve(JSON.stringify({
-          ok,
-          reason,
-          path: window.location.pathname + window.location.search,
-          awaited,
-          lastSignal,
-          lastLiveState: currentState
-        }));
-      };
-
-      const scheduleQuiet = () => {
-        clearTimeout(quietTimer);
-        quietTimer = setTimeout(() => finish(true, "settled"), quietMs);
-      };
-
-      const note = (signal) => {
-        lastSignal = signal;
-      };
-
-      const onPageLoadingStart = () => {
-        inFlight = true;
-        note("phx:page-loading-start");
-        clearTimeout(quietTimer);
-      };
-
-      const onPageLoadingStop = () => {
-        inFlight = false;
-        note("phx:page-loading-stop");
-        if (liveState() !== "disconnected") scheduleQuiet();
-      };
-
-      window.addEventListener("phx:page-loading-start", onPageLoadingStart);
-      window.addEventListener("phx:page-loading-stop", onPageLoadingStop);
-      cleanupFns.push(() => window.removeEventListener("phx:page-loading-start", onPageLoadingStart));
-      cleanupFns.push(() => window.removeEventListener("phx:page-loading-stop", onPageLoadingStop));
-
-      const onLoad = () => {
-        note("window-load");
-        if (!inFlight) scheduleQuiet();
-      };
-      window.addEventListener("load", onLoad);
-      cleanupFns.push(() => window.removeEventListener("load", onLoad));
-
-      const observer = new MutationObserver(() => {
-        const currentState = liveState();
-        if (currentState === "down") {
-          note("liveview-down");
-          scheduleQuiet();
-          return;
-        }
-
-        if (currentState === "connected") {
-          note("dom-mutation");
-          if (!inFlight) scheduleQuiet();
-          return;
-        }
-
-        note("liveview-disconnected");
-        clearTimeout(quietTimer);
-      });
-
-      observer.observe(document.documentElement, {
-        subtree: true,
-        childList: true,
-        attributes: true,
-        characterData: true
-      });
-      cleanupFns.push(() => observer.disconnect());
-
-      const initialState = liveState();
-      if (initialState === "connected") {
-        note("liveview-connected");
-      } else if (initialState === "down") {
-        note("liveview-down");
-      } else {
-        note("liveview-disconnected");
+      } catch (error) {
+        return payload(false, "setup-error", "setup-error", "unknown", { error: "" + error });
       }
-
-      if (!inFlight && initialState !== "disconnected") {
-        scheduleQuiet();
-      }
-
-      timeoutTimer = setTimeout(() => finish(false, "timeout"), timeoutMs);
-    }))()
+    })()
     """
   end
 end

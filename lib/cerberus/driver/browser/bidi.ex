@@ -6,7 +6,7 @@ defmodule Cerberus.Driver.Browser.BiDi do
   alias Cerberus.Driver.Browser.BiDiSocket
   alias Cerberus.Driver.Browser.Runtime
 
-  @default_command_timeout_ms 5_000
+  @default_command_timeout_ms 10_000
 
   @type browser_name :: :chrome | :firefox
 

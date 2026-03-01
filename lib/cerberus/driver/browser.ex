@@ -1201,10 +1201,17 @@ defmodule Cerberus.Driver.Browser do
     if navigation_transition_error?(reason, details) do
       {:ok, navigation_transition_readiness(details)}
     else
-      if readiness_payload?(details) do
-        {:error, reason, details}
+      readiness =
+        if readiness_payload?(details) do
+          details
+        else
+          merge_last_readiness(state, details)
+        end
+
+      if recoverable_readiness_timeout?(reason, readiness) do
+        {:ok, Map.put_new(readiness, "recoveredFrom", reason)}
       else
-        {:error, reason, merge_last_readiness(state, details)}
+        {:error, reason, readiness}
       end
     end
   end
@@ -1229,6 +1236,15 @@ defmodule Cerberus.Driver.Browser do
 
     Map.put_new(readiness, "details", details)
   end
+
+  defp recoverable_readiness_timeout?(reason, readiness)
+       when reason in ["bidi command timeout", "browser readiness timeout"] and is_map(readiness) do
+    readiness["ok"] == true and
+      readiness["reason"] == "settled" and
+      readiness["lastLiveState"] in ["connected", "down"]
+  end
+
+  defp recoverable_readiness_timeout?(_reason, _readiness), do: false
 
   defp snapshot_with_retry(state, attempts \\ 6, delay_ms \\ 50)
 

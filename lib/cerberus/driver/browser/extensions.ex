@@ -71,16 +71,17 @@ defmodule Cerberus.Driver.Browser.Extensions do
     expected_message = Keyword.get(opts, :message)
 
     subscription_id = subscribe_dialog_events!(session)
+    action_task = Task.async(fn -> action.(session) end)
 
     try do
-      next_session = action.(session)
+      opened = await_dialog_event!("browsingContext.userPromptOpened", session.tab_id, timeout_ms)
+      handle_dialog_prompt!(session, timeout_ms)
+      closed = await_dialog_event!("browsingContext.userPromptClosed", session.tab_id, timeout_ms)
+      next_session = await_dialog_action_result!(action_task, timeout_ms)
 
       if !match?(%BrowserSession{}, next_session) do
         raise ArgumentError, "with_dialog/3 callback must return a browser session"
       end
-
-      opened = await_dialog_event!("browsingContext.userPromptOpened", session.tab_id, timeout_ms)
-      closed = await_dialog_event!("browsingContext.userPromptClosed", session.tab_id, timeout_ms)
 
       observed = %{
         type: opened["type"],
@@ -92,6 +93,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
       assert_dialog_message!(observed, expected_message)
       update_last_result(next_session, :with_dialog, observed)
     after
+      _ = Task.shutdown(action_task, :brutal_kill)
       unsubscribe_dialog_events(subscription_id, session)
     end
   end
@@ -230,6 +232,12 @@ defmodule Cerberus.Driver.Browser.Extensions do
   defp decode_remote_value(value), do: value
 
   defp normalize_cookie(cookie) when is_map(cookie) do
+    session_cookie? =
+      cookie["goog:session"] ||
+        cookie["session"] ||
+        is_nil(cookie["expiry"]) ||
+        is_nil(cookie["expires"])
+
     %{
       name: cookie["name"],
       value: decode_remote_value(cookie["value"]),
@@ -238,7 +246,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
       http_only: cookie["httpOnly"] || false,
       secure: cookie["secure"] || false,
       same_site: cookie["sameSite"],
-      session: cookie["goog:session"] || false
+      session: !!session_cookie?
     }
   end
 
@@ -331,6 +339,34 @@ defmodule Cerberus.Driver.Browser.Extensions do
     after
       remaining ->
         raise AssertionError, message: "with_dialog/3 timed out waiting for #{method}"
+    end
+  end
+
+  defp handle_dialog_prompt!(session, timeout_ms) do
+    params = %{"context" => session.tab_id, "accept" => false}
+    opts = Keyword.put(bidi_opts(session), :timeout, timeout_ms)
+
+    case BiDi.command("browsingContext.handleUserPrompt", params, opts) do
+      {:ok, _payload} ->
+        :ok
+
+      {:error, reason, details} ->
+        raise ArgumentError, "with_dialog/3 failed to handle prompt: #{reason} (#{inspect(details)})"
+    end
+  end
+
+  defp await_dialog_action_result!(action_task, timeout_ms) do
+    wait_ms = timeout_ms + 1_000
+
+    case Task.yield(action_task, wait_ms) || Task.shutdown(action_task, :brutal_kill) do
+      {:ok, result} ->
+        result
+
+      {:exit, reason} ->
+        raise AssertionError, message: "with_dialog/3 callback failed: #{Exception.format_exit(reason)}"
+
+      nil ->
+        raise AssertionError, message: "with_dialog/3 timed out waiting for action callback completion"
     end
   end
 

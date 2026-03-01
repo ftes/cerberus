@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-28T20:40:01Z
-updated_at: 2026-03-01T09:32:45Z
+updated_at: 2026-03-01T11:25:33Z
 ---
 
 Restructure CI to run browser-tagged tests in four lanes: local chrome, local firefox, websocket chrome, websocket firefox. Minimize duplicate setup via shared non-browser setup and reusable matrix job steps.
@@ -2047,3 +2047,14 @@ Finished in 36.2 seconds (1.0s async, 35.2s sync)
 - Re-ran local Firefox lane exactly as CI (`source .envrc && CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors --max-failures 1`).
 - Current failure: `test fill_in matches wrapped labels with nested inline text across static and browser drivers` in `test/cerberus/core/form_actions_test.exs:29`.
 - Error path: `GenServer.call(... {:await_ready, [timeout_ms: 1500, quiet_ms: 40]}, 2500)` timeout from `Cerberus.Driver.Browser.UserContextProcess.handle_call/3` -> surfaced through `Cerberus.Driver.Browser.await_driver_ready/1`.
+
+
+- Investigated Firefox locally without `--max-failures`: `CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors` => 239 tests, 19 failures.
+- Serial rerun (`--max-cases 1`, still no max-failures) still failed: 239 tests, 24 failures. This indicates failures are not primarily caused by ExUnit parallelism.
+- Deterministic non-timeout root cause reproduced in isolation: `mix test test/cerberus/core/live_trigger_action_behavior_test.exs` fails 3/9 with `TypeError: MutationObserver.observe: Argument 1 is not an object.` from browser readiness script evaluation.
+- Additional recurring classes: `await_ready` GenServer timeouts (many tests), `bidi command timeout` in dialog-related browser extension flows, and occasional `DiscardedBrowsingContextError` in context creation under load.
+- Conclusion from investigation: increasing timeouts alone will not fix the Firefox lane; readiness JS needs robustness fixes first (guard observer root / realm lifecycle), then timeout tuning can be reconsidered.
+
+\n- Hardened Firefox local readiness and dialog stability: improved browser readiness script resilience/fallback polling, added bounded retry for transient readiness evaluation errors, increased readiness call budget, and normalized timeout recovery when latest readiness is already settled.\n- Updated browser extension dialog flow to avoid Firefox prompt deadlock by running callback action concurrently, handling prompt via , then awaiting callback completion.\n- Increased default BiDi command timeout to 10s and added transient retry for  (/) during tab creation.\n- Improved cookie normalization for Firefox by recognizing / flags and inferring session cookies when expiry fields are absent.\n- Local verification: focused failing subset (, , ) now passes on Firefox; full Firefox run without  now passes ().
+
+- Hardened Firefox local readiness and dialog stability: improved readiness script resilience with observer fallback polling, added bounded retry for transient readiness evaluation errors, increased readiness call budget, and normalized timeout recovery when latest readiness snapshot is already settled.\n- Updated browser extension dialog flow to avoid Firefox prompt deadlock by running the callback action concurrently, handling prompts via browsingContext.handleUserPrompt, then awaiting callback completion.\n- Increased default BiDi command timeout to 10s and added transient retry for browsingContext.create DiscardedBrowsingContextError/no such frame during tab creation.\n- Improved cookie normalization for Firefox by recognizing session/goog:session flags and inferring session cookies when expiry fields are absent.\n- Local verification: focused failing subset (form_actions, browser_extensions, documentation_examples) now passes on Firefox; full Firefox run without max-failures passes (240 tests, 0 failures).

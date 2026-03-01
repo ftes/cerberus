@@ -171,13 +171,13 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   end
 
   def handle_call({:await_ready, opts}, _from, state) do
-    {:reply, BrowsingContextProcess.await_ready(active_browsing_context_pid!(state), opts), state}
+    {:reply, await_ready_safe(active_browsing_context_pid!(state), opts), state}
   end
 
   def handle_call({:await_ready_tab, tab_id, opts}, _from, state) do
     case browsing_context_pid(state, tab_id) do
       {:ok, pid} ->
-        {:reply, BrowsingContextProcess.await_ready(pid, opts), state}
+        {:reply, await_ready_safe(pid, opts), state}
 
       {:error, reason, details} ->
         {:reply, {:error, reason, details}, state}
@@ -443,5 +443,15 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
       #{script}
     }
     """
+  end
+
+  defp await_ready_safe(pid, opts) when is_pid(pid) and is_list(opts) do
+    BrowsingContextProcess.await_ready(pid, opts)
+  catch
+    :exit, {:timeout, {GenServer, :call, _call_args}} ->
+      {:error, "browser readiness timeout", %{"reason" => "await_ready process timeout"}}
+
+    :exit, reason ->
+      {:error, "browser readiness call failed", %{"reason" => inspect(reason)}}
   end
 end
