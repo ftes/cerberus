@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreLiveTriggerActionBehaviorTest do
+defmodule CerberusTest.LiveTriggerActionBehaviorTest do
   use ExUnit.Case, async: true
 
   import Cerberus

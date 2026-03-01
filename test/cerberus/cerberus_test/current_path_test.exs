@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreCurrentPathTest do
+defmodule CerberusTest.CurrentPathTest do
   use ExUnit.Case, async: true
 
   import Cerberus

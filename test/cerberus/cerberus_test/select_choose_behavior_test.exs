@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreSelectChooseBehaviorTest do
+defmodule CerberusTest.SelectChooseBehaviorTest do
   use ExUnit.Case, async: true
 
   import Cerberus

@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreExplicitBrowserTest do
+defmodule CerberusTest.ExplicitBrowserTest do
   use ExUnit.Case, async: false
 
   import Cerberus

@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreSQLSandboxBehaviorTest do
+defmodule CerberusTest.SQLSandboxBehaviorTest do
   use ExUnit.Case, async: true
 
   import Cerberus

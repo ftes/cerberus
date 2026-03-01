@@ -257,7 +257,7 @@ config :cerberus, :browser,
 Remote `webdriver_url` integration smoke test (Docker required):
 
 ```bash
-CERBERUS_REMOTE_WEBDRIVER=1 mix test test/core/remote_webdriver_behavior_test.exs
+CERBERUS_REMOTE_WEBDRIVER=1 mix test test/cerberus/cerberus_test/remote_webdriver_behavior_test.exs
 ```
 
 This test starts a `selenium/standalone-chromium` container with `docker run`,
@@ -268,7 +268,7 @@ Global remote-browser invocation (Docker required):
 ```bash
 mix test.websocket
 mix test.websocket --browsers chrome,firefox
-mix test.websocket test/core/explicit_browser_test.exs
+mix test.websocket test/cerberus/cerberus_test/explicit_browser_test.exs
 ```
 
 `mix test.websocket` starts/stops Selenium container(s) and runs one `mix test`
@@ -278,7 +278,7 @@ invocation with remote browser lane wiring. Use `--browsers` (`chrome`,
 Cross-browser conformance run:
 
 ```bash
-mix test --only browser test/core --exclude explicit_browser
+mix test --only browser test/cerberus/cerberus_test --exclude explicit_browser
 ```
 
 `@tag :browser` uses the default browser lane. For explicit browser selection, use top-level tags (`@tag :chrome`, `@tag :firefox`) and disable a lane at test scope with `@tag chrome: false` or `@tag firefox: false`.

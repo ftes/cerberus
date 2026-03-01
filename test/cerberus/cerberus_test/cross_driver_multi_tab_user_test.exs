@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreCrossDriverMultiTabUserTest do
+defmodule CerberusTest.CrossDriverMultiTabUserTest do
   use ExUnit.Case, async: true
 
   import Cerberus

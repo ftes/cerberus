@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreCrossDriverTextTest do
+defmodule CerberusTest.CrossDriverTextTest do
   use ExUnit.Case, async: true
 
   import Cerberus

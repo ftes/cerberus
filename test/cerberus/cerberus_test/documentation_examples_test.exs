@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreDocumentationExamplesTest do
+defmodule CerberusTest.DocumentationExamplesTest do
   use ExUnit.Case, async: true
 
   import Cerberus

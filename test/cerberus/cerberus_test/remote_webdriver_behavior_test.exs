@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreRemoteWebdriverBehaviorTest do
+defmodule CerberusTest.RemoteWebdriverBehaviorTest do
   use ExUnit.Case, async: false
 
   import Cerberus

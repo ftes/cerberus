@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreLiveClickBindingsBehaviorTest do
+defmodule CerberusTest.LiveClickBindingsBehaviorTest do
   use ExUnit.Case, async: true
 
   import Cerberus

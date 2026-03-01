@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreStaticUploadBehaviorTest do
+defmodule CerberusTest.StaticUploadBehaviorTest do
   use ExUnit.Case, async: true
 
   import Cerberus

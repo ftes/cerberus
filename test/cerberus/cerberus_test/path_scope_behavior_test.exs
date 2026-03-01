@@ -1,4 +1,4 @@
-defmodule Cerberus.CorePathScopeBehaviorTest do
+defmodule CerberusTest.PathScopeBehaviorTest do
   use ExUnit.Case, async: true
 
   import Cerberus

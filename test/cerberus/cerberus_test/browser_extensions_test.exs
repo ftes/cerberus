@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreBrowserExtensionsTest do
+defmodule CerberusTest.BrowserExtensionsTest do
   use ExUnit.Case, async: true
 
   import Cerberus

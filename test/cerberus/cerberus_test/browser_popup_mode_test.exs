@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreBrowserPopupModeTest do
+defmodule CerberusTest.BrowserPopupModeTest do
   use ExUnit.Case, async: true
 
   import Cerberus

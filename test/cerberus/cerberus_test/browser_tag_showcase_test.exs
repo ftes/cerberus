@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreBrowserTagShowcaseTest do
+defmodule CerberusTest.BrowserTagShowcaseTest do
   use ExUnit.Case, async: true
 
   import Cerberus

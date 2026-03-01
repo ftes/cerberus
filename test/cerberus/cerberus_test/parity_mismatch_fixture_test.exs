@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreParityMismatchFixtureTest do
+defmodule CerberusTest.ParityMismatchFixtureTest do
   use ExUnit.Case, async: true
 
   import Cerberus

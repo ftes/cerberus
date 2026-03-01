@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreLiveTimeoutAssertionsTest do
+defmodule CerberusTest.LiveTimeoutAssertionsTest do
   use ExUnit.Case, async: true
 
   import Cerberus

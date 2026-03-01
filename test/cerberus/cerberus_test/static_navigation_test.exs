@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreStaticNavigationTest do
+defmodule CerberusTest.StaticNavigationTest do
   use ExUnit.Case, async: true
 
   import Cerberus

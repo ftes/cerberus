@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreBrowserTimeoutAssertionsTest do
+defmodule CerberusTest.BrowserTimeoutAssertionsTest do
   use ExUnit.Case, async: true
 
   import Cerberus

@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreLiveFormChangeBehaviorTest do
+defmodule CerberusTest.LiveFormChangeBehaviorTest do
   use ExUnit.Case, async: true
 
   import Cerberus

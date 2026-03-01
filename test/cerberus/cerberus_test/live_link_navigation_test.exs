@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreLiveLinkNavigationTest do
+defmodule CerberusTest.LiveLinkNavigationTest do
   use ExUnit.Case, async: true
 
   import Cerberus

@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreHelperLocatorBehaviorTest do
+defmodule CerberusTest.HelperLocatorBehaviorTest do
   use ExUnit.Case, async: true
 
   import Cerberus

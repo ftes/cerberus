@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreAutoModeTest do
+defmodule CerberusTest.AutoModeTest do
   use ExUnit.Case, async: true
 
   import Cerberus

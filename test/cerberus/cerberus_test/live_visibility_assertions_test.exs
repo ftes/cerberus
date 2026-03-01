@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreLiveVisibilityAssertionsTest do
+defmodule CerberusTest.LiveVisibilityAssertionsTest do
   use ExUnit.Case, async: true
 
   import Cerberus
