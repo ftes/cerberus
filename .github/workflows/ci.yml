@@ -81,12 +81,12 @@ jobs:
 
       - name: Install local Chrome runtime
         run: |
-          bin/chrome.sh --install
+          bin/chrome.sh
           sed 's/^export //' tmp/browser-tools/env.sh >> "$GITHUB_ENV"
 
       - name: Install local Firefox runtime
         run: |
-          bin/firefox.sh --install
+          bin/firefox.sh
           sed 's/^export //' tmp/browser-tools/env.sh >> "$GITHUB_ENV"
 
       - name: Run full test suite (default local Chrome)
