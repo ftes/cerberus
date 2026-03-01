@@ -1,4 +1,4 @@
-defmodule CerberusTest.LocatorOracleHarnessTest do
+defmodule Cerberus.LocatorParityTest do
   use ExUnit.Case, async: false
 
   import Cerberus
