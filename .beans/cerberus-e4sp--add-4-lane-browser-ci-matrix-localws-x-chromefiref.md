@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-28T20:40:01Z
-updated_at: 2026-03-01T06:38:36Z
+updated_at: 2026-03-01T06:50:32Z
 ---
 
 Restructure CI to run browser-tagged tests in four lanes: local chrome, local firefox, websocket chrome, websocket firefox. Minimize duplicate setup via shared non-browser setup and reusable matrix job steps.
@@ -2034,3 +2034,5 @@ Migration summary:
 .
 Finished in 36.2 seconds (1.0s async, 35.2s sync)
 256 tests, 97 failures (4 excluded) (both green).
+
+- Per request, commented out websocket Chrome/Firefox CI lanes in .github/workflows/ci.yml with a TODO note. Current suspected cause is websocket remote image capability mismatch: selenium/standalone-chromium:126.0 does not support emulation.setUserAgentOverride or network.setExtraHeaders, and our browser sandbox metadata setup depends on those commands during session initialization.
