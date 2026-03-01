@@ -3,26 +3,18 @@ defmodule Cerberus.CoreStaticUploadBehaviorTest do
 
   import Cerberus
 
-  alias Cerberus.Harness
-
-  @tag :static
-  @tag :live
-  test "upload submits file inputs on static routes in phoenix mode", context do
+  test "upload submits file inputs on static routes in phoenix mode" do
     jpg = upload_fixture_path("elixir.jpg")
 
-    Harness.run!(
-      context,
-      fn session ->
-        session
-        |> visit("/upload/static")
-        |> within("#static-upload-form", fn scoped ->
-          scoped
-          |> upload("Avatar", jpg)
-          |> submit(text: "Upload Avatar", exact: true)
-        end)
-        |> assert_has(text("Uploaded file: elixir.jpg", exact: true))
-      end
-    )
+    :phoenix
+    |> session()
+    |> visit("/upload/static")
+    |> within("#static-upload-form", fn scoped ->
+      scoped
+      |> upload("Avatar", jpg)
+      |> submit(text: "Upload Avatar", exact: true)
+    end)
+    |> assert_has(text("Uploaded file: elixir.jpg", exact: true))
   end
 
   defp upload_fixture_path(file_name) do

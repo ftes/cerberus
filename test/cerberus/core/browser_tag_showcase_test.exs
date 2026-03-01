@@ -3,18 +3,13 @@ defmodule Cerberus.CoreBrowserTagShowcaseTest do
 
   import Cerberus
 
-  alias Cerberus.Harness
+  test "browser session uses default browser lane" do
+    session = session(:browser)
 
-  @moduletag :browser
+    assert session.__struct__ == Cerberus.Driver.Browser
 
-  test "module-level browser tag uses default browser lane", context do
-    results =
-      Harness.run!(context, fn session ->
-        session
-        |> visit("/articles")
-        |> assert_has(text("Articles", exact: true))
-      end)
-
-    assert Enum.map(results, & &1.driver) == [:browser]
+    session
+    |> visit("/articles")
+    |> assert_has(text("Articles", exact: true))
   end
 end

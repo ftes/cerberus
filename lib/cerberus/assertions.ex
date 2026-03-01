@@ -248,7 +248,12 @@ defmodule Cerberus.Assertions do
   defp observed_transition(_observed), do: nil
 
   defp resolve_assert_timeout(_session, true, validated_timeout), do: validated_timeout
-  defp resolve_assert_timeout(session, false, _validated_timeout), do: Session.assert_timeout_ms(session)
+  defp resolve_assert_timeout(%LiveSession{} = session, false, _validated_timeout), do: Session.assert_timeout_ms(session)
+
+  defp resolve_assert_timeout(%BrowserSession{} = session, false, _validated_timeout),
+    do: Session.assert_timeout_ms(session)
+
+  defp resolve_assert_timeout(_session, false, _validated_timeout), do: 0
 
   defp driver_module_for_session!(%StaticSession{}), do: StaticSession
   defp driver_module_for_session!(%LiveSession{}), do: LiveSession

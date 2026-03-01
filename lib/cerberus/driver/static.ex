@@ -87,7 +87,7 @@ defmodule Cerberus.Driver.Static do
         %LiveSession{
           endpoint: session.endpoint,
           conn: conn,
-          assert_timeout_ms: session.assert_timeout_ms,
+          assert_timeout_ms: assert_timeout_for_live(session),
           view: view,
           html: html,
           form_data: session.form_data,
@@ -417,7 +417,7 @@ defmodule Cerberus.Driver.Static do
         %LiveSession{
           endpoint: session.endpoint,
           conn: conn,
-          assert_timeout_ms: session.assert_timeout_ms,
+          assert_timeout_ms: assert_timeout_for_live(session),
           view: view,
           html: html,
           form_data: session.form_data,
@@ -451,6 +451,16 @@ defmodule Cerberus.Driver.Static do
   end
 
   defp normalize_submit_method(nil), do: "get"
+
+  defp assert_timeout_for_live(session) do
+    static_default = Session.default_assert_timeout_ms()
+
+    if session.assert_timeout_ms == static_default do
+      Session.live_browser_assert_timeout_default_ms()
+    else
+      session.assert_timeout_ms
+    end
+  end
 
   defp clear_submitted_session(%__MODULE__{} = session, form_data, op, observed) do
     %{

@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-01T17:33:28Z
-updated_at: 2026-03-01T17:40:25Z
+updated_at: 2026-03-01T18:22:02Z
 parent: cerberus-whq9
 ---
 
@@ -16,7 +16,7 @@ Goals:
 - Use explicit for driver in ... loops where multi-driver coverage is needed.
 
 ## Todo
-- [ ] Inventory and replace all Harness.run/run! call sites
+- [x] Inventory and replace all Harness.run/run! call sites
 - [ ] Convert cross-driver scenarios to explicit loop-generated tests
 - [ ] Remove harness support code and obsolete tags
 - [ ] Run format and precommit
@@ -30,3 +30,18 @@ Goals:
 - Consolidated select_choose_behavior_test.exs into a single top-level for driver in [:phoenix, :browser] loop for all tests sharing the same driver set.
 - Updated test bodies to call session(unquote(driver)) directly.
 - Revalidated with firefox lane: 18 tests, 0 failures.
+
+- Converted additional core test modules from Harness.run!/run to direct sessions and compile-time driver loops in test/cerberus/core:
+  - browser_tag_showcase_test.exs
+  - browser_timeout_assertions_test.exs
+  - checkbox_array_behavior_test.exs
+  - cross_driver_text_test.exs
+  - live_navigation_test.exs
+  - live_timeout_assertions_test.exs
+  - live_visibility_assertions_test.exs
+  - open_browser_behavior_test.exs
+  - static_navigation_test.exs
+  - static_upload_behavior_test.exs
+- Kept non-browser public API constrained to session()/session(:phoenix); explicit :static/:live public aliases were not introduced.
+- Preserved live default assertion-timeout semantics (500ms) when phoenix sessions transition into LiveView mode.
+- Tightened shared assertion timeout resolution so static sessions remain fail-fast by default (timeout 0) unless explicitly overridden per call.
