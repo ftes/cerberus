@@ -407,16 +407,15 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   defp maybe_stop_service(%{managed?: true, process: process}) when is_port(process) do
     os_pid = process_os_pid(process)
+    kill_target = local_service_kill_target(os_pid)
 
-    if is_integer(os_pid), do: signal_process_group(os_pid, "TERM")
+    signal_local_service(kill_target, "TERM")
     if Port.info(process) != nil, do: Port.close(process)
 
-    if is_integer(os_pid) do
-      Process.sleep(50)
+    Process.sleep(50)
 
-      if process_group_alive?(os_pid) do
-        signal_process_group(os_pid, "KILL")
-      end
+    if local_service_alive?(kill_target) do
+      signal_local_service(kill_target, "KILL")
     end
 
     :ok
@@ -430,6 +429,136 @@ defmodule Cerberus.Driver.Browser.Runtime do
       _ -> nil
     end
   end
+
+  defp local_service_kill_target(os_pid) when is_integer(os_pid) and os_pid > 0 do
+    service_pgid = process_group_id(os_pid)
+    runtime_pgid = current_process_group_id()
+
+    if is_integer(service_pgid) and service_pgid > 0 and service_pgid != runtime_pgid do
+      {:process_group, service_pgid}
+    else
+      {:process_tree, process_tree_pids(os_pid)}
+    end
+  end
+
+  defp local_service_kill_target(_), do: :none
+
+  defp local_service_alive?({:process_group, pgid}) do
+    process_group_alive?(pgid)
+  end
+
+  defp local_service_alive?({:process_tree, pids}) when is_list(pids) do
+    Enum.any?(pids, &pid_alive?/1)
+  end
+
+  defp local_service_alive?(:none), do: false
+
+  defp signal_local_service({:process_group, pgid}, signal) do
+    signal_process_group(pgid, signal)
+  end
+
+  defp signal_local_service({:process_tree, pids}, signal) when is_list(pids) do
+    signal_process_tree(pids, signal)
+  end
+
+  defp signal_local_service(:none, _signal), do: :ok
+
+  defp process_group_id(os_pid) when is_integer(os_pid) and os_pid > 0 do
+    case System.cmd("ps", ["-o", "pgid=", "-p", Integer.to_string(os_pid)], stderr_to_stdout: true) do
+      {output, 0} -> parse_positive_integer(output)
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  defp process_group_id(_), do: nil
+
+  defp current_process_group_id do
+    case parse_positive_integer(:os.getpid()) do
+      nil -> nil
+      os_pid -> process_group_id(os_pid)
+    end
+  end
+
+  defp process_tree_pids(root_pid) when is_integer(root_pid) and root_pid > 0 do
+    [root_pid]
+    |> MapSet.new()
+    |> process_tree_pids([root_pid])
+    |> MapSet.to_list()
+  end
+
+  defp process_tree_pids(_), do: []
+
+  defp process_tree_pids(visited, []), do: visited
+
+  defp process_tree_pids(visited, [parent_pid | rest]) do
+    children =
+      parent_pid
+      |> child_pids()
+      |> Enum.reject(&MapSet.member?(visited, &1))
+
+    visited = Enum.reduce(children, visited, &MapSet.put(&2, &1))
+    process_tree_pids(visited, rest ++ children)
+  end
+
+  defp child_pids(parent_pid) when is_integer(parent_pid) and parent_pid > 0 do
+    case System.cmd("pgrep", ["-P", Integer.to_string(parent_pid)], stderr_to_stdout: true) do
+      {output, 0} ->
+        output
+        |> String.split("\n", trim: true)
+        |> Enum.map(&parse_positive_integer/1)
+        |> Enum.reject(&is_nil/1)
+
+      _ ->
+        []
+    end
+  rescue
+    _ -> []
+  end
+
+  defp child_pids(_), do: []
+
+  defp signal_process_tree(pids, signal) when signal in ["TERM", "KILL"] and is_list(pids) do
+    pids =
+      pids
+      |> Enum.filter(&(is_integer(&1) and &1 > 0))
+      |> Enum.uniq()
+      |> Enum.map(&Integer.to_string/1)
+
+    case pids do
+      [] ->
+        :ok
+
+      _ ->
+        _ = System.cmd("kill", ["-#{signal}" | pids], stderr_to_stdout: true)
+        :ok
+    end
+  rescue
+    _ -> :ok
+  end
+
+  defp pid_alive?(os_pid) when is_integer(os_pid) and os_pid > 0 do
+    case System.cmd("kill", ["-0", Integer.to_string(os_pid)], stderr_to_stdout: true) do
+      {_output, 0} -> true
+      _ -> false
+    end
+  rescue
+    _ -> false
+  end
+
+  defp pid_alive?(_), do: false
+
+  defp parse_positive_integer(value) when is_integer(value) and value > 0, do: value
+
+  defp parse_positive_integer(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {integer, ""} when integer > 0 -> integer
+      _ -> nil
+    end
+  end
+
+  defp parse_positive_integer(_), do: nil
 
   defp process_group_alive?(os_pid) when is_integer(os_pid) and os_pid > 0 do
     case System.cmd("kill", ["-0", "--", "-#{os_pid}"], stderr_to_stdout: true) do

@@ -63,8 +63,20 @@ Cerberus.TestHelperSupport.ensure_postgres_database!(Repo.config())
       {Phoenix.PubSub, name: Cerberus.Fixtures.PubSub},
       Cerberus.Driver.Browser.Supervisor
     ],
-    strategy: :one_for_one
+    strategy: :one_for_one,
+    name: Cerberus.TestSupportSupervisor
   )
+
+ExUnit.after_suite(fn _results ->
+  case Process.whereis(Cerberus.TestSupportSupervisor) do
+    pid when is_pid(pid) ->
+      _ = Supervisor.stop(pid, :normal, 15_000)
+      :ok
+
+    _ ->
+      :ok
+  end
+end)
 
 SQL.query!(
   Repo,

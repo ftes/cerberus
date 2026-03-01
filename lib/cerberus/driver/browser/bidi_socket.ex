@@ -135,6 +135,8 @@ defmodule Cerberus.Driver.Browser.BiDiSocket do
     with {:ok, owner} <- resolve_owner(state.owner),
          {:ok, normalized_browser} <- normalize_browser_name(browser_name),
          {:ok, socket} <- WS.start_link(url, owner, ws_opts(normalized_browser)) do
+      # Keep WS process failures isolated; disconnections are handled via owner events + monitor.
+      _ = Process.unlink(socket)
       monitor_ref = Process.monitor(socket)
       sockets = Map.put(sockets, normalized_browser, %{socket: socket, url: url, monitor_ref: monitor_ref})
       {:reply, {:ok, socket}, %{state | sockets: sockets}}
@@ -156,5 +158,14 @@ defmodule Cerberus.Driver.Browser.BiDiSocket do
 
   defp ws_opts(_browser_name) do
     [extra_headers: [{"Sec-WebSocket-Protocol", "webDriverBidi"}]]
+  end
+
+  @impl true
+  def terminate(_reason, state) do
+    Enum.each(state.sockets, fn {_browser_name, %{socket: socket}} ->
+      _ = WS.close(socket)
+    end)
+
+    :ok
   end
 end

@@ -280,7 +280,7 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
   @impl true
   def terminate(_reason, state) do
-    _ = remove_user_context(state.user_context_id, state.bidi_opts)
+    _ = maybe_remove_user_context(state)
 
     if is_pid(state.browsing_context_supervisor) and
          Process.alive?(state.browsing_context_supervisor) do
@@ -308,6 +308,21 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   end
 
   defp remove_user_context(_, _), do: :ok
+
+  defp maybe_remove_user_context(%{owner: owner, user_context_id: user_context_id, bidi_opts: bidi_opts})
+       when is_pid(owner) do
+    if Process.alive?(owner) do
+      try do
+        remove_user_context(user_context_id, bidi_opts)
+      catch
+        :exit, _reason -> :ok
+      end
+    else
+      :ok
+    end
+  end
+
+  defp maybe_remove_user_context(_state), do: :ok
 
   defp start_browsing_context(browsing_context_supervisor, user_context_id, defaults, bidi_opts) do
     DynamicSupervisor.start_child(
