@@ -48,7 +48,8 @@ defmodule Cerberus.Driver.Browser.WS do
           {:ok, next_state}
 
         {:disconnect, reason, next_state} ->
-          {:stop, reason, maybe_mark_disconnected(next_state, reason)}
+          _ = maybe_mark_disconnected(next_state, reason)
+          {:stop, disconnect_stop_reason(reason)}
       end
     end
   end
@@ -80,7 +81,7 @@ defmodule Cerberus.Driver.Browser.WS do
       {:noreply, next_state}
     else
       {:disconnect, reason, next_state} ->
-        {:stop, reason, maybe_mark_disconnected(next_state, reason)}
+        {:stop, disconnect_stop_reason(reason), maybe_mark_disconnected(next_state, reason)}
 
       {:error, reason} ->
         next_state = maybe_mark_disconnected(state, reason)
@@ -94,7 +95,7 @@ defmodule Cerberus.Driver.Browser.WS do
       {:noreply, next_state}
     else
       {:disconnect, reason, next_state} ->
-        {:stop, reason, maybe_mark_disconnected(next_state, reason)}
+        {:stop, disconnect_stop_reason(reason), maybe_mark_disconnected(next_state, reason)}
 
       {:error, reason} ->
         next_state = maybe_mark_disconnected(state, reason)
@@ -332,6 +333,9 @@ defmodule Cerberus.Driver.Browser.WS do
 
   defp decode_close_payload(<<code::16, reason::binary>>), do: {code, reason}
   defp decode_close_payload(_payload), do: :closed
+
+  defp disconnect_stop_reason({:remote_close, {1000, _reason}}), do: :normal
+  defp disconnect_stop_reason(reason), do: reason
 
   defp encode_frame(opcode, payload) when is_integer(opcode) and is_binary(payload) do
     fin_opcode = 0x80 ||| opcode
