@@ -22,6 +22,7 @@ Goals:
 - [x] Extract browser assertion/path/html expression builders into `Cerberus.Driver.Browser.Expressions`
 - [x] Extract browser snapshot expression into `Cerberus.Driver.Browser.Expressions`
 - [x] Extract browser DOM discovery expressions (`clickables`, `form_fields`, `file_fields`) into `Cerberus.Driver.Browser.Expressions`
+- [x] Extract browser action expressions (`upload_field`, `field_set`, `select_set`, `checkbox_set`, `radio_set`, `button_click`) into `Cerberus.Driver.Browser.Expressions`
 - [ ] Continue splitting browser driver monolith (navigation/forms/assertions/expression builders)
 - [ ] Split remaining live/static responsibilities into focused modules
 - [ ] Keep per-driver APIs coherent and discoverable

@@ -446,4 +446,584 @@ defmodule Cerberus.Driver.Browser.Expressions do
     })()
     """
   end
+
+  @spec upload_field(
+          non_neg_integer(),
+          String.t(),
+          String.t(),
+          integer(),
+          binary(),
+          String.t() | nil,
+          String.t() | nil
+        ) ::
+          String.t()
+  def upload_field(index, file_name, mime_type, last_modified_unix_ms, content, scope, selector) do
+    encoded_file_name = JSON.encode!(file_name)
+    encoded_mime_type = JSON.encode!(mime_type)
+    encoded_last_modified = JSON.encode!(last_modified_unix_ms)
+    encoded_content = JSON.encode!(Base.encode64(content))
+    encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
+
+    """
+    (() => {
+      const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
+      const fileName = #{encoded_file_name};
+      const mimeType = #{encoded_mime_type};
+      const lastModified = #{encoded_last_modified};
+      const contentBase64 = #{encoded_content};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
+      const fields = queryWithinRoots("input[type='file']").filter(selectorMatches);
+      const field = fields[#{index}];
+
+      if (!field) {
+        return JSON.stringify({ ok: false, reason: "field_not_found" });
+      }
+
+      try {
+        const decoded = atob(contentBase64);
+        const bytes = new Uint8Array(decoded.length);
+
+        for (let i = 0; i < decoded.length; i += 1) {
+          bytes[i] = decoded.charCodeAt(i);
+        }
+
+        const file = new File([bytes], fileName, { type: mimeType, lastModified });
+        const transfer = new DataTransfer();
+        transfer.items.add(file);
+        field.files = transfer.files;
+
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        field.dispatchEvent(new Event("change", { bubbles: true }));
+
+        return JSON.stringify({
+          ok: true,
+          path: window.location.pathname + window.location.search
+        });
+      } catch (error) {
+        return JSON.stringify({
+          ok: false,
+          reason: "file_set_failed",
+          message: String(error && error.message ? error.message : error)
+        });
+      }
+    })()
+    """
+  end
+
+  @spec field_set(non_neg_integer(), term(), String.t() | nil, String.t() | nil) :: String.t()
+  def field_set(index, value, scope, selector) do
+    encoded_value = JSON.encode!(to_string(value))
+    encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
+
+    """
+    (() => {
+      const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
+      const fields = queryWithinRoots("input, textarea, select")
+        .filter((element) => {
+          const type = (element.getAttribute("type") || "").toLowerCase();
+          return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
+        });
+
+      const field = fields[#{index}];
+      if (!field) {
+        return JSON.stringify({ ok: false, reason: "field_not_found" });
+      }
+
+      const value = #{encoded_value};
+      field.value = value;
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+
+      return JSON.stringify({
+        ok: true,
+        path: window.location.pathname + window.location.search
+      });
+    })()
+    """
+  end
+
+  @spec select_set(
+          non_neg_integer(),
+          [String.t()],
+          boolean(),
+          boolean(),
+          [String.t()],
+          String.t() | nil,
+          String.t() | nil
+        ) ::
+          String.t()
+  def select_set(index, options, exact_option, preserve_existing, remembered_values, scope, selector) do
+    encoded_options = JSON.encode!(options)
+    encoded_exact_option = JSON.encode!(exact_option)
+    encoded_preserve_existing = JSON.encode!(preserve_existing)
+    encoded_remembered_values = JSON.encode!(remembered_values)
+    encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
+
+    """
+    (() => {
+      const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
+      const requestedOptions = #{encoded_options};
+      const exactOption = #{encoded_exact_option};
+      const preserveExisting = #{encoded_preserve_existing};
+      const rememberedValues = #{encoded_remembered_values};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").replace(/\\s+/g, " ").trim();
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
+      const fields = queryWithinRoots("input, textarea, select")
+        .filter((element) => {
+          const type = (element.getAttribute("type") || "").toLowerCase();
+          return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
+        });
+
+      const field = fields[#{index}];
+      if (!field) {
+        return JSON.stringify({ ok: false, reason: "field_not_found" });
+      }
+
+      if ((field.tagName || "").toLowerCase() !== "select") {
+        return JSON.stringify({ ok: false, reason: "field_not_select" });
+      }
+
+      if (field.disabled) {
+        return JSON.stringify({ ok: false, reason: "field_disabled" });
+      }
+
+      if (!field.multiple && requestedOptions.length > 1) {
+        return JSON.stringify({ ok: false, reason: "select_not_multiple" });
+      }
+
+      const matchOption = (option, requested) => {
+        const optionText = normalize(option.textContent);
+        const requestedText = normalize(requested);
+
+        if (exactOption) {
+          return optionText === requestedText;
+        }
+
+        return optionText.includes(requestedText);
+      };
+
+      const matched = [];
+
+      for (const requested of requestedOptions) {
+        const enabled = Array.from(field.options || []).find((option) => matchOption(option, requested) && !option.disabled);
+
+        if (enabled) {
+          matched.push(enabled);
+          continue;
+        }
+
+        const disabled = Array.from(field.options || []).find((option) => matchOption(option, requested) && option.disabled);
+
+        if (disabled) {
+          return JSON.stringify({ ok: false, reason: "option_disabled", option: requested });
+        }
+
+        return JSON.stringify({ ok: false, reason: "option_not_found", option: requested });
+      }
+
+      if (field.multiple) {
+        const remembered = new Set((rememberedValues || []).map((value) => String(value)));
+        const selectedValues = preserveExisting
+          ? new Set(
+              Array.from(field.selectedOptions || []).map((option) => option.value || normalize(option.textContent))
+                .concat(Array.from(remembered))
+            )
+          : new Set();
+
+        for (const option of matched) {
+          selectedValues.add(option.value || normalize(option.textContent));
+        }
+
+        for (const option of Array.from(field.options || [])) {
+          const value = option.value || normalize(option.textContent);
+          option.selected = selectedValues.has(value);
+        }
+      } else {
+        for (const option of Array.from(field.options || [])) {
+          option.selected = false;
+        }
+
+        if (matched[0]) {
+          matched[0].selected = true;
+          field.value = matched[0].value || normalize(matched[0].textContent);
+        }
+      }
+
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+
+      const value = field.multiple
+        ? Array.from(field.selectedOptions || []).map((option) => option.value || normalize(option.textContent))
+        : field.value;
+
+      return JSON.stringify({
+        ok: true,
+        path: window.location.pathname + window.location.search,
+        value
+      });
+    })()
+    """
+  end
+
+  @spec checkbox_set(non_neg_integer(), boolean(), String.t() | nil, String.t() | nil) :: String.t()
+  def checkbox_set(index, checked, scope, selector) do
+    encoded_checked = JSON.encode!(checked)
+    encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
+
+    """
+    (() => {
+      const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
+      const shouldCheck = #{encoded_checked};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
+      const fields = queryWithinRoots("input, textarea, select")
+        .filter((element) => {
+          const type = (element.getAttribute("type") || "").toLowerCase();
+          return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
+        });
+
+      const field = fields[#{index}];
+      if (!field) {
+        return JSON.stringify({ ok: false, reason: "field_not_found" });
+      }
+
+      const type = (field.getAttribute("type") || "").toLowerCase();
+      if (type !== "checkbox") {
+        return JSON.stringify({ ok: false, reason: "field_not_checkbox" });
+      }
+
+      if (field.disabled) {
+        return JSON.stringify({ ok: false, reason: "field_disabled" });
+      }
+
+      field.checked = shouldCheck;
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+
+      return JSON.stringify({
+        ok: true,
+        path: window.location.pathname + window.location.search
+      });
+    })()
+    """
+  end
+
+  @spec radio_set(non_neg_integer(), String.t() | nil, String.t() | nil) :: String.t()
+  def radio_set(index, scope, selector) do
+    encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
+
+    """
+    (() => {
+      const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
+      const fields = queryWithinRoots("input, textarea, select")
+        .filter((element) => {
+          const type = (element.getAttribute("type") || "").toLowerCase();
+          return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
+        });
+
+      const field = fields[#{index}];
+      if (!field) {
+        return JSON.stringify({ ok: false, reason: "field_not_found" });
+      }
+
+      const type = (field.getAttribute("type") || "").toLowerCase();
+      if (type !== "radio") {
+        return JSON.stringify({ ok: false, reason: "field_not_radio" });
+      }
+
+      if (field.disabled) {
+        return JSON.stringify({ ok: false, reason: "field_disabled" });
+      }
+
+      field.checked = true;
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+
+      return JSON.stringify({
+        ok: true,
+        path: window.location.pathname + window.location.search,
+        value: field.value || "on"
+      });
+    })()
+    """
+  end
+
+  @spec button_click(non_neg_integer(), String.t() | nil, String.t() | nil) :: String.t()
+  def button_click(index, scope, selector) do
+    encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
+
+    """
+    (() => {
+      const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
+      const buttons = queryWithinRoots("button").filter(selectorMatches);
+      const button = buttons[#{index}];
+
+      if (!button) {
+        return JSON.stringify({ ok: false, reason: "button_not_found" });
+      }
+
+      button.click();
+
+      return JSON.stringify({
+        ok: true,
+        path: window.location.pathname + window.location.search
+      });
+    })()
+    """
+  end
 end
