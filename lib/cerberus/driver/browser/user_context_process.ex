@@ -41,12 +41,25 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
   @spec evaluate(pid(), String.t()) :: {:ok, map()} | {:error, String.t(), map()}
   def evaluate(pid, expression) when is_pid(pid) and is_binary(expression) do
-    GenServer.call(pid, {:evaluate, expression}, 10_000)
+    evaluate_with_timeout(pid, expression, 10_000)
   end
 
   @spec evaluate(pid(), String.t(), String.t() | nil) :: {:ok, map()} | {:error, String.t(), map()}
   def evaluate(pid, expression, tab_id) when is_pid(pid) and is_binary(expression) do
-    GenServer.call(pid, {:evaluate_tab, tab_id, expression}, 10_000)
+    evaluate_with_timeout(pid, expression, 10_000, tab_id)
+  end
+
+  @spec evaluate_with_timeout(pid(), String.t(), pos_integer()) :: {:ok, map()} | {:error, String.t(), map()}
+  def evaluate_with_timeout(pid, expression, timeout_ms)
+      when is_pid(pid) and is_binary(expression) and is_integer(timeout_ms) and timeout_ms > 0 do
+    GenServer.call(pid, {:evaluate, expression, timeout_ms}, timeout_ms + 5_000)
+  end
+
+  @spec evaluate_with_timeout(pid(), String.t(), pos_integer(), String.t() | nil) ::
+          {:ok, map()} | {:error, String.t(), map()}
+  def evaluate_with_timeout(pid, expression, timeout_ms, tab_id)
+      when is_pid(pid) and is_binary(expression) and is_integer(timeout_ms) and timeout_ms > 0 do
+    GenServer.call(pid, {:evaluate_tab, tab_id, expression, timeout_ms}, timeout_ms + 5_000)
   end
 
   @spec await_ready(pid(), keyword()) :: {:ok, map()} | {:error, String.t(), map()}
@@ -156,14 +169,14 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     end
   end
 
-  def handle_call({:evaluate, expression}, _from, state) do
-    {:reply, BrowsingContextProcess.evaluate(active_browsing_context_pid!(state), expression), state}
+  def handle_call({:evaluate, expression, timeout_ms}, _from, state) do
+    {:reply, BrowsingContextProcess.evaluate(active_browsing_context_pid!(state), expression, timeout_ms), state}
   end
 
-  def handle_call({:evaluate_tab, tab_id, expression}, _from, state) do
+  def handle_call({:evaluate_tab, tab_id, expression, timeout_ms}, _from, state) do
     case browsing_context_pid(state, tab_id) do
       {:ok, pid} ->
-        {:reply, BrowsingContextProcess.evaluate(pid, expression), state}
+        {:reply, BrowsingContextProcess.evaluate(pid, expression, timeout_ms), state}
 
       {:error, reason, details} ->
         {:reply, {:error, reason, details}, state}

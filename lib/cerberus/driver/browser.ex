@@ -226,6 +226,20 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @doc false
+  @spec assert_path(t(), String.t() | Regex.t(), Options.path_opts()) ::
+          {:ok, t(), map()} | {:error, t(), map(), String.t()}
+  def assert_path(%__MODULE__{} = session, expected, opts) when is_binary(expected) or is_struct(expected, Regex) do
+    run_path_assertion(session, expected, opts, :assert_path)
+  end
+
+  @doc false
+  @spec refute_path(t(), String.t() | Regex.t(), Options.path_opts()) ::
+          {:ok, t(), map()} | {:error, t(), map(), String.t()}
+  def refute_path(%__MODULE__{} = session, expected, opts) when is_binary(expected) or is_struct(expected, Regex) do
+    run_path_assertion(session, expected, opts, :refute_path)
+  end
+
+  @doc false
   @spec wait_for_assertion_signal(t(), non_neg_integer()) :: t()
   def wait_for_assertion_signal(%__MODULE__{} = session, timeout_ms) when is_integer(timeout_ms) and timeout_ms >= 0 do
     state = state!(session)
@@ -413,37 +427,33 @@ defmodule Cerberus.Driver.Browser do
   @impl true
   def assert_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
     state = state!(session)
-    match_opts = locator_match_opts(locator, opts)
+    timeout_ms = assertion_timeout_ms(opts)
+    match_opts = locator_match_opts(locator, Keyword.delete(opts, :timeout))
     visible = visibility_filter(opts)
 
-    with_driver_ready(session, state, :assert_has, fn ready_state ->
-      case with_snapshot(ready_state) do
-        {next_state, snapshot} ->
-          assert_snapshot_result(session, next_state, snapshot, expected, visible, match_opts)
+    case run_text_assertion(state, expected, visible, match_opts, timeout_ms, :assert) do
+      {:ok, next_state, observed} ->
+        {:ok, update_session(session, next_state, :assert_has, observed), observed}
 
-        {:error, reason, details} ->
-          observed = %{path: ready_state.current_path, details: details}
-          {:error, session, observed, "failed to collect browser text snapshot: #{reason}"}
-      end
-    end)
+      {:error, reason, observed} ->
+        {:error, session, observed, reason}
+    end
   end
 
   @impl true
   def refute_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
     state = state!(session)
-    match_opts = locator_match_opts(locator, opts)
+    timeout_ms = assertion_timeout_ms(opts)
+    match_opts = locator_match_opts(locator, Keyword.delete(opts, :timeout))
     visible = visibility_filter(opts)
 
-    with_driver_ready(session, state, :refute_has, fn ready_state ->
-      case with_snapshot(ready_state) do
-        {next_state, snapshot} ->
-          refute_snapshot_result(session, next_state, snapshot, expected, visible, match_opts)
+    case run_text_assertion(state, expected, visible, match_opts, timeout_ms, :refute) do
+      {:ok, next_state, observed} ->
+        {:ok, update_session(session, next_state, :refute_has, observed), observed}
 
-        {:error, reason, details} ->
-          observed = %{path: ready_state.current_path, details: details}
-          {:error, session, observed, "failed to collect browser text snapshot: #{reason}"}
-      end
-    end)
+      {:error, reason, observed} ->
+        {:error, session, observed, reason}
+    end
   end
 
   defp do_click(session, state, clickables_data, expected, opts, selector) do
@@ -1040,8 +1050,11 @@ defmodule Cerberus.Driver.Browser do
     UserContextProcess.navigate(state.user_context_pid, url, state.tab_id)
   end
 
-  defp eval_json(state, expression) do
-    with {:ok, result} <- UserContextProcess.evaluate(state.user_context_pid, expression, state.tab_id),
+  defp eval_json(state, expression, timeout_ms \\ 10_000)
+
+  defp eval_json(state, expression, timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
+    with {:ok, result} <-
+           UserContextProcess.evaluate_with_timeout(state.user_context_pid, expression, timeout_ms, state.tab_id),
          {:ok, json} <- decode_remote_json(result) do
       {:ok, json}
     else
@@ -1113,44 +1126,136 @@ defmodule Cerberus.Driver.Browser do
     Map.has_key?(payload, "awaited") or Map.has_key?(payload, "lastSignal")
   end
 
-  defp assert_snapshot_result(session, next_state, snapshot, expected, visible, opts) do
-    texts = select_texts(snapshot, visible)
-    matched = Enum.filter(texts, &Query.match_text?(&1, expected, opts))
+  defp run_text_assertion(state, expected, visible, match_opts, timeout_ms, mode) when mode in [:assert, :refute] do
+    scope = Session.scope(state)
+    selector = Keyword.get(match_opts, :selector)
+    exact = Keyword.get(match_opts, :exact, false)
+    normalize_ws = Keyword.get(match_opts, :normalize_ws, true)
 
-    observed = %{
-      path: snapshot.path,
-      title: snapshot.title,
-      visible: visible,
-      texts: texts,
-      matched: matched,
-      expected: expected
-    }
+    expression =
+      text_assertion_expression(
+        scope,
+        selector,
+        text_expectation_payload(expected),
+        exact,
+        normalize_ws,
+        visible,
+        timeout_ms,
+        mode
+      )
 
-    if matched == [] do
-      {:error, session, observed, "expected text not found"}
-    else
-      {:ok, update_session(session, next_state, :assert_has, observed), observed}
+    case eval_json(state, expression, command_timeout_ms(timeout_ms)) do
+      {:ok, %{"ok" => true} = result} ->
+        next_state = %{state | current_path: result["path"] || state.current_path}
+        {:ok, next_state, text_assertion_observed(result, expected, visible)}
+
+      {:ok, result} ->
+        reason = if mode == :assert, do: "expected text not found", else: "unexpected matching text found"
+        {:error, reason, text_assertion_observed(result, expected, visible)}
+
+      {:error, reason, details} ->
+        observed = %{path: state.current_path, details: details}
+        {:error, "failed to evaluate browser text assertion: #{reason}", observed}
     end
   end
 
-  defp refute_snapshot_result(session, next_state, snapshot, expected, visible, opts) do
-    texts = select_texts(snapshot, visible)
-    matched = Enum.filter(texts, &Query.match_text?(&1, expected, opts))
+  defp run_path_assertion(session, expected, opts, op) when op in [:assert_path, :refute_path] do
+    state = state!(session)
+    timeout_ms = path_timeout_ms(opts)
+    exact = Keyword.fetch!(opts, :exact)
+    expected_query = Cerberus.Path.normalize_expected_query(Keyword.get(opts, :query))
 
-    observed = %{
-      path: snapshot.path,
-      title: snapshot.title,
-      visible: visible,
-      texts: texts,
-      matched: matched,
-      expected: expected
+    expected_path =
+      if is_binary(expected) do
+        Cerberus.Path.normalize(expected) || expected
+      else
+        expected
+      end
+
+    assertion = %{
+      expected: expected,
+      expected_query: expected_query,
+      exact: exact,
+      timeout_ms: timeout_ms,
+      op: op,
+      payload: path_expectation_payload(expected_path),
+      deadline: System.monotonic_time(:millisecond) + timeout_ms
     }
 
-    if matched == [] do
-      {:ok, update_session(session, next_state, :refute_has, observed), observed}
-    else
-      {:error, session, observed, "unexpected matching text found"}
+    do_run_path_assertion(session, state, assertion)
+  end
+
+  defp do_run_path_assertion(session, state, assertion) do
+    expected = assertion.expected
+    expected_query = assertion.expected_query
+    exact = assertion.exact
+    timeout_ms = assertion.timeout_ms
+    op = assertion.op
+    expected_payload = assertion.payload
+    deadline = assertion.deadline
+    remaining_timeout = max(deadline - System.monotonic_time(:millisecond), 0)
+
+    expression =
+      path_assertion_expression(
+        expected_payload,
+        expected_query,
+        exact,
+        remaining_timeout,
+        op
+      )
+
+    case eval_json(state, expression, command_timeout_ms(remaining_timeout)) do
+      {:ok, result} ->
+        observed = %{
+          path: result["path"] || state.current_path,
+          scope: Session.scope(session),
+          expected: expected,
+          query: expected_query,
+          exact: exact,
+          timeout: timeout_ms,
+          path_match?: result["path_match?"] == true,
+          query_match?: result["query_match?"] == true
+        }
+
+        cond do
+          result["ok"] == true ->
+            updated = %{session | current_path: observed.path}
+            {:ok, updated, observed}
+
+          result["reason"] == "navigation-transition" and remaining_timeout > 0 ->
+            Process.sleep(25)
+            do_run_path_assertion(session, state, assertion)
+
+          true ->
+            {:error, session, observed, "path assertion failed"}
+        end
+
+      {:error, reason, details} ->
+        observed = %{
+          path: state.current_path,
+          scope: Session.scope(session),
+          expected: expected,
+          query: expected_query,
+          exact: exact,
+          timeout: timeout_ms,
+          path_match?: false,
+          query_match?: false,
+          details: details
+        }
+
+        {:error, session, observed, "failed to evaluate browser path assertion: #{reason}"}
     end
+  end
+
+  defp text_assertion_observed(result, expected, visible) when is_map(result) do
+    %{
+      path: result["path"],
+      title: result["title"] || "",
+      visible: visible,
+      texts: result["texts"] || [],
+      matched: result["matched"] || [],
+      expected: expected
+    }
   end
 
   defp click_button_after_eval(session, state, button) do
@@ -1266,10 +1371,6 @@ defmodule Cerberus.Driver.Browser do
         success
     end
   end
-
-  defp select_texts(snapshot, true), do: snapshot.visible
-  defp select_texts(snapshot, false), do: snapshot.hidden
-  defp select_texts(snapshot, :any), do: snapshot.visible ++ snapshot.hidden
 
   defp state!(%__MODULE__{user_context_pid: user_context_pid, tab_id: tab_id} = state)
        when is_pid(user_context_pid) and is_binary(tab_id) do
@@ -1527,6 +1628,44 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
+  defp assertion_timeout_ms(opts) do
+    case Keyword.get(opts, :timeout, 0) do
+      timeout when is_integer(timeout) and timeout >= 0 -> timeout
+      _ -> 0
+    end
+  end
+
+  defp path_timeout_ms(opts) do
+    case Keyword.get(opts, :timeout, 0) do
+      timeout when is_integer(timeout) and timeout >= 0 -> timeout
+      _ -> 0
+    end
+  end
+
+  defp command_timeout_ms(timeout_ms) when is_integer(timeout_ms) and timeout_ms >= 0 do
+    max(timeout_ms, 1_000) + 5_000
+  end
+
+  defp text_expectation_payload(%Regex{source: source, opts: opts}) do
+    %{"type" => "regex", "source" => source, "opts" => opts}
+  end
+
+  defp text_expectation_payload(expected) when is_binary(expected) do
+    %{"type" => "string", "value" => expected}
+  end
+
+  defp path_expectation_payload(%Regex{source: source, opts: opts}) do
+    %{"type" => "regex", "source" => source, "opts" => opts}
+  end
+
+  defp path_expectation_payload(expected) when is_binary(expected) do
+    %{"type" => "string", "value" => expected}
+  end
+
+  defp visibility_mode(true), do: "visible"
+  defp visibility_mode(false), do: "hidden"
+  defp visibility_mode(:any), do: "any"
+
   defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
   defp normalize_positive_integer(_value, default), do: default
 
@@ -1652,6 +1791,355 @@ defmodule Cerberus.Driver.Browser do
   defp current_path_expression do
     """
     (() => JSON.stringify({ path: window.location.pathname + window.location.search }))()
+    """
+  end
+
+  defp text_assertion_expression(scope, selector, expected, exact, normalize_ws, visible, timeout_ms, mode)
+       when mode in [:assert, :refute] do
+    encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
+    encoded_expected = JSON.encode!(expected)
+    encoded_visible = JSON.encode!(visibility_mode(visible))
+    encoded_mode = JSON.encode!(Atom.to_string(mode))
+
+    """
+    (() => {
+      const scopeSelector = #{encoded_scope};
+      const selector = #{encoded_selector};
+      const expected = #{encoded_expected};
+      const exact = #{if(exact, do: "true", else: "false")};
+      const normalizeWs = #{if(normalize_ws, do: "true", else: "false")};
+      const visibility = #{encoded_visible};
+      const timeoutMs = #{timeout_ms};
+      const mode = #{encoded_mode};
+      const pollMs = 50;
+
+      const normalize = (value) => {
+        const source = (value || "").replace(/\\u00A0/g, " ");
+        if (!normalizeWs) return source;
+        return source.replace(/\\s+/g, " ").trim();
+      };
+
+      const regexFromExpected = (payload) => {
+        if (!payload || payload.type !== "regex") return null;
+        try {
+          const supported = new Set(["i", "m", "s", "u"]);
+          const flags = (payload.opts || "")
+            .split("")
+            .filter((flag) => supported.has(flag))
+            .join("");
+          return new RegExp(payload.source || "", flags);
+        } catch (_error) {
+          return null;
+        }
+      };
+
+      const expectedRegex = regexFromExpected(expected);
+
+      const matchText = (actual) => {
+        const normalizedActual = normalize(actual);
+
+        if (expectedRegex) {
+          return expectedRegex.test(normalizedActual);
+        }
+
+        const expectedValue = normalize(expected && expected.value ? expected.value : "");
+        return exact ? normalizedActual === expectedValue : normalizedActual.includes(expectedValue);
+      };
+
+      const isHidden = (element) => {
+        let current = element;
+        while (current) {
+          if (current.hasAttribute("hidden")) return true;
+          const style = window.getComputedStyle(current);
+          if (style.display === "none" || style.visibility === "hidden") return true;
+          current = current.parentElement;
+        }
+        return false;
+      };
+
+      const pushUnique = (list, value) => {
+        if (!list.includes(value)) list.push(value);
+      };
+
+      const collectTexts = () => {
+        const defaultRoot = document.body || document.documentElement;
+        let roots = defaultRoot ? [defaultRoot] : [];
+
+        if (scopeSelector) {
+          try {
+            roots = Array.from(document.querySelectorAll(scopeSelector));
+          } catch (_error) {
+            roots = [];
+          }
+        }
+
+        const elements = [];
+        const seen = new Set();
+
+        for (const root of roots) {
+          if (!root) continue;
+
+          const pushElement = (candidate) => {
+            if (!candidate || seen.has(candidate)) return;
+            seen.add(candidate);
+            elements.push(candidate);
+          };
+
+          if (selector) {
+            try {
+              if (typeof root.matches === "function" && root.matches(selector)) {
+                pushElement(root);
+              }
+            } catch (_error) {
+              // ignored
+            }
+
+            try {
+              for (const candidate of root.querySelectorAll(selector)) {
+                pushElement(candidate);
+              }
+            } catch (_error) {
+              // ignored
+            }
+          } else {
+            pushElement(root);
+            for (const candidate of root.querySelectorAll("*")) {
+              pushElement(candidate);
+            }
+          }
+        }
+
+        const visibleTexts = [];
+        const hiddenTexts = [];
+
+        for (const element of elements) {
+          const tag = (element.tagName || "").toLowerCase();
+          if (tag === "script" || tag === "style" || tag === "noscript") continue;
+
+          const hidden = isHidden(element);
+          const source = hidden ? element.textContent : (element.innerText || element.textContent);
+          const value = normalize(source);
+          if (!value) continue;
+
+          if (hidden) {
+            pushUnique(hiddenTexts, value);
+          } else {
+            pushUnique(visibleTexts, value);
+          }
+        }
+
+        const texts = visibility === "visible"
+          ? visibleTexts
+          : visibility === "hidden"
+            ? hiddenTexts
+            : visibleTexts.concat(hiddenTexts);
+
+        const matched = texts.filter((text) => matchText(text));
+        const ok = mode === "assert" ? matched.length > 0 : matched.length === 0;
+        const reason = mode === "assert" ? "expected text not found" : "unexpected matching text found";
+
+        return {
+          ok,
+          reason,
+          path: window.location.pathname + window.location.search,
+          title: document.title || "",
+          texts,
+          matched
+        };
+      };
+
+      return new Promise((resolve) => {
+        let resolved = false;
+        const cleanupFns = [];
+        let lastResult = collectTexts();
+
+        const finish = (result) => {
+          if (resolved) return;
+          resolved = true;
+          for (const cleanup of cleanupFns) {
+            try {
+              cleanup();
+            } catch (_error) {
+              // ignored
+            }
+          }
+          resolve(JSON.stringify(result));
+        };
+
+        if (lastResult.ok || timeoutMs <= 0) {
+          finish(lastResult);
+          return;
+        }
+
+        const check = () => {
+          if (resolved) return;
+          lastResult = collectTexts();
+          if (lastResult.ok) {
+            finish(lastResult);
+          }
+        };
+
+        try {
+          const root = document.documentElement || document.body || document;
+          const observer = new MutationObserver(() => check());
+          observer.observe(root, {
+            subtree: true,
+            childList: true,
+            attributes: true,
+            characterData: true
+          });
+          cleanupFns.push(() => observer.disconnect());
+        } catch (_error) {
+          // ignored
+        }
+
+        const intervalRef = setInterval(check, pollMs);
+        cleanupFns.push(() => clearInterval(intervalRef));
+
+        const timeoutRef = setTimeout(() => finish(lastResult), timeoutMs);
+        cleanupFns.push(() => clearTimeout(timeoutRef));
+      });
+    })()
+    """
+  end
+
+  defp path_assertion_expression(expected, expected_query, exact, timeout_ms, op)
+       when op in [:assert_path, :refute_path] do
+    encoded_expected = JSON.encode!(expected)
+    encoded_expected_query = JSON.encode!(expected_query)
+    encoded_op = JSON.encode!(Atom.to_string(op))
+
+    """
+    (() => {
+      const expected = #{encoded_expected};
+      const expectedQuery = #{encoded_expected_query};
+      const exact = #{if(exact, do: "true", else: "false")};
+      const timeoutMs = #{timeout_ms};
+      const op = #{encoded_op};
+      const pollMs = 25;
+
+      const currentPath = () => window.location.pathname + window.location.search;
+
+      const pathOnly = (value) => {
+        try {
+          const idx = value.indexOf("?");
+          return idx >= 0 ? value.slice(0, idx) : value;
+        } catch (_error) {
+          return value || "/";
+        }
+      };
+
+      const regexFromExpected = (payload) => {
+        if (!payload || payload.type !== "regex") return null;
+        try {
+          const supported = new Set(["i", "m", "s", "u"]);
+          const flags = (payload.opts || "")
+            .split("")
+            .filter((flag) => supported.has(flag))
+            .join("");
+          return new RegExp(payload.source || "", flags);
+        } catch (_error) {
+          return null;
+        }
+      };
+
+      const expectedRegex = regexFromExpected(expected);
+
+      const pathMatches = (actualPath) => {
+        if (expectedRegex) {
+          return expectedRegex.test(actualPath);
+        }
+
+        const expectedValue = expected && expected.value ? expected.value : "";
+        const actualTarget = expectedValue.includes("?") ? actualPath : pathOnly(actualPath);
+        return exact ? actualTarget === expectedValue : actualTarget.includes(expectedValue);
+      };
+
+      const queryMatches = (actualPath) => {
+        if (!expectedQuery) return true;
+
+        const idx = actualPath.indexOf("?");
+        const query = idx >= 0 ? actualPath.slice(idx + 1) : "";
+        const params = new URLSearchParams(query);
+
+        return Object.entries(expectedQuery).every(([key, value]) => {
+          return (params.get(key) || null) === String(value);
+        });
+      };
+
+        const evaluate = () => {
+          const path = currentPath();
+          const pathMatch = pathMatches(path);
+          const queryMatch = queryMatches(path);
+          const combinedMatch = pathMatch && queryMatch;
+          const ok = op === "assert_path" ? combinedMatch : !combinedMatch;
+          const reason = ok ? "matched" : "timeout";
+
+          return {
+            ok,
+            reason,
+            path,
+            "path_match?": pathMatch,
+            "query_match?": queryMatch
+          };
+        };
+
+      return new Promise((resolve) => {
+        let resolved = false;
+        const cleanupFns = [];
+        let lastResult = evaluate();
+
+        const finish = (result) => {
+          if (resolved) return;
+          resolved = true;
+          for (const cleanup of cleanupFns) {
+            try {
+              cleanup();
+            } catch (_error) {
+              // ignored
+            }
+          }
+          resolve(JSON.stringify(result));
+        };
+
+        if (lastResult.ok || timeoutMs <= 0) {
+          finish(lastResult);
+          return;
+        }
+
+        const check = () => {
+          if (resolved) return;
+          lastResult = evaluate();
+          if (lastResult.ok) {
+            finish(lastResult);
+          }
+        };
+
+        const onNavigation = () => check();
+        window.addEventListener("popstate", onNavigation);
+        window.addEventListener("hashchange", onNavigation);
+        cleanupFns.push(() => window.removeEventListener("popstate", onNavigation));
+        cleanupFns.push(() => window.removeEventListener("hashchange", onNavigation));
+
+        const onUnload = () => {
+          finish({
+            ...lastResult,
+            reason: "navigation-transition"
+          });
+        };
+        window.addEventListener("beforeunload", onUnload);
+        window.addEventListener("pagehide", onUnload);
+        cleanupFns.push(() => window.removeEventListener("beforeunload", onUnload));
+        cleanupFns.push(() => window.removeEventListener("pagehide", onUnload));
+
+        const intervalRef = setInterval(check, pollMs);
+        cleanupFns.push(() => clearInterval(intervalRef));
+
+        const timeoutRef = setTimeout(() => finish(lastResult), timeoutMs);
+        cleanupFns.push(() => clearTimeout(timeoutRef));
+      });
+    })()
     """
   end
 

@@ -278,30 +278,13 @@ defmodule Cerberus do
     {validated_timeout, opts} = Keyword.pop(opts, :timeout, 0)
     timeout = resolve_path_timeout(session, call_has_timeout, validated_timeout)
 
-    LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
-      timed_session = refresh_path_assertion_session(timed_session)
-      actual_path = current_path(timed_session)
-      path_match? = Path.match_path?(actual_path, expected, exact: Keyword.fetch!(opts, :exact))
-      query_match? = Path.query_matches?(actual_path, Keyword.get(opts, :query))
-      matches? = path_match? and query_match?
+    case session do
+      %BrowserSession{} ->
+        run_browser_path_assertion!(session, expected, opts, timeout, :assert_path)
 
-      observed = %{
-        path: actual_path,
-        scope: Session.scope(timed_session),
-        expected: expected,
-        query: Path.normalize_expected_query(Keyword.get(opts, :query)),
-        exact: Keyword.fetch!(opts, :exact),
-        timeout: timeout,
-        path_match?: path_match?,
-        query_match?: query_match?
-      }
-
-      if matches? do
-        update_last_result(timed_session, :assert_path, observed)
-      else
-        raise AssertionError, message: format_path_error("assert_path", observed)
-      end
-    end)
+      _other ->
+        run_non_browser_path_assertion(session, expected, opts, timeout, :assert_path)
+    end
   end
 
   @spec refute_path(arg, String.t() | Regex.t(), Options.path_opts()) :: arg when arg: var
@@ -311,30 +294,13 @@ defmodule Cerberus do
     {validated_timeout, opts} = Keyword.pop(opts, :timeout, 0)
     timeout = resolve_path_timeout(session, call_has_timeout, validated_timeout)
 
-    LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
-      timed_session = refresh_path_assertion_session(timed_session)
-      actual_path = current_path(timed_session)
-      path_match? = Path.match_path?(actual_path, expected, exact: Keyword.fetch!(opts, :exact))
-      query_match? = Path.query_matches?(actual_path, Keyword.get(opts, :query))
-      matches? = path_match? and query_match?
+    case session do
+      %BrowserSession{} ->
+        run_browser_path_assertion!(session, expected, opts, timeout, :refute_path)
 
-      observed = %{
-        path: actual_path,
-        scope: Session.scope(timed_session),
-        expected: expected,
-        query: Path.normalize_expected_query(Keyword.get(opts, :query)),
-        exact: Keyword.fetch!(opts, :exact),
-        timeout: timeout,
-        path_match?: path_match?,
-        query_match?: query_match?
-      }
-
-      if matches? do
-        raise AssertionError, message: format_path_error("refute_path", observed)
-      else
-        update_last_result(timed_session, :refute_path, observed)
-      end
-    end)
+      _other ->
+        run_non_browser_path_assertion(session, expected, opts, timeout, :refute_path)
+    end
   end
 
   @spec click(arg, term(), Options.click_opts()) :: arg when arg: var
@@ -474,6 +440,51 @@ defmodule Cerberus do
 
   defp update_last_result(%{last_result: _} = session, op, observed) do
     %{session | last_result: %{op: op, observed: observed}}
+  end
+
+  defp run_browser_path_assertion!(session, expected, opts, timeout, op) when op in [:assert_path, :refute_path] do
+    browser_opts = Keyword.put(opts, :timeout, timeout)
+    run_fun = if op == :assert_path, do: &BrowserSession.assert_path/3, else: &BrowserSession.refute_path/3
+
+    case run_fun.(session, expected, browser_opts) do
+      {:ok, timed_session, observed} ->
+        update_last_result(timed_session, op, observed)
+
+      {:error, _failed_session, observed, _reason} ->
+        raise AssertionError, message: format_path_error(Atom.to_string(op), observed)
+    end
+  end
+
+  defp run_non_browser_path_assertion(session, expected, opts, timeout, op) when op in [:assert_path, :refute_path] do
+    LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
+      observed = build_path_observed(timed_session, expected, opts, timeout)
+      matches? = observed.path_match? and observed.query_match?
+      should_pass? = if op == :assert_path, do: matches?, else: not matches?
+
+      if should_pass? do
+        update_last_result(timed_session, op, observed)
+      else
+        raise AssertionError, message: format_path_error(Atom.to_string(op), observed)
+      end
+    end)
+  end
+
+  defp build_path_observed(session, expected, opts, timeout) do
+    refreshed_session = refresh_path_assertion_session(session)
+    actual_path = current_path(refreshed_session)
+    path_match? = Path.match_path?(actual_path, expected, exact: Keyword.fetch!(opts, :exact))
+    query_match? = Path.query_matches?(actual_path, Keyword.get(opts, :query))
+
+    %{
+      path: actual_path,
+      scope: Session.scope(refreshed_session),
+      expected: expected,
+      query: Path.normalize_expected_query(Keyword.get(opts, :query)),
+      exact: Keyword.fetch!(opts, :exact),
+      timeout: timeout,
+      path_match?: path_match?,
+      query_match?: query_match?
+    }
   end
 
   defp resolve_path_timeout(_session, true, validated_timeout), do: validated_timeout

@@ -42,7 +42,13 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   @spec evaluate(pid(), String.t()) :: {:ok, map()} | {:error, String.t(), map()}
   def evaluate(pid, expression) when is_pid(pid) and is_binary(expression) do
-    GenServer.call(pid, {:evaluate, expression}, 10_000)
+    evaluate(pid, expression, 10_000)
+  end
+
+  @spec evaluate(pid(), String.t(), pos_integer()) :: {:ok, map()} | {:error, String.t(), map()}
+  def evaluate(pid, expression, timeout_ms)
+      when is_pid(pid) and is_binary(expression) and is_integer(timeout_ms) and timeout_ms > 0 do
+    GenServer.call(pid, {:evaluate, expression, timeout_ms}, command_call_timeout_ms(timeout_ms))
   end
 
   @spec await_ready(pid(), keyword()) :: {:ok, map()} | {:error, String.t(), map()}
@@ -129,8 +135,9 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     end
   end
 
-  def handle_call({:evaluate, expression}, _from, state) do
-    result = evaluate_script(state.id, expression, state.bidi_opts)
+  def handle_call({:evaluate, expression, timeout_ms}, _from, state) do
+    bidi_opts = Keyword.put(state.bidi_opts, :timeout, timeout_ms)
+    result = evaluate_script(state.id, expression, bidi_opts)
 
     {:reply, result, state}
   end
@@ -302,6 +309,10 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
   defp normalize_positive_integer(_value, default), do: default
+
+  defp command_call_timeout_ms(timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
+    timeout_ms + 5_000
+  end
 
   defp readiness_expression(timeout_ms, quiet_ms) do
     """

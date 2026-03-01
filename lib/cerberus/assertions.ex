@@ -175,9 +175,14 @@ defmodule Cerberus.Assertions do
     timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
     message_opts = Keyword.put(driver_opts, :timeout, timeout)
 
-    LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
-      run_assertion!(timed_session, :assert_has, locator, locator_input, driver_opts, message_opts)
-    end)
+    if match?(%BrowserSession{}, session) do
+      browser_opts = Keyword.put(driver_opts, :timeout, timeout)
+      run_assertion!(session, :assert_has, locator, locator_input, browser_opts, message_opts)
+    else
+      LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
+        run_assertion!(timed_session, :assert_has, locator, locator_input, driver_opts, message_opts)
+      end)
+    end
   end
 
   @spec refute_has(arg, term(), Options.assert_opts()) :: arg when arg: var
@@ -189,9 +194,14 @@ defmodule Cerberus.Assertions do
     timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
     message_opts = Keyword.put(driver_opts, :timeout, timeout)
 
-    LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
-      run_assertion!(timed_session, :refute_has, locator, locator_input, driver_opts, message_opts)
-    end)
+    if match?(%BrowserSession{}, session) do
+      browser_opts = Keyword.put(driver_opts, :timeout, timeout)
+      run_assertion!(session, :refute_has, locator, locator_input, browser_opts, message_opts)
+    else
+      LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
+        run_assertion!(timed_session, :refute_has, locator, locator_input, driver_opts, message_opts)
+      end)
+    end
   end
 
   defp run_assertion!(session, op, locator, locator_input, driver_opts, message_opts) do
