@@ -1162,35 +1162,42 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp run_text_assertion(state, expected, visible, match_opts, timeout_ms, mode) when mode in [:assert, :refute] do
-    scope = Session.scope(state)
-    selector = Keyword.get(match_opts, :selector)
-    exact = Keyword.get(match_opts, :exact, false)
-    normalize_ws = Keyword.get(match_opts, :normalize_ws, true)
+    case maybe_ensure_assertion_helpers(state) do
+      :ok ->
+        scope = Session.scope(state)
+        selector = Keyword.get(match_opts, :selector)
+        exact = Keyword.get(match_opts, :exact, false)
+        normalize_ws = Keyword.get(match_opts, :normalize_ws, true)
 
-    expression =
-      text_assertion_expression(
-        scope,
-        selector,
-        text_expectation_payload(expected),
-        exact,
-        normalize_ws,
-        visible,
-        timeout_ms,
-        mode
-      )
+        expression =
+          text_assertion_expression(
+            scope,
+            selector,
+            text_expectation_payload(expected),
+            exact,
+            normalize_ws,
+            visible,
+            timeout_ms,
+            mode
+          )
 
-    case eval_json(state, expression, command_timeout_ms(timeout_ms)) do
-      {:ok, %{"ok" => true} = result} ->
-        next_state = %{state | current_path: result["path"] || state.current_path}
-        {:ok, next_state, text_assertion_observed(result, expected, visible)}
+        case eval_json(state, expression, command_timeout_ms(timeout_ms)) do
+          {:ok, %{"ok" => true} = result} ->
+            next_state = %{state | current_path: result["path"] || state.current_path}
+            {:ok, next_state, text_assertion_observed(result, expected, visible)}
 
-      {:ok, result} ->
-        reason = if mode == :assert, do: "expected text not found", else: "unexpected matching text found"
-        {:error, reason, text_assertion_observed(result, expected, visible)}
+          {:ok, result} ->
+            reason = if mode == :assert, do: "expected text not found", else: "unexpected matching text found"
+            {:error, reason, text_assertion_observed(result, expected, visible)}
+
+          {:error, reason, details} ->
+            observed = %{path: state.current_path, details: details}
+            {:error, "failed to evaluate browser text assertion: #{reason}", observed}
+        end
 
       {:error, reason, details} ->
         observed = %{path: state.current_path, details: details}
-        {:error, "failed to evaluate browser text assertion: #{reason}", observed}
+        {:error, "failed to load browser assertion helpers: #{reason}", observed}
     end
   end
 
@@ -1217,7 +1224,25 @@ defmodule Cerberus.Driver.Browser do
       deadline: System.monotonic_time(:millisecond) + timeout_ms
     }
 
-    do_run_path_assertion(session, state, assertion)
+    case maybe_ensure_assertion_helpers(state) do
+      :ok ->
+        do_run_path_assertion(session, state, assertion)
+
+      {:error, reason, details} ->
+        observed = %{
+          path: state.current_path,
+          scope: Session.scope(session),
+          expected: expected,
+          query: expected_query,
+          exact: exact,
+          timeout: timeout_ms,
+          path_match?: false,
+          query_match?: false,
+          details: details
+        }
+
+        {:error, session, observed, "failed to load browser assertion helpers: #{reason}"}
+    end
   end
 
   defp do_run_path_assertion(session, state, assertion) do
@@ -1296,6 +1321,23 @@ defmodule Cerberus.Driver.Browser do
       expected: expected
     }
   end
+
+  defp maybe_ensure_assertion_helpers(%{browser_name: :firefox} = state) do
+    expression = assertion_helpers_preload_expression()
+
+    case eval_json(state, expression) do
+      {:ok, %{"ok" => true}} ->
+        :ok
+
+      {:ok, result} ->
+        {:error, "assertion helper preload failed", %{result: result}}
+
+      {:error, reason, details} ->
+        {:error, reason, details}
+    end
+  end
+
+  defp maybe_ensure_assertion_helpers(_state), do: :ok
 
   defp click_button_after_eval(session, state, button) do
     case await_driver_ready(state) do
@@ -1857,6 +1899,20 @@ defmodule Cerberus.Driver.Browser do
   defp current_path_expression do
     """
     (() => JSON.stringify({ path: window.location.pathname + window.location.search }))()
+    """
+  end
+
+  defp assertion_helpers_preload_expression do
+    """
+    (() => {
+      #{AssertionHelpers.preload_script()}
+
+      const helper = window.__cerberusAssert;
+
+      return JSON.stringify({
+        ok: !!(helper && typeof helper.text === "function" && typeof helper.pathCheck === "function")
+      });
+    })()
     """
   end
 
