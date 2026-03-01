@@ -166,6 +166,8 @@ Isolation strategy:
 Popup behavior:
 - `popup_mode: :allow` keeps browser default popup/new-window behavior (default).
 - `popup_mode: :same_tab` injects an early preload script that rewrites `window.open(...)` to same-tab navigation.
+- Firefox limitation: `popup_mode: :same_tab` is currently unsupported and raises explicitly.
+- Known bug: Firefox BiDi preload registration may emit `chrome://remote/content/shared/Realm.sys.mjs` TypeError logs.
 - `:same_tab` is a pragmatic workaround for autonomous popup flows until first-class multi-window lifecycle APIs land.
 
 ## Browser Defaults and Runtime Options

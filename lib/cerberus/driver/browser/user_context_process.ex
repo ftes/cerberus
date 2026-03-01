@@ -3,9 +3,11 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
   use GenServer
 
+  alias Cerberus.Driver.Browser.AssertionHelpers
   alias Cerberus.Driver.Browser.BiDi
   alias Cerberus.Driver.Browser.BrowsingContextProcess
   alias Cerberus.Driver.Browser.BrowsingContextSupervisor
+  alias Cerberus.Driver.Browser.PopupHelpers
   alias Cerberus.Driver.Browser.Runtime
 
   @spec child_spec(keyword()) :: Supervisor.child_spec()
@@ -445,13 +447,23 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   defp maybe_add_init_scripts(_user_context_id, [], _bidi_opts), do: :ok
 
   defp maybe_add_init_scripts(user_context_id, scripts, bidi_opts) when is_list(scripts) do
-    Enum.reduce_while(scripts, :ok, fn script, :ok ->
+    browser_name = Runtime.browser_name(bidi_opts)
+
+    scripts
+    |> Enum.reject(&skip_firefox_problematic_preload?(&1, browser_name))
+    |> Enum.reduce_while(:ok, fn script, :ok ->
       case add_preload_script(user_context_id, script, bidi_opts) do
         :ok -> {:cont, :ok}
         {:error, reason, details} -> {:halt, {:error, reason, details}}
       end
     end)
   end
+
+  defp skip_firefox_problematic_preload?(script, :firefox) when is_binary(script) do
+    script == AssertionHelpers.preload_script() or script == PopupHelpers.same_tab_popup_preload_script()
+  end
+
+  defp skip_firefox_problematic_preload?(_script, _browser_name), do: false
 
   defp add_preload_script(user_context_id, script, bidi_opts) when is_binary(script) do
     params = %{
