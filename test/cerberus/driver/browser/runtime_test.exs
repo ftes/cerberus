@@ -116,5 +116,19 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
 
       assert Runtime.normalize_web_socket_url(web_socket_url, service_url) == web_socket_url
     end
+
+    test "keeps non-selenium websocket endpoint even when service host/port differ" do
+      web_socket_url = "ws://127.0.0.1:9222/session/abc"
+      service_url = "http://127.0.0.1:4545"
+
+      assert Runtime.normalize_web_socket_url(web_socket_url, service_url) == web_socket_url
+    end
+
+    test "keeps non-selenium private-host websocket endpoint" do
+      web_socket_url = "ws://172.17.0.2:9222/session/abc"
+      service_url = "http://127.0.0.1:4545"
+
+      assert Runtime.normalize_web_socket_url(web_socket_url, service_url) == web_socket_url
+    end
   end
 end

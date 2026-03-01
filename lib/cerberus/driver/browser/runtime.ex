@@ -236,7 +236,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
          %URI{host: service_host, port: service_port} <- URI.parse(service_url),
          true <- is_binary(service_host),
          true <- is_integer(service_port),
-         true <- rewrite_web_socket_url?(ws_host, service_host, ws_port, service_port) do
+         true <- rewrite_web_socket_url?(ws_uri, ws_host, service_host, ws_port, service_port) do
       ws_uri
       |> Map.put(:host, service_host)
       |> Map.put(:port, service_port)
@@ -248,10 +248,17 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   def normalize_web_socket_url(web_socket_url, _service_url), do: web_socket_url
 
-  defp rewrite_web_socket_url?(ws_host, service_host, ws_port, service_port) do
-    (ws_host != service_host or ws_port != service_port) and
+  defp rewrite_web_socket_url?(ws_uri, ws_host, service_host, ws_port, service_port) do
+    selenium_bidi_endpoint?(ws_uri) and
+      (ws_host != service_host or ws_port != service_port) and
       (local_or_private_host?(ws_host) or ws_host == "localhost")
   end
+
+  defp selenium_bidi_endpoint?(%URI{path: path}) when is_binary(path) do
+    String.contains?(path, "/se/bidi")
+  end
+
+  defp selenium_bidi_endpoint?(_uri), do: false
 
   defp local_or_private_host?(host) when host in ["localhost", "127.0.0.1"], do: true
 

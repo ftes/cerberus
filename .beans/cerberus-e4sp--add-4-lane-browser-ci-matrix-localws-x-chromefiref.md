@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-28T20:40:01Z
-updated_at: 2026-03-01T06:50:32Z
+updated_at: 2026-03-01T09:11:21Z
 ---
 
 Restructure CI to run browser-tagged tests in four lanes: local chrome, local firefox, websocket chrome, websocket firefox. Minimize duplicate setup via shared non-browser setup and reusable matrix job steps.
@@ -2036,3 +2036,9 @@ Finished in 36.2 seconds (1.0s async, 35.2s sync)
 256 tests, 97 failures (4 excluded) (both green).
 
 - Per request, commented out websocket Chrome/Firefox CI lanes in .github/workflows/ci.yml with a TODO note. Current suspected cause is websocket remote image capability mismatch: selenium/standalone-chromium:126.0 does not support emulation.setUserAgentOverride or network.setExtraHeaders, and our browser sandbox metadata setup depends on those commands during session initialization.
+
+- Fixed websocket URL normalization to only rewrite Selenium-style BiDi endpoints (/se/bidi) in Runtime.normalize_web_socket_url/2. This avoids rewriting local GeckoDriver BiDi URLs (for example ws://127.0.0.1:9222/session/<id>) to the WebDriver service port, which previously produced 405 errors.
+
+- Added regression coverage in runtime tests for non-Selenium endpoints where host/port differ, ensuring those URLs are preserved.
+
+- Validation run: mix test test/cerberus/driver/browser/runtime_test.exs; mix precommit (both passed).
