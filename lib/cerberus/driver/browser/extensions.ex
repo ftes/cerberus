@@ -6,11 +6,6 @@ defmodule Cerberus.Driver.Browser.Extensions do
   alias Cerberus.Driver.Browser.UserContextProcess
   alias ExUnit.AssertionError
 
-  @dialog_events [
-    "browsingContext.userPromptOpened",
-    "browsingContext.userPromptClosed"
-  ]
-
   @default_dialog_timeout_ms 1_500
 
   @spec type(BrowserSession.t(), String.t(), keyword()) :: BrowserSession.t()
@@ -70,7 +65,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
     timeout_ms = dialog_timeout_ms(opts)
     expected_message = Keyword.get(opts, :message)
 
-    subscription_id = subscribe_dialog_events!(session)
+    :ok = subscribe_dialog_events!(session)
     action_task = Task.async(fn -> action.(session) end)
 
     try do
@@ -94,7 +89,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
       update_last_result(next_session, :with_dialog, observed)
     after
       _ = Task.shutdown(action_task, :brutal_kill)
-      unsubscribe_dialog_events(subscription_id, session)
+      unsubscribe_dialog_events(session)
     end
   end
 
@@ -299,24 +294,11 @@ defmodule Cerberus.Driver.Browser.Extensions do
   end
 
   defp subscribe_dialog_events!(session) do
-    bidi_opts = bidi_opts(session)
-    :ok = BiDi.subscribe(self(), bidi_opts)
-
-    case BiDi.command("session.subscribe", %{"events" => @dialog_events, "contexts" => [session.tab_id]}, bidi_opts) do
-      {:ok, %{"subscription" => subscription_id}} when is_binary(subscription_id) ->
-        subscription_id
-
-      {:ok, payload} ->
-        raise ArgumentError, "failed to subscribe to dialog events: #{inspect(payload)}"
-
-      {:error, reason, details} ->
-        raise ArgumentError, "failed to subscribe to dialog events: #{reason} (#{inspect(details)})"
-    end
+    BiDi.subscribe(self(), bidi_opts(session))
   end
 
-  defp unsubscribe_dialog_events(subscription_id, session) do
+  defp unsubscribe_dialog_events(session) do
     opts = bidi_opts(session)
-    _ = BiDi.command("session.unsubscribe", %{"subscriptions" => [subscription_id]}, opts)
     _ = BiDi.unsubscribe(self(), opts)
     :ok
   end

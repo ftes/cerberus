@@ -11,7 +11,9 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   @bidi_events [
     "browsingContext.navigationStarted",
     "browsingContext.domContentLoaded",
-    "browsingContext.load"
+    "browsingContext.load",
+    "browsingContext.userPromptOpened",
+    "browsingContext.userPromptClosed"
   ]
 
   @spec child_spec(keyword()) :: Supervisor.child_spec()
