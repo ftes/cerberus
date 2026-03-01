@@ -103,6 +103,8 @@ user2 =
 ### 6. Browser-Only Extensions
 
 ```elixir
+import Cerberus.Browser
+
 session =
   session(:browser)
   |> visit("/browser/extensions")
