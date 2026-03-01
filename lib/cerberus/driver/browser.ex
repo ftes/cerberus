@@ -1042,7 +1042,7 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp with_snapshot(state) do
-    case eval_json(state, snapshot_expression(Session.scope(state))) do
+    case eval_json(state, Expressions.snapshot(Session.scope(state))) do
       {:ok, snapshot} ->
         snapshot = %{
           path: snapshot["path"],
@@ -1663,74 +1663,6 @@ defmodule Cerberus.Driver.Browser do
 
   defp ensure_popup_mode_supported!(browser_name, popup_mode),
     do: Config.ensure_popup_mode_supported!(browser_name, popup_mode)
-
-  defp snapshot_expression(scope) do
-    encoded_scope = JSON.encode!(scope)
-
-    """
-    (() => {
-      const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
-      const scopeSelector = #{encoded_scope};
-
-      const isElementHidden = (element) => {
-        let current = element;
-        while (current) {
-          if (current.hasAttribute("hidden")) return true;
-          const style = window.getComputedStyle(current);
-          if (style.display === "none" || style.visibility === "hidden") return true;
-          current = current.parentElement;
-        }
-        return false;
-      };
-
-      const pushUnique = (list, value) => {
-        if (!list.includes(value)) list.push(value);
-      };
-
-      const visible = [];
-      const hiddenTexts = [];
-      const defaultRoot = document.body || document.documentElement;
-      let roots = defaultRoot ? [defaultRoot] : [];
-
-      if (scopeSelector) {
-        try {
-          roots = Array.from(document.querySelectorAll(scopeSelector));
-        } catch (_error) {
-          roots = [];
-        }
-      }
-
-      const elements = [];
-      for (const root of roots) {
-        if (!root) continue;
-        elements.push(root, ...Array.from(root.querySelectorAll("*")));
-      }
-
-      for (const element of elements) {
-        const tag = (element.tagName || "").toLowerCase();
-        if (tag === "script" || tag === "style" || tag === "noscript") continue;
-
-        const hidden = isElementHidden(element);
-        const source = hidden ? element.textContent : (element.innerText || element.textContent);
-        const value = normalize(source);
-        if (!value) continue;
-
-        if (hidden) {
-          pushUnique(hiddenTexts, value);
-        } else {
-          pushUnique(visible, value);
-        }
-      }
-
-      return JSON.stringify({
-        path: window.location.pathname + window.location.search,
-        title: document.title || "",
-        visible,
-        hidden: hiddenTexts
-      });
-    })()
-    """
-  end
 
   defp clickables_expression(scope, selector) do
     encoded_scope = JSON.encode!(scope)
