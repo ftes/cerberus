@@ -10,7 +10,7 @@ defmodule Cerberus.CoreLocatorOracleHarnessTest do
 
   @moduletag :browser
 
-  @html_snippet """
+  @html_prefix """
   <!doctype html>
   <html>
     <head>
@@ -18,45 +18,113 @@ defmodule Cerberus.CoreLocatorOracleHarnessTest do
       <title>Locator Oracle</title>
     </head>
     <body>
-      <main id="root">
-        <h1 data-testid="articles-title">Articles</h1>
-        <a href="#counter" id="counter-link">Counter Link</a>
-        <button id="increment">Increment</button>
-        <div style="display: none;">Secret Hidden Copy</div>
+  """
 
-        <form id="profile">
-          <label for="email_input">Email Address</label>
-          <input id="email_input" name="profile[email]" type="text" value="" />
-
-          <label for="search_q">Search term</label>
-          <input id="search_q" name="search[q]" type="text" value="" />
-
-          <label for="language_select">Language</label>
-          <select id="language_select" name="profile[language]">
-            <option value="">Choose one</option>
-            <option value="elixir"> Elixir </option>
-            <option value="erlang">Erlang</option>
-          </select>
-
-          <label for="item_one">One</label>
-          <input id="item_one" name="items[]" type="checkbox" value="one" checked />
-
-          <label for="item_two">Two</label>
-          <input id="item_two" name="items[]" type="checkbox" value="two" />
-
-          <label for="contact_email">Email</label>
-          <input id="contact_email" name="contact" type="radio" value="email" />
-
-          <label for="contact_sms">SMS</label>
-          <input id="contact_sms" name="contact" type="radio" value="sms" />
-
-          <label for="avatar_upload">Avatar</label>
-          <input id="avatar_upload" name="profile[avatar]" type="file" />
-        </form>
-      </main>
+  @html_suffix """
     </body>
   </html>
   """
+
+  @default_html @html_prefix <>
+                  """
+                    <main id="root">
+                    <h1 data-testid="articles-title">Articles</h1>
+                    <p id="multiline">Alpha
+                    Beta</p>
+                    <div style="display: none;">Secret Hidden Copy</div>
+                    <div hidden>Hidden Attribute Copy</div>
+                    <a href="#counter" id="counter-link">Counter Link</a>
+                    <button id="increment">Increment</button>
+
+                    <section id="primary">
+                      <form id="profile">
+                        <label for="email_input">Email Address</label>
+                        <input id="email_input" name="profile[email]" type="text" value="" />
+
+                        <label for="search_q">Search term</label>
+                        <input id="search_q" name="search[q]" type="text" value="" />
+
+                        <label for="language_select">Language</label>
+                        <select id="language_select" name="profile[language]">
+                          <option value="">Choose one</option>
+                          <option value="elixir"> Elixir </option>
+                          <option value="erlang">Erlang</option>
+                          <option value="rust" disabled>Rust</option>
+                        </select>
+
+                        <label for="item_one">One</label>
+                        <input id="item_one" name="items[]" type="checkbox" value="one" checked />
+
+                        <label for="item_two">Two</label>
+                        <input id="item_two" name="items[]" type="checkbox" value="two" />
+
+                        <label for="contact_email">Email</label>
+                        <input id="contact_email" name="contact" type="radio" value="email" />
+
+                        <label for="contact_sms">SMS</label>
+                        <input id="contact_sms" name="contact" type="radio" value="sms" />
+
+                        <label for="avatar_upload">Avatar</label>
+                        <input id="avatar_upload" name="profile[avatar]" type="file" />
+
+                        <label for="nickname">Nickname</label>
+                        <input id="nickname" name="profile[nickname]" type="text" />
+                      </form>
+                    </section>
+
+                    <section id="secondary">
+                      <form id="alternate">
+                        <label for="secondary_email">Email Address</label>
+                        <input id="secondary_email" name="alt[email]" type="text" value="" />
+
+                        <label>Wrapped Name
+                          <input id="wrapped_name" name="wrapped[name]" type="text" value="" />
+                        </label>
+
+                        <label for="secondary_two">Two</label>
+                        <input id="secondary_two" name="secondary_items[]" type="checkbox" value="two" />
+
+                        <label for="color_select">Favorite Color</label>
+                        <select id="color_select" name="alt[color]">
+                          <option value="blue">Blue</option>
+                          <option value="green">Green</option>
+                        </select>
+                      </form>
+                    </section>
+                  </main>
+                  """ <>
+                  @html_suffix
+
+  @inline_label_html @html_prefix <>
+                       """
+                         <main>
+                         <form id="inline">
+                           <label>Inline Email
+                             <input id="inline_email" name="inline[email]" type="text" value="" />
+                           </label>
+                         </form>
+                       </main>
+                       """ <>
+                       @html_suffix
+
+  @selector_only_html @html_prefix <>
+                        """
+                          <main>
+                          <div class="bucket">
+                            <button id="save-1">Save</button>
+                          </div>
+                          <div class="bucket secondary">
+                            <button id="save-2">Save</button>
+                          </div>
+                          <form id="selector-form">
+                            <label for="s1">Field</label>
+                            <input id="s1" name="selector[field][one]" type="text" value="" />
+                            <label for="s2">Field</label>
+                            <input id="s2" name="selector[field][two]" type="text" value="" />
+                          </form>
+                        </main>
+                        """ <>
+                        @html_suffix
 
   setup do
     upload_path =
@@ -71,15 +139,20 @@ defmodule Cerberus.CoreLocatorOracleHarnessTest do
     {:ok, browser_session: session(:browser), upload_path: upload_path}
   end
 
-  test "snippet locator outcomes match in static and browser worlds", context do
+  test "rich snippet locator corpus stays in static/browser parity", context do
     cases = parity_cases(context.upload_path)
 
-    Enum.each(cases, fn %{name: name, expect: expect, op: op} ->
-      static_session = static_snippet_session(@html_snippet)
-      browser_session = inject_snippet!(context.browser_session, @html_snippet)
+    Enum.each(cases, fn case_def ->
+      name = case_def.name
+      html = Map.get(case_def, :html, @default_html)
+      expect = case_def.expect
+      expected_error_module = Map.get(case_def, :error_module)
 
-      static_result = run_case(static_session, op)
-      browser_result = run_case(browser_session, op)
+      static_session = static_snippet_session(html)
+      browser_session = inject_snippet!(context.browser_session, html)
+
+      static_result = run_case(static_session, case_def.run)
+      browser_result = run_case(browser_session, case_def.run)
 
       assert static_result.status == expect,
              "expected static #{name} to be #{inspect(expect)}, got #{inspect(static_result)}"
@@ -89,120 +162,214 @@ defmodule Cerberus.CoreLocatorOracleHarnessTest do
 
       assert static_result.status == browser_result.status,
              "expected parity for #{name}, static=#{inspect(static_result)} browser=#{inspect(browser_result)}"
+
+      if expect == :error and not is_nil(expected_error_module) do
+        assert static_result.error_module == expected_error_module,
+               "expected static #{name} error module #{inspect(expected_error_module)}, got #{inspect(static_result)}"
+
+        assert browser_result.error_module == expected_error_module,
+               "expected browser #{name} error module #{inspect(expected_error_module)}, got #{inspect(browser_result)}"
+      end
     end)
   end
 
   defp parity_cases(upload_path) do
     [
+      # text matching
+      %{name: "assert_has text inexact", expect: :ok, run: &assert_has(&1, text("Article"))},
+      %{name: "assert_has text exact", expect: :ok, run: &assert_has(&1, text("Articles", exact: true))},
+      %{name: "assert_has text regex", expect: :ok, run: &assert_has(&1, text(~r/Arti\wles?/))},
+      %{name: "assert_has multiline normalized text", expect: :ok, run: &assert_has(&1, text("Alpha Beta", exact: true))},
+      %{name: "refute_has text", expect: :ok, run: &refute_has(&1, text("Definitely Missing"))},
       %{
-        name: "assert_has text (default inexact)",
-        expect: :ok,
-        op: &assert_has(&1, text("Articles"))
-      },
-      %{
-        name: "assert_has text exact",
-        expect: :ok,
-        op: &assert_has(&1, text("Articles", exact: true))
-      },
-      %{
-        name: "assert_has text regex",
-        expect: :ok,
-        op: &assert_has(&1, text(~r/Article/))
-      },
-      %{
-        name: "assert_has hidden text with default visibility fails",
+        name: "assert_has hidden text fails by default",
         expect: :error,
-        op: &assert_has(&1, text("Secret Hidden Copy"))
+        error_module: AssertionError,
+        run: &assert_has(&1, text("Secret Hidden Copy"))
       },
       %{
-        name: "assert_has hidden text with visible false passes",
+        name: "assert_has hidden text with visible false",
         expect: :ok,
-        op: &assert_has(&1, text("Secret Hidden Copy"), visible: false)
+        run: &assert_has(&1, text("Secret Hidden Copy"), visible: false)
       },
       %{
-        name: "assert_has hidden text with visible any passes",
+        name: "assert_has hidden text with visible any",
         expect: :ok,
-        op: &assert_has(&1, text("Secret Hidden Copy"), visible: :any)
+        run: &assert_has(&1, text("Hidden Attribute Copy"), visible: :any)
       },
+      # helper mappings in assertions
       %{
-        name: "assert_has label helper is treated as text in assertions",
+        name: "assert_has label helper maps to text",
         expect: :ok,
-        op: &assert_has(&1, label("Email Address", exact: true))
+        run: &assert_has(&1, label("Email Address", exact: true))
       },
       %{
-        name: "assert_has role button helper maps to text matching",
+        name: "assert_has role button helper maps to text",
         expect: :ok,
-        op: &assert_has(&1, role(:button, name: "Increment", exact: true))
+        run: &assert_has(&1, role(:button, name: "Increment", exact: true))
       },
       %{
-        name: "assert_has css locator is unsupported in this slice",
+        name: "assert_has role link helper maps to text",
+        expect: :ok,
+        run: &assert_has(&1, role(:link, name: "Counter Link", exact: true))
+      },
+      %{
+        name: "assert_has css locator unsupported in this slice",
         expect: :error,
-        op: &assert_has(&1, css("#root"))
+        error_module: InvalidLocatorError,
+        run: &assert_has(&1, css("#root"))
       },
       %{
-        name: "assert_has selector option is unsupported in this slice",
+        name: "assert_has selector option unsupported in this slice",
         expect: :error,
-        op: &assert_has(&1, text("Articles"), selector: "h1")
+        error_module: ArgumentError,
+        run: &assert_has(&1, text("Articles"), selector: "h1")
       },
       %{
-        name: "assert_has testid helper is unsupported in this slice",
+        name: "assert_has testid unsupported in this slice",
         expect: :error,
-        op: &assert_has(&1, testid("articles-title"))
+        error_module: InvalidLocatorError,
+        run: &assert_has(&1, testid("articles-title"))
       },
+      # fill_in
+      %{name: "fill_in label locator", expect: :ok, run: &fill_in(&1, label("Email Address"), "alice@example.com")},
       %{
-        name: "fill_in with label locator",
+        name: "fill_in role textbox locator",
         expect: :ok,
-        op: &fill_in(&1, label("Email Address"), "alice@example.com")
+        run: &fill_in(&1, role(:textbox, name: "Search term"), "phoenix")
       },
       %{
-        name: "fill_in with role textbox locator",
+        name: "fill_in role searchbox locator",
         expect: :ok,
-        op: &fill_in(&1, role(:textbox, name: "Search term"), "phoenix")
+        run: &fill_in(&1, role(:searchbox, name: "Search term"), "search")
       },
+      %{name: "fill_in css locator", expect: :ok, run: &fill_in(&1, css("#search_q"), "cerberus")},
+      %{name: "fill_in regex label shorthand", expect: :ok, run: &fill_in(&1, ~r/Search term/, "regex value")},
       %{
-        name: "fill_in with css locator",
-        expect: :ok,
-        op: &fill_in(&1, css("#search_q"), "cerberus")
-      },
-      %{
-        name: "fill_in with explicit text locator is rejected",
+        name: "fill_in explicit text locator rejected",
         expect: :error,
-        op: &fill_in(&1, text("Email Address"), "invalid")
+        error_module: InvalidLocatorError,
+        run: &fill_in(&1, text("Email Address"), "invalid")
       },
       %{
-        name: "select with label locator",
-        expect: :ok,
-        op: &select(&1, label("Language"), option: "Elixir")
+        name: "fill_in role link rejected",
+        expect: :error,
+        error_module: InvalidLocatorError,
+        run: &fill_in(&1, role(:link, name: "Counter Link"), "invalid")
       },
       %{
-        name: "select with role combobox locator",
+        name: "fill_in duplicate labels disambiguated by selector",
         expect: :ok,
-        op: &select(&1, role(:combobox, name: "Language"), option: "Erlang")
+        run: &fill_in(&1, label("Email Address"), "secondary@example.com", selector: "#secondary input")
       },
       %{
-        name: "select with css locator",
+        name: "fill_in wrapped label input",
+        html: @inline_label_html,
         expect: :ok,
-        op: &select(&1, css("#language_select"), option: "Elixir")
+        run: &fill_in(&1, label("Inline Email"), "wrapped@example.com")
+      },
+      # select
+      %{name: "select label locator", expect: :ok, run: &select(&1, label("Language"), option: "Elixir")},
+      %{
+        name: "select role combobox locator",
+        expect: :ok,
+        run: &select(&1, role(:combobox, name: "Language"), option: "Erlang")
+      },
+      %{name: "select css locator", expect: :ok, run: &select(&1, css("#language_select"), option: "Erlang")},
+      %{
+        name: "select exact_option false supports substring",
+        expect: :ok,
+        run: &select(&1, label("Language"), option: "Elix", exact_option: false)
       },
       %{
-        name: "check checkbox by label",
-        expect: :ok,
-        op: &check(&1, label("Two"))
+        name: "select disabled option errors",
+        expect: :error,
+        error_module: AssertionError,
+        run: &select(&1, label("Language"), option: "Rust")
       },
       %{
-        name: "uncheck checkbox by label",
+        name: "select option missing errors",
+        expect: :error,
+        error_module: AssertionError,
+        run: &select(&1, label("Language"), option: "Missing")
+      },
+      # check/uncheck/choose
+      %{name: "check checkbox by label", expect: :ok, run: &check(&1, label("Two"))},
+      %{name: "uncheck checkbox by label", expect: :ok, run: &uncheck(&1, label("One"))},
+      %{
+        name: "check duplicate labels disambiguated by selector",
         expect: :ok,
-        op: &uncheck(&1, label("One"))
+        run: &check(&1, label("Two"), selector: "#secondary input")
+      },
+      %{name: "choose radio by label", expect: :ok, run: &choose(&1, label("SMS"))},
+      %{
+        name: "check on non-checkbox field errors",
+        expect: :error,
+        error_module: AssertionError,
+        run: &check(&1, label("Search term"))
       },
       %{
-        name: "choose radio by label",
-        expect: :ok,
-        op: &choose(&1, label("SMS"))
+        name: "choose on non-radio field errors",
+        expect: :error,
+        error_module: AssertionError,
+        run: &choose(&1, label("Two"))
+      },
+      # upload
+      %{name: "upload file input by label", expect: :ok, run: &upload(&1, label("Avatar"), upload_path)},
+      %{
+        name: "upload on non-file field errors",
+        expect: :error,
+        error_module: AssertionError,
+        run: &upload(&1, label("Nickname"), upload_path)
+      },
+      # click/submit locator normalization errors
+      %{
+        name: "click with label locator rejected",
+        expect: :error,
+        error_module: InvalidLocatorError,
+        run: &click(&1, label("Search term"))
       },
       %{
-        name: "upload file by label",
+        name: "click with testid locator rejected",
+        expect: :error,
+        error_module: InvalidLocatorError,
+        run: &click(&1, testid("articles-title"))
+      },
+      %{
+        name: "submit with label locator rejected",
+        expect: :error,
+        error_module: InvalidLocatorError,
+        run: &submit(&1, label("Search term"))
+      },
+      # sigil-rich cases
+      %{name: "sigil css locator for fill_in", expect: :ok, run: &fill_in(&1, ~l"#search_q"c, "sigil css")},
+      %{name: "sigil role locator for select", expect: :ok, run: &select(&1, ~l"combobox:Language"r, option: "Elixir")},
+      %{name: "sigil role exact assertion", expect: :ok, run: &assert_has(&1, ~l"button:Increment"re)},
+      %{
+        name: "invalid mixed locator sigil modifiers raise",
+        expect: :error,
+        error_module: InvalidLocatorError,
+        run: &assert_has(&1, ~l"button:Increment"rc)
+      },
+      # selector-only disambiguation snippet
+      %{
+        name: "selector-only snippet fill_in with selector",
+        html: @selector_only_html,
+        expect: :error,
+        error_module: AssertionError,
+        run: &fill_in(&1, label("Field"), "scoped", selector: ".secondary #s2")
+      },
+      %{
+        name: "selector-only snippet ambiguous fill_in still succeeds",
+        html: @selector_only_html,
         expect: :ok,
-        op: &upload(&1, label("Avatar"), upload_path)
+        run: &fill_in(&1, label("Field"), "any")
+      },
+      %{
+        name: "selector-only snippet assertion exact text",
+        html: @selector_only_html,
+        expect: :ok,
+        run: &assert_has(&1, text("Save", exact: true))
       }
     ]
   end
@@ -235,8 +402,8 @@ defmodule Cerberus.CoreLocatorOracleHarnessTest do
     browser_session
   end
 
-  defp run_case(session, op) when is_function(op, 1) do
-    _ = op.(session)
+  defp run_case(session, run_fun) when is_function(run_fun, 1) do
+    _ = run_fun.(session)
     %{status: :ok}
   rescue
     error in [AssertionError, ArgumentError, InvalidLocatorError] ->
