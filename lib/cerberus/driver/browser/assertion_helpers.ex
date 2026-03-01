@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAssert && window.__cerberusAssert.__version === 3) return;
+    if (window.__cerberusAssert && window.__cerberusAssert.__version === 4) return;
 
     const helper = {};
-    helper.__version = 3;
+    helper.__version = 4;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -53,6 +53,8 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           return "input[placeholder],textarea[placeholder],select[placeholder]";
         case "title":
           return "[title]";
+        case "alt":
+          return "[alt],img[alt],input[type='image'][alt],[role='img'][alt],button,a[href]";
         case "testid":
           return "[data-testid]";
         default:
@@ -162,7 +164,29 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       };
     };
 
-    helper.valueForMatch = (element, hidden, matchBy, normalizeWs) => {
+    helper.altSourceForElement = (element, cache) => {
+      if (cache && cache.has(element)) {
+        return cache.get(element);
+      }
+
+      const direct = element.getAttribute("alt");
+      if (direct) {
+        if (cache) cache.set(element, direct);
+        return direct;
+      }
+
+      let source = "";
+
+      if (typeof element.querySelector === "function") {
+        const nested = element.querySelector("img[alt],input[type='image'][alt],[role='img'][alt]");
+        source = nested ? (nested.getAttribute("alt") || "") : "";
+      }
+
+      if (cache) cache.set(element, source);
+      return source;
+    };
+
+    helper.valueForMatch = (element, hidden, matchBy, normalizeWs, context) => {
       const tag = (element.tagName || "").toLowerCase();
       if (tag === "script" || tag === "style" || tag === "noscript") return null;
 
@@ -208,13 +232,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           source = element.getAttribute("data-testid") || "";
           break;
         case "alt": {
-          const direct = element.getAttribute("alt");
-          if (direct) {
-            source = direct;
-          } else {
-            const nested = element.querySelector("img[alt],input[type='image'][alt],[role='img'][alt]");
-            source = nested ? (nested.getAttribute("alt") || "") : "";
-          }
+          source = helper.altSourceForElement(element, context && context.altCache);
           break;
         }
         default:
@@ -303,13 +321,14 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const matchText = helper.buildTextMatcher(options.expected, exact, normalizeWs);
       const filters = helper.matchFilters(options);
       const hasFilters = helper.hasMatchFilters(filters);
+      const context = { altCache: new Map() };
       let matchCount = 0;
 
       helper.eachCandidateElement(roots, selector, prefilterSelector, (element) => {
         const hidden = needsHiddenState ? helper.isHidden(element) : false;
         if (visibility !== "all" && !helper.selectedVisibility(visibility, hidden)) return true;
 
-        const value = helper.valueForMatch(element, hidden, matchBy, normalizeWs);
+        const value = helper.valueForMatch(element, hidden, matchBy, normalizeWs, context);
         if (!value) return true;
 
         if (matchText(value)) {
@@ -346,6 +365,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const roots = helper.resolveRoots(options.scopeSelector || null);
       const matchText = helper.buildTextMatcher(options.expected, exact, normalizeWs);
       const filters = helper.matchFilters(options);
+      const context = { altCache: new Map() };
       const visibleTexts = [];
       const hiddenTexts = [];
       const visibleSet = new Set();
@@ -353,7 +373,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
       helper.eachCandidateElement(roots, selector, prefilterSelector, (element) => {
         const hidden = helper.isHidden(element);
-        const value = helper.valueForMatch(element, hidden, matchBy, normalizeWs);
+        const value = helper.valueForMatch(element, hidden, matchBy, normalizeWs, context);
         if (!value) return true;
 
         if (hidden) {
