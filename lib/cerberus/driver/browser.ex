@@ -20,6 +20,8 @@ defmodule Cerberus.Driver.Browser do
   @default_screenshot_full_page false
   @user_context_supervisor Cerberus.Driver.Browser.UserContextSupervisor
   @empty_browser_context_defaults %{viewport: nil, user_agent: nil, init_scripts: [], popup_mode: :allow}
+  @clickable_match_field_by %{title: "title", alt: "alt", testid: "testid"}
+  @field_match_field_by %{placeholder: "placeholder", title: "title", testid: "testid"}
 
   @type viewport :: %{width: pos_integer(), height: pos_integer()}
   @type browser_context_defaults :: %{
@@ -64,6 +66,7 @@ defmodule Cerberus.Driver.Browser do
     owner = self()
     context_defaults = browser_context_defaults(opts)
     browser_name = Runtime.browser_name(opts)
+    ensure_popup_mode_supported!(browser_name, context_defaults.popup_mode)
 
     start_opts =
       opts
@@ -980,27 +983,13 @@ defmodule Cerberus.Driver.Browser do
     end)
   end
 
-  defp clickable_match_value(item, match_by) when is_map(item) do
-    case match_by do
-      :text -> item["text"] || ""
-      :link -> item["text"] || ""
-      :button -> item["text"] || ""
-      :title -> item["title"] || ""
-      :alt -> item["alt"] || ""
-      :testid -> item["testid"] || ""
-      _ -> item["text"] || ""
-    end
-  end
+  defp clickable_match_value(item, match_by) when is_map(item),
+    do: item[Map.get(@clickable_match_field_by, match_by, "text")] || ""
 
-  defp field_match_value(item, match_by) when is_map(item) do
-    case match_by do
-      :label -> item["label"] || ""
-      :placeholder -> item["placeholder"] || ""
-      :title -> item["title"] || ""
-      :testid -> item["testid"] || ""
-      _ -> item["label"] || ""
-    end
-  end
+  defp field_match_value(item, :label) when is_map(item), do: item["label"] || ""
+
+  defp field_match_value(item, match_by) when is_map(item),
+    do: item[Map.get(@field_match_field_by, match_by, "label")] || ""
 
   defp submit_control?(button) do
     type = (button["type"] || "submit") |> to_string() |> String.downcase()
@@ -1190,24 +1179,20 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp run_text_assertion(state, expected, visible, match_opts, timeout_ms, mode) when mode in [:assert, :refute] do
-    scope = Session.scope(state)
-    selector = Keyword.get(match_opts, :selector)
-    exact = Keyword.get(match_opts, :exact, false)
-    normalize_ws = Keyword.get(match_opts, :normalize_ws, true)
-    match_by = Keyword.get(match_opts, :match_by, :text)
+    case maybe_ensure_assertion_helpers(state) do
+      :ok ->
+        do_run_text_assertion(state, expected, visible, match_opts, timeout_ms, mode)
 
-    expression =
-      text_assertion_expression(
-        scope,
-        selector,
-        text_expectation_payload(expected),
-        exact,
-        normalize_ws,
-        match_by,
-        visible,
-        timeout_ms,
-        mode
-      )
+      {:error, reason, details} ->
+        observed = %{path: state.current_path, details: details}
+        {:error, "failed to load browser assertion helpers: #{reason}", observed}
+    end
+  end
+
+  defp do_run_text_assertion(state, expected, visible, match_opts, timeout_ms, mode) do
+    match_by = Keyword.get(match_opts, :match_by, :text)
+    payload = build_text_assertion_payload(state, expected, visible, match_opts, timeout_ms, mode, match_by)
+    expression = text_assertion_expression(payload)
 
     case eval_json(state, expression, command_timeout_ms(timeout_ms)) do
       {:ok, %{"ok" => true} = result} ->
@@ -1215,14 +1200,31 @@ defmodule Cerberus.Driver.Browser do
         {:ok, next_state, text_assertion_observed(result, expected, visible, match_by)}
 
       {:ok, result} ->
-        reason = if mode == :assert, do: "expected text not found", else: "unexpected matching text found"
-        {:error, reason, text_assertion_observed(result, expected, visible, match_by)}
+        {:error, text_assertion_reason(mode), text_assertion_observed(result, expected, visible, match_by)}
 
       {:error, reason, details} ->
         observed = %{path: state.current_path, details: details}
         {:error, "failed to evaluate browser text assertion: #{reason}", observed}
     end
   end
+
+  defp build_text_assertion_payload(state, expected, visible, match_opts, timeout_ms, mode, match_by) do
+    %{
+      scopeSelector: Session.scope(state),
+      selector: Keyword.get(match_opts, :selector),
+      expected: text_expectation_payload(expected),
+      exact: Keyword.get(match_opts, :exact, false),
+      normalizeWs: Keyword.get(match_opts, :normalize_ws, true),
+      matchBy: Atom.to_string(match_by),
+      visibility: visibility_mode(visible),
+      timeoutMs: timeout_ms,
+      mode: Atom.to_string(mode),
+      pollMs: 250
+    }
+  end
+
+  defp text_assertion_reason(:assert), do: "expected text not found"
+  defp text_assertion_reason(:refute), do: "unexpected matching text found"
 
   defp run_path_assertion(session, expected, opts, op) when op in [:assert_path, :refute_path] do
     state = state!(session)
@@ -1247,7 +1249,25 @@ defmodule Cerberus.Driver.Browser do
       deadline: System.monotonic_time(:millisecond) + timeout_ms
     }
 
-    do_run_path_assertion(session, state, assertion)
+    case maybe_ensure_assertion_helpers(state) do
+      :ok ->
+        do_run_path_assertion(session, state, assertion)
+
+      {:error, reason, details} ->
+        observed = %{
+          path: state.current_path,
+          scope: Session.scope(session),
+          expected: expected,
+          query: expected_query,
+          exact: exact,
+          timeout: timeout_ms,
+          path_match?: false,
+          query_match?: false,
+          details: details
+        }
+
+        {:error, session, observed, "failed to load browser assertion helpers: #{reason}"}
+    end
   end
 
   defp do_run_path_assertion(session, state, assertion) do
@@ -1327,6 +1347,23 @@ defmodule Cerberus.Driver.Browser do
       expected: expected
     }
   end
+
+  defp maybe_ensure_assertion_helpers(%{browser_name: :firefox} = state) do
+    expression = assertion_helpers_preload_expression()
+
+    case eval_json(state, expression) do
+      {:ok, %{"ok" => true}} ->
+        :ok
+
+      {:ok, result} ->
+        {:error, "assertion helper preload failed", %{result: result}}
+
+      {:error, reason, details} ->
+        {:error, reason, details}
+    end
+  end
+
+  defp maybe_ensure_assertion_helpers(_state), do: :ok
 
   defp click_button_after_eval(session, state, button) do
     case await_driver_ready(state) do
@@ -1851,6 +1888,13 @@ defmodule Cerberus.Driver.Browser do
     raise ArgumentError, ":popup_mode must be :allow or :same_tab, got: #{inspect(mode)}"
   end
 
+  defp ensure_popup_mode_supported!(:firefox, :same_tab) do
+    raise ArgumentError,
+          "popup_mode :same_tab is currently unsupported on Firefox due a WebDriver BiDi preload runtime issue; use :allow on Firefox"
+  end
+
+  defp ensure_popup_mode_supported!(_browser_name, _popup_mode), do: :ok
+
   defp normalize_init_scripts(scripts, script) do
     scripts_from(scripts, :init_scripts) ++ scripts_from(script, :init_script)
   end
@@ -1891,22 +1935,23 @@ defmodule Cerberus.Driver.Browser do
     """
   end
 
-  defp text_assertion_expression(scope, selector, expected, exact, normalize_ws, match_by, visible, timeout_ms, mode)
-       when mode in [:assert, :refute] do
-    payload = %{
-      scopeSelector: scope,
-      selector: selector,
-      expected: expected,
-      exact: exact,
-      normalizeWs: normalize_ws,
-      matchBy: Atom.to_string(match_by),
-      visibility: visibility_mode(visible),
-      timeoutMs: timeout_ms,
-      mode: Atom.to_string(mode),
-      pollMs: 250
-    }
+  defp assertion_helpers_preload_expression do
+    """
+    (() => {
+      #{AssertionHelpers.preload_script()}
 
+      const helper = window.__cerberusAssert;
+
+      return JSON.stringify({
+        ok: !!(helper && typeof helper.text === "function" && typeof helper.pathCheck === "function")
+      });
+    })()
+    """
+  end
+
+  defp text_assertion_expression(payload) when is_map(payload) do
     encoded_payload = JSON.encode!(payload)
+    mode_value = Map.get(payload, :mode, "assert")
 
     """
     (() => {
@@ -1915,7 +1960,7 @@ defmodule Cerberus.Driver.Browser do
         return helper.text(#{encoded_payload});
       }
 
-      const mode = #{JSON.encode!(Atom.to_string(mode))};
+      const mode = #{JSON.encode!(mode_value)};
       const reason = mode === "assert" ? "expected text not found" : "unexpected matching text found";
 
       return JSON.stringify({

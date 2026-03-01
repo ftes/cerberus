@@ -262,225 +262,181 @@ defmodule Cerberus.Assertions do
   defp normalize_click_locator(locator_input, opts) do
     locator = Locator.normalize(locator_input)
     opts = merge_locator_selector_opts(locator, opts)
+    normalize_click_locator_kind(locator, locator_input, opts)
+  end
 
-    case locator do
-      %Locator{kind: :text} ->
-        {locator, opts}
+  defp normalize_click_locator_kind(%Locator{kind: :text} = locator, _locator_input, opts), do: {locator, opts}
 
-      %Locator{kind: :label} ->
-        raise InvalidLocatorError,
-          locator: locator_input,
-          message:
-            "label locators target form-field lookup and are not supported for click/3; use text(...) for generic element text matching"
+  defp normalize_click_locator_kind(%Locator{kind: :label}, locator_input, _opts) do
+    raise InvalidLocatorError,
+      locator: locator_input,
+      message:
+        "label locators target form-field lookup and are not supported for click/3; use text(...) for generic element text matching"
+  end
 
-      %Locator{kind: :link, value: value} ->
-        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :link)}, Keyword.put(opts, :kind, :link)}
+  defp normalize_click_locator_kind(%Locator{kind: :link, value: value} = locator, _locator_input, opts) do
+    normalized = %{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :link)}
+    {normalized, Keyword.put(opts, :kind, :link)}
+  end
 
-      %Locator{kind: :button, value: value} ->
-        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :button)},
-         Keyword.put(opts, :kind, :button)}
+  defp normalize_click_locator_kind(%Locator{kind: :button, value: value} = locator, _locator_input, opts) do
+    normalized = %{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :button)}
+    {normalized, Keyword.put(opts, :kind, :button)}
+  end
 
-      %Locator{kind: :title, value: value} ->
-        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :title)}, opts}
+  defp normalize_click_locator_kind(%Locator{kind: :title, value: value} = locator, _locator_input, opts) do
+    {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :title)}, opts}
+  end
 
-      %Locator{kind: :alt, value: value} ->
-        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :alt)}, opts}
+  defp normalize_click_locator_kind(%Locator{kind: :alt, value: value} = locator, _locator_input, opts) do
+    {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :alt)}, opts}
+  end
 
-      %Locator{kind: :css, value: selector} ->
-        updated_locator = %{locator | kind: :text, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
-        {updated_locator, Keyword.put(opts, :selector, selector)}
+  defp normalize_click_locator_kind(%Locator{kind: :css, value: selector} = locator, _locator_input, opts) do
+    updated_locator = %{locator | kind: :text, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
+    {updated_locator, Keyword.put(opts, :selector, selector)}
+  end
 
-      %Locator{kind: :placeholder} ->
-        raise InvalidLocatorError, locator: locator_input, message: "placeholder locators are not supported for click/3"
+  defp normalize_click_locator_kind(%Locator{kind: :placeholder}, locator_input, _opts) do
+    raise InvalidLocatorError, locator: locator_input, message: "placeholder locators are not supported for click/3"
+  end
 
-      %Locator{kind: :testid, value: value} ->
-        normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
-        {%{locator | kind: :text, value: value, opts: normalized_opts}, opts}
-    end
+  defp normalize_click_locator_kind(%Locator{kind: :testid, value: value} = locator, _locator_input, opts) do
+    normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
+    {%{locator | kind: :text, value: value, opts: normalized_opts}, opts}
   end
 
   defp normalize_fill_in_locator(locator_input, opts) do
-    locator = Locator.normalize(locator_input)
-    opts = merge_locator_selector_opts(locator, opts)
-
-    case locator do
-      %Locator{kind: :text, value: value} ->
-        if fill_in_label_shorthand?(locator_input) do
-          {%Locator{kind: :label, value: value}, opts}
-        else
-          raise InvalidLocatorError,
-            locator: locator_input,
-            message:
-              "text locators are not supported for fill_in/4; use a plain string/regex label shorthand or label(...), role(:textbox, ...), or css(...)"
-        end
-
-      %Locator{kind: :label, value: value} ->
-        {%Locator{kind: :label, value: value}, opts}
-
-      %Locator{kind: :placeholder, value: value} ->
-        normalized_opts = put_match_by(locator.opts, :placeholder)
-        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
-
-      %Locator{kind: :title, value: value} ->
-        normalized_opts = put_match_by(locator.opts, :title)
-        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
-
-      %Locator{kind: :testid, value: value} ->
-        normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
-        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
-
-      %Locator{kind: :css, value: selector} ->
-        updated_locator = %{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
-        {updated_locator, Keyword.put(opts, :selector, selector)}
-
-      %Locator{kind: :link} ->
-        raise InvalidLocatorError, locator: locator_input, message: "link locators are not supported for fill_in/4"
-
-      %Locator{kind: :button} ->
-        raise InvalidLocatorError, locator: locator_input, message: "button locators are not supported for fill_in/4"
-
-      %Locator{kind: :alt} ->
-        raise InvalidLocatorError, locator: locator_input, message: "alt locators are not supported for fill_in/4"
-    end
+    normalize_labeled_field_locator(
+      locator_input,
+      opts,
+      "fill_in/4",
+      "text locators are not supported for fill_in/4; use a plain string/regex label shorthand or label(...), role(:textbox, ...), or css(...)"
+    )
   end
 
   defp normalize_upload_locator(locator_input, opts) do
-    locator = Locator.normalize(locator_input)
-    opts = merge_locator_selector_opts(locator, opts)
-
-    case locator do
-      %Locator{kind: :text, value: value} ->
-        if upload_label_shorthand?(locator_input) do
-          {%Locator{kind: :label, value: value}, opts}
-        else
-          raise InvalidLocatorError,
-            locator: locator_input,
-            message:
-              "text locators are not supported for upload/4; use a plain string/regex label shorthand or label(...), role(:textbox, ...), or css(...)"
-        end
-
-      %Locator{kind: :label, value: value} ->
-        {%Locator{kind: :label, value: value}, opts}
-
-      %Locator{kind: :placeholder, value: value} ->
-        normalized_opts = put_match_by(locator.opts, :placeholder)
-        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
-
-      %Locator{kind: :title, value: value} ->
-        normalized_opts = put_match_by(locator.opts, :title)
-        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
-
-      %Locator{kind: :testid, value: value} ->
-        normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
-        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
-
-      %Locator{kind: :css, value: selector} ->
-        updated_locator = %{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
-        {updated_locator, Keyword.put(opts, :selector, selector)}
-
-      %Locator{kind: :link} ->
-        raise InvalidLocatorError, locator: locator_input, message: "link locators are not supported for upload/4"
-
-      %Locator{kind: :button} ->
-        raise InvalidLocatorError, locator: locator_input, message: "button locators are not supported for upload/4"
-
-      %Locator{kind: :alt} ->
-        raise InvalidLocatorError, locator: locator_input, message: "alt locators are not supported for upload/4"
-    end
+    normalize_labeled_field_locator(
+      locator_input,
+      opts,
+      "upload/4",
+      "text locators are not supported for upload/4; use a plain string/regex label shorthand or label(...), role(:textbox, ...), or css(...)"
+    )
   end
 
   defp normalize_check_locator(locator_input, opts, op_name) do
-    locator = Locator.normalize(locator_input)
-    opts = merge_locator_selector_opts(locator, opts)
-
-    case locator do
-      %Locator{kind: :text, value: value} ->
-        if check_label_shorthand?(locator_input) do
-          {%Locator{kind: :label, value: value}, opts}
-        else
-          raise InvalidLocatorError,
-            locator: locator_input,
-            message:
-              "text locators are not supported for #{op_name}; use a plain string/regex label shorthand or label(...) or css(...)"
-        end
-
-      %Locator{kind: :label, value: value} ->
-        {%Locator{kind: :label, value: value}, opts}
-
-      %Locator{kind: :placeholder, value: value} ->
-        normalized_opts = put_match_by(locator.opts, :placeholder)
-        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
-
-      %Locator{kind: :title, value: value} ->
-        normalized_opts = put_match_by(locator.opts, :title)
-        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
-
-      %Locator{kind: :testid, value: value} ->
-        normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
-        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
-
-      %Locator{kind: :css, value: selector} ->
-        updated_locator = %{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
-        {updated_locator, Keyword.put(opts, :selector, selector)}
-
-      %Locator{kind: :link} ->
-        raise InvalidLocatorError, locator: locator_input, message: "link locators are not supported for #{op_name}"
-
-      %Locator{kind: :button} ->
-        raise InvalidLocatorError, locator: locator_input, message: "button locators are not supported for #{op_name}"
-
-      %Locator{kind: :alt} ->
-        raise InvalidLocatorError, locator: locator_input, message: "alt locators are not supported for #{op_name}"
-    end
+    normalize_labeled_field_locator(
+      locator_input,
+      opts,
+      op_name,
+      "text locators are not supported for #{op_name}; use a plain string/regex label shorthand or label(...) or css(...)"
+    )
   end
 
   defp normalize_select_locator(locator_input, opts) do
+    normalize_labeled_field_locator(
+      locator_input,
+      opts,
+      "select/3",
+      "text locators are not supported for select/3; use a plain string/regex label shorthand or label(...), role(:combobox, ...), or css(...)"
+    )
+  end
+
+  defp normalize_labeled_field_locator(locator_input, opts, op_name, text_error_message) do
     locator = Locator.normalize(locator_input)
     opts = merge_locator_selector_opts(locator, opts)
+    normalize_labeled_field_kind(locator, locator_input, opts, op_name, text_error_message)
+  end
 
-    case locator do
-      %Locator{kind: :text, value: value} ->
-        if select_label_shorthand?(locator_input) do
-          {%Locator{kind: :label, value: value}, opts}
-        else
-          raise InvalidLocatorError,
-            locator: locator_input,
-            message:
-              "text locators are not supported for select/3; use a plain string/regex label shorthand or label(...), role(:combobox, ...), or css(...)"
-        end
-
-      %Locator{kind: :label, value: value} ->
-        {%Locator{kind: :label, value: value}, opts}
-
-      %Locator{kind: :placeholder, value: value} ->
-        normalized_opts = put_match_by(locator.opts, :placeholder)
-        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
-
-      %Locator{kind: :title, value: value} ->
-        normalized_opts = put_match_by(locator.opts, :title)
-        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
-
-      %Locator{kind: :testid, value: value} ->
-        normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
-        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
-
-      %Locator{kind: :css, value: selector} ->
-        updated_locator = %{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
-        {updated_locator, Keyword.put(opts, :selector, selector)}
-
-      %Locator{kind: :link} ->
-        raise InvalidLocatorError, locator: locator_input, message: "link locators are not supported for select/3"
-
-      %Locator{kind: :button} ->
-        raise InvalidLocatorError, locator: locator_input, message: "button locators are not supported for select/3"
-
-      %Locator{kind: :alt} ->
-        raise InvalidLocatorError, locator: locator_input, message: "alt locators are not supported for select/3"
+  defp normalize_labeled_field_kind(
+         %Locator{kind: :text, value: value},
+         locator_input,
+         opts,
+         _op_name,
+         text_error_message
+       ) do
+    if label_shorthand?(locator_input) do
+      {%Locator{kind: :label, value: value}, opts}
+    else
+      raise InvalidLocatorError, locator: locator_input, message: text_error_message
     end
+  end
+
+  defp normalize_labeled_field_kind(
+         %Locator{kind: :label, value: value},
+         _locator_input,
+         opts,
+         _op_name,
+         _text_error_message
+       ) do
+    {%Locator{kind: :label, value: value}, opts}
+  end
+
+  defp normalize_labeled_field_kind(
+         %Locator{kind: kind, value: value} = locator,
+         _locator_input,
+         opts,
+         _op_name,
+         _text_error_message
+       )
+       when kind in [:placeholder, :title] do
+    normalized_opts = put_match_by(locator.opts, kind)
+    {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
+  end
+
+  defp normalize_labeled_field_kind(
+         %Locator{kind: :testid, value: value} = locator,
+         _locator_input,
+         opts,
+         _op_name,
+         _text_error_message
+       ) do
+    normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
+    {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
+  end
+
+  defp normalize_labeled_field_kind(
+         %Locator{kind: :css, value: selector} = locator,
+         _locator_input,
+         opts,
+         _op_name,
+         _text_error_message
+       ) do
+    updated_locator = %{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
+    {updated_locator, Keyword.put(opts, :selector, selector)}
+  end
+
+  defp normalize_labeled_field_kind(%Locator{kind: kind}, locator_input, _opts, op_name, _text_error_message)
+       when kind in [:link, :button, :alt] do
+    raise InvalidLocatorError, locator: locator_input, message: "#{kind} locators are not supported for #{op_name}"
   end
 
   defp normalize_choose_locator(locator_input, opts) do
     normalize_check_locator(locator_input, opts, "choose/3")
+  end
+
+  defp normalize_assert_locator(locator_input, opts) do
+    locator = Locator.normalize(locator_input)
+    ensure_assert_locator_opts!(locator, locator_input)
+    normalize_assert_locator_kind(locator, locator_input, opts)
+  end
+
+  defp normalize_assert_locator_kind(%Locator{kind: :text} = locator, _locator_input, opts), do: {locator, opts}
+
+  defp normalize_assert_locator_kind(%Locator{kind: :css}, locator_input, _opts) do
+    raise InvalidLocatorError,
+      locator: locator_input,
+      message: "css locators are not supported for assert_has/3 or refute_has/3 in this slice"
+  end
+
+  defp normalize_assert_locator_kind(%Locator{kind: kind, value: value} = locator, _locator_input, opts)
+       when kind in [:label, :link, :button, :placeholder, :title, :alt] do
+    {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, kind)}, opts}
+  end
+
+  defp normalize_assert_locator_kind(%Locator{kind: :testid, value: value} = locator, _locator_input, opts) do
+    normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
+    {%{locator | kind: :text, value: value, opts: normalized_opts}, opts}
   end
 
   defp normalize_submit_locator(locator_input, opts) do
@@ -516,43 +472,6 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  defp normalize_assert_locator(locator_input, opts) do
-    locator = Locator.normalize(locator_input)
-    ensure_assert_locator_opts!(locator, locator_input)
-
-    case locator do
-      %Locator{kind: :text} ->
-        {locator, opts}
-
-      %Locator{kind: :label, value: value} ->
-        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :label)}, opts}
-
-      %Locator{kind: :link, value: value} ->
-        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :link)}, opts}
-
-      %Locator{kind: :button, value: value} ->
-        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :button)}, opts}
-
-      %Locator{kind: :placeholder, value: value} ->
-        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :placeholder)}, opts}
-
-      %Locator{kind: :title, value: value} ->
-        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :title)}, opts}
-
-      %Locator{kind: :alt, value: value} ->
-        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :alt)}, opts}
-
-      %Locator{kind: :testid, value: value} ->
-        normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
-        {%{locator | kind: :text, value: value, opts: normalized_opts}, opts}
-
-      %Locator{kind: :css} ->
-        raise InvalidLocatorError,
-          locator: locator_input,
-          message: "css locators are not supported for assert_has/3 or refute_has/3 in this slice"
-    end
-  end
-
   defp ensure_assert_locator_opts!(%Locator{opts: locator_opts}, locator_input) do
     if Keyword.has_key?(locator_opts, :selector) do
       raise InvalidLocatorError,
@@ -566,19 +485,7 @@ defmodule Cerberus.Assertions do
     Keyword.merge(selector_opt, opts)
   end
 
-  defp fill_in_label_shorthand?(locator_input) do
-    is_binary(locator_input) or is_struct(locator_input, Regex)
-  end
-
-  defp upload_label_shorthand?(locator_input) do
-    is_binary(locator_input) or is_struct(locator_input, Regex)
-  end
-
-  defp check_label_shorthand?(locator_input) do
-    is_binary(locator_input) or is_struct(locator_input, Regex)
-  end
-
-  defp select_label_shorthand?(locator_input) do
+  defp label_shorthand?(locator_input) do
     is_binary(locator_input) or is_struct(locator_input, Regex)
   end
 

@@ -31,33 +31,16 @@ defmodule Cerberus.Html do
   end
 
   @spec assertion_values(String.t(), atom(), true | false | :any, String.t() | nil) :: [String.t()]
-  def assertion_values(html, match_by, visibility \\ true, scope \\ nil) when is_binary(html) and is_atom(match_by) do
-    if match_by == :text do
-      texts(html, visibility, scope)
-    else
-      case parse_document(html) do
-        {:ok, lazy_html} ->
-          {visible, hidden} =
-            lazy_html
-            |> scoped_nodes(scope)
-            |> Enum.reduce({[], []}, fn root, acc ->
-              root
-              |> LazyHTML.to_tree()
-              |> collect_assertion_values(match_by, false, acc)
-            end)
+  def assertion_values(html, match_by, visibility \\ true, scope \\ nil)
 
-          visible = Enum.uniq(visible)
-          hidden = Enum.uniq(hidden)
+  def assertion_values(html, :text, visibility, scope) when is_binary(html) do
+    texts(html, visibility, scope)
+  end
 
-          case visibility do
-            true -> visible
-            false -> hidden
-            :any -> visible ++ hidden
-          end
-
-        _ ->
-          []
-      end
+  def assertion_values(html, match_by, visibility, scope) when is_binary(html) and is_atom(match_by) do
+    case parse_document(html) do
+      {:ok, lazy_html} -> collect_assertion_values_in_doc(lazy_html, match_by, visibility, scope)
+      _ -> []
     end
   end
 
@@ -621,6 +604,25 @@ defmodule Cerberus.Html do
 
   defp css_attr_char_escape(char), do: <<char::utf8>>
 
+  defp collect_assertion_values_in_doc(lazy_html, match_by, visibility, scope) do
+    {visible, hidden} =
+      lazy_html
+      |> scoped_nodes(scope)
+      |> Enum.reduce({[], []}, fn root, acc ->
+        root
+        |> LazyHTML.to_tree()
+        |> collect_assertion_values(match_by, false, acc)
+      end)
+
+    visible = Enum.uniq(visible)
+    hidden = Enum.uniq(hidden)
+    pick_visibility_values(visibility, visible, hidden)
+  end
+
+  defp pick_visibility_values(true, visible, _hidden), do: visible
+  defp pick_visibility_values(false, _visible, hidden), do: hidden
+  defp pick_visibility_values(:any, visible, hidden), do: visible ++ hidden
+
   defp collect_assertion_values(nodes, match_by, hidden_parent?, acc) when is_list(nodes) do
     Enum.reduce(nodes, acc, fn node, acc ->
       case node do
@@ -637,20 +639,25 @@ defmodule Cerberus.Html do
   end
 
   defp maybe_append_assertion_value(_node, tag, attrs, children, match_by, hidden?, acc) do
-    value =
-      case match_by do
-        :label when tag == "label" -> normalize_text(tree_text(children))
-        :link when tag == "a" -> if(is_binary(attr_from_attrs(attrs, "href")), do: normalize_text(tree_text(children)))
-        :button when tag == "button" -> normalize_text(tree_text(children))
-        :title -> attr_from_attrs(attrs, "title")
-        :placeholder when tag in ["input", "textarea", "select"] -> attr_from_attrs(attrs, "placeholder")
-        :alt -> attr_from_attrs(attrs, "alt")
-        :testid -> attr_from_attrs(attrs, "data-testid")
-        _ -> nil
-      end
-
+    value = assertion_value_for(tag, attrs, children, match_by)
     append_text(value || "", hidden?, acc)
   end
+
+  defp assertion_value_for("label", _attrs, children, :label), do: normalize_text(tree_text(children))
+
+  defp assertion_value_for("a", attrs, children, :link) do
+    if is_binary(attr_from_attrs(attrs, "href")), do: normalize_text(tree_text(children))
+  end
+
+  defp assertion_value_for("button", _attrs, children, :button), do: normalize_text(tree_text(children))
+  defp assertion_value_for(_tag, attrs, _children, :title), do: attr_from_attrs(attrs, "title")
+
+  defp assertion_value_for(tag, attrs, _children, :placeholder) when tag in ["input", "textarea", "select"],
+    do: attr_from_attrs(attrs, "placeholder")
+
+  defp assertion_value_for(_tag, attrs, _children, :alt), do: attr_from_attrs(attrs, "alt")
+  defp assertion_value_for(_tag, attrs, _children, :testid), do: attr_from_attrs(attrs, "data-testid")
+  defp assertion_value_for(_tag, _attrs, _children, _match_by), do: nil
 
   defp tree_text(nodes) when is_list(nodes) do
     Enum.map_join(nodes, " ", fn
@@ -667,12 +674,7 @@ defmodule Cerberus.Html do
     |> String.trim()
   end
 
-  defp node_tree_tag(node) do
-    case node do
-      {tag, _attrs, _children} -> to_string(tag)
-      _ -> "*"
-    end
-  end
+  defp node_tree_tag({tag, _attrs, _children}), do: to_string(tag)
 
   defp attr_from_attrs(attrs, name) when is_list(attrs) and is_binary(name) do
     Enum.find_value(attrs, nil, fn
@@ -785,15 +787,9 @@ defmodule Cerberus.Html do
     end
   end
 
-  defp field_match_value(root_node, field_node, match_by) do
-    case match_by do
-      :label -> field_label_for_node(root_node, field_node)
-      :placeholder -> attr(field_node, "placeholder") || ""
-      :title -> attr(field_node, "title") || ""
-      :testid -> attr(field_node, "data-testid") || ""
-      _ -> ""
-    end
-  end
+  defp field_match_value(_root_node, field_node, :placeholder), do: attr(field_node, "placeholder") || ""
+  defp field_match_value(_root_node, field_node, :title), do: attr(field_node, "title") || ""
+  defp field_match_value(_root_node, field_node, :testid), do: attr(field_node, "data-testid") || ""
 
   defp field_label_for_node(root_node, field_node) do
     id = attr(field_node, "id")
@@ -828,36 +824,40 @@ defmodule Cerberus.Html do
   end
 
   defp node_alt_text(root_node, node) do
-    direct = attr(node, "alt")
-
-    if is_binary(direct) and direct != "" do
-      direct
-    else
-      node
-      |> safe_query("img[alt],input[type='image'][alt],[role='img'][alt]")
-      |> Enum.find_value("", fn image_node ->
-        if node_matches_selector?(root_node, image_node, nil) do
-          attr(image_node, "alt") || ""
-        end
-      end)
-    end
+    node
+    |> direct_or_nested_alt("img[alt],input[type='image'][alt],[role='img'][alt]")
+    |> maybe_filter_alt_by_root(root_node)
   end
 
   defp button_alt_text(node, root_node \\ nil) do
-    direct = attr(node, "alt")
+    node
+    |> direct_or_nested_alt("img[alt],input[type='image'][alt]")
+    |> maybe_filter_alt_by_root(root_node)
+  end
 
-    if is_binary(direct) and direct != "" do
-      direct
-    else
-      node
-      |> safe_query("img[alt],input[type='image'][alt]")
-      |> Enum.find_value("", fn image_node ->
-        if is_nil(root_node) or node_matches_selector?(root_node, image_node, nil) do
-          attr(image_node, "alt") || ""
-        end
-      end)
+  defp direct_or_nested_alt(node, nested_selector) do
+    case attr(node, "alt") do
+      direct when is_binary(direct) and direct != "" ->
+        {:direct, direct}
+
+      _ ->
+        {:nested, safe_query(node, nested_selector)}
     end
   end
+
+  defp maybe_filter_alt_by_root({:direct, value}, _root_node), do: value
+
+  defp maybe_filter_alt_by_root({:nested, nodes}, nil) do
+    Enum.find_value(nodes, "", &alt_value/1)
+  end
+
+  defp maybe_filter_alt_by_root({:nested, nodes}, root_node) do
+    Enum.find_value(nodes, "", fn image_node ->
+      if node_matches_selector?(root_node, image_node, nil), do: alt_value(image_node)
+    end)
+  end
+
+  defp alt_value(node), do: attr(node, "alt") || ""
 
   defp field_for_label(root_node, label_node) do
     case attr(label_node, "for") do
