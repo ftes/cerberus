@@ -104,7 +104,6 @@ jobs:
       #     mix test.websocket --warnings-as-errors --max-failures 1 --browsers chrome $BROWSER_DRIVER_FILES
 
       - name: Run browser-driver tests in local Firefox lane
-        continue-on-error: true
         run: |
           CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors --max-failures 1
 

@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-28T20:40:01Z
-updated_at: 2026-03-01T09:11:21Z
+updated_at: 2026-03-01T09:32:45Z
 ---
 
 Restructure CI to run browser-tagged tests in four lanes: local chrome, local firefox, websocket chrome, websocket firefox. Minimize duplicate setup via shared non-browser setup and reusable matrix job steps.
@@ -2042,3 +2042,8 @@ Finished in 36.2 seconds (1.0s async, 35.2s sync)
 - Added regression coverage in runtime tests for non-Selenium endpoints where host/port differ, ensuring those URLs are preserved.
 
 - Validation run: mix test test/cerberus/driver/browser/runtime_test.exs; mix precommit (both passed).
+
+
+- Re-ran local Firefox lane exactly as CI (`source .envrc && CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors --max-failures 1`).
+- Current failure: `test fill_in matches wrapped labels with nested inline text across static and browser drivers` in `test/cerberus/core/form_actions_test.exs:29`.
+- Error path: `GenServer.call(... {:await_ready, [timeout_ms: 1500, quiet_ms: 40]}, 2500)` timeout from `Cerberus.Driver.Browser.UserContextProcess.handle_call/3` -> surfaced through `Cerberus.Driver.Browser.await_driver_ready/1`.
