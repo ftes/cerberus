@@ -350,6 +350,9 @@ defmodule Cerberus.Driver.Browser.Extensions do
       {:ok, _payload} ->
         :ok
 
+      {:error, _reason, %{"error" => "no such alert"}} ->
+        :ok
+
       {:error, reason, details} ->
         raise ArgumentError, "with_dialog/3 failed to handle prompt: #{reason} (#{inspect(details)})"
     end
