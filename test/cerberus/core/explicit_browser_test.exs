@@ -3,54 +3,36 @@ defmodule Cerberus.CoreExplicitBrowserTest do
 
   import Cerberus
 
-  alias Cerberus.Harness
-
   @moduletag explicit_browser: true
 
-  @tag :chrome
-  @tag :firefox
-  test "explicit chrome/firefox tags run both browser lanes", context do
-    results =
-      Harness.run!(context, fn session ->
-        session =
-          session
-          |> visit("/articles")
-          |> assert_has(text("Articles", exact: true))
-
-        %{browser_name: session.browser_name}
-      end)
-
-    assert Enum.map(results, & &1.driver) == [:chrome, :firefox]
-
-    browser_names_by_driver = Map.new(results, fn result -> {result.driver, result.value.browser_name} end)
-
-    assert browser_names_by_driver == %{chrome: :chrome, firefox: :firefox}
-  end
-
-  @tag firefox: true
-  @tag chrome: false
-  test "test-level tags can force firefox only", context do
-    results =
-      Harness.run!(context, fn session ->
-        session
+  for driver <- [:chrome, :firefox] do
+    test "explicit chrome/firefox drivers run as expected (#{driver})" do
+      session =
+        unquote(driver)
+        |> session()
         |> visit("/articles")
         |> assert_has(text("Articles", exact: true))
-      end)
 
-    assert Enum.map(results, & &1.driver) == [:firefox]
+      assert session.browser_name == unquote(driver)
+    end
   end
 
-  @tag :chrome
-  @tag :firefox
-  test "explicit chrome/firefox drivers map to the matching runtime browser", context do
-    results =
-      Harness.run!(context, fn session ->
-        %{user_agent: Cerberus.Browser.evaluate_js(session, "navigator.userAgent")}
-      end)
+  test "firefox can be targeted directly" do
+    :firefox
+    |> session()
+    |> visit("/articles")
+    |> assert_has(text("Articles", exact: true))
+  end
 
-    user_agents_by_driver = Map.new(results, fn result -> {result.driver, result.value.user_agent} end)
+  for driver <- [:chrome, :firefox] do
+    test "explicit driver maps to matching runtime browser (#{driver})" do
+      user_agent =
+        unquote(driver)
+        |> session()
+        |> Cerberus.Browser.evaluate_js("navigator.userAgent")
 
-    assert user_agents_by_driver[:chrome] =~ "Chrome"
-    assert user_agents_by_driver[:firefox] =~ "Firefox"
+      expected = if unquote(driver) == :chrome, do: "Chrome", else: "Firefox"
+      assert user_agent =~ expected
+    end
   end
 end

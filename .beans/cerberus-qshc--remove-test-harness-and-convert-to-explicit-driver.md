@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-01T17:33:28Z
-updated_at: 2026-03-01T18:41:26Z
+updated_at: 2026-03-01T18:43:57Z
 parent: cerberus-whq9
 ---
 
@@ -63,3 +63,10 @@ Goals:
   - live_link_navigation_test.exs
 - Replaced harness-driven live/browser matrices with explicit `for driver <- [:phoenix, :browser]` loops and direct `session(:phoenix, ...)` for phoenix-only setup cases (custom conn/connect_params).
 - Validation: targeted chrome batch run passed (40 tests, 0 failures) and mix precommit passed.
+
+- Converted additional docs/helper/browser-focused harness tests:
+  - explicit_browser_test.exs
+  - documentation_examples_test.exs
+  - helper_locator_behavior_test.exs
+- Replaced harness runs with explicit public API driver loops (`:phoenix/:browser` and explicit `:chrome/:firefox` where applicable).
+- Validation: targeted run for this slice passed (33 tests, 0 failures) and mix precommit passed.

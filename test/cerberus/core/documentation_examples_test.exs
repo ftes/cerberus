@@ -4,38 +4,30 @@ defmodule Cerberus.CoreDocumentationExamplesTest do
   import Cerberus
 
   alias Cerberus.Browser
-  alias Cerberus.Harness
 
-  @tag :auto
-  @tag :browser
-  test "quickstart counter flow from docs works across auto and browser", context do
-    Harness.run!(context, fn session ->
-      session
+  for driver <- [:phoenix, :browser] do
+    test "quickstart counter flow from docs works across auto and browser (#{driver})" do
+      unquote(driver)
+      |> session()
       |> visit("/articles")
       |> assert_has(text("Articles", exact: true))
       |> click(link("Counter"))
       |> assert_has(text("Count: 0", exact: true))
-    end)
-  end
+    end
 
-  @tag :auto
-  @tag :browser
-  test "form plus path flow from docs works across auto and browser", context do
-    Harness.run!(context, fn session ->
-      session
+    test "form plus path flow from docs works across auto and browser (#{driver})" do
+      unquote(driver)
+      |> session()
       |> visit("/search")
       |> fill_in(label("Search term"), "Aragorn")
       |> submit(button("Run Search"))
       |> assert_path("/search/results", query: %{q: "Aragorn"})
       |> assert_has(text("Search query: Aragorn", exact: true))
-    end)
-  end
+    end
 
-  @tag :auto
-  @tag :browser
-  test "scoped navigation flow from docs works across auto and browser", context do
-    Harness.run!(context, fn session ->
-      session
+    test "scoped navigation flow from docs works across auto and browser (#{driver})" do
+      unquote(driver)
+      |> session()
       |> visit("/scoped")
       |> within("#secondary-panel", fn scoped ->
         scoped
@@ -43,15 +35,12 @@ defmodule Cerberus.CoreDocumentationExamplesTest do
         |> click(link("Open"))
       end)
       |> assert_path("/search")
-    end)
-  end
+    end
 
-  @tag :auto
-  @tag :browser
-  test "multi-user and multi-tab flow from docs preserves isolation semantics", context do
-    Harness.run!(context, fn session ->
+    test "multi-user and multi-tab flow from docs preserves isolation semantics (#{driver})" do
       primary =
-        session
+        unquote(driver)
+        |> session()
         |> visit("/session/user/alice")
         |> assert_has(text("Session user: alice", exact: true))
 
@@ -66,16 +55,14 @@ defmodule Cerberus.CoreDocumentationExamplesTest do
       |> visit("/session/user")
       |> assert_has(text("Session user: unset", exact: true))
       |> refute_has(text("Session user: alice", exact: true))
-    end)
+    end
   end
 
-  @tag :auto
-  test "async live assertion flow from docs works with timeout", context do
-    Harness.run!(context, fn session ->
-      session
-      |> visit("/live/async_page")
-      |> assert_has(text("Title loaded async"), timeout: 500)
-    end)
+  test "async live assertion flow from docs works with timeout" do
+    :phoenix
+    |> session()
+    |> visit("/live/async_page")
+    |> assert_has(text("Title loaded async"), timeout: 500)
   end
 
   test "browser extension snippet from docs works" do
