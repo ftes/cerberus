@@ -3,6 +3,7 @@ defmodule Cerberus.Driver.Browser do
 
   @behaviour Cerberus.Driver
 
+  alias Cerberus.Driver.Browser.AssertionHelpers
   alias Cerberus.Driver.Browser.BiDi
   alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.UserContextProcess
@@ -1200,7 +1201,6 @@ defmodule Cerberus.Driver.Browser do
         expected_payload,
         expected_query,
         exact,
-        remaining_timeout,
         op
       )
 
@@ -1222,7 +1222,7 @@ defmodule Cerberus.Driver.Browser do
             updated = %{session | current_path: observed.path}
             {:ok, updated, observed}
 
-          result["reason"] == "navigation-transition" and remaining_timeout > 0 ->
+          remaining_timeout > 0 ->
             updated_session = wait_for_assertion_signal(session, remaining_timeout)
             do_run_path_assertion(updated_session, state!(updated_session), assertion)
 
@@ -1231,19 +1231,24 @@ defmodule Cerberus.Driver.Browser do
         end
 
       {:error, reason, details} ->
-        observed = %{
-          path: state.current_path,
-          scope: Session.scope(session),
-          expected: expected,
-          query: expected_query,
-          exact: exact,
-          timeout: timeout_ms,
-          path_match?: false,
-          query_match?: false,
-          details: details
-        }
+        if remaining_timeout > 0 and navigation_transition_error?(reason, details) do
+          updated_session = wait_for_assertion_signal(session, remaining_timeout)
+          do_run_path_assertion(updated_session, state!(updated_session), assertion)
+        else
+          observed = %{
+            path: state.current_path,
+            scope: Session.scope(session),
+            expected: expected,
+            query: expected_query,
+            exact: exact,
+            timeout: timeout_ms,
+            path_match?: false,
+            query_match?: false,
+            details: details
+          }
 
-        {:error, session, observed, "failed to evaluate browser path assertion: #{reason}"}
+          {:error, session, observed, "failed to evaluate browser path assertion: #{reason}"}
+        end
     end
   end
 
@@ -1567,10 +1572,10 @@ defmodule Cerberus.Driver.Browser do
           viewport: normalize_viewport(opt_value(opts, browser_opts, :viewport)),
           user_agent: normalize_user_agent(opt_value(opts, browser_opts, :user_agent)),
           init_scripts:
-            normalize_init_scripts(
-              opt_value(opts, browser_opts, :init_scripts),
-              opt_value(opts, browser_opts, :init_script)
-            )
+            opts
+            |> opt_value(browser_opts, :init_scripts)
+            |> normalize_init_scripts(opt_value(opts, browser_opts, :init_script))
+            |> ensure_internal_init_scripts()
         }
 
       other ->
@@ -1692,8 +1697,16 @@ defmodule Cerberus.Driver.Browser do
     %{
       viewport: normalize_viewport(Map.get(defaults, :viewport)),
       user_agent: normalize_user_agent(Map.get(defaults, :user_agent)),
-      init_scripts: normalize_init_scripts(Map.get(defaults, :init_scripts), nil)
+      init_scripts:
+        defaults
+        |> Map.get(:init_scripts)
+        |> normalize_init_scripts(nil)
+        |> ensure_internal_init_scripts()
     }
+  end
+
+  defp ensure_internal_init_scripts(scripts) when is_list(scripts) do
+    [AssertionHelpers.preload_script() | scripts]
   end
 
   defp merged_browser_opts(opts) do
@@ -1796,420 +1809,69 @@ defmodule Cerberus.Driver.Browser do
 
   defp text_assertion_expression(scope, selector, expected, exact, normalize_ws, visible, timeout_ms, mode)
        when mode in [:assert, :refute] do
-    encoded_scope = JSON.encode!(scope)
-    encoded_selector = JSON.encode!(selector)
-    encoded_expected = JSON.encode!(expected)
-    encoded_visible = JSON.encode!(visibility_mode(visible))
-    encoded_mode = JSON.encode!(Atom.to_string(mode))
+    payload = %{
+      scopeSelector: scope,
+      selector: selector,
+      expected: expected,
+      exact: exact,
+      normalizeWs: normalize_ws,
+      visibility: visibility_mode(visible),
+      timeoutMs: timeout_ms,
+      mode: Atom.to_string(mode),
+      pollMs: 250
+    }
+
+    encoded_payload = JSON.encode!(payload)
 
     """
     (() => {
-      const scopeSelector = #{encoded_scope};
-      const selector = #{encoded_selector};
-      const expected = #{encoded_expected};
-      const exact = #{if(exact, do: "true", else: "false")};
-      const normalizeWs = #{if(normalize_ws, do: "true", else: "false")};
-      const visibility = #{encoded_visible};
-      const timeoutMs = #{timeout_ms};
-      const mode = #{encoded_mode};
-      const pollMs = 250;
-      const deadline = Date.now() + timeoutMs;
+      const helper = window.__cerberusAssert;
+      if (helper && typeof helper.text === "function") {
+        return helper.text(#{encoded_payload});
+      }
 
-      const normalize = (value) => {
-        const source = (value || "").replace(/\\u00A0/g, " ");
-        if (!normalizeWs) return source;
-        return source.replace(/\\s+/g, " ").trim();
-      };
+      const mode = #{JSON.encode!(Atom.to_string(mode))};
+      const reason = mode === "assert" ? "expected text not found" : "unexpected matching text found";
 
-      const regexFromExpected = (payload) => {
-        if (!payload || payload.type !== "regex") return null;
-        try {
-          const supported = new Set(["i", "m", "s", "u"]);
-          const flags = (payload.opts || "")
-            .split("")
-            .filter((flag) => supported.has(flag))
-            .join("");
-          return new RegExp(payload.source || "", flags);
-        } catch (_error) {
-          return null;
-        }
-      };
-
-      const expectedRegex = regexFromExpected(expected);
-
-      const matchText = (actual) => {
-        const normalizedActual = normalize(actual);
-
-        if (expectedRegex) {
-          return expectedRegex.test(normalizedActual);
-        }
-
-        const expectedValue = normalize(expected && expected.value ? expected.value : "");
-        return exact ? normalizedActual === expectedValue : normalizedActual.includes(expectedValue);
-      };
-
-      const isHidden = (element) => {
-        let current = element;
-        while (current) {
-          if (current.hasAttribute("hidden")) return true;
-          const style = window.getComputedStyle(current);
-          if (style.display === "none" || style.visibility === "hidden") return true;
-          current = current.parentElement;
-        }
-        return false;
-      };
-
-      const selectedVisibility = (hidden) => {
-        if (visibility === "visible") return !hidden;
-        if (visibility === "hidden") return hidden;
-        return true;
-      };
-
-      const collectRoots = () => {
-        const defaultRoot = document.body || document.documentElement;
-        if (!scopeSelector) return defaultRoot ? [defaultRoot] : [];
-
-        try {
-          return Array.from(document.querySelectorAll(scopeSelector));
-        } catch (_error) {
-          return [];
-        }
-      };
-
-      const collectElements = (roots) => {
-        const elements = [];
-        const seen = new Set();
-
-        for (const root of roots) {
-          if (!root) continue;
-
-          const pushElement = (candidate) => {
-            if (!candidate || seen.has(candidate)) return;
-            seen.add(candidate);
-            elements.push(candidate);
-          };
-
-          if (selector) {
-            try {
-              if (typeof root.matches === "function" && root.matches(selector)) {
-                pushElement(root);
-              }
-            } catch (_error) {
-              // ignored
-            }
-
-            try {
-              for (const candidate of root.querySelectorAll(selector)) {
-                pushElement(candidate);
-              }
-            } catch (_error) {
-              // ignored
-            }
-          } else {
-            pushElement(root);
-            for (const candidate of root.querySelectorAll("*")) {
-              pushElement(candidate);
-            }
-          }
-        }
-
-        return elements;
-      };
-
-      const collectTexts = (diagnostics) => {
-        const roots = collectRoots();
-        const elements = collectElements(roots);
-        const visibleTexts = diagnostics ? [] : null;
-        const hiddenTexts = diagnostics ? [] : null;
-        const visibleSet = diagnostics ? new Set() : null;
-        const hiddenSet = diagnostics ? new Set() : null;
-        let matchedAny = false;
-
-        for (const element of elements) {
-          const tag = (element.tagName || "").toLowerCase();
-          if (tag === "script" || tag === "style" || tag === "noscript") continue;
-
-          const hidden = isHidden(element);
-          if (!selectedVisibility(hidden) && !diagnostics) continue;
-
-          const source = hidden ? element.textContent : (element.innerText || element.textContent);
-          const value = normalize(source);
-          if (!value) continue;
-
-          if (diagnostics) {
-            if (hidden) {
-              if (!hiddenSet.has(value)) {
-                hiddenSet.add(value);
-                hiddenTexts.push(value);
-              }
-            } else {
-              if (!visibleSet.has(value)) {
-                visibleSet.add(value);
-                visibleTexts.push(value);
-              }
-            }
-          }
-
-          if (selectedVisibility(hidden) && matchText(value)) {
-            matchedAny = true;
-            if (!diagnostics) {
-              break;
-            }
-          }
-        }
-
-        if (!diagnostics) {
-          return { matchedAny };
-        }
-
-        const texts = visibility === "visible"
-          ? visibleTexts
-          : visibility === "hidden"
-            ? hiddenTexts
-            : visibleTexts.concat(hiddenTexts);
-
-        const matched = texts.filter((text) => matchText(text));
-        const ok = mode === "assert" ? matchedAny : matched.length === 0;
-        const reason = mode === "assert" ? "expected text not found" : "unexpected matching text found";
-
-        return {
-          ok,
-          reason,
-          path: window.location.pathname + window.location.search,
-          title: document.title || "",
-          texts,
-          matched
-        };
-      };
-
-      const quickCheck = () => {
-        const { matchedAny } = collectTexts(false);
-
-        return {
-          ok: mode === "assert" ? matchedAny : !matchedAny,
-          path: window.location.pathname + window.location.search,
-          title: document.title || ""
-        };
-      };
-
-      return new Promise((resolve) => {
-        let resolved = false;
-        const cleanupFns = [];
-        let dirty = true;
-        let pendingCheck = false;
-        let lastQuick = quickCheck();
-
-        const finish = (result) => {
-          if (resolved) return;
-          resolved = true;
-          for (const cleanup of cleanupFns) {
-            try {
-              cleanup();
-            } catch (_error) {
-              // ignored
-            }
-          }
-          resolve(JSON.stringify(result));
-        };
-
-        const scheduleCheck = () => {
-          if (resolved || pendingCheck || !dirty) return;
-          pendingCheck = true;
-
-          const run = () => {
-            pendingCheck = false;
-            if (resolved) return;
-            dirty = false;
-            lastQuick = quickCheck();
-
-            if (lastQuick.ok) {
-              finish(collectTexts(true));
-            }
-          };
-
-          if (typeof window.requestAnimationFrame === "function") {
-            window.requestAnimationFrame(() => run());
-          } else {
-            setTimeout(run, 0);
-          }
-        };
-
-        if (lastQuick.ok || timeoutMs <= 0) {
-          finish(collectTexts(true));
-          return;
-        }
-
-        try {
-          const root = document.documentElement || document.body || document;
-          const observer = new MutationObserver(() => {
-            dirty = true;
-            scheduleCheck();
-          });
-          observer.observe(root, {
-            subtree: true,
-            childList: true,
-            attributes: true,
-            characterData: true
-          });
-          cleanupFns.push(() => observer.disconnect());
-        } catch (_error) {
-          // ignored
-        }
-
-        scheduleCheck();
-
-        const intervalRef = setInterval(() => {
-          if (Date.now() >= deadline) {
-            finish(collectTexts(true));
-            return;
-          }
-
-          dirty = true;
-          scheduleCheck();
-        }, pollMs);
-        cleanupFns.push(() => clearInterval(intervalRef));
-
-        const timeoutRef = setTimeout(() => finish(collectTexts(true)), timeoutMs);
-        cleanupFns.push(() => clearTimeout(timeoutRef));
+      return JSON.stringify({
+        ok: false,
+        reason,
+        path: window.location.pathname + window.location.search,
+        title: document.title || "",
+        texts: [],
+        matched: [],
+        helperMissing: true
       });
     })()
     """
   end
 
-  defp path_assertion_expression(expected, expected_query, exact, timeout_ms, op)
-       when op in [:assert_path, :refute_path] do
-    encoded_expected = JSON.encode!(expected)
-    encoded_expected_query = JSON.encode!(expected_query)
-    encoded_op = JSON.encode!(Atom.to_string(op))
+  defp path_assertion_expression(expected, expected_query, exact, op) when op in [:assert_path, :refute_path] do
+    payload = %{
+      expected: expected,
+      expectedQuery: expected_query,
+      exact: exact,
+      op: Atom.to_string(op)
+    }
+
+    encoded_payload = JSON.encode!(payload)
 
     """
     (() => {
-      const expected = #{encoded_expected};
-      const expectedQuery = #{encoded_expected_query};
-      const exact = #{if(exact, do: "true", else: "false")};
-      const timeoutMs = #{timeout_ms};
-      const op = #{encoded_op};
-      const pollMs = 25;
+      const helper = window.__cerberusAssert;
+      if (helper && typeof helper.pathCheck === "function") {
+        return helper.pathCheck(#{encoded_payload});
+      }
 
-      const currentPath = () => window.location.pathname + window.location.search;
+      const path = window.location.pathname + window.location.search;
 
-      const pathOnly = (value) => {
-        try {
-          const idx = value.indexOf("?");
-          return idx >= 0 ? value.slice(0, idx) : value;
-        } catch (_error) {
-          return value || "/";
-        }
-      };
-
-      const regexFromExpected = (payload) => {
-        if (!payload || payload.type !== "regex") return null;
-        try {
-          const supported = new Set(["i", "m", "s", "u"]);
-          const flags = (payload.opts || "")
-            .split("")
-            .filter((flag) => supported.has(flag))
-            .join("");
-          return new RegExp(payload.source || "", flags);
-        } catch (_error) {
-          return null;
-        }
-      };
-
-      const expectedRegex = regexFromExpected(expected);
-
-      const pathMatches = (actualPath) => {
-        if (expectedRegex) {
-          return expectedRegex.test(actualPath);
-        }
-
-        const expectedValue = expected && expected.value ? expected.value : "";
-        const actualTarget = expectedValue.includes("?") ? actualPath : pathOnly(actualPath);
-        return exact ? actualTarget === expectedValue : actualTarget.includes(expectedValue);
-      };
-
-      const queryMatches = (actualPath) => {
-        if (!expectedQuery) return true;
-
-        const idx = actualPath.indexOf("?");
-        const query = idx >= 0 ? actualPath.slice(idx + 1) : "";
-        const params = new URLSearchParams(query);
-
-        return Object.entries(expectedQuery).every(([key, value]) => {
-          return (params.get(key) || null) === String(value);
-        });
-      };
-
-        const evaluate = () => {
-          const path = currentPath();
-          const pathMatch = pathMatches(path);
-          const queryMatch = queryMatches(path);
-          const combinedMatch = pathMatch && queryMatch;
-          const ok = op === "assert_path" ? combinedMatch : !combinedMatch;
-          const reason = ok ? "matched" : "timeout";
-
-          return {
-            ok,
-            reason,
-            path,
-            "path_match?": pathMatch,
-            "query_match?": queryMatch
-          };
-        };
-
-      return new Promise((resolve) => {
-        let resolved = false;
-        const cleanupFns = [];
-        let lastResult = evaluate();
-
-        const finish = (result) => {
-          if (resolved) return;
-          resolved = true;
-          for (const cleanup of cleanupFns) {
-            try {
-              cleanup();
-            } catch (_error) {
-              // ignored
-            }
-          }
-          resolve(JSON.stringify(result));
-        };
-
-        if (lastResult.ok || timeoutMs <= 0) {
-          finish(lastResult);
-          return;
-        }
-
-        const check = () => {
-          if (resolved) return;
-          lastResult = evaluate();
-          if (lastResult.ok) {
-            finish(lastResult);
-          }
-        };
-
-        const onNavigation = () => check();
-        window.addEventListener("popstate", onNavigation);
-        window.addEventListener("hashchange", onNavigation);
-        cleanupFns.push(() => window.removeEventListener("popstate", onNavigation));
-        cleanupFns.push(() => window.removeEventListener("hashchange", onNavigation));
-
-        const onUnload = () => {
-          finish({
-            ...lastResult,
-            reason: "navigation-transition"
-          });
-        };
-        window.addEventListener("beforeunload", onUnload);
-        window.addEventListener("pagehide", onUnload);
-        cleanupFns.push(() => window.removeEventListener("beforeunload", onUnload));
-        cleanupFns.push(() => window.removeEventListener("pagehide", onUnload));
-
-        const intervalRef = setInterval(check, pollMs);
-        cleanupFns.push(() => clearInterval(intervalRef));
-
-        const timeoutRef = setTimeout(() => finish(lastResult), timeoutMs);
-        cleanupFns.push(() => clearTimeout(timeoutRef));
+      return JSON.stringify({
+        ok: false,
+        reason: "helper-missing",
+        path,
+        "path_match?": false,
+        "query_match?": false,
+        helperMissing: true
       });
     })()
     """
