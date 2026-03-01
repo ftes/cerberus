@@ -1,6 +1,8 @@
 defmodule Cerberus.Query do
   @moduledoc false
 
+  @state_keys [:checked, :disabled, :selected, :readonly]
+
   @spec match_text?(String.t(), String.t() | Regex.t(), keyword()) :: boolean()
   def match_text?(actual, expected, opts \\ []) when is_binary(actual) do
     actual = maybe_normalize_ws(actual, opts)
@@ -179,6 +181,70 @@ defmodule Cerberus.Query do
       :ok
     else
       {:error, "expected matched element count between #{min} and #{max}, got #{match_count}"}
+    end
+  end
+
+  @spec matches_state_filters?(map(), keyword()) :: boolean()
+  def matches_state_filters?(candidate, opts) when is_map(candidate) and is_list(opts) do
+    Enum.all?(@state_keys, fn key ->
+      case Keyword.get(opts, key) do
+        value when is_boolean(value) ->
+          resolve_state_value(candidate, key) == value
+
+        _ ->
+          true
+      end
+    end)
+  end
+
+  def matches_state_filters?(_candidate, _opts), do: true
+
+  defp resolve_state_value(candidate, :checked) do
+    bool_value(candidate, [:input_checked, :checked])
+  end
+
+  defp resolve_state_value(candidate, :disabled) do
+    bool_value(candidate, [:input_disabled, :disabled])
+  end
+
+  defp resolve_state_value(candidate, :readonly) do
+    bool_value(candidate, [:input_readonly, :readonly])
+  end
+
+  defp resolve_state_value(candidate, :selected) do
+    case bool_value(candidate, [:input_selected, :selected]) do
+      nil -> bool_value(candidate, [:input_checked, :checked])
+      value -> value
+    end
+  end
+
+  defp bool_value(candidate, keys) do
+    keys
+    |> Enum.reduce_while(:missing, fn key, _acc ->
+      case map_value(candidate, key) do
+        :missing -> {:cont, :missing}
+        value -> {:halt, value}
+      end
+    end)
+    |> case do
+      true -> true
+      false -> false
+      _ -> nil
+    end
+  end
+
+  defp map_value(candidate, key) when is_map(candidate) and is_atom(key) do
+    string_key = Atom.to_string(key)
+
+    cond do
+      Map.has_key?(candidate, key) ->
+        Map.get(candidate, key)
+
+      Map.has_key?(candidate, string_key) ->
+        Map.get(candidate, string_key)
+
+      true ->
+        :missing
     end
   end
 end

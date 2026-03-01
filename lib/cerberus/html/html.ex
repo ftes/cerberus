@@ -158,6 +158,10 @@ defmodule Cerberus.Html do
         %{
           text: text,
           href: attr(node, "href"),
+          disabled: false,
+          readonly: false,
+          selected: false,
+          checked: false,
           title: attr(node, "title") || "",
           testid: attr(node, "data-testid") || ""
         }
@@ -180,6 +184,10 @@ defmodule Cerberus.Html do
       fn node, text, _root_node ->
         %{
           text: text,
+          disabled: disabled?(node),
+          readonly: readonly?(node),
+          selected: false,
+          checked: false,
           title: attr(node, "title") || "",
           testid: attr(node, "data-testid") || "",
           button_name: attr(node, "name"),
@@ -196,6 +204,7 @@ defmodule Cerberus.Html do
       lazy_html
       |> scoped_nodes(scope)
       |> Enum.flat_map(&find_form_field_in_root(&1, expected, opts))
+      |> Enum.filter(&Query.matches_state_filters?(&1, opts))
 
     pick_match_result(matches, opts)
   end
@@ -210,6 +219,7 @@ defmodule Cerberus.Html do
         find_submit_button_in_forms(root_node, expected, opts, selector) ++
           find_submit_button_in_owner_form(root_node, expected, opts, selector)
       end)
+      |> Enum.filter(&Query.matches_state_filters?(&1, opts))
 
     pick_match_result(matches, opts)
   end
@@ -377,6 +387,10 @@ defmodule Cerberus.Html do
         title: attr(button_node, "title") || "",
         alt: button_alt_text(button_node),
         testid: attr(button_node, "data-testid") || "",
+        disabled: disabled?(button_node),
+        readonly: readonly?(button_node),
+        selected: false,
+        checked: false,
         action: action,
         method: method,
         form: form_meta.form,
@@ -507,7 +521,10 @@ defmodule Cerberus.Html do
       title: attr(field_node, "title") || "",
       testid: attr(field_node, "data-testid") || "",
       input_value: input_value(field_node, input_type),
-      input_checked: checked?(field_node)
+      input_checked: checked?(field_node),
+      input_disabled: disabled?(field_node),
+      input_readonly: readonly?(field_node),
+      input_selected: selected?(field_node, input_type)
     }
   end
 
@@ -532,7 +549,7 @@ defmodule Cerberus.Html do
         |> build_fun.(text, root_node)
         |> maybe_put_unique_selector(lazy_html, node)
 
-      mapped
+      if Query.matches_state_filters?(mapped, opts), do: mapped
     end
   end
 
@@ -1220,9 +1237,22 @@ defmodule Cerberus.Html do
     |> is_binary()
   end
 
+  defp selected?(field_node, input_type) when input_type in ["checkbox", "radio"], do: checked?(field_node)
+
+  defp selected?(field_node, input_type) when input_type in ["select-one", "select-multiple"],
+    do: selected_option_values(field_node) != []
+
+  defp selected?(_field_node, _input_type), do: false
+
   defp disabled?(node) do
     node
     |> attr("disabled")
+    |> is_binary()
+  end
+
+  defp readonly?(node) do
+    node
+    |> attr("readonly")
     |> is_binary()
   end
 

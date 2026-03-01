@@ -84,6 +84,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
         |> safe_query(query_selector)
         |> Enum.flat_map(&maybe_live_clickable_match_list(root_node, &1, lazy_html, expected, opts))
       end)
+      |> Enum.filter(&Query.matches_state_filters?(&1, opts))
 
     case Query.pick_match(matches, opts) do
       {:ok, match} -> {:ok, match}
@@ -283,6 +284,10 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
       text: text,
       title: attr(node, "title") || "",
       testid: attr(node, "data-testid") || "",
+      disabled: phx_boolean_attr?(attr(node, "disabled")),
+      readonly: phx_boolean_attr?(attr(node, "readonly")),
+      selected: false,
+      checked: false,
       button_name: attr(node, "name"),
       button_value: attr(node, "value"),
       form: form_id,
@@ -513,6 +518,9 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   end
 
   defp phx_binding?(_value), do: false
+
+  defp phx_boolean_attr?(value) when is_binary(value), do: true
+  defp phx_boolean_attr?(_value), do: false
 
   defp trigger_action_enabled?(nil), do: false
 

@@ -24,4 +24,17 @@ defmodule Cerberus.OptionsTest do
       Options.validate_fill_in!(first: true, nth: 2)
     end
   end
+
+  test "validate_fill_in! accepts boolean state filters" do
+    assert [checked: true, disabled: false, selected: true, readonly: false] =
+             [checked: true, disabled: false, selected: true, readonly: false]
+             |> Options.validate_fill_in!()
+             |> Keyword.take([:checked, :disabled, :selected, :readonly])
+  end
+
+  test "validate_fill_in! rejects non-boolean state filters" do
+    assert_raise ArgumentError, ~r/:checked must be a boolean or nil/, fn ->
+      Options.validate_fill_in!(checked: :yes)
+    end
+  end
 end

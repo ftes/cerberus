@@ -207,6 +207,35 @@ defmodule Cerberus.LocatorParityTest do
                          """ <>
                          @html_suffix
 
+  @state_filter_html @html_prefix <>
+                       """
+                         <main>
+                         <form id="state-filter-form">
+                           <label for="sf_enabled">State Field</label>
+                           <input id="sf_enabled" name="state[field][enabled]" type="text" value="" />
+
+                           <label for="sf_disabled">State Field</label>
+                           <input id="sf_disabled" name="state[field][disabled]" type="text" value="" disabled />
+
+                           <label for="sf_readonly">Readonly Field</label>
+                           <input id="sf_readonly" name="state[field][readonly]" type="text" value="" readonly />
+
+                           <label for="sf_check_a">State Check</label>
+                           <input id="sf_check_a" name="state[check][]" type="checkbox" value="a" checked />
+
+                           <label for="sf_check_b">State Check</label>
+                           <input id="sf_check_b" name="state[check][]" type="checkbox" value="b" />
+
+                           <label for="sf_contact_a">State Contact</label>
+                           <input id="sf_contact_a" name="state[contact]" type="radio" value="email" checked />
+
+                           <label for="sf_contact_b">State Contact</label>
+                           <input id="sf_contact_b" name="state[contact]" type="radio" value="sms" />
+                         </form>
+                         </main>
+                       """ <>
+                       @html_suffix
+
   setup do
     upload_path =
       Path.join(System.tmp_dir!(), "cerberus-locator-oracle-#{System.unique_integer([:positive])}.txt")
@@ -415,6 +444,37 @@ defmodule Cerberus.LocatorParityTest do
         expect: :error,
         error_module: AssertionError,
         run: &choose(&1, label("Two"))
+      },
+      # state filters
+      %{
+        name: "fill_in state filter chooses enabled duplicate field",
+        html: @state_filter_html,
+        expect: :ok,
+        run: &fill_in(&1, label("State Field"), "enabled", disabled: false)
+      },
+      %{
+        name: "fill_in state filter chooses readonly field",
+        html: @state_filter_html,
+        expect: :ok,
+        run: &fill_in(&1, label("Readonly Field"), "readonly", readonly: true)
+      },
+      %{
+        name: "check state filter chooses unchecked checkbox",
+        html: @state_filter_html,
+        expect: :ok,
+        run: &check(&1, label("State Check"), checked: false)
+      },
+      %{
+        name: "uncheck state filter chooses checked checkbox",
+        html: @state_filter_html,
+        expect: :ok,
+        run: &uncheck(&1, label("State Check"), checked: true)
+      },
+      %{
+        name: "choose state filter chooses unselected radio",
+        html: @state_filter_html,
+        expect: :ok,
+        run: &choose(&1, label("State Contact"), selected: false)
       },
       # upload
       %{name: "upload file input by label", expect: :ok, run: &upload(&1, label("Avatar"), upload_path)},

@@ -15,6 +15,10 @@ defmodule Cerberus.Options do
   @type click_opts :: [
           kind: click_kind(),
           selector: String.t() | nil,
+          checked: boolean() | nil,
+          disabled: boolean() | nil,
+          selected: boolean() | nil,
+          readonly: boolean() | nil,
           count: non_neg_integer() | nil,
           min: non_neg_integer() | nil,
           max: non_neg_integer() | nil,
@@ -36,6 +40,10 @@ defmodule Cerberus.Options do
 
   @type fill_in_opts :: [
           selector: String.t() | nil,
+          checked: boolean() | nil,
+          disabled: boolean() | nil,
+          selected: boolean() | nil,
+          readonly: boolean() | nil,
           count: non_neg_integer() | nil,
           min: non_neg_integer() | nil,
           max: non_neg_integer() | nil,
@@ -48,6 +56,10 @@ defmodule Cerberus.Options do
 
   @type check_opts :: [
           selector: String.t() | nil,
+          checked: boolean() | nil,
+          disabled: boolean() | nil,
+          selected: boolean() | nil,
+          readonly: boolean() | nil,
           count: non_neg_integer() | nil,
           min: non_neg_integer() | nil,
           max: non_neg_integer() | nil,
@@ -62,6 +74,10 @@ defmodule Cerberus.Options do
           option: select_value(),
           exact_option: boolean(),
           selector: String.t() | nil,
+          checked: boolean() | nil,
+          disabled: boolean() | nil,
+          selected: boolean() | nil,
+          readonly: boolean() | nil,
           count: non_neg_integer() | nil,
           min: non_neg_integer() | nil,
           max: non_neg_integer() | nil,
@@ -74,6 +90,10 @@ defmodule Cerberus.Options do
 
   @type choose_opts :: [
           selector: String.t() | nil,
+          checked: boolean() | nil,
+          disabled: boolean() | nil,
+          selected: boolean() | nil,
+          readonly: boolean() | nil,
           count: non_neg_integer() | nil,
           min: non_neg_integer() | nil,
           max: non_neg_integer() | nil,
@@ -86,6 +106,10 @@ defmodule Cerberus.Options do
 
   @type upload_opts :: [
           selector: String.t() | nil,
+          checked: boolean() | nil,
+          disabled: boolean() | nil,
+          selected: boolean() | nil,
+          readonly: boolean() | nil,
           count: non_neg_integer() | nil,
           min: non_neg_integer() | nil,
           max: non_neg_integer() | nil,
@@ -98,6 +122,10 @@ defmodule Cerberus.Options do
 
   @type submit_opts :: [
           selector: String.t() | nil,
+          checked: boolean() | nil,
+          disabled: boolean() | nil,
+          selected: boolean() | nil,
+          readonly: boolean() | nil,
           count: non_neg_integer() | nil,
           min: non_neg_integer() | nil,
           max: non_neg_integer() | nil,
@@ -127,6 +155,10 @@ defmodule Cerberus.Options do
       doc: "Limits click matching to links, buttons, or both."
     ],
     selector: [type: :any, default: nil, doc: "Limits matching to elements that satisfy the CSS selector."],
+    checked: [type: :any, default: nil, doc: "Requires matched elements to be checked/unchecked."],
+    disabled: [type: :any, default: nil, doc: "Requires matched elements to be disabled/enabled."],
+    selected: [type: :any, default: nil, doc: "Requires matched elements to be selected/unselected."],
+    readonly: [type: :any, default: nil, doc: "Requires matched elements to be readonly/editable."],
     count: [type: :any, default: nil, doc: "Requires exactly this many matched candidates."],
     min: [type: :any, default: nil, doc: "Requires at least this many matched candidates."],
     max: [type: :any, default: nil, doc: "Requires at most this many matched candidates."],
@@ -156,6 +188,10 @@ defmodule Cerberus.Options do
 
   @fill_in_opts_schema [
     selector: [type: :any, default: nil, doc: "Limits field lookup to elements that satisfy the CSS selector."],
+    checked: [type: :any, default: nil, doc: "Requires matched fields to be checked/unchecked."],
+    disabled: [type: :any, default: nil, doc: "Requires matched fields to be disabled/enabled."],
+    selected: [type: :any, default: nil, doc: "Requires matched fields to be selected/unselected."],
+    readonly: [type: :any, default: nil, doc: "Requires matched fields to be readonly/editable."],
     count: [type: :any, default: nil, doc: "Requires exactly this many matched candidates."],
     min: [type: :any, default: nil, doc: "Requires at least this many matched candidates."],
     max: [type: :any, default: nil, doc: "Requires at most this many matched candidates."],
@@ -172,6 +208,10 @@ defmodule Cerberus.Options do
       default: nil,
       doc: "Limits submit control lookup to elements that satisfy the CSS selector."
     ],
+    checked: [type: :any, default: nil, doc: "Requires matched submit controls to be checked/unchecked."],
+    disabled: [type: :any, default: nil, doc: "Requires matched submit controls to be disabled/enabled."],
+    selected: [type: :any, default: nil, doc: "Requires matched submit controls to be selected/unselected."],
+    readonly: [type: :any, default: nil, doc: "Requires matched submit controls to be readonly/editable."],
     count: [type: :any, default: nil, doc: "Requires exactly this many matched candidates."],
     min: [type: :any, default: nil, doc: "Requires at least this many matched candidates."],
     max: [type: :any, default: nil, doc: "Requires at most this many matched candidates."],
@@ -184,6 +224,10 @@ defmodule Cerberus.Options do
 
   @upload_opts_schema [
     selector: [type: :any, default: nil, doc: "Limits file-input lookup to elements that satisfy the CSS selector."],
+    checked: [type: :any, default: nil, doc: "Requires matched file inputs to be checked/unchecked."],
+    disabled: [type: :any, default: nil, doc: "Requires matched file inputs to be disabled/enabled."],
+    selected: [type: :any, default: nil, doc: "Requires matched file inputs to be selected/unselected."],
+    readonly: [type: :any, default: nil, doc: "Requires matched file inputs to be readonly/editable."],
     count: [type: :any, default: nil, doc: "Requires exactly this many matched candidates."],
     min: [type: :any, default: nil, doc: "Requires at least this many matched candidates."],
     max: [type: :any, default: nil, doc: "Requires at most this many matched candidates."],
@@ -198,6 +242,10 @@ defmodule Cerberus.Options do
     option: [type: :any, required: true, doc: "Option text to select; list form targets multi-select inputs."],
     exact_option: [type: :boolean, default: true, doc: "Requires exact option-text matches unless disabled."],
     selector: [type: :any, default: nil, doc: "Limits select lookup to elements that satisfy the CSS selector."],
+    checked: [type: :any, default: nil, doc: "Requires matched selects to be checked/unchecked."],
+    disabled: [type: :any, default: nil, doc: "Requires matched selects to be disabled/enabled."],
+    selected: [type: :any, default: nil, doc: "Requires matched selects to be selected/unselected."],
+    readonly: [type: :any, default: nil, doc: "Requires matched selects to be readonly/editable."],
     count: [type: :any, default: nil, doc: "Requires exactly this many matched candidates."],
     min: [type: :any, default: nil, doc: "Requires at least this many matched candidates."],
     max: [type: :any, default: nil, doc: "Requires at most this many matched candidates."],
@@ -256,6 +304,7 @@ defmodule Cerberus.Options do
     opts
     |> validate!(@click_opts_schema, "click/3")
     |> validate_selector!("click/3")
+    |> validate_state_filters!("click/3")
     |> validate_match_filters!("click/3", true)
   end
 
@@ -268,6 +317,7 @@ defmodule Cerberus.Options do
     opts
     |> validate!(@fill_in_opts_schema, "fill_in/4")
     |> validate_selector!("fill_in/4")
+    |> validate_state_filters!("fill_in/4")
     |> validate_match_filters!("fill_in/4", true)
   end
 
@@ -276,6 +326,7 @@ defmodule Cerberus.Options do
     opts
     |> validate!(@fill_in_opts_schema, op_name)
     |> validate_selector!(op_name)
+    |> validate_state_filters!(op_name)
     |> validate_match_filters!(op_name, true)
   end
 
@@ -284,6 +335,7 @@ defmodule Cerberus.Options do
     opts
     |> validate!(@fill_in_opts_schema, op_name)
     |> validate_selector!(op_name)
+    |> validate_state_filters!(op_name)
     |> validate_match_filters!(op_name, true)
   end
 
@@ -292,6 +344,7 @@ defmodule Cerberus.Options do
     opts
     |> validate!(@select_opts_schema, "select/3")
     |> validate_selector!("select/3")
+    |> validate_state_filters!("select/3")
     |> validate_match_filters!("select/3", true)
     |> validate_select_option!("select/3")
   end
@@ -301,6 +354,7 @@ defmodule Cerberus.Options do
     opts
     |> validate!(@submit_opts_schema, "submit/3")
     |> validate_selector!("submit/3")
+    |> validate_state_filters!("submit/3")
     |> validate_match_filters!("submit/3", true)
   end
 
@@ -309,6 +363,7 @@ defmodule Cerberus.Options do
     opts
     |> validate!(@upload_opts_schema, "upload/4")
     |> validate_selector!("upload/4")
+    |> validate_state_filters!("upload/4")
     |> validate_match_filters!("upload/4", true)
   end
 
@@ -384,6 +439,27 @@ defmodule Cerberus.Options do
 
       _other ->
         raise ArgumentError, "#{op_name} invalid options: :#{key} must be a non-empty string path"
+    end
+  end
+
+  defp validate_state_filters!(opts, op_name) do
+    opts
+    |> validate_boolean_or_nil_opt!(op_name, :checked)
+    |> validate_boolean_or_nil_opt!(op_name, :disabled)
+    |> validate_boolean_or_nil_opt!(op_name, :selected)
+    |> validate_boolean_or_nil_opt!(op_name, :readonly)
+  end
+
+  defp validate_boolean_or_nil_opt!(opts, op_name, key) do
+    case Keyword.get(opts, key) do
+      nil ->
+        opts
+
+      value when is_boolean(value) ->
+        opts
+
+      _ ->
+        raise ArgumentError, "#{op_name} invalid options: :#{key} must be a boolean or nil"
     end
   end
 

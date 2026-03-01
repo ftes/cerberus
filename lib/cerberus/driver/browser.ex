@@ -963,7 +963,7 @@ defmodule Cerberus.Driver.Browser do
     matches =
       Enum.filter(items, fn item ->
         value = clickable_match_value(item, Keyword.get(opts, :match_by, :text))
-        Query.match_text?(value, expected, opts)
+        Query.match_text?(value, expected, opts) and Query.matches_state_filters?(item, opts)
       end)
 
     Query.pick_match(matches, opts)
@@ -982,7 +982,7 @@ defmodule Cerberus.Driver.Browser do
     matches =
       Enum.filter(items, fn item ->
         value = field_match_value(item, Keyword.get(opts, :match_by, :label))
-        Query.match_text?(value, expected, opts)
+        Query.match_text?(value, expected, opts) and Query.matches_state_filters?(item, opts)
       end)
 
     Query.pick_match(matches, opts)

@@ -222,6 +222,10 @@ defmodule Cerberus.Driver.Browser.Expressions do
         .map((element, index) => ({
         index,
         text: normalize(element.textContent),
+        checked: false,
+        selected: false,
+        disabled: false,
+        readonly: false,
         title: element.getAttribute("title") || "",
         alt: (() => {
           const direct = element.getAttribute("alt");
@@ -239,6 +243,10 @@ defmodule Cerberus.Driver.Browser.Expressions do
         .map((element, index) => ({
         index,
         text: normalize(element.textContent),
+        checked: false,
+        selected: false,
+        disabled: element.disabled === true,
+        readonly: element.readOnly === true || element.hasAttribute("readonly"),
         title: element.getAttribute("title") || "",
         alt: (() => {
           const direct = element.getAttribute("alt");
@@ -355,6 +363,11 @@ defmodule Cerberus.Driver.Browser.Expressions do
             type,
             value,
             checked: element.checked === true,
+            selected:
+              tag === "select"
+                ? Array.from(element.options || []).some((option) => option.hasAttribute("selected"))
+                : element.checked === true,
+            readonly: element.readOnly === true || element.hasAttribute("readonly"),
             tag,
             multiple: tag === "select" && element.multiple === true,
             disabled: element.disabled === true
@@ -436,7 +449,11 @@ defmodule Cerberus.Driver.Browser.Expressions do
           label: labels.get(element.id) || "",
           placeholder: element.getAttribute("placeholder") || "",
           title: element.getAttribute("title") || "",
-          testid: element.getAttribute("data-testid") || ""
+          testid: element.getAttribute("data-testid") || "",
+          checked: element.checked === true,
+          selected: element.checked === true,
+          readonly: element.readOnly === true || element.hasAttribute("readonly"),
+          disabled: element.disabled === true
         }));
 
       return JSON.stringify({

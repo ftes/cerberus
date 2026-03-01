@@ -128,5 +128,38 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       |> assert_has(testid("live-change-name"))
       |> assert_has(text("name: Eowyn", exact: true))
     end
+
+    test "state filters can target selected radios in live and browser (#{driver})" do
+      unquote(driver)
+      |> session()
+      |> visit("/live/controls")
+      |> choose(label("Mail Choice"), selected: true)
+      |> assert_has(text("contact: mail", exact: true))
+    end
+
+    test "state filters reject non-matching radio state in live and browser (#{driver})" do
+      assert_raise ExUnit.AssertionError, ~r/no (elements|form field) matched locator/, fn ->
+        unquote(driver)
+        |> session()
+        |> visit("/live/controls")
+        |> choose(label("Email Choice"), selected: true)
+      end
+    end
+
+    test "state filters apply before disabled select checks in live and browser (#{driver})" do
+      assert_raise ExUnit.AssertionError, ~r/no (elements|form field) matched locator/, fn ->
+        unquote(driver)
+        |> session()
+        |> visit("/live/controls")
+        |> select(label("Disabled select"), option: "Cannot submit", disabled: false)
+      end
+
+      assert_raise ExUnit.AssertionError, ~r/matched select field is disabled/, fn ->
+        unquote(driver)
+        |> session()
+        |> visit("/live/controls")
+        |> select(label("Disabled select"), option: "Cannot submit", disabled: true)
+      end
+    end
   end
 end
