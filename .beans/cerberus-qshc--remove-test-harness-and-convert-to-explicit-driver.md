@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-01T17:33:28Z
-updated_at: 2026-03-01T18:37:36Z
+updated_at: 2026-03-01T18:41:26Z
 parent: cerberus-whq9
 ---
 
@@ -54,3 +54,12 @@ Goals:
   - live_click_bindings_behavior_test.exs
 - Replaced Harness.run!/run contexts with direct session(driver) flows using explicit `for driver <- [:phoenix, :browser]` loops where applicable.
 - Validation: targeted chrome batch run passed (25 tests, 0 failures) and mix precommit passed.
+
+- Converted live-form and live-navigation harness tests to explicit public API sessions in test/cerberus/core:
+  - live_form_change_behavior_test.exs
+  - live_form_synchronization_behavior_test.exs
+  - live_trigger_action_behavior_test.exs
+  - live_upload_behavior_test.exs
+  - live_link_navigation_test.exs
+- Replaced harness-driven live/browser matrices with explicit `for driver <- [:phoenix, :browser]` loops and direct `session(:phoenix, ...)` for phoenix-only setup cases (custom conn/connect_params).
+- Validation: targeted chrome batch run passed (40 tests, 0 failures) and mix precommit passed.

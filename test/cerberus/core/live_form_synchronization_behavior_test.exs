@@ -3,13 +3,10 @@ defmodule Cerberus.CoreLiveFormSynchronizationBehaviorTest do
 
   import Cerberus
 
-  alias Cerberus.Harness
-
-  @tag :live
-  @tag :browser
-  test "conditional submissions exclude fields removed from the rendered form", context do
-    Harness.run!(context, fn session ->
-      session
+  for driver <- [:phoenix, :browser] do
+    test "conditional submissions exclude fields removed from the rendered form (#{driver})" do
+      unquote(driver)
+      |> session()
       |> visit("/live/form-sync")
       |> fill_in("Version A Text", "some value for A")
       |> click_button(button("Version B", exact: true))
@@ -18,14 +15,11 @@ defmodule Cerberus.CoreLiveFormSynchronizationBehaviorTest do
       |> assert_has(text("has version_a_text?: false", exact: true))
       |> assert_has(text("has version_b_text?: true", exact: true))
       |> assert_has(text("submitted version_b_text: some value for B", exact: true))
-    end)
-  end
+    end
 
-  @tag :static
-  @tag :browser
-  test "static submissions exclude stale fields after form-shape navigation", context do
-    Harness.run!(context, fn session ->
-      session
+    test "static submissions exclude stale fields after form-shape navigation (#{driver})" do
+      unquote(driver)
+      |> session()
       |> visit("/search/profile/a")
       |> fill_in("Version A Text", "some value for A")
       |> click_link(text("Switch to Version B", exact: true))
@@ -34,33 +28,27 @@ defmodule Cerberus.CoreLiveFormSynchronizationBehaviorTest do
       |> assert_has(text("has version_a_text?: false", exact: true))
       |> assert_has(text("has version_b_text?: true", exact: true))
       |> assert_has(text("submitted version_b_text: some value for B", exact: true))
-    end)
-  end
+    end
 
-  @tag :live
-  @tag :browser
-  test "dispatch(change) buttons inside forms drive add/remove semantics", context do
-    Harness.run!(context, fn session ->
-      session
+    test "dispatch(change) buttons inside forms drive add/remove semantics (#{driver})" do
+      unquote(driver)
+      |> session()
       |> visit("/live/form-sync")
       |> assert_has(text("Email count: 1", exact: true))
       |> click_button(button("add more", exact: true))
       |> assert_has(text("Email count: 2", exact: true))
       |> click_button(button("delete", selector: "button[name='mailing_list[emails_drop][]'][value='1']", exact: true))
       |> assert_has(text("Email count: 1", exact: true))
-    end)
-  end
+    end
 
-  @tag :live
-  @tag :browser
-  test "submit-only forms still submit filled values without phx-change", context do
-    Harness.run!(context, fn session ->
-      session
+    test "submit-only forms still submit filled values without phx-change (#{driver})" do
+      unquote(driver)
+      |> session()
       |> visit("/live/form-sync")
       |> fill_in("Nickname (submit only)", "Aragorn")
       |> refute_has(text("no-change submitted: Aragorn", exact: true))
       |> submit(button("Save No Change", exact: true))
       |> assert_has(text("no-change submitted: Aragorn", exact: true))
-    end)
+    end
   end
 end

@@ -3,38 +3,29 @@ defmodule Cerberus.CoreLiveFormChangeBehaviorTest do
 
   import Cerberus
 
-  alias Cerberus.Harness
-
-  @tag :live
-  @tag :browser
-  test "fill_in emits _target for phx-change events", context do
-    Harness.run!(context, fn session ->
-      session
+  for driver <- [:phoenix, :browser] do
+    test "fill_in emits _target for phx-change events (#{driver})" do
+      unquote(driver)
+      |> session()
       |> visit("/live/form-change")
       |> fill_in("Email", "frodo@example.com")
       |> assert_has(text("_target: [email]", exact: true))
       |> assert_has(text("email: frodo@example.com", exact: true))
-    end)
-  end
+    end
 
-  @tag :live
-  @tag :browser
-  test "fill_in does not trigger server-side change when form has no phx-change", context do
-    Harness.run!(context, fn session ->
-      session
+    test "fill_in does not trigger server-side change when form has no phx-change (#{driver})" do
+      unquote(driver)
+      |> session()
       |> visit("/live/form-change")
       |> within("#no-phx-change-form", fn scoped ->
         fill_in(scoped, "Name (no phx-change)", "Aragorn")
       end)
       |> assert_has(text("No change value: unchanged", exact: true))
-    end)
-  end
+    end
 
-  @tag :live
-  @tag :browser
-  test "active form ordering preserves hidden defaults across sequential fill_in", context do
-    Harness.run!(context, fn session ->
-      session
+    test "active form ordering preserves hidden defaults across sequential fill_in (#{driver})" do
+      unquote(driver)
+      |> session()
       |> visit("/live/form-change")
       |> within("#changes-hidden-input-form", fn scoped ->
         scoped
@@ -44,18 +35,15 @@ defmodule Cerberus.CoreLiveFormChangeBehaviorTest do
       |> assert_has(text("name: Frodo", exact: true))
       |> assert_has(text("email: frodo@example.com", exact: true))
       |> assert_has(text("hidden_race: hobbit", exact: true))
-    end)
-  end
+    end
 
-  @tag :live
-  @tag :browser
-  test "fill_in matches wrapped nested label text in live and browser drivers", context do
-    Harness.run!(context, fn session ->
-      session
+    test "fill_in matches wrapped nested label text in live and browser drivers (#{driver})" do
+      unquote(driver)
+      |> session()
       |> visit("/live/form-change")
       |> fill_in("Nickname *", "Strider")
       |> assert_has(text("_target: [nickname]", exact: true))
       |> assert_has(text("nickname: Strider", exact: true))
-    end)
+    end
   end
 end

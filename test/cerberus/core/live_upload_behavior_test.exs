@@ -3,90 +3,71 @@ defmodule Cerberus.CoreLiveUploadBehaviorTest do
 
   import Cerberus
 
-  alias Cerberus.Harness
-
-  @tag :live
-  test "upload keeps active form unset and raises translated upload errors", context do
+  test "upload keeps active form unset and raises translated upload errors" do
     jpg = upload_fixture_path("elixir.jpg")
     png = upload_fixture_path("phoenix.png")
 
-    Harness.run!(
-      context,
-      fn session ->
-        session =
-          session
-          |> visit("/live/uploads")
-          |> within("#upload-change-form", fn scoped ->
-            upload(scoped, "Avatar", jpg)
-          end)
+    session =
+      :phoenix
+      |> session()
+      |> visit("/live/uploads")
+      |> within("#upload-change-form", fn scoped ->
+        upload(scoped, "Avatar", jpg)
+      end)
 
-        assert %{active_form: nil} = session.form_data
+    assert %{active_form: nil} = session.form_data
 
-        assert_raise ExUnit.AssertionError, ~r/Unsupported file type/, fn ->
-          session
-          |> visit("/live/uploads")
-          |> within("#full-form", fn scoped ->
-            upload(scoped, "Avatar", png)
-          end)
-        end
+    assert_raise ExUnit.AssertionError, ~r/Unsupported file type/, fn ->
+      session
+      |> visit("/live/uploads")
+      |> within("#full-form", fn scoped ->
+        upload(scoped, "Avatar", png)
+      end)
+    end
 
-        assert_raise ExUnit.AssertionError, ~r/Too many files uploaded/, fn ->
-          session
-          |> visit("/live/uploads")
-          |> within("#full-form", fn scoped ->
-            scoped
-            |> upload("Avatar", jpg)
-            |> upload("Avatar", jpg)
-          end)
-        end
+    assert_raise ExUnit.AssertionError, ~r/Too many files uploaded/, fn ->
+      session
+      |> visit("/live/uploads")
+      |> within("#full-form", fn scoped ->
+        scoped
+        |> upload("Avatar", jpg)
+        |> upload("Avatar", jpg)
+      end)
+    end
 
-        assert_raise ExUnit.AssertionError, ~r/File too large/, fn ->
-          session
-          |> visit("/live/uploads")
-          |> within("#tiny-upload-form", fn scoped ->
-            upload(scoped, "Tiny", jpg)
-          end)
-        end
-
-        session
-      end
-    )
+    assert_raise ExUnit.AssertionError, ~r/File too large/, fn ->
+      session
+      |> visit("/live/uploads")
+      |> within("#tiny-upload-form", fn scoped ->
+        upload(scoped, "Tiny", jpg)
+      end)
+    end
   end
 
-  @tag :live
-  @tag :browser
-  test "upload triggers phx-change validations on file selection", context do
-    jpg = upload_fixture_path("elixir.jpg")
+  for driver <- [:phoenix, :browser] do
+    test "upload triggers phx-change validations on file selection (#{driver})" do
+      jpg = upload_fixture_path("elixir.jpg")
 
-    Harness.run!(
-      context,
-      fn session ->
-        session
-        |> visit("/live/uploads")
-        |> within("#upload-change-form", fn scoped ->
-          upload(scoped, "Avatar", jpg)
-        end)
-        |> assert_has(text("phx-change triggered on file selection", exact: true))
-      end
-    )
-  end
+      unquote(driver)
+      |> session()
+      |> visit("/live/uploads")
+      |> within("#upload-change-form", fn scoped ->
+        upload(scoped, "Avatar", jpg)
+      end)
+      |> assert_has(text("phx-change triggered on file selection", exact: true))
+    end
 
-  @tag :live
-  @tag :browser
-  test "upload follows redirects from progress callbacks", context do
-    jpg = upload_fixture_path("elixir.jpg")
+    test "upload follows redirects from progress callbacks (#{driver})" do
+      jpg = upload_fixture_path("elixir.jpg")
 
-    Harness.run!(
-      context,
-      fn session ->
-        session
-        |> visit("/live/uploads")
-        |> within("#upload-redirect-form", fn scoped ->
-          upload(scoped, "Redirect Avatar", jpg)
-        end)
-        |> assert_path("/live/async_page_2")
-      end
-    )
+      unquote(driver)
+      |> session()
+      |> visit("/live/uploads")
+      |> within("#upload-redirect-form", fn scoped ->
+        upload(scoped, "Redirect Avatar", jpg)
+      end)
+      |> assert_path("/live/async_page_2")
+    end
   end
 
   defp upload_fixture_path(file_name) do
