@@ -66,7 +66,7 @@ Cross-driver concern modules remain separate:
 
 ## Test Organization (Maintainer)
 
-Integration contract tests are located under `test/cerberus/cerberus_test` and use `CerberusTest.*` module names.
+Integration contract tests are located under `test/cerberus` and use `Cerberus.*` module names.
 Driver internals stay in driver-focused test paths such as `test/cerberus/driver/browser`.
 
 Cross-driver integration tests use plain ExUnit loops rather than a custom harness:
