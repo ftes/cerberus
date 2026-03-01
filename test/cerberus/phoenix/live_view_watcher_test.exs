@@ -1,7 +1,7 @@
-defmodule Cerberus.LiveViewWatcherTest do
+defmodule Cerberus.Phoenix.LiveViewWatcherTest do
   use ExUnit.Case, async: true
 
-  alias Cerberus.LiveViewWatcher
+  alias Cerberus.Phoenix.LiveViewWatcher
   alias Phoenix.Socket.Message
 
   defmodule DummyLiveView do

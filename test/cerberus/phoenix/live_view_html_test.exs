@@ -1,7 +1,7 @@
-defmodule Cerberus.LiveViewHtmlTest do
+defmodule Cerberus.Phoenix.LiveViewHTMLTest do
   use ExUnit.Case, async: true
 
-  alias Cerberus.LiveViewHtml
+  alias Cerberus.Phoenix.LiveViewHTML
 
   test "find_live_clickable_button escapes multiline attribute values in selector" do
     html = """
@@ -13,7 +13,7 @@ defmodule Cerberus.LiveViewHtmlTest do
     """
 
     assert {:ok, %{selector: selector}} =
-             LiveViewHtml.find_live_clickable_button(html, "Create", exact: true)
+             LiveViewHTML.find_live_clickable_button(html, "Create", exact: true)
 
     assert is_binary(selector)
     assert selector =~ "data-confirm="
@@ -41,7 +41,7 @@ defmodule Cerberus.LiveViewHtmlTest do
               button_value: "1",
               form: "dynamic-form",
               form_selector: ~s(form[id="dynamic-form"])
-            }} = LiveViewHtml.find_live_clickable_button(html, "delete", exact: true)
+            }} = LiveViewHTML.find_live_clickable_button(html, "delete", exact: true)
   end
 
   test "find_live_clickable_button excludes dispatch-only buttons without form phx-change context" do
@@ -51,7 +51,7 @@ defmodule Cerberus.LiveViewHtmlTest do
     </main>
     """
 
-    assert :error = LiveViewHtml.find_live_clickable_button(html, "dispatch only", exact: true)
+    assert :error = LiveViewHTML.find_live_clickable_button(html, "dispatch only", exact: true)
   end
 
   test "find_form_field enriches with input/form phx-change metadata" do
@@ -66,7 +66,7 @@ defmodule Cerberus.LiveViewHtmlTest do
     </main>
     """
 
-    assert {:ok, field} = LiveViewHtml.find_form_field(html, "Name", exact: true)
+    assert {:ok, field} = LiveViewHTML.find_form_field(html, "Name", exact: true)
     assert field.input_phx_change
     assert field.form_phx_change
   end
@@ -80,7 +80,7 @@ defmodule Cerberus.LiveViewHtmlTest do
     </main>
     """
 
-    assert {:ok, button} = LiveViewHtml.find_submit_button(html, "Save", exact: true)
+    assert {:ok, button} = LiveViewHTML.find_submit_button(html, "Save", exact: true)
     assert button.form_phx_submit
   end
 
@@ -101,6 +101,6 @@ defmodule Cerberus.LiveViewHtmlTest do
                method: "post",
                defaults: %{"profile[name]" => "Aragorn"}
              }
-           ] = LiveViewHtml.trigger_action_forms(html)
+           ] = LiveViewHTML.trigger_action_forms(html)
   end
 end

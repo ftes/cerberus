@@ -13,14 +13,14 @@ defmodule Cerberus do
 
   alias Cerberus.Assertions
   alias Cerberus.Driver.Browser, as: BrowserSession
-  alias Cerberus.Driver.Conn, as: DriverConn
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.Static, as: StaticSession
-  alias Cerberus.LiveViewTimeout
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
   alias Cerberus.Options
   alias Cerberus.Path
+  alias Cerberus.Phoenix.Conn, as: DriverConn
+  alias Cerberus.Phoenix.LiveViewTimeout
   alias Cerberus.Session
   alias ExUnit.AssertionError
   alias Phoenix.LiveViewTest.View

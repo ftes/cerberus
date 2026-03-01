@@ -1,4 +1,4 @@
-defmodule Cerberus.Driver.Conn do
+defmodule Cerberus.Phoenix.Conn do
   @moduledoc false
 
   import Phoenix.ConnTest, only: [build_conn: 0, dispatch: 5, recycle: 1]

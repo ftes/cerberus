@@ -5,10 +5,10 @@ defmodule Cerberus.Assertions do
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.InvalidLocatorError
-  alias Cerberus.LiveViewTimeout
   alias Cerberus.Locator
   alias Cerberus.Options
   alias Cerberus.Path
+  alias Cerberus.Phoenix.LiveViewTimeout
   alias Cerberus.Session
   alias ExUnit.AssertionError
 

@@ -1,4 +1,4 @@
-defmodule Cerberus.LiveViewTimeoutTest do
+defmodule Cerberus.Phoenix.LiveViewTimeoutTest do
   use ExUnit.Case, async: true
 
   import Cerberus
@@ -6,7 +6,7 @@ defmodule Cerberus.LiveViewTimeoutTest do
 
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Fixtures.Endpoint
-  alias Cerberus.LiveViewTimeout
+  alias Cerberus.Phoenix.LiveViewTimeout
   alias ExUnit.AssertionError
 
   defmodule DummyLiveView do

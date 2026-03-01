@@ -14,7 +14,7 @@ flowchart LR
   C --> F[Browser Driver\nWebDriver BiDi]
   D --> G[HTML Semantics\nCerberus.Html]
   E --> G
-  E --> H[LiveView Semantics\nCerberus.Driver.LiveViewHtml]
+  E --> H[LiveView Semantics\nCerberus.Phoenix.LiveViewHTML]
   F --> I[Browser Runtime\nShared worker + per-test context]
 ```
 

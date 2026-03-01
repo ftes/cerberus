@@ -1,8 +1,8 @@
-defmodule Cerberus.LiveViewHtml do
+defmodule Cerberus.Phoenix.LiveViewHTML do
   @moduledoc false
 
   alias Cerberus.Html
-  alias Cerberus.LiveViewBindings
+  alias Cerberus.Phoenix.LiveViewBindings
   alias Cerberus.Query
 
   @spec find_live_clickable_button(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::

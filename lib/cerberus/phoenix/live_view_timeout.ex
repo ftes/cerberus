@@ -1,10 +1,10 @@
-defmodule Cerberus.LiveViewTimeout do
+defmodule Cerberus.Phoenix.LiveViewTimeout do
   @moduledoc false
 
   alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Live
   alias Cerberus.Driver.Static
-  alias Cerberus.LiveViewWatcher
+  alias Cerberus.Phoenix.LiveViewWatcher
   alias ExUnit.AssertionError
   alias Phoenix.LiveView.Channel, as: LiveViewChannel
 

@@ -1,7 +1,7 @@
-defmodule Cerberus.LiveViewBindingsTest do
+defmodule Cerberus.Phoenix.LiveViewBindingsTest do
   use ExUnit.Case, async: true
 
-  alias Cerberus.LiveViewBindings
+  alias Cerberus.Phoenix.LiveViewBindings
 
   test "returns true for raw phx-click event handlers" do
     assert LiveViewBindings.phx_click?("save")

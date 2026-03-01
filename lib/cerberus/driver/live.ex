@@ -5,12 +5,12 @@ defmodule Cerberus.Driver.Live do
 
   import Phoenix.LiveViewTest, only: [element: 2, element: 3, render: 1, render_click: 1]
 
-  alias Cerberus.Driver.Conn
   alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.Html
-  alias Cerberus.LiveViewHtml
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
+  alias Cerberus.Phoenix.Conn
+  alias Cerberus.Phoenix.LiveViewHTML
   alias Cerberus.Query
   alias Cerberus.Session
   alias Cerberus.UploadFile
@@ -359,7 +359,7 @@ defmodule Cerberus.Driver.Live do
 
     case route_kind(session) do
       :live ->
-        case LiveViewHtml.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
+        case LiveViewHTML.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
           {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
             do_live_upload(session, field, path)
 
@@ -396,7 +396,7 @@ defmodule Cerberus.Driver.Live do
 
     case route_kind(session) do
       :live ->
-        case LiveViewHtml.find_submit_button(session.html, expected, match_opts, Session.scope(session)) do
+        case LiveViewHTML.find_submit_button(session.html, expected, match_opts, Session.scope(session)) do
           {:ok, button} ->
             do_live_submit(session, button)
 
@@ -934,7 +934,7 @@ defmodule Cerberus.Driver.Live do
   defp find_clickable_button(_session, _expected, _opts, :link), do: :error
 
   defp find_clickable_button(%{view: view} = session, expected, opts, _kind) when not is_nil(view) do
-    LiveViewHtml.find_live_clickable_button(session.html, expected, opts, Session.scope(session))
+    LiveViewHTML.find_live_clickable_button(session.html, expected, opts, Session.scope(session))
   end
 
   defp find_clickable_button(%__MODULE__{} = session, expected, opts, _kind) do
@@ -1630,7 +1630,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp find_live_select_field(session, expected, opts) do
-    case LiveViewHtml.find_form_field(session.html, expected, opts, Session.scope(session)) do
+    case LiveViewHTML.find_form_field(session.html, expected, opts, Session.scope(session)) do
       {:ok, %{name: name, input_type: "select"} = field} when is_binary(name) and name != "" ->
         {:ok, field}
 
@@ -1646,7 +1646,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp find_live_radio_field(session, expected, opts) do
-    case LiveViewHtml.find_form_field(session.html, expected, opts, Session.scope(session)) do
+    case LiveViewHTML.find_form_field(session.html, expected, opts, Session.scope(session)) do
       {:ok, %{name: name, input_type: "radio"} = field} when is_binary(name) and name != "" ->
         {:ok, field}
 
@@ -1749,7 +1749,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp do_live_fill_in(session, expected, value, opts) do
-    case LiveViewHtml.find_form_field(session.html, expected, opts, Session.scope(session)) do
+    case LiveViewHTML.find_form_field(session.html, expected, opts, Session.scope(session)) do
       {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
         form_data = put_form_value(session.form_data, field.form, name, value)
         updated = %{session | form_data: form_data}
@@ -1817,7 +1817,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp find_checkbox_field(session, expected, opts) do
-    case LiveViewHtml.find_form_field(session.html, expected, opts, Session.scope(session)) do
+    case LiveViewHTML.find_form_field(session.html, expected, opts, Session.scope(session)) do
       {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
         {:ok, field}
 
@@ -2021,7 +2021,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp maybe_follow_trigger_action(session, rendered) do
-    case LiveViewHtml.trigger_action_forms(rendered) do
+    case LiveViewHTML.trigger_action_forms(rendered) do
       [] ->
         :no_trigger
 

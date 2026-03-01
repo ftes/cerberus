@@ -1,4 +1,4 @@
-defmodule Cerberus.LiveViewBindings do
+defmodule Cerberus.Phoenix.LiveViewBindings do
   @moduledoc false
 
   @valid_js_commands MapSet.new(["navigate", "patch", "push"])

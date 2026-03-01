@@ -1,4 +1,4 @@
-defmodule Cerberus.LiveViewWatcher do
+defmodule Cerberus.Phoenix.LiveViewWatcher do
   @moduledoc false
 
   use GenServer, restart: :transient
