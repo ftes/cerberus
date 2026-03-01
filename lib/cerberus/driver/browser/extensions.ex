@@ -359,39 +359,32 @@ defmodule Cerberus.Driver.Browser.Extensions do
   defp await_dialog_opened_event_loop(context_id, action_task, deadline, action_outcome) do
     action_outcome = poll_action_task(action_task, action_outcome)
 
-    case action_outcome do
-      {:exit, reason} ->
-        raise AssertionError, message: "with_dialog/3 callback failed: #{Exception.format_exit(reason)}"
+    now = System.monotonic_time(:millisecond)
+    remaining = max(deadline - now, 0)
 
-      _ ->
-        now = System.monotonic_time(:millisecond)
-        remaining = max(deadline - now, 0)
+    if remaining == 0 do
+      raise_dialog_open_timeout!(action_outcome)
+    else
+      wait_ms = min(remaining, @dialog_poll_ms)
 
-        if remaining == 0 do
-          raise_dialog_open_timeout!(action_outcome)
-        else
-          wait_ms = min(remaining, @dialog_poll_ms)
+      receive do
+        {:cerberus_bidi_event,
+         %{
+           "method" => "browsingContext.userPromptOpened",
+           "params" => %{"context" => ^context_id} = params
+         }} ->
+          {params, action_outcome}
 
-          receive do
-            {:cerberus_bidi_event,
-             %{
-               "method" => "browsingContext.userPromptOpened",
-               "params" => %{"context" => ^context_id} = params
-             }} ->
-              {params, action_outcome}
-
-            {:cerberus_bidi_event, _other} ->
-              await_dialog_opened_event_loop(context_id, action_task, deadline, action_outcome)
-          after
-            wait_ms ->
-              await_dialog_opened_event_loop(context_id, action_task, deadline, action_outcome)
-          end
-        end
+        {:cerberus_bidi_event, _other} ->
+          await_dialog_opened_event_loop(context_id, action_task, deadline, action_outcome)
+      after
+        wait_ms ->
+          await_dialog_opened_event_loop(context_id, action_task, deadline, action_outcome)
+      end
     end
   end
 
   defp poll_action_task(_action_task, {:ok, _} = action_outcome), do: action_outcome
-  defp poll_action_task(_action_task, {:exit, _} = action_outcome), do: action_outcome
 
   defp poll_action_task(action_task, :pending) do
     Task.yield(action_task, 0) || :pending
@@ -444,10 +437,6 @@ defmodule Cerberus.Driver.Browser.Extensions do
   end
 
   defp await_dialog_action_result!(_action_task, {:ok, result}, _timeout_ms), do: result
-
-  defp await_dialog_action_result!(_action_task, {:exit, reason}, _timeout_ms) do
-    raise AssertionError, message: "with_dialog/3 callback failed: #{Exception.format_exit(reason)}"
-  end
 
   defp await_dialog_action_result!(action_task, :pending, timeout_ms) do
     wait_ms = timeout_ms + 1_000
