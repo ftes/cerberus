@@ -111,6 +111,53 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
     end
   end
 
+  describe "chrome startup hardening helpers" do
+    test "chrome_startup_retries/1 defaults to one retry and accepts overrides" do
+      Application.put_env(:cerberus, :browser, chrome_startup_retries: 3)
+      assert Runtime.chrome_startup_retries([]) == 3
+      assert Runtime.chrome_startup_retries(chrome_startup_retries: 0) == 0
+      assert Runtime.chrome_startup_retries(chrome_startup_retries: 2) == 2
+    end
+
+    test "chrome_startup_retryable_error?/1 only matches transient chrome startup failures" do
+      assert Runtime.chrome_startup_retryable_error?(
+               ~s(webdriver session request failed with status 500: %{\\"message\\" => \\"session not created: Chrome instance exited\\"})
+             )
+
+      refute Runtime.chrome_startup_retryable_error?("webdriver timed out")
+      refute Runtime.chrome_startup_retryable_error?(nil)
+    end
+
+    @tag :tmp_dir
+    test "append_startup_log/3 appends path and tail", %{tmp_dir: tmp_dir} do
+      log_path = Path.join(tmp_dir, "chromedriver.log")
+
+      File.write!(log_path, """
+      one
+      two
+      three
+      four
+      """)
+
+      message =
+        Runtime.append_startup_log("startup failed", log_path,
+          startup_log_tail_lines: 2,
+          startup_log_tail_bytes: 200
+        )
+
+      assert message =~ "startup failed"
+      assert message =~ log_path
+      assert message =~ "three"
+      assert message =~ "four"
+      refute message =~ "one"
+    end
+
+    test "append_startup_log/3 leaves reason unchanged when log is missing" do
+      reason = "startup failed"
+      assert Runtime.append_startup_log(reason, "/tmp/does-not-exist.log") == reason
+    end
+  end
+
   describe "normalize_web_socket_url/2" do
     test "rewrites private selenium websocket endpoint to service host/port" do
       web_socket_url = "ws://172.17.0.2:4444/session/abc/se/bidi"

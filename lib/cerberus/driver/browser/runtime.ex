@@ -5,6 +5,9 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   @default_browser_name :chrome
   @default_runtime_http_timeout_ms 5_000
+  @default_chrome_startup_retries 1
+  @default_startup_log_tail_bytes 8_192
+  @default_startup_log_tail_lines 40
   @startup_attempts 120
   @startup_sleep_ms 50
 
@@ -12,7 +15,9 @@ defmodule Cerberus.Driver.Browser.Runtime do
           url: String.t(),
           browser_name: :chrome | :firefox,
           managed?: boolean(),
-          process: port() | nil
+          process: port() | nil,
+          startup_log_path: String.t() | nil,
+          startup_log_ephemeral?: boolean()
         }
 
   @type runtime_session :: %{
@@ -167,8 +172,12 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   defp start_runtime_session(opts) do
     with {:ok, service} <- start_service(opts) do
-      case start_webdriver_session(service, opts) do
-        {:ok, session_id, web_socket_url} ->
+      retries = startup_retry_attempts(service, opts)
+
+      case start_webdriver_session_with_retry(service, opts, retries) do
+        {:ok, service, session_id, web_socket_url} ->
+          maybe_cleanup_startup_log(service)
+
           {:ok,
            %{
              service: service,
@@ -178,7 +187,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
              owners: MapSet.new()
            }}
 
-        {:error, reason} ->
+        {:error, service, reason} ->
           maybe_stop_service(service)
           {:error, reason}
       end
@@ -226,7 +235,15 @@ defmodule Cerberus.Driver.Browser.Runtime do
     webdriver_url = remote_webdriver_url(opts)
 
     if is_binary(webdriver_url) do
-      {:ok, %{url: webdriver_url, browser_name: browser_name, managed?: false, process: nil}}
+      {:ok,
+       %{
+         url: webdriver_url,
+         browser_name: browser_name,
+         managed?: false,
+         process: nil,
+         startup_log_path: nil,
+         startup_log_ephemeral?: false
+       }}
     else
       start_managed_service(opts, browser_name)
     end
@@ -235,7 +252,8 @@ defmodule Cerberus.Driver.Browser.Runtime do
   defp start_managed_service(opts, browser_name) do
     binary = opts |> webdriver_binary!(browser_name) |> Path.expand()
     port = Keyword.get(opts, :chromedriver_port) || random_port!()
-    args = webdriver_service_args(browser_name, port)
+    {startup_log_path, startup_log_ephemeral?} = startup_log_path(opts, browser_name)
+    args = webdriver_service_args(browser_name, port, startup_log_path)
 
     process =
       Port.open({:spawn_executable, to_charlist(binary)}, [
@@ -249,7 +267,15 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
     case wait_for_service(url, @startup_attempts, opts) do
       :ok ->
-        {:ok, %{url: url, browser_name: browser_name, managed?: true, process: process}}
+        {:ok,
+         %{
+           url: url,
+           browser_name: browser_name,
+           managed?: true,
+           process: process,
+           startup_log_path: startup_log_path,
+           startup_log_ephemeral?: startup_log_ephemeral?
+         }}
 
       {:error, reason} ->
         Port.close(process)
@@ -260,12 +286,185 @@ defmodule Cerberus.Driver.Browser.Runtime do
       {:error, Exception.message(error)}
   end
 
-  defp webdriver_service_args(:chrome, port) do
-    [to_charlist("--port=#{port}")]
+  defp webdriver_service_args(:chrome, port, startup_log_path) do
+    [to_charlist("--port=#{port}"), ~c"--verbose"] ++ maybe_log_path_arg(startup_log_path)
   end
 
-  defp webdriver_service_args(:firefox, port) do
+  defp webdriver_service_args(:firefox, port, _startup_log_path) do
     [to_charlist("--port=#{port}"), ~c"--websocket-port=0"]
+  end
+
+  defp maybe_log_path_arg(path) when is_binary(path), do: [to_charlist("--log-path=#{path}")]
+  defp maybe_log_path_arg(_path), do: []
+
+  defp start_webdriver_session_with_retry(service, opts, retries_left)
+       when is_integer(retries_left) and retries_left >= 0 do
+    case start_webdriver_session(service, opts) do
+      {:ok, session_id, web_socket_url} ->
+        {:ok, service, session_id, web_socket_url}
+
+      {:error, reason} ->
+        handle_startup_session_failure(service, opts, retries_left, reason)
+    end
+  end
+
+  defp handle_startup_session_failure(service, opts, retries_left, reason) do
+    if retries_left > 0 and retryable_startup_error?(service, reason) do
+      retry_start_webdriver_session(service, opts, retries_left - 1, reason)
+    else
+      {:error, service, append_startup_log(reason, service.startup_log_path, opts)}
+    end
+  end
+
+  defp retry_start_webdriver_session(service, opts, retries_left, reason) do
+    maybe_stop_service(service)
+    maybe_cleanup_startup_log(service)
+
+    case start_service(opts) do
+      {:ok, replacement_service} ->
+        start_webdriver_session_with_retry(replacement_service, opts, retries_left)
+
+      {:error, restart_reason} ->
+        reason = append_startup_log(reason, service.startup_log_path, opts)
+        {:error, service, "#{reason}; webdriver restart failed: #{restart_reason}"}
+    end
+  end
+
+  defp startup_retry_attempts(%{managed?: true, browser_name: :chrome}, opts) do
+    chrome_startup_retries(opts)
+  end
+
+  defp startup_retry_attempts(_service, _opts), do: 0
+
+  @doc false
+  @spec chrome_startup_retries(keyword()) :: non_neg_integer()
+  def chrome_startup_retries(opts) when is_list(opts) do
+    browser_opts = browser_opts(opts)
+
+    opts
+    |> Keyword.get(:chrome_startup_retries, browser_opts[:chrome_startup_retries])
+    |> normalize_non_neg_integer(@default_chrome_startup_retries)
+  end
+
+  defp retryable_startup_error?(%{managed?: true, browser_name: :chrome}, reason) do
+    chrome_startup_retryable_error?(reason)
+  end
+
+  defp retryable_startup_error?(_service, _reason), do: false
+
+  @doc false
+  @spec chrome_startup_retryable_error?(term()) :: boolean()
+  def chrome_startup_retryable_error?(reason) when is_binary(reason) do
+    downcased = String.downcase(reason)
+    String.contains?(downcased, "session not created") and String.contains?(downcased, "chrome instance exited")
+  end
+
+  def chrome_startup_retryable_error?(_reason), do: false
+
+  defp startup_log_path(opts, :chrome) do
+    browser_opts = browser_opts(opts)
+
+    case normalize_non_empty_string(Keyword.get(opts, :chromedriver_log_path, browser_opts[:chromedriver_log_path]), nil) do
+      path when is_binary(path) ->
+        case ensure_log_dir(path) do
+          {:ok, expanded_path} -> {expanded_path, false}
+          _ -> {nil, false}
+        end
+
+      _ ->
+        autogenerated_path =
+          Path.join(System.tmp_dir!(), "cerberus-chromedriver-#{:erlang.unique_integer([:positive])}.log")
+
+        case ensure_log_dir(autogenerated_path) do
+          {:ok, expanded_path} -> {expanded_path, true}
+          _ -> {nil, false}
+        end
+    end
+  end
+
+  defp startup_log_path(_opts, _browser_name), do: {nil, false}
+
+  defp ensure_log_dir(path) when is_binary(path) do
+    expanded_path = Path.expand(path)
+
+    case File.mkdir_p(Path.dirname(expanded_path)) do
+      :ok -> {:ok, expanded_path}
+      {:error, _reason} -> {:error, :mkdir_failed}
+    end
+  end
+
+  defp maybe_cleanup_startup_log(%{startup_log_path: path, startup_log_ephemeral?: true}) when is_binary(path) do
+    _ = File.rm(path)
+    :ok
+  end
+
+  defp maybe_cleanup_startup_log(_service), do: :ok
+
+  @doc false
+  @spec append_startup_log(String.t(), String.t() | nil, keyword()) :: String.t()
+  def append_startup_log(reason, startup_log_path, opts \\ []) when is_binary(reason) and is_list(opts) do
+    case startup_log_tail(startup_log_path, opts) do
+      nil ->
+        reason
+
+      {path, tail} when tail == "" ->
+        reason <> " (chromedriver startup log: " <> path <> ")"
+
+      {path, tail} ->
+        reason <>
+          " (chromedriver startup log: " <>
+          path <> ")\nchromedriver startup log tail:\n" <> tail
+    end
+  end
+
+  defp startup_log_tail(path, opts) when is_binary(path) and is_list(opts) do
+    expanded_path = Path.expand(path)
+    max_bytes = startup_log_tail_bytes(opts)
+    max_lines = startup_log_tail_lines(opts)
+
+    case File.read(expanded_path) do
+      {:ok, contents} ->
+        tail =
+          contents
+          |> trim_leading_bytes(max_bytes)
+          |> String.split("\n", trim: true)
+          |> Enum.take(-max_lines)
+          |> Enum.join("\n")
+          |> String.trim()
+
+        {expanded_path, tail}
+
+      _ ->
+        nil
+    end
+  end
+
+  defp startup_log_tail(_path, _opts), do: nil
+
+  defp startup_log_tail_bytes(opts) do
+    browser_opts = browser_opts(opts)
+
+    opts
+    |> Keyword.get(:startup_log_tail_bytes, browser_opts[:startup_log_tail_bytes])
+    |> normalize_positive_integer(@default_startup_log_tail_bytes)
+  end
+
+  defp startup_log_tail_lines(opts) do
+    browser_opts = browser_opts(opts)
+
+    opts
+    |> Keyword.get(:startup_log_tail_lines, browser_opts[:startup_log_tail_lines])
+    |> normalize_positive_integer(@default_startup_log_tail_lines)
+  end
+
+  defp trim_leading_bytes(contents, max_bytes) when is_binary(contents) and is_integer(max_bytes) and max_bytes > 0 do
+    size = byte_size(contents)
+
+    if size <= max_bytes do
+      contents
+    else
+      binary_part(contents, size - max_bytes, max_bytes)
+    end
   end
 
   defp start_webdriver_session(service, opts) do
@@ -853,6 +1052,9 @@ defmodule Cerberus.Driver.Browser.Runtime do
   end
 
   defp normalize_non_empty_string(_value, default), do: default
+
+  defp normalize_non_neg_integer(value, _default) when is_integer(value) and value >= 0, do: value
+  defp normalize_non_neg_integer(_value, default), do: default
 
   defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
   defp normalize_positive_integer(_value, default), do: default
