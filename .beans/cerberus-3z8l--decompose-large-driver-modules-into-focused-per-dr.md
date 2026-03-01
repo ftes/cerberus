@@ -17,7 +17,8 @@ Goals:
 
 ## Todo
 - [x] Extract browser option/context normalization into `Cerberus.Driver.Browser.Config`
+- [x] Extract static form-state and submit payload logic into `Cerberus.Driver.Static.FormData`
 - [ ] Continue splitting browser driver monolith (navigation/forms/assertions/expression builders)
-- [ ] Split live/static modules where responsibilities are mixed
+- [ ] Split remaining live/static responsibilities into focused modules
 - [ ] Keep per-driver APIs coherent and discoverable
-- [ ] Run format and precommit
+- [x] Run format and precommit for completed decomposition slices

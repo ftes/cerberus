@@ -4,6 +4,7 @@ defmodule Cerberus.Driver.Static do
   @behaviour Cerberus.Driver
 
   alias Cerberus.Driver.Live, as: LiveSession
+  alias Cerberus.Driver.Static.FormData
   alias Cerberus.Html
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
@@ -164,7 +165,7 @@ defmodule Cerberus.Driver.Static do
 
     case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
       {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
-        updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
+        updated = %{session | form_data: FormData.put_form_value(session.form_data, field.form, name, value)}
 
         observed = %{
           action: :fill_in,
@@ -218,8 +219,8 @@ defmodule Cerberus.Driver.Static do
     case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
       {:ok, %{name: name, input_type: "file"} = field} when is_binary(name) and name != "" ->
         file = UploadFile.read!(path)
-        value = upload_value_for_update(session, field, file, path)
-        updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
+        value = FormData.upload_value_for_update(session, field, file, path)
+        updated = %{session | form_data: FormData.put_form_value(session.form_data, field.form, name, value)}
 
         observed = %{
           action: :upload,
@@ -348,8 +349,8 @@ defmodule Cerberus.Driver.Static do
 
   defp do_submit(session, button) do
     method = normalize_submit_method(button.method)
-    form_selector = submit_form_selector(button)
-    submitted_params = params_for_submit(session, button, form_selector)
+    form_selector = FormData.submit_form_selector(button)
+    submitted_params = FormData.params_for_submit(session, button, form_selector)
 
     case follow_form_request(session, method, button.action, submitted_params) do
       {:ok, updated, transition} ->
@@ -363,7 +364,7 @@ defmodule Cerberus.Driver.Static do
           transition: transition
         }
 
-        cleared_form_data = clear_submitted_form(session.form_data, button.form)
+        cleared_form_data = FormData.clear_submitted_form(session.form_data, button.form)
         {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
 
       {:error, failed_session, reason, details} ->
@@ -580,15 +581,11 @@ defmodule Cerberus.Driver.Static do
   defp normalize_query_value(nil), do: ""
   defp normalize_query_value(value), do: to_string(value)
 
-  defp empty_form_data do
-    %{active_form: nil, values: %{}}
-  end
-
   defp toggle_checkbox(session, expected, opts, checked?, op) do
     case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
       {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
-        value = toggled_checkbox_value(session, field, checked?)
-        updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
+        value = FormData.toggled_checkbox_value(session, field, checked?)
+        updated = %{session | form_data: FormData.put_form_value(session.form_data, field.form, name, value)}
 
         observed = %{
           action: op,
@@ -618,7 +615,7 @@ defmodule Cerberus.Driver.Static do
     case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
       {:ok, %{name: name, input_type: "radio"} = field} when is_binary(name) and name != "" ->
         value = field[:input_value] || "on"
-        updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
+        updated = %{session | form_data: FormData.put_form_value(session.form_data, field.form, name, value)}
 
         observed = %{
           action: :choose,
@@ -649,8 +646,8 @@ defmodule Cerberus.Driver.Static do
       {:ok, %{name: name, input_type: "select"} = field} when is_binary(name) and name != "" ->
         case Html.select_values(session.html, field, option, opts, Session.scope(session)) do
           {:ok, %{values: values, multiple?: multiple?}} ->
-            value = select_value_for_update(session, field, option, values, multiple?)
-            updated = %{session | form_data: put_form_value(session.form_data, field.form, name, value)}
+            value = FormData.select_value_for_update(session, field, option, values, multiple?)
+            updated = %{session | form_data: FormData.put_form_value(session.form_data, field.form, name, value)}
 
             observed = %{
               action: op,
@@ -688,179 +685,6 @@ defmodule Cerberus.Driver.Static do
         {:error, session, observed, "no form field matched locator"}
     end
   end
-
-  defp put_form_value(form_data, form, name, value) do
-    %{active_form: active_form, values: values} = normalize_form_data(form_data)
-    key = form_key(form, active_form)
-    form_values = Map.get(values, key, %{})
-    next_values = Map.put(values, key, Map.put(form_values, name, value))
-    %{active_form: key, values: next_values}
-  end
-
-  defp params_for_submit(session, button, form_selector) do
-    params = submit_form_payload(session, button, form_selector)
-
-    case button_payload(button) do
-      nil -> params
-      {name, value} -> Map.put(params, name, value)
-    end
-  end
-
-  defp submit_form_payload(session, button, form_selector) do
-    defaults = submit_form_defaults(session, button, form_selector)
-    active = pruned_params_for_form(session, button.form, form_selector)
-    Map.merge(defaults, active)
-  end
-
-  defp submit_form_defaults(_session, _button, selector) when selector in [nil, ""], do: %{}
-
-  defp submit_form_defaults(session, _button, selector) when is_binary(selector) do
-    Html.form_defaults(session.html, selector, Session.scope(session))
-  end
-
-  defp submit_form_selector(%{form_selector: selector}) when is_binary(selector) and selector != "", do: selector
-
-  defp submit_form_selector(%{form: form}) when is_binary(form) and form != "" do
-    ~s(form[id="#{form}"])
-  end
-
-  defp submit_form_selector(_), do: nil
-
-  defp pruned_params_for_form(session, form, form_selector) do
-    active = params_for_form(session.form_data, form)
-    keep = form_field_name_allowlist(session, form_selector)
-    prune_form_params(active, keep)
-  end
-
-  defp params_for_form(form_data, form) do
-    %{active_form: active_form, values: values} = normalize_form_data(form_data)
-    key = form_key(form, active_form)
-    Map.get(values, key, %{})
-  end
-
-  defp toggled_checkbox_value(session, field, checked?) do
-    name = field.name
-    defaults = submit_defaults_for_field(session, field)
-    active = pruned_params_for_form(session, field.form, field[:form_selector])
-    current = Map.get(active, name, Map.get(defaults, name))
-    input_value = field[:input_value] || "on"
-
-    if String.ends_with?(name, "[]") do
-      current_list = checkbox_value_list(current)
-
-      if checked? do
-        ensure_checkbox_value(current_list, input_value)
-      else
-        Enum.reject(current_list, &(&1 == input_value))
-      end
-    else
-      if checked? do
-        input_value
-      else
-        checkbox_unchecked_value(defaults, name, input_value)
-      end
-    end
-  end
-
-  defp submit_defaults_for_field(session, field) do
-    case field[:form_selector] do
-      selector when is_binary(selector) and selector != "" ->
-        Html.form_defaults(session.html, selector, Session.scope(session))
-
-      _ ->
-        %{}
-    end
-  end
-
-  defp checkbox_value_list(nil), do: []
-  defp checkbox_value_list(value) when is_list(value), do: value
-  defp checkbox_value_list(value), do: [value]
-
-  defp select_value_for_update(_session, _field, _option, values, false) do
-    List.first(values)
-  end
-
-  defp select_value_for_update(_session, _field, option, values, true) when is_list(option) do
-    values
-  end
-
-  defp select_value_for_update(session, field, _option, values, true) do
-    defaults = submit_defaults_for_field(session, field)
-    active = pruned_params_for_form(session, field.form, field[:form_selector])
-    current = Map.get(active, field.name, Map.get(defaults, field.name))
-
-    current
-    |> checkbox_value_list()
-    |> Enum.concat(values)
-    |> Enum.uniq()
-  end
-
-  defp ensure_checkbox_value(values, input_value) do
-    if Enum.any?(values, &(&1 == input_value)) do
-      values
-    else
-      values ++ [input_value]
-    end
-  end
-
-  defp checkbox_unchecked_value(defaults, name, input_value) do
-    case Map.get(defaults, name) do
-      ^input_value -> ""
-      nil -> ""
-      other -> other
-    end
-  end
-
-  defp clear_submitted_form(form_data, form) do
-    %{active_form: active_form, values: values} = normalize_form_data(form_data)
-    key = form_key(form, active_form)
-    %{active_form: nil, values: Map.delete(values, key)}
-  end
-
-  defp normalize_form_data(%{active_form: _active_form, values: values} = data) when is_map(values), do: data
-
-  defp normalize_form_data(values) when is_map(values) do
-    %{active_form: "__default__", values: %{"__default__" => values}}
-  end
-
-  defp normalize_form_data(_), do: empty_form_data()
-
-  defp upload_value_for_update(session, field, file, source_path) do
-    upload = %Plug.Upload{
-      path: source_path,
-      filename: file.file_name,
-      content_type: file.mime_type
-    }
-
-    if String.ends_with?(field.name, "[]") do
-      defaults = submit_defaults_for_field(session, field)
-      active = pruned_params_for_form(session, field.form, field[:form_selector])
-      current = Map.get(active, field.name, Map.get(defaults, field.name))
-      checkbox_value_list(current) ++ [upload]
-    else
-      upload
-    end
-  end
-
-  defp form_key(form, _active_form) when is_binary(form) and form != "", do: "form:" <> form
-  defp form_key(_form, active_form) when is_binary(active_form), do: active_form
-  defp form_key(_form, _active_form), do: "__default__"
-
-  defp button_payload(button) do
-    case {button.button_name, button.button_value} do
-      {name, value} when is_binary(name) and name != "" -> {name, value || ""}
-      _ -> nil
-    end
-  end
-
-  defp form_field_name_allowlist(_session, selector) when selector in [nil, ""], do: nil
-
-  defp form_field_name_allowlist(session, selector) do
-    Html.form_field_names(session.html, selector, Session.scope(session))
-  end
-
-  defp prune_form_params(params, nil) when is_map(params), do: params
-  defp prune_form_params(params, %MapSet{} = keep) when is_map(params), do: Map.take(params, MapSet.to_list(keep))
 
   defp transition(from_driver, to_driver, reason, from_path, to_path) do
     %{
