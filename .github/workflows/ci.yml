@@ -89,8 +89,8 @@ jobs:
           bin/check_browser_bidi_ready.sh firefox --install
           sed 's/^export //' tmp/browser-tools/env.sh >> "$GITHUB_ENV"
 
-      - name: Run full test suite (default local chrome)
-        run: mix test --exclude firefox
+      - name: Run full test suite (default local Chrome)
+        run: mix test --warnings-as-errors --max-failures 1 --exclude firefox
 
       - name: Run browser-driver tests in websocket Chrome lane
         run: |
@@ -100,7 +100,7 @@ jobs:
               | sort
           )"
           [ -n "$BROWSER_DRIVER_FILES" ]
-          mix test.websocket --browsers chrome $BROWSER_DRIVER_FILES
+          mix test.websocket --warnings-as-errors --max-failures 1 --browsers chrome $BROWSER_DRIVER_FILES
 
       - name: Run browser-driver tests in local Firefox lane
         continue-on-error: true
@@ -111,7 +111,7 @@ jobs:
               | sort
           )"
           [ -n "$BROWSER_DRIVER_FILES" ]
-          CERBERUS_BROWSER_NAME=firefox mix test $BROWSER_DRIVER_FILES
+          CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors --max-failures 1 $BROWSER_DRIVER_FILES
 
       - name: Run browser-driver tests in websocket Firefox lane
         run: |
@@ -121,4 +121,4 @@ jobs:
               | sort
           )"
           [ -n "$BROWSER_DRIVER_FILES" ]
-          mix test.websocket --browsers firefox $BROWSER_DRIVER_FILES
+          mix test.websocket --warnings-as-errors --max-failures 1 --browsers firefox $BROWSER_DRIVER_FILES
