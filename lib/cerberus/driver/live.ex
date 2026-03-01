@@ -859,7 +859,11 @@ defmodule Cerberus.Driver.Live do
       |> Phoenix.LiveViewTest.render_upload(file.file_name)
       |> maybe_raise_upload_error!(session, file.file_name, live_upload_name)
 
-    change_result = maybe_upload_change_result(session, form_selector, field)
+    change_result =
+      case upload_progress_result do
+        {:error, _} = error -> error
+        _ -> maybe_upload_change_result(session, form_selector, field)
+      end
 
     result = upload_change_result(change_result, upload_progress_result)
     finalize_upload_result(result, session, field, file.file_name)

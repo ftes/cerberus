@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-28T20:40:01Z
-updated_at: 2026-02-28T21:56:15Z
+updated_at: 2026-03-01T06:38:04Z
 ---
 
 Restructure CI to run browser-tagged tests in four lanes: local chrome, local firefox, websocket chrome, websocket firefox. Minimize duplicate setup via shared non-browser setup and reusable matrix job steps.
@@ -40,3 +40,7 @@ Restructure CI to run browser-tagged tests in four lanes: local chrome, local fi
 - Fixed browser radio/checkbox index mismatches and added multi-select value memory for browser selects, updated timeout assertion examples, tagged firefox-only public API constructor coverage, and adjusted CI to exclude firefox-tagged tests from default lane while keeping local firefox lane best-effort.
 
 - Fixed CI browser-file discovery portability by replacing rg-based selection with find+grep and adding an empty-file-list guard, after websocket lane accidentally ran the full suite when rg was missing in GitHub runner.
+
+- Reproduced latest CI failure (run 22529867585): CoreLiveUploadBehaviorTest crashed in live upload redirect path due to calling render_change on a dead LiveView process after render_upload redirected.
+
+- Fixed Cerberus.Driver.Live.do_live_upload/3 to skip maybe_upload_change_result/3 when upload progress already returns {:error, ...} redirect/patch tuples, then validated with mix test test/core/live_upload_behavior_test.exs --exclude firefox --seed 504672 and full lane command mix test --exclude firefox (both green).
