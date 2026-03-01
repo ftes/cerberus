@@ -199,7 +199,6 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     work_dir = Path.join(tmp_dir, "work")
     test_glob = "test/features/pt_*_test.exs"
 
-    File.rm_rf!(work_dir)
     File.cp_r!(fixture_dir, work_dir)
 
     assert {_output, 0} = run_mix(work_dir, ["deps.get"])
