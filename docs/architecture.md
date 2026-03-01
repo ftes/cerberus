@@ -33,6 +33,23 @@ flowchart LR
 >
 > This split keeps HTML rules testable without Phoenix internals and isolates LiveView-specific quirks to one layer.
 
+## Driver Module Map
+
+Driver-first organization is the primary code layout rule:
+
+- Static driver core: `lib/cerberus/driver/static.ex` and `lib/cerberus/driver/static/form_data.ex`.
+- Live driver core: `lib/cerberus/driver/live.ex` and `lib/cerberus/driver/live/form_data.ex`.
+- Browser driver core:
+  - `lib/cerberus/driver/browser.ex` for orchestration.
+  - `lib/cerberus/driver/browser/config.ex` for browser option normalization.
+  - `lib/cerberus/driver/browser/expressions.ex` for browser-side JS expression builders.
+  - `lib/cerberus/driver/browser/runtime.ex`, `lib/cerberus/driver/browser/bidi.ex`, and browser socket/context supervisors for BiDi lifecycle.
+
+Cross-driver concern modules remain separate:
+
+- `lib/cerberus/html/html.ex` for HTML-spec behavior.
+- `lib/cerberus/phoenix/*` for Phoenix/LiveView-specific behavior.
+
 ## Multi-User / Multi-Tab Semantics
 
 - `open_user/1` creates isolated user state in all drivers.
@@ -46,6 +63,23 @@ flowchart LR
 - Each browser session (`session(:browser, ...)`) creates a dedicated browser user context.
 - Per-session browser overrides (`browser: [viewport: ..., user_agent: ..., init_script: ...]`) apply only to that session's user context.
 - Result: test/module overrides do not require dedicated browser processes unless you need different runtime-level launch settings.
+
+## Test Organization (Maintainer)
+
+Integration contract tests are located under `test/cerberus/cerberus_test` and use `CerberusTest.*` module names.
+Driver internals stay in driver-focused test paths such as `test/cerberus/driver/browser`.
+
+Cross-driver integration tests use plain ExUnit loops rather than a custom harness:
+
+```elixir
+for driver <- [:phoenix, :browser] do
+  test "works across drivers (#{driver})" do
+    session(unquote(driver))
+    |> visit("/page")
+    |> assert_has(text("ok"))
+  end
+end
+```
 
 ## Escape Hatches
 

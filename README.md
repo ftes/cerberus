@@ -5,7 +5,7 @@
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/ftes/cerberus/ci.yml)](https://github.com/ftes/cerberus/actions)
 ![Cerberus hero artwork](docs/hero.png)
 
-Cerberus is an experimental Phoenix testing harness with one API across:
+Cerberus is an experimental Phoenix testing library with one API across:
 - non-browser Phoenix mode with static/live auto-detection and switching,
 - browser mode for Chrome and Firefox via WebDriver BiDi.
 
@@ -143,7 +143,7 @@ Most tests switch modes by changing only the first session line:
 +session(:browser)
  |> visit("/live/counter")
  |> click(button("Increment"))
- |> assert_has(text("Count: 1"))
+|> assert_has(text("Count: 1"))
 ```
 
 ## Per-Test Browser Overrides
