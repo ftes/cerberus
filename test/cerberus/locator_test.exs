@@ -48,6 +48,10 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :button, value: "Increment"} = ~l"button:Increment"r
     assert %Locator{kind: :link, value: "Counter"} = ~l"link:Counter"r
     assert %Locator{kind: :label, value: "Search term"} = ~l"textbox:Search term"r
+    assert %Locator{kind: :label, value: "Race 2"} = ~l"listbox:Race 2"r
+    assert %Locator{kind: :label, value: "Age"} = ~l"spinbutton:Age"r
+    assert %Locator{kind: :button, value: "Tab Primary"} = ~l"tab:Tab Primary"r
+    assert %Locator{kind: :button, value: "Menu Secondary"} = ~l"menuitem:Menu Secondary"r
   end
 
   test "~l supports css selector modifier" do
@@ -89,8 +93,12 @@ defmodule Cerberus.LocatorTest do
 
   test "normalizes role locator to operation-specific kind" do
     assert %Locator{kind: :button, value: "Increment"} = Locator.normalize(role: :button, name: "Increment")
+    assert %Locator{kind: :button, value: "Tab Primary"} = Locator.normalize(role: :tab, name: "Tab Primary")
+    assert %Locator{kind: :button, value: "Menu Secondary"} = Locator.normalize(role: :menuitem, name: "Menu Secondary")
     assert %Locator{kind: :link, value: "Counter"} = Locator.normalize(role: "link", name: "Counter")
     assert %Locator{kind: :label, value: "Search term"} = Locator.normalize(role: :textbox, name: "Search term")
+    assert %Locator{kind: :label, value: "Race 2"} = Locator.normalize(role: :listbox, name: "Race 2")
+    assert %Locator{kind: :label, value: "Age"} = Locator.normalize(role: :spinbutton, name: "Age")
     assert %Locator{kind: :label, value: "Email updates"} = Locator.normalize(role: :checkbox, name: "Email updates")
     assert %Locator{kind: :alt, value: "Logo"} = Locator.normalize(role: :img, name: "Logo")
     assert %Locator{kind: :text, value: "Dashboard"} = Locator.normalize(role: :heading, name: "Dashboard")

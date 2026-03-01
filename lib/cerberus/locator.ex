@@ -281,10 +281,14 @@ defmodule Cerberus.Locator do
   end
 
   defp role_to_kind!("button", _original), do: :button
+  defp role_to_kind!("menuitem", _original), do: :button
+  defp role_to_kind!("tab", _original), do: :button
   defp role_to_kind!("link", _original), do: :link
   defp role_to_kind!("textbox", _original), do: :label
   defp role_to_kind!("searchbox", _original), do: :label
   defp role_to_kind!("combobox", _original), do: :label
+  defp role_to_kind!("listbox", _original), do: :label
+  defp role_to_kind!("spinbutton", _original), do: :label
   defp role_to_kind!("checkbox", _original), do: :label
   defp role_to_kind!("radio", _original), do: :label
   defp role_to_kind!("switch", _original), do: :label

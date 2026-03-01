@@ -134,6 +134,10 @@ session
     - `r` role form (`~l"button:Save"r`)
     - `c` CSS form (`~l"button[type='submit']"c`)
 
+Role helpers currently support practical aliases used by actions/assertions:
+- click/assert roles: `button`, `menuitem`, `tab`, `link`, `heading`, `img`
+- form-control roles: `textbox`, `searchbox`, `combobox`, `listbox`, `spinbutton`, `checkbox`, `radio`, `switch`
+
 ## Switching Modes
 
 Most tests switch modes by changing only the first session line:

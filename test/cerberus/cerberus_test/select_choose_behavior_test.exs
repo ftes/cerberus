@@ -13,6 +13,17 @@ defmodule CerberusTest.SelectChooseBehaviorTest do
       |> assert_has(text("race: dwarf", exact: true))
     end
 
+    test "expanded role helpers listbox/spinbutton work on static controls (#{driver})" do
+      unquote(driver)
+      |> session()
+      |> visit("/controls")
+      |> fill_in(role(:spinbutton, name: "Age"), "41")
+      |> select(role(:listbox, name: "Race 2"), option: "Orc")
+      |> submit(text("Save Controls"))
+      |> assert_has(text("age: 41", exact: true))
+      |> assert_has(text("race_2: [orc]", exact: true))
+    end
+
     test "select/choose/submit support testid locators on static routes (#{driver})" do
       unquote(driver)
       |> session()
@@ -68,6 +79,18 @@ defmodule CerberusTest.SelectChooseBehaviorTest do
       |> select("Race", option: "Elf")
       |> assert_has(text("_target: [race]", exact: true))
       |> assert_has(text("race: elf", exact: true))
+    end
+
+    test "expanded role helpers listbox/spinbutton work on live controls (#{driver})" do
+      unquote(driver)
+      |> session()
+      |> visit("/live/controls")
+      |> fill_in(role(:spinbutton, name: "Age"), "44")
+      |> assert_has(text("_target: [age]", exact: true))
+      |> assert_has(text("age: 44", exact: true))
+      |> select(role(:listbox, name: "Race 2"), option: "Dwarf")
+      |> assert_has(text("_target: [race_2]", exact: true))
+      |> assert_has(text("race_2: [dwarf]", exact: true))
     end
 
     test "select supports testid locators on live routes (#{driver})" do

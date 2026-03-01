@@ -48,6 +48,10 @@
 - `css("...")`
 - `role(:button, name: "...")`
 
+### Supported role aliases
+- Click/assert roles: `button`, `menuitem`, `tab`, `link`, `heading`, `img`
+- Form-control roles: `textbox`, `searchbox`, `combobox`, `listbox`, `spinbutton`, `checkbox`, `radio`, `switch`
+
 ### Sigil `~l`
 
 | Locator | Meaning |

@@ -257,6 +257,9 @@ defmodule Cerberus.Fixtures.PageController do
               <option value="disabled_race" disabled>Disabled Race</option>
             </select>
 
+            <label for="controls_age">Age</label>
+            <input id="controls_age" type="number" name="age" value="33" data-testid="controls-age-input" />
+
             <label for="controls_race_2">Race 2</label>
             <select id="controls_race_2" name="race_2[]" multiple data-testid="controls-race-2-select">
               <option value="elf">Elf</option>
@@ -292,6 +295,7 @@ defmodule Cerberus.Fixtures.PageController do
   def controls_result(conn, params) do
     params = merged_request_params(conn, params)
     race = Map.get(params, "race", "")
+    age = Map.get(params, "age", "")
     race_2 = params |> Map.get("race_2", []) |> List.wrap() |> Enum.reject(&(&1 == ""))
     contact = Map.get(params, "contact", "")
     disabled_select = Map.get(params, "disabled_select", "")
@@ -307,6 +311,7 @@ defmodule Cerberus.Fixtures.PageController do
         <main>
           <div id="form-data">
             <p>race: #{race}</p>
+            <p>age: #{age}</p>
             <p>race_2: [#{Enum.join(race_2, ",")}]</p>
             <p>contact: #{contact}</p>
             <p>disabled_select: #{disabled_select}</p>

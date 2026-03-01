@@ -47,6 +47,11 @@ defmodule Cerberus.Fixtures.SelectorEdgeLive do
           Create
         </button>
       </section>
+
+      <section id="role-actions">
+        <button phx-click="select_primary" role="tab">Tab Primary</button>
+        <button phx-click="select_secondary" role="menuitem">Menu Secondary</button>
+      </section>
     </main>
     """
   end

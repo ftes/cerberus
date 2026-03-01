@@ -68,6 +68,9 @@ defmodule CerberusTest.LocatorOracleHarnessTest do
                           data-testid="search-input"
                         />
 
+                        <label for="age_input">Age</label>
+                        <input id="age_input" name="profile[age]" type="number" value="33" />
+
                         <label for="language_select">Language</label>
                         <select
                           id="language_select"
@@ -242,6 +245,16 @@ defmodule CerberusTest.LocatorOracleHarnessTest do
         run: &assert_has(&1, role(:button, name: "Increment", exact: true))
       },
       %{
+        name: "assert_has role tab helper",
+        expect: :ok,
+        run: &assert_has(&1, role(:tab, name: "Increment", exact: true))
+      },
+      %{
+        name: "assert_has role menuitem helper",
+        expect: :ok,
+        run: &assert_has(&1, role(:menuitem, name: "Increment", exact: true))
+      },
+      %{
         name: "assert_has role link helper",
         expect: :ok,
         run: &assert_has(&1, role(:link, name: "Counter Link", exact: true))
@@ -274,6 +287,7 @@ defmodule CerberusTest.LocatorOracleHarnessTest do
         expect: :ok,
         run: &fill_in(&1, role(:searchbox, name: "Search term"), "search")
       },
+      %{name: "fill_in role spinbutton locator", expect: :ok, run: &fill_in(&1, role(:spinbutton, name: "Age"), "42")},
       %{name: "fill_in css locator", expect: :ok, run: &fill_in(&1, css("#search_q"), "cerberus")},
       %{name: "fill_in regex label shorthand", expect: :ok, run: &fill_in(&1, ~r/Search term/, "regex value")},
       %{
@@ -312,6 +326,11 @@ defmodule CerberusTest.LocatorOracleHarnessTest do
         name: "select role combobox locator",
         expect: :ok,
         run: &select(&1, role(:combobox, name: "Language"), option: "Erlang")
+      },
+      %{
+        name: "select role listbox locator",
+        expect: :ok,
+        run: &select(&1, role(:listbox, name: "Language"), option: "Elixir")
       },
       %{name: "select css locator", expect: :ok, run: &select(&1, css("#language_select"), option: "Erlang")},
       %{
@@ -376,6 +395,7 @@ defmodule CerberusTest.LocatorOracleHarnessTest do
       # sigil-rich cases
       %{name: "sigil css locator for fill_in", expect: :ok, run: &fill_in(&1, ~l"#search_q"c, "sigil css")},
       %{name: "sigil role locator for select", expect: :ok, run: &select(&1, ~l"combobox:Language"r, option: "Elixir")},
+      %{name: "sigil role locator for listbox", expect: :ok, run: &select(&1, ~l"listbox:Language"r, option: "Erlang")},
       %{name: "sigil role exact assertion", expect: :ok, run: &assert_has(&1, ~l"button:Increment"re)},
       %{
         name: "invalid mixed locator sigil modifiers raise",

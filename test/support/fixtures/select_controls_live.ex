@@ -34,6 +34,9 @@ defmodule Cerberus.Fixtures.SelectControlsLive do
           <option value="disabled_race" disabled>Disabled Race</option>
         </select>
 
+        <label for="live_controls_age">Age</label>
+        <input id="live_controls_age" type="number" name="age" value={Map.get(@form_data, "age", "33")} />
+
         <label for="live_controls_race_2">Race 2</label>
         <select id="live_controls_race_2" name="race_2[]" multiple data-testid="live-race-2-select">
           <option value="elf">Elf</option>
@@ -85,6 +88,7 @@ defmodule Cerberus.Fixtures.SelectControlsLive do
       <div id="form-data">
         <p>_target: [<%= Enum.join(@target, ",") %>]</p>
         <p>race: <%= Map.get(@form_data, "race", "") %></p>
+        <p>age: <%= Map.get(@form_data, "age", "") %></p>
         <p>race_2: [<%= @form_data |> Map.get("race_2", []) |> List.wrap() |> Enum.join(",") %>]</p>
         <p>contact: <%= Map.get(@form_data, "contact", "") %></p>
         <p>disabled_select: <%= Map.get(@form_data, "disabled_select", "") %></p>

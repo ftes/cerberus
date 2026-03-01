@@ -68,6 +68,16 @@ defmodule CerberusTest.HelperLocatorBehaviorTest do
       |> assert_has(text("Articles", exact: true))
     end
 
+    test "expanded role helpers tab/menuitem map to clickable controls (#{driver})" do
+      unquote(driver)
+      |> session()
+      |> visit("/live/selector-edge")
+      |> click(role(:tab, name: "Tab Primary"))
+      |> assert_has(text("Selected: primary", exact: true))
+      |> click(role(:menuitem, name: "Menu Secondary"))
+      |> assert_has(text("Selected: secondary", exact: true))
+    end
+
     test "testid helper works across drivers for assertions and form actions (#{driver})" do
       unquote(driver)
       |> session()
