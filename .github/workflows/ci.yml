@@ -95,6 +95,9 @@ jobs:
       - name: Install Chrome
         run: bin/chrome.sh
 
+      - name: Install Firefox
+        run: bin/firefox.sh
+
       - name: Run tests with Chrome
         run: mix test --warnings-as-errors --max-failures 1
 
@@ -108,9 +111,6 @@ jobs:
       # - name: Run browser-driver tests in websocket Chrome lane
       #   run: |
       #     mix test.websocket --warnings-as-errors --max-failures 1 --browsers chrome $BROWSER_DRIVER_FILES
-
-      - name: Install Firefox
-        run: bin/firefox.sh
 
       - name: Run tests with Firefox
         run: CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors --max-failures 1
