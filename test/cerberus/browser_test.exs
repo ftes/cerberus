@@ -28,6 +28,9 @@ defmodule Cerberus.BrowserTest do
 
   @tag :tmp_dir
   test "screenshot captures browser PNG output to a requested path", %{tmp_dir: tmp_dir} do
+    # NOTE: ExUnit :tmp_dir paths are deterministic for module+test. If multiple
+    # mix test processes execute this same test in one checkout concurrently,
+    # one process can remove this directory while another still reads artifacts.
     path = Path.join(tmp_dir, "cerberus-screenshot.png")
 
     session =
