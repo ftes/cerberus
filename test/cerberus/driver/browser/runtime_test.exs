@@ -54,6 +54,25 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
              ) ==
                "http://override-firefox:4444"
     end
+
+    test "supports top-level per-browser webdriver url keys" do
+      Application.put_env(:cerberus, :browser,
+        chrome_webdriver_url: "http://config-chrome:4444",
+        firefox_webdriver_url: "http://config-firefox:4444"
+      )
+
+      assert Runtime.remote_webdriver_url(browser_name: :chrome) == "http://config-chrome:4444"
+      assert Runtime.remote_webdriver_url(browser_name: :firefox) == "http://config-firefox:4444"
+
+      assert Runtime.remote_webdriver_url(browser_name: :chrome, chrome_webdriver_url: "http://override-chrome:4444") ==
+               "http://override-chrome:4444"
+
+      assert Runtime.remote_webdriver_url(
+               browser_name: :firefox,
+               firefox_webdriver_url: "http://override-firefox:4444"
+             ) ==
+               "http://override-firefox:4444"
+    end
   end
 
   describe "webdriver_session_payload/3" do

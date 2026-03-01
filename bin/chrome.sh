@@ -2,33 +2,27 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-TOOLS_DIR="${CERBERUS_BROWSER_TOOLS_DIR:-$ROOT_DIR/tmp/browser-tools}"
-CHROMEDRIVER_PORT="${CERBERUS_CHROMEDRIVER_PORT:-9515}"
+TMP_DIR="$ROOT_DIR/tmp"
 METADATA_URL="https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json"
-
-INSTALL=0
+LATEST_METADATA_URL="https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json"
 PLATFORM_KEY=""
-INSTALL_CHROME_BIN=""
-INSTALL_CHROMEDRIVER_BIN=""
+CLI_CHROME_VERSION=""
 
 usage() {
   cat <<'USAGE'
-Usage: bin/check_chrome_bidi_ready.sh [--install] [--port PORT]
+Usage: bin/chrome.sh [--version VERSION]
 
-Checks WebDriver BiDi readiness for Cerberus:
-- verifies Chrome and ChromeDriver versions/builds,
-- optionally installs a pinned Chrome for Testing + matching ChromeDriver under tmp/browser-tools,
-- performs a WebDriver session handshake with `webSocketUrl: true`.
-
-Environment:
-  CHROME         Required path to Chrome binary (unless --install is used).
-  CHROMEDRIVER   Required path to ChromeDriver binary (unless --install is used).
-  CERBERUS_CHROME_VERSION  Pinned Chrome/CfT version (default: 145.0.7632.117).
+Ensures Chrome runtime binaries for Cerberus:
+- ensures Chrome for Testing + matching ChromeDriver are installed under tmp,
+- reuses existing binaries when already installed,
+- prints resolved binary paths.
 
 Options:
-  --install     Download pinned Chrome + matching ChromeDriver and use local binaries.
-  --port PORT   Local ChromeDriver HTTP port (default: 9515).
-  -h, --help    Show this help.
+  --version VERSION  Override Chrome/CfT version for this run.
+  -h, --help         Show this help.
+
+Environment:
+  CERBERUS_CHROME_VERSION  Default version when --version is not provided.
 USAGE
 }
 
@@ -62,43 +56,31 @@ chromedriver_binary_relpath() {
   echo "chromedriver-${platform_key}/chromedriver"
 }
 
-chrome_binary() {
-  local configured="${CHROME:-}"
-
-  if [[ -n "$configured" ]]; then
-    [[ -x "$configured" ]] || fail "CHROME is not executable: $configured"
-    echo "$configured"
-    return
-  fi
-
-  fail "could not find a Chrome binary. Set CHROME."
-}
-
-chromedriver_binary() {
-  local configured="${CHROMEDRIVER:-}"
-
-  if [[ -n "$configured" ]]; then
-    [[ -x "$configured" ]] || fail "CHROMEDRIVER is not executable: $configured"
-    echo "$configured"
-    return
-  fi
-
-  fail "chromedriver not found. Set CHROMEDRIVER or use --install."
-}
-
 version_of() {
   local binary="$1"
   "$binary" --version 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true
 }
 
-major_of() {
-  local version="$1"
-  echo "${version%%.*}"
+resolve_default_chrome_version() {
+  local version
+
+  version="$(curl -fsSL "$LATEST_METADATA_URL" | jq -r '.channels.Stable.version // empty')"
+  [[ -n "$version" ]] || fail "unable to resolve latest Stable Chrome version"
+  echo "$version"
 }
 
-build_of() {
-  local version="$1"
-  echo "${version%.*}"
+resolve_chrome_version() {
+  if [[ -n "$CLI_CHROME_VERSION" ]]; then
+    echo "$CLI_CHROME_VERSION"
+    return
+  fi
+
+  if [[ -n "${CERBERUS_CHROME_VERSION:-}" ]]; then
+    echo "$CERBERUS_CHROME_VERSION"
+    return
+  fi
+
+  resolve_default_chrome_version
 }
 
 lookup_download_url() {
@@ -110,84 +92,73 @@ lookup_download_url() {
 
   json="$(curl -fsSL "$METADATA_URL")"
 
-  url="$(
+  url="$({
     jq -r \
       --arg v "$version" \
       --arg a "$artifact" \
       --arg p "$platform_key" \
       '.versions[] | select(.version == $v) | .downloads[$a][]? | select(.platform == $p) | .url' \
       <<<"$json" | head -n1
-  )"
+  })"
 
   [[ -n "$url" ]] || fail "no $artifact download URL found for version $version and platform $platform_key"
   echo "$url"
 }
 
-download_artifact() {
+install_artifact() {
   local artifact="$1"
   local version="$2"
   local platform_key="$3"
+  local install_dir="$4"
   local url
   local zip_file
-  local unpack_dir
 
-  mkdir -p "$TOOLS_DIR"
+  mkdir -p "$TMP_DIR"
   url="$(lookup_download_url "$version" "$artifact" "$platform_key")"
-  zip_file="$TOOLS_DIR/${artifact}-${version}-${platform_key}.zip"
-  unpack_dir="$TOOLS_DIR/${artifact}-${version}-${platform_key}"
+  zip_file="$TMP_DIR/${artifact}-${version}-${platform_key}.zip"
 
-  if [[ ! -d "$unpack_dir" ]]; then
-    curl -fsSL "$url" -o "$zip_file"
-    rm -rf "$unpack_dir"
-    unzip -q -o "$zip_file" -d "$unpack_dir"
+  curl -fsSL "$url" -o "$zip_file"
+  rm -rf "$install_dir"
+  mkdir -p "$install_dir"
+  unzip -q -o "$zip_file" -d "$install_dir"
+}
+
+ensure_runtime() {
+  local version="$1"
+  local platform_key="$2"
+  local chrome_dir="$TMP_DIR/chrome-${version}"
+  local chromedriver_dir="$TMP_DIR/chromedriver-${version}"
+  local chrome_bin="$chrome_dir/$(chrome_binary_relpath "$platform_key")"
+  local chromedriver_bin="$chromedriver_dir/$(chromedriver_binary_relpath "$platform_key")"
+  local stable_chrome_bin="$chrome_dir/chrome"
+  local stable_chromedriver_bin="$chromedriver_dir/chromedriver"
+
+  if [[ ! -x "$chrome_bin" ]]; then
+    install_artifact "chrome" "$version" "$platform_key" "$chrome_dir"
   fi
 
-  echo "$unpack_dir"
-}
-
-write_env_file() {
-  local chrome_bin="$1"
-  local chromedriver_bin="$2"
-  local env_file="$TOOLS_DIR/env.sh"
-
-  {
-    printf "export CERBERUS_BROWSER_TOOLS_DIR=%q\n" "$TOOLS_DIR"
-    printf "export CERBERUS_CHROME_VERSION=%q\n" "$CERBERUS_CHROME_VERSION"
-    printf "export CERBERUS_CFT_PLATFORM=%q\n" "$PLATFORM_KEY"
-    printf "export CHROME=%q\n" "$chrome_bin"
-    printf "export CHROMEDRIVER=%q\n" "$chromedriver_bin"
-  } >"$env_file"
-}
-
-install_pinned_runtime() {
-  local chrome_unpack
-  local chromedriver_unpack
-  local chrome_bin
-  local chromedriver_bin
-
-  chrome_unpack="$(download_artifact "chrome" "$CERBERUS_CHROME_VERSION" "$PLATFORM_KEY")"
-  chromedriver_unpack="$(download_artifact "chromedriver" "$CERBERUS_CHROME_VERSION" "$PLATFORM_KEY")"
-
-  chrome_bin="$chrome_unpack/$(chrome_binary_relpath "$PLATFORM_KEY")"
-  chromedriver_bin="$chromedriver_unpack/$(chromedriver_binary_relpath "$PLATFORM_KEY")"
+  if [[ ! -x "$chromedriver_bin" ]]; then
+    install_artifact "chromedriver" "$version" "$platform_key" "$chromedriver_dir"
+  fi
 
   [[ -x "$chrome_bin" ]] || fail "installed chrome binary is not executable: $chrome_bin"
   [[ -x "$chromedriver_bin" ]] || fail "installed chromedriver binary is not executable: $chromedriver_bin"
 
-  write_env_file "$chrome_bin" "$chromedriver_bin"
-  INSTALL_CHROME_BIN="$chrome_bin"
-  INSTALL_CHROMEDRIVER_BIN="$chromedriver_bin"
+  ln -sf "$chrome_bin" "$stable_chrome_bin"
+  ln -sf "$chromedriver_bin" "$stable_chromedriver_bin"
+
+  [[ -x "$stable_chrome_bin" ]] || fail "stable chrome binary path is not executable: $stable_chrome_bin"
+  [[ -x "$stable_chromedriver_bin" ]] || fail "stable chromedriver binary path is not executable: $stable_chromedriver_bin"
+
+  CHROME_BIN="$stable_chrome_bin"
+  CHROMEDRIVER_BIN="$stable_chromedriver_bin"
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --install)
-      INSTALL=1
-      shift
-      ;;
-    --port)
-      [[ $# -ge 2 ]] || fail "missing value for --port"
-      CHROMEDRIVER_PORT="$2"
+    --version)
+      [[ $# -ge 2 ]] || fail "missing value for --version"
+      CLI_CHROME_VERSION="$2"
       shift 2
       ;;
     -h|--help)
@@ -201,105 +172,17 @@ while [[ $# -gt 0 ]]; do
 done
 
 PLATFORM_KEY="$(platform)"
-
-if [[ "$INSTALL" -eq 1 ]]; then
-  install_pinned_runtime
-  CHROME_BIN="$INSTALL_CHROME_BIN"
-  CHROMEDRIVER_BIN="$INSTALL_CHROMEDRIVER_BIN"
-else
-  CHROME_BIN="$(chrome_binary)"
-  CHROMEDRIVER_BIN="$(chromedriver_binary)"
-fi
+CHROME_VERSION_REQUESTED="$(resolve_chrome_version)"
+ensure_runtime "$CHROME_VERSION_REQUESTED" "$PLATFORM_KEY"
 
 CHROME_VERSION="$(version_of "$CHROME_BIN")"
-CHROME_MAJOR="$(major_of "$CHROME_VERSION")"
-CHROME_BUILD="$(build_of "$CHROME_VERSION")"
 [[ -n "$CHROME_VERSION" ]] || fail "unable to determine Chrome version from $CHROME_BIN"
 
 CHROMEDRIVER_VERSION="$(version_of "$CHROMEDRIVER_BIN")"
-CHROMEDRIVER_MAJOR="$(major_of "$CHROMEDRIVER_VERSION")"
-CHROMEDRIVER_BUILD="$(build_of "$CHROMEDRIVER_VERSION")"
 [[ -n "$CHROMEDRIVER_VERSION" ]] || fail "unable to determine ChromeDriver version from $CHROMEDRIVER_BIN"
 
-if [[ "$CHROMEDRIVER_MAJOR" != "$CHROME_MAJOR" ]]; then
-  fail "Chrome major $CHROME_MAJOR does not match ChromeDriver major $CHROMEDRIVER_MAJOR."
-fi
-
-if [[ "$CHROME_BUILD" != "$CHROMEDRIVER_BUILD" ]]; then
-  fail "Chrome build $CHROME_BUILD does not match ChromeDriver build $CHROMEDRIVER_BUILD."
-fi
-
-if [[ "$INSTALL" -eq 1 ]]; then
-  if [[ "$CHROME_VERSION" != "$CERBERUS_CHROME_VERSION" ]]; then
-      fail "installed Chrome version $CHROME_VERSION does not match pinned $CERBERUS_CHROME_VERSION."
-  fi
-
-  if [[ "$CHROMEDRIVER_VERSION" != "$CERBERUS_CHROME_VERSION" ]]; then
-    fail "installed ChromeDriver version $CHROMEDRIVER_VERSION does not match pinned $CERBERUS_CHROME_VERSION."
-  fi
-fi
-
-LOG_FILE="$ROOT_DIR/tmp/chromedriver.log"
-mkdir -p "$(dirname "$LOG_FILE")"
-
-"$CHROMEDRIVER_BIN" --port="$CHROMEDRIVER_PORT" >"$LOG_FILE" 2>&1 &
-DRIVER_PID=$!
-cleanup() {
-  kill "$DRIVER_PID" >/dev/null 2>&1 || true
-}
-trap cleanup EXIT
-
-ready=0
-for _ in $(seq 1 100); do
-  if curl -fsS "http://127.0.0.1:${CHROMEDRIVER_PORT}/status" >/dev/null 2>&1; then
-    ready=1
-    break
-  fi
-  sleep 0.05
-done
-[[ "$ready" -eq 1 ]] || fail "chromedriver did not become ready on port $CHROMEDRIVER_PORT"
-
-payload="$(jq -n --arg binary "$CHROME_BIN" '{
-  capabilities: {
-    alwaysMatch: {
-      browserName: "chrome",
-      webSocketUrl: true,
-      "goog:chromeOptions": {
-        binary: $binary,
-        args: ["--headless=new", "--disable-gpu", "--no-sandbox"]
-      }
-    }
-  }
-}')"
-
-response="$(
-  curl -sS \
-    -X POST \
-    "http://127.0.0.1:${CHROMEDRIVER_PORT}/session" \
-    -H "Content-Type: application/json" \
-    -d "$payload"
-)"
-
-error_code="$(jq -r '.value.error // empty' <<<"$response")"
-if [[ -n "$error_code" ]]; then
-  error_message="$(jq -r '.value.message // "unknown session creation error"' <<<"$response")"
-  fail "$error_message"
-fi
-
-session_id="$(jq -r '.value.sessionId // empty' <<<"$response")"
-web_socket_url="$(jq -r '.value.capabilities.webSocketUrl // empty' <<<"$response")"
-
-[[ -n "$session_id" ]] || fail "session creation succeeded but sessionId is empty: $response"
-[[ -n "$web_socket_url" ]] || fail "session created without capabilities.webSocketUrl: $response"
-
-curl -sS -X DELETE "http://127.0.0.1:${CHROMEDRIVER_PORT}/session/${session_id}" >/dev/null || true
-
-echo "BiDi readiness OK"
+echo "Chrome runtime ready"
 echo "chrome_binary=$CHROME_BIN"
 echo "chrome_version=$CHROME_VERSION"
 echo "chromedriver_binary=$CHROMEDRIVER_BIN"
 echo "chromedriver_version=$CHROMEDRIVER_VERSION"
-echo "webSocketUrl=$web_socket_url"
-if [[ "$INSTALL" -eq 1 ]]; then
-  echo "env_file=$TOOLS_DIR/env.sh"
-fi

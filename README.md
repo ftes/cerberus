@@ -186,7 +186,7 @@ Assertion-timeout fallback:
 
 Option scopes:
 - Per-session context options: `ready_timeout_ms`, `ready_quiet_ms`, `browser: [viewport: ..., user_agent: ..., init_script: ... | init_scripts: [...]]`.
-- Global runtime launch options: `browser_name`, `webdriver_url`, `webdriver_urls`, `show_browser`, `headless`, `chrome_args`, `firefox_args`, `chrome_binary`, `firefox_binary`, `chromedriver_binary`, `geckodriver_binary`.
+- Global runtime launch options: `browser_name`, `webdriver_url`, `chrome_webdriver_url`, `firefox_webdriver_url`, `show_browser`, `headless`, `chrome_args`, `firefox_args`, `chrome_binary`, `firefox_binary`, `chromedriver_binary`, `geckodriver_binary` (`webdriver_urls` is still accepted for compatibility).
 - Global browser defaults: `bidi_command_timeout_ms`, `runtime_http_timeout_ms`, `dialog_timeout_ms`, `screenshot_full_page`, `screenshot_artifact_dir`, `screenshot_path`.
 
 `show_browser: true` runs headed by default. `headless` has higher precedence if both are set.
@@ -236,10 +236,8 @@ For explicit multi-browser remote lanes in one invocation:
 
 ```elixir
 config :cerberus, :browser,
-  webdriver_urls: [
-    chrome: "http://127.0.0.1:4444",
-    firefox: "http://127.0.0.1:5555"
-  ]
+  chrome_webdriver_url: "http://127.0.0.1:4444",
+  firefox_webdriver_url: "http://127.0.0.1:5555"
 ```
 
 Remote `webdriver_url` integration smoke test (Docker required):
@@ -277,21 +275,22 @@ Explicit browser-lane override coverage:
 mix test --only explicit_browser
 ```
 
-Project helpers:
+Project browser runtime helpers:
 
 ```bash
-bin/check_browser_bidi_ready.sh chrome --install
-bin/check_browser_bidi_ready.sh firefox --install
+bin/chrome.sh --version 146.0.7680.31
+bin/firefox.sh --firefox-version 136.0.2 --geckodriver-version 0.36.0
 ```
 
-These helpers install browser/runtime binaries under `tmp/browser-tools`, write `tmp/browser-tools/env.sh`, and verify `webSocketUrl` BiDi handshake support.
-
-Direct browser-specific entrypoints:
-
-```bash
-bin/check_chrome_bidi_ready.sh --install
-bin/check_firefox_bidi_ready.sh --install
-```
+These scripts always provision runtime binaries when missing and reuse existing binaries when present.
+Versions are controlled with input arguments (`--version`, `--firefox-version`, `--geckodriver-version`)
+or matching env vars (`CERBERUS_CHROME_VERSION`, `CERBERUS_FIREFOX_VERSION`, `CERBERUS_GECKODRIVER_VERSION`).
+Arguments take precedence; if neither is set, defaults are latest Stable Chrome, latest stable Firefox, and GeckoDriver 0.36.0.
+Installed paths are stable per version, for example:
+- `tmp/chrome-<version>`
+- `tmp/chromedriver-<version>`
+- `tmp/firefox-<version>`
+- `tmp/geckodriver-<version>`
 
 ## Migration Task
 

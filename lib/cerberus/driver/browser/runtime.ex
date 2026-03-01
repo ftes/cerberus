@@ -371,6 +371,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
   def remote_webdriver_url(opts) when is_list(opts) do
     browser_name = browser_name(opts)
     browser_opts = browser_opts(opts)
+    browser_webdriver_url = browser_specific_webdriver_url(opts, browser_opts, browser_name)
 
     webdriver_urls =
       opts
@@ -380,7 +381,9 @@ defmodule Cerberus.Driver.Browser.Runtime do
     opts
     |> Keyword.get(
       :webdriver_url,
-      webdriver_urls || browser_opts[:webdriver_url] || opts[:chromedriver_url] || browser_opts[:chromedriver_url]
+      browser_webdriver_url ||
+        webdriver_urls ||
+        browser_opts[:webdriver_url] || opts[:chromedriver_url] || browser_opts[:chromedriver_url]
     )
     |> normalize_non_empty_string(nil)
   end
@@ -591,6 +594,18 @@ defmodule Cerberus.Driver.Browser.Runtime do
   end
 
   defp normalize_webdriver_urls(_urls, _browser_name), do: nil
+
+  defp browser_specific_webdriver_url(opts, browser_opts, :chrome) when is_list(opts) and is_list(browser_opts) do
+    normalize_non_empty_string(opts[:chrome_webdriver_url], nil) ||
+      normalize_non_empty_string(browser_opts[:chrome_webdriver_url], nil)
+  end
+
+  defp browser_specific_webdriver_url(opts, browser_opts, :firefox) when is_list(opts) and is_list(browser_opts) do
+    normalize_non_empty_string(opts[:firefox_webdriver_url], nil) ||
+      normalize_non_empty_string(browser_opts[:firefox_webdriver_url], nil)
+  end
+
+  defp browser_specific_webdriver_url(_opts, _browser_opts, _browser_name), do: nil
 
   defp normalize_browser_name(value, _default) when value in [:chrome, "chrome"], do: :chrome
   defp normalize_browser_name(value, _default) when value in [:firefox, "firefox"], do: :firefox

@@ -2,34 +2,28 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-TOOLS_DIR="${CERBERUS_BROWSER_TOOLS_DIR:-$ROOT_DIR/tmp/browser-tools}"
-GECKODRIVER_PORT="${CERBERUS_GECKODRIVER_PORT:-4545}"
-
-INSTALL=0
+TMP_DIR="$ROOT_DIR/tmp"
+CLI_FIREFOX_VERSION=""
+CLI_GECKODRIVER_VERSION=""
 PLATFORM_KEY=""
-INSTALL_FIREFOX_BIN=""
-INSTALL_GECKODRIVER_BIN=""
 
 usage() {
   cat <<'USAGE'
-Usage: bin/check_firefox_bidi_ready.sh [--install] [--port PORT]
+Usage: bin/firefox.sh [--firefox-version VERSION] [--geckodriver-version VERSION]
 
-Checks Firefox WebDriver BiDi readiness for Cerberus:
-- verifies Firefox and GeckoDriver are available,
-- optionally installs Firefox + matching GeckoDriver under tmp/browser-tools,
-- starts local GeckoDriver,
-- performs a WebDriver session handshake with `webSocketUrl: true`.
-
-Environment:
-  FIREFOX                    Required path to Firefox binary (unless --install is used).
-  GECKODRIVER                Required path to GeckoDriver binary (unless --install is used).
-  CERBERUS_FIREFOX_VERSION   Firefox version to install (default: latest).
-  CERBERUS_GECKODRIVER_VERSION  GeckoDriver version to install (default: 0.36.0).
+Ensures Firefox runtime binaries for Cerberus:
+- ensures Firefox + GeckoDriver are installed under tmp,
+- reuses existing binaries when already installed,
+- prints resolved binary paths.
 
 Options:
-  --install     Download Firefox + GeckoDriver and use local binaries.
-  --port PORT   Local GeckoDriver HTTP port (default: 4545).
-  -h, --help    Show this help.
+  --firefox-version VERSION      Override Firefox version for this run.
+  --geckodriver-version VERSION  Override GeckoDriver version for this run.
+  -h, --help                     Show this help.
+
+Environment:
+  CERBERUS_FIREFOX_VERSION      Default Firefox version when --firefox-version is not provided.
+  CERBERUS_GECKODRIVER_VERSION  Default GeckoDriver version when --geckodriver-version is not provided.
 USAGE
 }
 
@@ -49,22 +43,45 @@ platform() {
   esac
 }
 
+resolve_default_firefox_version() {
+  local version
+
+  version="$(curl -fsSL "https://product-details.mozilla.org/1.0/firefox_versions.json" | jq -r '.LATEST_FIREFOX_VERSION // empty')"
+  [[ -n "$version" ]] || fail "unable to resolve latest Firefox version"
+  echo "$version"
+}
+
+resolve_firefox_version() {
+  if [[ -n "$CLI_FIREFOX_VERSION" ]]; then
+    echo "$CLI_FIREFOX_VERSION"
+    return
+  fi
+
+  if [[ -n "${CERBERUS_FIREFOX_VERSION:-}" ]]; then
+    echo "$CERBERUS_FIREFOX_VERSION"
+    return
+  fi
+
+  resolve_default_firefox_version
+}
+
+resolve_geckodriver_version() {
+  if [[ -n "$CLI_GECKODRIVER_VERSION" ]]; then
+    echo "$CLI_GECKODRIVER_VERSION"
+    return
+  fi
+
+  if [[ -n "${CERBERUS_GECKODRIVER_VERSION:-}" ]]; then
+    echo "$CERBERUS_GECKODRIVER_VERSION"
+    return
+  fi
+
+  echo "0.36.0"
+}
+
 firefox_download_url() {
   local version="$1"
   local platform_key="$2"
-  local os_key
-
-  case "$platform_key" in
-    mac-arm64|mac-x64) os_key="osx" ;;
-    linux64) os_key="linux64" ;;
-    linux-arm64) os_key="linux-aarch64" ;;
-    *) fail "unsupported Firefox platform key: $platform_key" ;;
-  esac
-
-  if [[ "$version" == "latest" ]]; then
-    echo "https://download.mozilla.org/?product=firefox-latest&os=${os_key}&lang=en-US"
-    return
-  fi
 
   case "$platform_key" in
     mac-arm64|mac-x64)
@@ -75,6 +92,9 @@ firefox_download_url() {
       ;;
     linux-arm64)
       echo "https://archive.mozilla.org/pub/firefox/releases/${version}/linux-aarch64/en-US/firefox-${version}.tar.xz"
+      ;;
+    *)
+      fail "unsupported Firefox platform key: $platform_key"
       ;;
   esac
 }
@@ -98,136 +118,103 @@ geckodriver_download_url() {
   echo "https://github.com/mozilla/geckodriver/releases/download/v${version}/geckodriver-v${version}-${platform_key}.tar.gz"
 }
 
-firefox_binary() {
-  local configured="${FIREFOX:-}"
-
-  if [[ -n "$configured" ]]; then
-    [[ -x "$configured" ]] || fail "FIREFOX is not executable: $configured"
-    echo "$configured"
-    return
-  fi
-
-  fail "FIREFOX is not set. Set FIREFOX or use --install."
-}
-
-geckodriver_binary() {
-  local configured="${GECKODRIVER:-}"
-
-  if [[ -n "$configured" ]]; then
-    [[ -x "$configured" ]] || fail "GECKODRIVER is not executable: $configured"
-    echo "$configured"
-    return
-  fi
-
-  fail "GECKODRIVER is not set. Set GECKODRIVER or use --install."
-}
-
 version_of() {
   local binary="$1"
   "$binary" --version 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+(\.[0-9]+(\.[0-9]+)?)?' | head -n1 || true
 }
 
-write_env_file() {
-  local firefox_bin="$1"
-  local geckodriver_bin="$2"
-  local env_file="$TOOLS_DIR/env.sh"
-
-  {
-    printf "export CERBERUS_BROWSER_TOOLS_DIR=%q\n" "$TOOLS_DIR"
-    printf "export CERBERUS_FIREFOX_VERSION=%q\n" "$CERBERUS_FIREFOX_VERSION"
-    printf "export CERBERUS_GECKODRIVER_VERSION=%q\n" "$CERBERUS_GECKODRIVER_VERSION"
-    printf "export CERBERUS_FIREFOX_PLATFORM=%q\n" "$PLATFORM_KEY"
-    printf "export FIREFOX=%q\n" "$firefox_bin"
-    printf "export GECKODRIVER=%q\n" "$geckodriver_bin"
-  } >"$env_file"
-}
-
 install_firefox() {
-  local unpack_dir="$TOOLS_DIR/firefox-${CERBERUS_FIREFOX_VERSION}-${PLATFORM_KEY}"
+  local version="$1"
+  local platform_key="$2"
+  local install_dir="$TMP_DIR/firefox-${version}"
+  local payload_dir="$install_dir/payload"
   local firefox_bin
+  local stable_firefox_bin="$install_dir/firefox"
+  local archive_file
   local download_url
 
-  mkdir -p "$TOOLS_DIR"
-  download_url="$(firefox_download_url "$CERBERUS_FIREFOX_VERSION" "$PLATFORM_KEY")"
-
-  case "$PLATFORM_KEY" in
+  case "$platform_key" in
     mac-arm64|mac-x64)
-      firefox_bin="$unpack_dir/Firefox.app/Contents/MacOS/firefox"
+      firefox_bin="$payload_dir/Firefox.app/Contents/MacOS/firefox"
       if [[ ! -x "$firefox_bin" ]]; then
-        local archive_file="$TOOLS_DIR/firefox-${CERBERUS_FIREFOX_VERSION}-${PLATFORM_KEY}.dmg"
-        local mount_dir="$TOOLS_DIR/firefox-mount-${CERBERUS_FIREFOX_VERSION}-${PLATFORM_KEY}"
+        archive_file="$TMP_DIR/firefox-${version}-${platform_key}.dmg"
+        download_url="$(firefox_download_url "$version" "$platform_key")"
 
+        mkdir -p "$TMP_DIR"
         curl -fsSL "$download_url" -o "$archive_file"
-        rm -rf "$unpack_dir"
-        mkdir -p "$unpack_dir"
-        mkdir -p "$mount_dir"
+        rm -rf "$install_dir"
+        mkdir -p "$payload_dir"
 
+        local mount_dir
+        mount_dir="$TMP_DIR/firefox-mount-${version}-${platform_key}"
+        mkdir -p "$mount_dir"
         hdiutil attach "$archive_file" -nobrowse -readonly -mountpoint "$mount_dir" >/dev/null
-        cp -R "$mount_dir/Firefox.app" "$unpack_dir/Firefox.app"
-        hdiutil detach "$mount_dir" >/dev/null
+        cp -R "$mount_dir/Firefox.app" "$payload_dir/Firefox.app"
+        hdiutil detach "$mount_dir" >/dev/null || true
         rmdir "$mount_dir" >/dev/null 2>&1 || true
       fi
       ;;
     linux64|linux-arm64)
-      firefox_bin="$unpack_dir/firefox/firefox"
+      firefox_bin="$payload_dir/firefox/firefox"
       if [[ ! -x "$firefox_bin" ]]; then
-        local archive_file="$TOOLS_DIR/firefox-${CERBERUS_FIREFOX_VERSION}-${PLATFORM_KEY}.tar.xz"
+        archive_file="$TMP_DIR/firefox-${version}-${platform_key}.tar.xz"
+        download_url="$(firefox_download_url "$version" "$platform_key")"
 
+        mkdir -p "$TMP_DIR"
         curl -fsSL "$download_url" -o "$archive_file"
-        rm -rf "$unpack_dir"
-        mkdir -p "$unpack_dir"
-        tar -xf "$archive_file" -C "$unpack_dir"
+        rm -rf "$install_dir"
+        mkdir -p "$payload_dir"
+        tar -xf "$archive_file" -C "$payload_dir"
       fi
       ;;
     *)
-      fail "unsupported Firefox platform key: $PLATFORM_KEY"
+      fail "unsupported Firefox platform key: $platform_key"
       ;;
   esac
 
   [[ -x "$firefox_bin" ]] || fail "installed Firefox binary is not executable: $firefox_bin"
-  INSTALL_FIREFOX_BIN="$firefox_bin"
+  ln -sf "$firefox_bin" "$stable_firefox_bin"
+  [[ -x "$stable_firefox_bin" ]] || fail "stable firefox binary path is not executable: $stable_firefox_bin"
+  FIREFOX_BIN="$stable_firefox_bin"
 }
 
 install_geckodriver() {
-  local platform_key
-  local unpack_dir="$TOOLS_DIR/geckodriver-${CERBERUS_GECKODRIVER_VERSION}-${PLATFORM_KEY}"
-  local geckodriver_bin="$unpack_dir/geckodriver"
+  local version="$1"
+  local platform_key="$2"
+  local gecko_platform
+  local install_dir="$TMP_DIR/geckodriver-${version}"
+  local geckodriver_bin="$install_dir/geckodriver"
   local archive_file
   local download_url
 
-  platform_key="$(geckodriver_platform_key "$PLATFORM_KEY")"
-  archive_file="$TOOLS_DIR/geckodriver-${CERBERUS_GECKODRIVER_VERSION}-${platform_key}.tar.gz"
-  download_url="$(geckodriver_download_url "$CERBERUS_GECKODRIVER_VERSION" "$platform_key")"
-
-  mkdir -p "$TOOLS_DIR"
+  gecko_platform="$(geckodriver_platform_key "$platform_key")"
 
   if [[ ! -x "$geckodriver_bin" ]]; then
+    archive_file="$TMP_DIR/geckodriver-${version}-${gecko_platform}.tar.gz"
+    download_url="$(geckodriver_download_url "$version" "$gecko_platform")"
+
+    mkdir -p "$TMP_DIR"
     curl -fsSL "$download_url" -o "$archive_file"
-    rm -rf "$unpack_dir"
-    mkdir -p "$unpack_dir"
-    tar -xzf "$archive_file" -C "$unpack_dir"
+    rm -rf "$install_dir"
+    mkdir -p "$install_dir"
+    tar -xzf "$archive_file" -C "$install_dir"
     chmod +x "$geckodriver_bin"
   fi
 
   [[ -x "$geckodriver_bin" ]] || fail "installed GeckoDriver is not executable: $geckodriver_bin"
-  INSTALL_GECKODRIVER_BIN="$geckodriver_bin"
-}
-
-install_runtime() {
-  install_firefox
-  install_geckodriver
-  write_env_file "$INSTALL_FIREFOX_BIN" "$INSTALL_GECKODRIVER_BIN"
+  GECKODRIVER_BIN="$geckodriver_bin"
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --install)
-      INSTALL=1
-      shift
+    --firefox-version)
+      [[ $# -ge 2 ]] || fail "missing value for --firefox-version"
+      CLI_FIREFOX_VERSION="$2"
+      shift 2
       ;;
-    --port)
-      [[ $# -ge 2 ]] || fail "missing value for --port"
-      GECKODRIVER_PORT="$2"
+    --geckodriver-version)
+      [[ $# -ge 2 ]] || fail "missing value for --geckodriver-version"
+      CLI_GECKODRIVER_VERSION="$2"
       shift 2
       ;;
     -h|--help)
@@ -241,15 +228,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 PLATFORM_KEY="$(platform)"
+FIREFOX_VERSION_REQUESTED="$(resolve_firefox_version)"
+GECKODRIVER_VERSION_REQUESTED="$(resolve_geckodriver_version)"
 
-if [[ "$INSTALL" -eq 1 ]]; then
-  install_runtime
-  FIREFOX_BIN="$INSTALL_FIREFOX_BIN"
-  GECKODRIVER_BIN="$INSTALL_GECKODRIVER_BIN"
-else
-  FIREFOX_BIN="$(firefox_binary)"
-  GECKODRIVER_BIN="$(geckodriver_binary)"
-fi
+install_firefox "$FIREFOX_VERSION_REQUESTED" "$PLATFORM_KEY"
+install_geckodriver "$GECKODRIVER_VERSION_REQUESTED" "$PLATFORM_KEY"
 
 FIREFOX_VERSION="$(version_of "$FIREFOX_BIN")"
 GECKODRIVER_VERSION="$(version_of "$GECKODRIVER_BIN")"
@@ -257,71 +240,8 @@ GECKODRIVER_VERSION="$(version_of "$GECKODRIVER_BIN")"
 [[ -n "$FIREFOX_VERSION" ]] || fail "unable to determine Firefox version from $FIREFOX_BIN"
 [[ -n "$GECKODRIVER_VERSION" ]] || fail "unable to determine GeckoDriver version from $GECKODRIVER_BIN"
 
-if [[ "$INSTALL" -eq 1 && "$CERBERUS_GECKODRIVER_VERSION" != "$GECKODRIVER_VERSION" ]]; then
-  fail "installed GeckoDriver version $GECKODRIVER_VERSION does not match pinned $CERBERUS_GECKODRIVER_VERSION."
-fi
-
-LOG_FILE="$ROOT_DIR/tmp/geckodriver.log"
-mkdir -p "$(dirname "$LOG_FILE")"
-
-"$GECKODRIVER_BIN" --port "$GECKODRIVER_PORT" >"$LOG_FILE" 2>&1 &
-DRIVER_PID=$!
-cleanup() {
-  kill "$DRIVER_PID" >/dev/null 2>&1 || true
-}
-trap cleanup EXIT
-
-ready=0
-for _ in $(seq 1 100); do
-  if curl -fsS "http://127.0.0.1:${GECKODRIVER_PORT}/status" >/dev/null 2>&1; then
-    ready=1
-    break
-  fi
-  sleep 0.05
-done
-[[ "$ready" -eq 1 ]] || fail "geckodriver did not become ready on port $GECKODRIVER_PORT"
-
-payload="$(jq -n --arg binary "$FIREFOX_BIN" '{
-  capabilities: {
-    alwaysMatch: {
-      browserName: "firefox",
-      webSocketUrl: true,
-      "moz:firefoxOptions": {
-        binary: $binary,
-        args: ["-headless"]
-      }
-    }
-  }
-}')"
-
-response="$(
-  curl -sS \
-    -X POST \
-    "http://127.0.0.1:${GECKODRIVER_PORT}/session" \
-    -H "Content-Type: application/json" \
-    -d "$payload"
-)"
-
-error_code="$(jq -r '.value.error // empty' <<<"$response")"
-if [[ -n "$error_code" ]]; then
-  error_message="$(jq -r '.value.message // "unknown session creation error"' <<<"$response")"
-  fail "$error_message"
-fi
-
-session_id="$(jq -r '.value.sessionId // empty' <<<"$response")"
-web_socket_url="$(jq -r '.value.capabilities.webSocketUrl // empty' <<<"$response")"
-
-[[ -n "$session_id" ]] || fail "session creation succeeded but sessionId is empty: $response"
-[[ -n "$web_socket_url" ]] || fail "session created without capabilities.webSocketUrl: $response"
-
-curl -sS -X DELETE "http://127.0.0.1:${GECKODRIVER_PORT}/session/${session_id}" >/dev/null || true
-
-echo "Firefox BiDi readiness OK"
+echo "Firefox runtime ready"
 echo "firefox_binary=$FIREFOX_BIN"
 echo "firefox_version=$FIREFOX_VERSION"
 echo "geckodriver_binary=$GECKODRIVER_BIN"
 echo "geckodriver_version=$GECKODRIVER_VERSION"
-echo "webSocketUrl=$web_socket_url"
-if [[ "$INSTALL" -eq 1 ]]; then
-  echo "env_file=$TOOLS_DIR/env.sh"
-fi
