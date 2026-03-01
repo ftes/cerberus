@@ -1,6 +1,10 @@
 IMPORTANT: before you do anything else, run the `beans prime` command and heed its output.
-Don't include backticks when using beans CLI (shell expansion).
-Other agents may be running (beans in-progress). Try to pick next beans that won't conflict. Also try to ignore other changes in git - only commit your changes.
+Don't include backticks in the text you pass to beans - this WILL cause shell expansion.
+
+## You're not alone
+Other agents may be running (beans in-progress).
+Pick next bean that won't lead to edit conflicts.
+Ignore other changes in git - commit your changes only.
 
 ## Be autonomous
 Read a lot up front. Try to ask all questions up front.
