@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-28T20:40:01Z
-updated_at: 2026-03-01T12:57:41Z
+updated_at: 2026-03-01T13:06:45Z
 ---
 
 Restructure CI to run browser-tagged tests in four lanes: local chrome, local firefox, websocket chrome, websocket firefox. Minimize duplicate setup via shared non-browser setup and reusable matrix job steps.
@@ -2064,3 +2064,5 @@ Finished in 36.2 seconds (1.0s async, 35.2s sync)
 - Simplified runtime path sourcing end-to-end: .envrc now exports only version+binary vars, config/test.exs uses strict System.fetch_env!/1 for browser binaries, CI sources .envrc once and writes required vars to GITHUB_ENV, and browser cache/install paths use direct tmp/chrome-*/tmp/firefox-* layout (no tmp/browser-tools indirection).
 
 - Fixed CI regression after strict binary env wiring: full Chrome suite includes session(:firefox) API coverage, so workflow now installs both chrome and firefox runtimes before the first full test run (then reruns suite with CERBERUS_BROWSER_NAME=firefox).
+
+- Investigated local Chrome timeout storm: browser startup hung because bin/chrome.sh wrote a wrapper to tmp/chrome-<version>/chrome while that path could already be a symlink from previous runs, which overwrote the real app binary target. Restored stable-path handling to symlink mode, reinstalled chrome/chromedriver locally, and confirmed browser session startup recovers.

@@ -144,11 +144,7 @@ ensure_runtime() {
   [[ -x "$chrome_bin" ]] || fail "installed chrome binary is not executable: $chrome_bin"
   [[ -x "$chromedriver_bin" ]] || fail "installed chromedriver binary is not executable: $chromedriver_bin"
 
-  cat > "$stable_chrome_bin" <<EOF
-#!/usr/bin/env bash
-exec "${chrome_bin}" "\$@"
-EOF
-  chmod +x "$stable_chrome_bin"
+  ln -sf "$chrome_bin" "$stable_chrome_bin"
   ln -sf "$chromedriver_bin" "$stable_chromedriver_bin"
 
   [[ -x "$stable_chrome_bin" ]] || fail "stable chrome binary path is not executable: $stable_chrome_bin"
