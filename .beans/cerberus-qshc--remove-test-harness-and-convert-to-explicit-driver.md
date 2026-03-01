@@ -1,11 +1,11 @@
 ---
 # cerberus-qshc
 title: Remove test harness and convert to explicit driver loops
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-03-01T17:33:28Z
-updated_at: 2026-03-01T18:48:20Z
+updated_at: 2026-03-01T18:51:29Z
 parent: cerberus-whq9
 ---
 
@@ -17,9 +17,9 @@ Goals:
 
 ## Todo
 - [x] Inventory and replace all Harness.run/run! call sites
-- [ ] Convert cross-driver scenarios to explicit loop-generated tests
-- [ ] Remove harness support code and obsolete tags
-- [ ] Run format and precommit
+- [x] Convert cross-driver scenarios to explicit loop-generated tests
+- [x] Remove harness support code and obsolete tags
+- [x] Run format and precommit
 
 ## Progress Notes
 - Converted first representative file from Harness.run/run! to explicit driver loops: test/cerberus/core/select_choose_behavior_test.exs.
@@ -79,3 +79,10 @@ Goals:
   - live_nested_scope_behavior_test.exs
 - Replaced Harness.run error-aggregation assertions with explicit per-driver `assert_raise` checks to preserve failure-message coverage.
 - Validation: targeted run for this slice passed (35 tests, 0 failures) and mix precommit passed.
+
+## Summary of Changes
+- Replaced all `Harness.run/run!` usage across core tests with direct public API sessions and explicit driver loops (`:phoenix`, `:browser`, and explicit `:chrome/:firefox` where needed).
+- Converted error-aggregation assertions from harness result structs to direct per-driver `assert_raise` checks while keeping message-content coverage.
+- Removed harness support module by deleting `test/support/harness.ex` after eliminating all references.
+- Preserved/clarified timeout semantics during migration: static assertions remain fail-fast by default, while phoenix sessions transitioning into LiveView get live/browser default assertion timeout behavior.
+- Validation completed in slices with targeted chrome runs plus repeated `mix precommit`; final targeted verification for remaining harness-dependent tests passed (5 tests, 0 failures).

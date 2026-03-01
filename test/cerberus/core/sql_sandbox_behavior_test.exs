@@ -4,49 +4,60 @@ defmodule Cerberus.CoreSQLSandboxBehaviorTest do
   import Cerberus
 
   alias Cerberus.Fixtures.SandboxMessages
-  alias Cerberus.Harness
   alias Cerberus.Session
+  alias Ecto.Adapters.SQL.Sandbox
+  alias Phoenix.Ecto.SQL.Sandbox, as: PhoenixSandbox
 
-  @moduletag :static
-  @moduletag :live
-  @moduletag :browser
+  setup context do
+    [repo] = Application.get_env(:cerberus, :ecto_repos, [])
+    owner_pid = Sandbox.start_owner!(repo, shared: !context.async)
 
-  test "sandbox metadata keeps static DB reads isolated across drivers", context do
-    Harness.run!(
-      context,
-      fn session ->
-        body = unique_message("static", session)
-        SandboxMessages.insert!(body)
+    metadata_header =
+      repo
+      |> PhoenixSandbox.metadata_for(owner_pid)
+      |> PhoenixSandbox.encode_metadata()
 
-        session
-        |> visit("/sandbox/messages")
-        |> assert_has(text(body, exact: true))
-      end,
-      sandbox: true
-    )
+    conn =
+      Phoenix.ConnTest.build_conn()
+      |> Plug.Conn.delete_req_header("user-agent")
+      |> Plug.Conn.put_req_header("user-agent", metadata_header)
+
+    on_exit(fn ->
+      Sandbox.stop_owner(owner_pid)
+    end)
+
+    {:ok, sandbox_metadata: metadata_header, sandbox_conn: conn}
   end
 
-  @tag :live
-  @tag :browser
-  @tag static: false
-  test "sandbox metadata keeps live DB reads isolated across drivers", context do
-    Harness.run!(
-      context,
-      fn session ->
-        body = unique_message("live", session)
-        SandboxMessages.insert!(body)
+  for driver <- [:phoenix, :browser] do
+    test "sandbox metadata keeps static DB reads isolated across drivers (#{driver})", context do
+      session = sandbox_session(unquote(driver), context)
+      body = unique_message("static", session)
+      SandboxMessages.insert!(body)
 
-        session
-        |> visit("/live/sandbox/messages")
-        |> assert_has(text(body, exact: true))
-        |> click_button(button("Refresh", exact: true))
-        |> assert_has(text(body, exact: true))
-      end,
-      sandbox: true
-    )
+      session
+      |> visit("/sandbox/messages")
+      |> assert_has(text(body, exact: true))
+    end
+
+    test "sandbox metadata keeps live DB reads isolated across drivers (#{driver})", context do
+      session = sandbox_session(unquote(driver), context)
+      body = unique_message("live", session)
+      SandboxMessages.insert!(body)
+
+      session
+      |> visit("/live/sandbox/messages")
+      |> assert_has(text(body, exact: true))
+      |> click_button(button("Refresh", exact: true))
+      |> assert_has(text(body, exact: true))
+    end
   end
 
   defp unique_message(prefix, session) do
     "#{prefix}-#{Session.driver_kind(session)}-#{System.unique_integer([:positive, :monotonic])}"
+  end
+
+  defp sandbox_session(driver, context) when driver in [:phoenix, :browser] do
+    session(driver, conn: context.sandbox_conn, sandbox_metadata: context.sandbox_metadata)
   end
 end

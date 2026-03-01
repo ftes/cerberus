@@ -5,7 +5,6 @@ defmodule Cerberus.CoreRemoteWebdriverBehaviorTest do
 
   alias Cerberus.Driver.Browser.BiDiSupervisor
   alias Cerberus.Driver.Browser.Runtime
-  alias Cerberus.Harness
 
   @moduletag :browser
 
@@ -45,17 +44,11 @@ defmodule Cerberus.CoreRemoteWebdriverBehaviorTest do
   test "connects through webdriver_url to a containerized remote browser", context do
     case context[:skip] do
       nil ->
-        results =
-          Harness.run!(
-            context,
-            fn session ->
-              session
-              |> visit("/articles")
-              |> assert_has(text("Articles", exact: true))
-            end
-          )
+        :browser
+        |> session()
+        |> visit("/articles")
+        |> assert_has(text("Articles", exact: true))
 
-        assert Enum.map(results, & &1.driver) == [:browser]
         assert {:ok, session_id} = Runtime.session_id()
         assert is_binary(session_id)
 
