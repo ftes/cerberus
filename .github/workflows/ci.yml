@@ -9,11 +9,6 @@ on:
 permissions:
   contents: read
 
-env:
-  CERBERUS_CHROME_VERSION: 146.0.7680.31
-  CERBERUS_FIREFOX_VERSION: 147.0.4
-  CERBERUS_GECKODRIVER_VERSION: 0.36.0
-
 jobs:
   ci:
     name: CI
@@ -40,6 +35,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Load browser env
+        run: |
+          source .envrc
+
+          {
+            echo "CERBERUS_CHROME_VERSION=${CERBERUS_CHROME_VERSION}"
+            echo "CERBERUS_FIREFOX_VERSION=${CERBERUS_FIREFOX_VERSION}"
+            echo "CERBERUS_GECKODRIVER_VERSION=${CERBERUS_GECKODRIVER_VERSION}"
+            echo "CHROME=${CHROME}"
+            echo "CHROMEDRIVER=${CHROMEDRIVER}"
+            echo "FIREFOX=${FIREFOX}"
+            echo "GECKODRIVER=${GECKODRIVER}"
+          } >> "$GITHUB_ENV"
 
       - name: Setup BEAM
         uses: erlef/setup-beam@v1
@@ -73,14 +82,18 @@ jobs:
       - name: Run precommit
         run: mix precommit
 
-      - name: Cache browser tools
+      - name: Cache browser runtimes
         uses: actions/cache@v4
         with:
-          path: tmp/browser-tools
-          key: ${{ runner.os }}-browser-tools
+          path: |
+            tmp/chrome-*
+            tmp/chromedriver-*
+            tmp/firefox-*
+            tmp/geckodriver-*
+          key: ${{ runner.os }}-browser-runtime-${{ env.CERBERUS_CHROME_VERSION }}-${{ env.CERBERUS_FIREFOX_VERSION }}-${{ env.CERBERUS_GECKODRIVER_VERSION }}
 
       - name: Install Chrome
-        run: bin/chrome.sh --install
+        run: bin/chrome.sh
 
       - name: Run tests with Chrome
         run: mix test --warnings-as-errors --max-failures 1
@@ -97,7 +110,7 @@ jobs:
       #     mix test.websocket --warnings-as-errors --max-failures 1 --browsers chrome $BROWSER_DRIVER_FILES
 
       - name: Install Firefox
-        run: bin/firefox.sh --install
+        run: bin/firefox.sh
 
       - name: Run tests with Firefox
         run: CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors --max-failures 1

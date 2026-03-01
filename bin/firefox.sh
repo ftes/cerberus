@@ -175,7 +175,7 @@ install_firefox() {
   [[ -x "$firefox_bin" ]] || fail "installed Firefox binary is not executable: $firefox_bin"
   ln -sf "$firefox_bin" "$stable_firefox_bin"
   [[ -x "$stable_firefox_bin" ]] || fail "stable firefox binary path is not executable: $stable_firefox_bin"
-  FIREFOX_BIN="$stable_firefox_bin"
+  FIREFOX_BIN="$firefox_bin"
 }
 
 install_geckodriver() {

@@ -144,13 +144,17 @@ ensure_runtime() {
   [[ -x "$chrome_bin" ]] || fail "installed chrome binary is not executable: $chrome_bin"
   [[ -x "$chromedriver_bin" ]] || fail "installed chromedriver binary is not executable: $chromedriver_bin"
 
-  ln -sf "$chrome_bin" "$stable_chrome_bin"
+  cat > "$stable_chrome_bin" <<EOF
+#!/usr/bin/env bash
+exec "${chrome_bin}" "\$@"
+EOF
+  chmod +x "$stable_chrome_bin"
   ln -sf "$chromedriver_bin" "$stable_chromedriver_bin"
 
   [[ -x "$stable_chrome_bin" ]] || fail "stable chrome binary path is not executable: $stable_chrome_bin"
   [[ -x "$stable_chromedriver_bin" ]] || fail "stable chromedriver binary path is not executable: $stable_chromedriver_bin"
 
-  CHROME_BIN="$stable_chrome_bin"
+  CHROME_BIN="$chrome_bin"
   CHROMEDRIVER_BIN="$stable_chromedriver_bin"
 }
 
@@ -175,8 +179,7 @@ PLATFORM_KEY="$(platform)"
 CHROME_VERSION_REQUESTED="$(resolve_chrome_version)"
 ensure_runtime "$CHROME_VERSION_REQUESTED" "$PLATFORM_KEY"
 
-CHROME_VERSION="$(version_of "$CHROME_BIN")"
-[[ -n "$CHROME_VERSION" ]] || fail "unable to determine Chrome version from $CHROME_BIN"
+CHROME_VERSION="$CHROME_VERSION_REQUESTED"
 
 CHROMEDRIVER_VERSION="$(version_of "$CHROMEDRIVER_BIN")"
 [[ -n "$CHROMEDRIVER_VERSION" ]] || fail "unable to determine ChromeDriver version from $CHROMEDRIVER_BIN"
