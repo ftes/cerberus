@@ -23,7 +23,12 @@ defmodule Cerberus.CoreApiExamplesTest do
   @tag :live
   @tag :browser
   test "same counter click example runs in live and browser drivers", context do
-    Harness.run!(context, &counter_increment_flow/1)
+    Harness.run!(context, fn session ->
+      session
+      |> visit("/live/counter")
+      |> click(role(:button, name: "Increment"))
+      |> assert_has(text("Count: 1", exact: true))
+    end)
   end
 
   @tag :static
@@ -48,12 +53,5 @@ defmodule Cerberus.CoreApiExamplesTest do
       assert result.message =~ "visible: true"
       assert result.message =~ ~r/timeout: (0|500)/
     end)
-  end
-
-  defp counter_increment_flow(session) do
-    session
-    |> visit("/live/counter")
-    |> click(role(:button, name: "Increment"))
-    |> assert_has(text("Count: 1", exact: true))
   end
 end

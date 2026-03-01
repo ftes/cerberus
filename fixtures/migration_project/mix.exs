@@ -23,25 +23,16 @@ defmodule MigrationFixture.MixProject do
   defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
-    cerberus_path = System.get_env("CERBERUS_PATH")
-
-    cerberus_dep =
-      if is_binary(cerberus_path) and cerberus_path != "" do
-        [{:cerberus, path: cerberus_path, only: :test, runtime: false}]
-      else
-        []
-      end
-
-    cerberus_dep ++
-      [
-        {:phoenix, "~> 1.7"},
-        {:phoenix_html, "~> 4.1"},
-        {:phoenix_live_view, "~> 1.1"},
-        {:plug_cowboy, "~> 2.7"},
-        {:jason, "~> 1.4"},
-        {:lazy_html, ">= 0.1.0", only: :test},
-        {:phoenix_test, "~> 0.9", only: :test, runtime: false},
-        {:phoenix_test_playwright, "~> 0.12", only: :test, runtime: false}
-      ]
+    [
+      {:cerberus, path: System.fetch_env!("CERBERUS_PATH"), only: :test, runtime: false},
+      {:phoenix, "~> 1.7"},
+      {:phoenix_html, "~> 4.1"},
+      {:phoenix_live_view, "~> 1.1"},
+      {:plug_cowboy, "~> 2.7"},
+      {:jason, "~> 1.4"},
+      {:lazy_html, ">= 0.1.0", only: :test},
+      {:phoenix_test, "~> 0.9", only: :test, runtime: false},
+      {:phoenix_test_playwright, "~> 0.12", only: :test, runtime: false}
+    ]
   end
 end

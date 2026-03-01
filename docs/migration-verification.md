@@ -4,10 +4,10 @@ This guide documents the current migration verification loop for PhoenixTest-to-
 
 ## Goal
 
-Provide deterministic confidence that selected PhoenixTest scenarios still pass after running:
+Provide deterministic confidence that the committed migration-ready fixture suite still passes after running:
 
 1. pre-migration test run (`PhoenixTest` mode)
-2. `mix igniter.cerberus.migrate_phoenix_test --write` rewrite
+2. `mix cerberus.migrate_phoenix_test --write` rewrite
 3. post-migration test run (`Cerberus` mode)
 
 ## How To Run
@@ -15,35 +15,23 @@ Provide deterministic confidence that selected PhoenixTest scenarios still pass 
 Run the verification suite:
 
 ```bash
-mix test test/cerberus/migration_verification_test.exs
+mix test test/mix/tasks/igniter_cerberus_migrate_phoenix_test_test.exs
 ```
 
-The suite uses the internal migration verification helper and runs against the committed fixture project at:
+The suite runs directly against the committed fixture project at:
 
 - `fixtures/migration_project`
 
-## What Is Reported
+## What Is Asserted
 
-The verification helper returns row-level parity output:
+The test performs one end-to-end flow over `test/features/pt_*_test.exs`:
 
-- `report.rows`: one row per scenario
-  - `id`
-  - `test_file`
-  - `pre_status` (`:pass | :fail | :not_run`)
-  - `post_status` (`:pass | :fail | :not_run`)
-  - `parity` (`true | false`)
-- `report.summary`:
-  - `total_rows`
-  - `pre_pass_rows`
-  - `post_pass_rows`
-  - `parity_pass_rows`
-  - `all_parity_pass?`
+1. `mix deps.get`
+2. pre-migration run: `mix test ...` with `CERBERUS_MIGRATION_FIXTURE_MODE=phoenix_test`
+3. rewrite run: `mix cerberus.migrate_phoenix_test --write ...`
+4. post-migration run: `mix test ...` with `CERBERUS_MIGRATION_FIXTURE_MODE=cerberus`
 
-When a stage fails, the error payload includes:
-
-- failure stage (`:prepare | :deps_get | :pre_test | :migrate | :post_test`)
-- failing `row_id` and `test_file`
-- partial `report` state up to the failure point
+Each step must exit with status `0`.
 
 ## CI Integration
 
@@ -57,16 +45,15 @@ This keeps migration verification in the non-browser phase by default and avoids
 
 Current loop scope is intentionally narrow:
 
-- Non-browser migration scenario rows are the current source of truth.
+- Non-browser fixture tests are the current source of truth.
 - Matrix breadth in `docs/migration-verification-matrix.md` is a roadmap, not fully implemented row coverage yet.
 - Browser-specific PhoenixTest.Playwright parity rows are still pending broader migration support and runtime-cost decisions.
 - The Igniter task remains a safe-rewrite tool; unsupported patterns are warnings and require manual migration follow-up.
 
 ## Extending Coverage
 
-To add a new row:
+To extend coverage:
 
-1. Add/extend a fixture test under `fixtures/migration_project/test/features`.
-2. Add a row entry to the verification helper options in tests (or default rows when stable).
-3. Assert parity outcomes in `test/cerberus/migration_verification_test.exs`.
-4. Update `docs/migration-verification-matrix.md` to keep the matrix and implemented rows aligned.
+1. Add/extend fixture tests under `fixtures/migration_project/test/features`.
+2. Keep assertions mode-aware (`CERBERUS_MIGRATION_FIXTURE_MODE`) when PhoenixTest and Cerberus setup differs.
+3. Update `docs/migration-verification-matrix.md` when adding new scenario families.

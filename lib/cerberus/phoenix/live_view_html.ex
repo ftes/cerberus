@@ -1,7 +1,7 @@
-defmodule Cerberus.Driver.LiveViewHtml do
+defmodule Cerberus.LiveViewHtml do
   @moduledoc false
 
-  alias Cerberus.Driver.Html
+  alias Cerberus.Html
   alias Cerberus.LiveViewBindings
   alias Cerberus.Query
 

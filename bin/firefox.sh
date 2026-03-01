@@ -4,8 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TOOLS_DIR="${CERBERUS_BROWSER_TOOLS_DIR:-$ROOT_DIR/tmp/browser-tools}"
 GECKODRIVER_PORT="${CERBERUS_GECKODRIVER_PORT:-4545}"
-PINNED_FIREFOX_VERSION="${CERBERUS_FIREFOX_VERSION:-latest}"
-PINNED_GECKODRIVER_VERSION="${CERBERUS_GECKODRIVER_VERSION:-0.36.0}"
 
 INSTALL=0
 PLATFORM_KEY=""
@@ -136,8 +134,8 @@ write_env_file() {
 
   {
     printf "export CERBERUS_BROWSER_TOOLS_DIR=%q\n" "$TOOLS_DIR"
-    printf "export CERBERUS_FIREFOX_VERSION=%q\n" "$PINNED_FIREFOX_VERSION"
-    printf "export CERBERUS_GECKODRIVER_VERSION=%q\n" "$PINNED_GECKODRIVER_VERSION"
+    printf "export CERBERUS_FIREFOX_VERSION=%q\n" "$CERBERUS_FIREFOX_VERSION"
+    printf "export CERBERUS_GECKODRIVER_VERSION=%q\n" "$CERBERUS_GECKODRIVER_VERSION"
     printf "export CERBERUS_FIREFOX_PLATFORM=%q\n" "$PLATFORM_KEY"
     printf "export FIREFOX=%q\n" "$firefox_bin"
     printf "export GECKODRIVER=%q\n" "$geckodriver_bin"
@@ -145,19 +143,19 @@ write_env_file() {
 }
 
 install_firefox() {
-  local unpack_dir="$TOOLS_DIR/firefox-${PINNED_FIREFOX_VERSION}-${PLATFORM_KEY}"
+  local unpack_dir="$TOOLS_DIR/firefox-${CERBERUS_FIREFOX_VERSION}-${PLATFORM_KEY}"
   local firefox_bin
   local download_url
 
   mkdir -p "$TOOLS_DIR"
-  download_url="$(firefox_download_url "$PINNED_FIREFOX_VERSION" "$PLATFORM_KEY")"
+  download_url="$(firefox_download_url "$CERBERUS_FIREFOX_VERSION" "$PLATFORM_KEY")"
 
   case "$PLATFORM_KEY" in
     mac-arm64|mac-x64)
       firefox_bin="$unpack_dir/Firefox.app/Contents/MacOS/firefox"
       if [[ ! -x "$firefox_bin" ]]; then
-        local archive_file="$TOOLS_DIR/firefox-${PINNED_FIREFOX_VERSION}-${PLATFORM_KEY}.dmg"
-        local mount_dir="$TOOLS_DIR/firefox-mount-${PINNED_FIREFOX_VERSION}-${PLATFORM_KEY}"
+        local archive_file="$TOOLS_DIR/firefox-${CERBERUS_FIREFOX_VERSION}-${PLATFORM_KEY}.dmg"
+        local mount_dir="$TOOLS_DIR/firefox-mount-${CERBERUS_FIREFOX_VERSION}-${PLATFORM_KEY}"
 
         curl -fsSL "$download_url" -o "$archive_file"
         rm -rf "$unpack_dir"
@@ -173,7 +171,7 @@ install_firefox() {
     linux64|linux-arm64)
       firefox_bin="$unpack_dir/firefox/firefox"
       if [[ ! -x "$firefox_bin" ]]; then
-        local archive_file="$TOOLS_DIR/firefox-${PINNED_FIREFOX_VERSION}-${PLATFORM_KEY}.tar.xz"
+        local archive_file="$TOOLS_DIR/firefox-${CERBERUS_FIREFOX_VERSION}-${PLATFORM_KEY}.tar.xz"
 
         curl -fsSL "$download_url" -o "$archive_file"
         rm -rf "$unpack_dir"
@@ -192,14 +190,14 @@ install_firefox() {
 
 install_geckodriver() {
   local platform_key
-  local unpack_dir="$TOOLS_DIR/geckodriver-${PINNED_GECKODRIVER_VERSION}-${PLATFORM_KEY}"
+  local unpack_dir="$TOOLS_DIR/geckodriver-${CERBERUS_GECKODRIVER_VERSION}-${PLATFORM_KEY}"
   local geckodriver_bin="$unpack_dir/geckodriver"
   local archive_file
   local download_url
 
   platform_key="$(geckodriver_platform_key "$PLATFORM_KEY")"
-  archive_file="$TOOLS_DIR/geckodriver-${PINNED_GECKODRIVER_VERSION}-${platform_key}.tar.gz"
-  download_url="$(geckodriver_download_url "$PINNED_GECKODRIVER_VERSION" "$platform_key")"
+  archive_file="$TOOLS_DIR/geckodriver-${CERBERUS_GECKODRIVER_VERSION}-${platform_key}.tar.gz"
+  download_url="$(geckodriver_download_url "$CERBERUS_GECKODRIVER_VERSION" "$platform_key")"
 
   mkdir -p "$TOOLS_DIR"
 
@@ -259,8 +257,8 @@ GECKODRIVER_VERSION="$(version_of "$GECKODRIVER_BIN")"
 [[ -n "$FIREFOX_VERSION" ]] || fail "unable to determine Firefox version from $FIREFOX_BIN"
 [[ -n "$GECKODRIVER_VERSION" ]] || fail "unable to determine GeckoDriver version from $GECKODRIVER_BIN"
 
-if [[ "$INSTALL" -eq 1 && "$PINNED_GECKODRIVER_VERSION" != "$GECKODRIVER_VERSION" ]]; then
-  fail "installed GeckoDriver version $GECKODRIVER_VERSION does not match pinned $PINNED_GECKODRIVER_VERSION."
+if [[ "$INSTALL" -eq 1 && "$CERBERUS_GECKODRIVER_VERSION" != "$GECKODRIVER_VERSION" ]]; then
+  fail "installed GeckoDriver version $GECKODRIVER_VERSION does not match pinned $CERBERUS_GECKODRIVER_VERSION."
 fi
 
 LOG_FILE="$ROOT_DIR/tmp/geckodriver.log"

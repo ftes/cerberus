@@ -1,12 +1,12 @@
-defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTest do
+defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   @moduledoc """
   Migrates PhoenixTest test files to Cerberus in a preview-first workflow.
 
   By default this task runs in dry-run mode and prints a diff for each changed file.
   Use `--write` to apply changes.
 
-      mix igniter.cerberus.migrate_phoenix_test
-      mix igniter.cerberus.migrate_phoenix_test --write test/my_app_web/features
+      mix cerberus.migrate_phoenix_test
+      mix cerberus.migrate_phoenix_test --write test/my_app_web/features
   """
 
   @switches [

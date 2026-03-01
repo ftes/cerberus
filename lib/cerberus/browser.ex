@@ -9,6 +9,7 @@ defmodule Cerberus.Browser do
   alias Cerberus.Assertions
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Browser.Extensions
+  alias Cerberus.Options
   alias Cerberus.Session
 
   @type cookie :: %{
@@ -24,10 +25,17 @@ defmodule Cerberus.Browser do
 
   @spec screenshot(session, String.t() | keyword()) :: session when session: var
   def screenshot(session, opts \\ [])
-  def screenshot(%BrowserSession{} = session, path) when is_binary(path), do: Cerberus.screenshot(session, path)
-  def screenshot(%BrowserSession{} = session, opts) when is_list(opts), do: Cerberus.screenshot(session, opts)
-  def screenshot(session, path) when is_binary(path), do: Assertions.unsupported(session, :screenshot, path: path)
-  def screenshot(session, opts) when is_list(opts), do: Assertions.unsupported(session, :screenshot, opts)
+
+  @spec screenshot(arg, String.t() | Options.screenshot_opts()) :: arg when arg: var
+  def screenshot(%BrowserSession{} = session, path) when is_binary(path) do
+    opts = Options.validate_screenshot!(path: path)
+    BrowserSession.screenshot(session, opts)
+  end
+
+  def screenshot(%BrowserSession{} = session, opts) when is_list(opts) do
+    opts = Options.validate_screenshot!(opts)
+    BrowserSession.screenshot(session, opts)
+  end
 
   def screenshot(_session, _opts) do
     raise ArgumentError, "Browser.screenshot/2 expects a path string or keyword options"

@@ -4,8 +4,8 @@ defmodule Cerberus.Driver.Static do
   @behaviour Cerberus.Driver
 
   alias Cerberus.Driver.Conn
-  alias Cerberus.Driver.Html
   alias Cerberus.Driver.Live, as: LiveSession
+  alias Cerberus.Html
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
   alias Cerberus.Query

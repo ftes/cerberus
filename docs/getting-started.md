@@ -96,14 +96,14 @@ session()
 ## Step 7: Browser-Only Extensions
 
 ```elixir
-alias Cerberus.Browser
+import Cerberus.Browser
 
 session =
   session(:browser)
   |> visit("/browser/extensions")
-  |> Browser.type("hello", selector: "#keyboard-input")
-  |> Browser.press("Enter", selector: "#press-input")
-  |> Browser.with_dialog(fn dialog_session ->
+  |> type("hello", selector: "#keyboard-input")
+  |> press("Enter", selector: "#press-input")
+  |> with_dialog(fn dialog_session ->
     click(dialog_session, button("Open Confirm Dialog"))
   end)
 
@@ -111,10 +111,6 @@ session
 |> assert_has(text("Press result: submitted", exact: true))
 |> assert_has(text("Dialog result: cancelled", exact: true))
 ```
-
-> #### Warning
->
-> `Cerberus.Browser.*` APIs are intentionally browser-only and raise explicit unsupported-operation assertions on non-browser sessions.
 
 ## Step 8: Per-Test Browser Overrides
 
@@ -168,25 +164,3 @@ config :cerberus, :browser,
 If both are set, `headless` takes precedence over `show_browser`.
 
 Runtime launch settings (for example `show_browser`, `headless`, browser binaries, driver binaries, `webdriver_url`, and `webdriver_urls`) are runtime-level and should be configured globally per test invocation, not per test.
-
-## Step 11: Cross-Browser Conformance Runs
-
-```bash
-mix test --only drivers test/core --exclude explicit_browser
-```
-
-`drivers: [:browser]` runs the default browser lane. For targeted multi-browser coverage, add explicit tags at module/describe/test scope:
-
-```elixir
-@moduletag drivers: [:browser]
-
-describe "firefox-only flow" do
-  @describetag drivers: [:firefox]
-  test "..." do
-  end
-end
-
-@tag drivers: [:chrome, :firefox]
-test "run both browsers for this case only" do
-end
-```

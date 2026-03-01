@@ -1,7 +1,7 @@
-defmodule Cerberus.Driver.HtmlTest do
+defmodule Cerberus.HtmlTest do
   use ExUnit.Case, async: true
 
-  alias Cerberus.Driver.Html
+  alias Cerberus.Html
 
   test "find_form_field matches wrapped labels with nested inline text" do
     html = """

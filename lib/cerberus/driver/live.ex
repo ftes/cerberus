@@ -6,9 +6,9 @@ defmodule Cerberus.Driver.Live do
   import Phoenix.LiveViewTest, only: [element: 2, element: 3, render: 1, render_click: 1]
 
   alias Cerberus.Driver.Conn
-  alias Cerberus.Driver.Html
-  alias Cerberus.Driver.LiveViewHtml
   alias Cerberus.Driver.Static, as: StaticSession
+  alias Cerberus.Html
+  alias Cerberus.LiveViewHtml
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
   alias Cerberus.Query

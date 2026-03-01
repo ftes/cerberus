@@ -1,7 +1,7 @@
-defmodule Cerberus.Driver.LiveViewHtmlTest do
+defmodule Cerberus.LiveViewHtmlTest do
   use ExUnit.Case, async: true
 
-  alias Cerberus.Driver.LiveViewHtml
+  alias Cerberus.LiveViewHtml
 
   test "find_live_clickable_button escapes multiline attribute values in selector" do
     html = """

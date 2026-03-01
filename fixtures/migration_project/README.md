@@ -8,7 +8,7 @@ It intentionally contains baseline pre-migration tests using:
 - `PhoenixTest.Playwright`
 
 The migration verification runner copies this project to a temp directory, runs the
-baseline tests, applies `mix igniter.cerberus.migrate_phoenix_test`, then runs the
+baseline tests, applies `mix cerberus.migrate_phoenix_test`, then runs the
 rewritten tests.
 
 Playwright fixture test setup:

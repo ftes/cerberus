@@ -298,8 +298,8 @@ bin/check_firefox_bidi_ready.sh --install
 Cerberus includes an Igniter migration task for PhoenixTest codebases:
 
 ```bash
-mix igniter.cerberus.migrate_phoenix_test
-mix igniter.cerberus.migrate_phoenix_test --write test/my_app_web/features
+mix cerberus.migrate_phoenix_test
+mix cerberus.migrate_phoenix_test --write test/my_app_web/features
 ```
 
 It performs safe rewrites, reports manual follow-ups, and defaults to dry-run diff output.

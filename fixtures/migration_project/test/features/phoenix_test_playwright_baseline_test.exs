@@ -1,7 +1,7 @@
 defmodule MigrationFixtureWeb.PhoenixTestPlaywrightBaselineTest do
   use PhoenixTest.Playwright.Case, async: true
 
-  @playwright_package Path.expand("../../assets/node_modules/playwright/package.json", __DIR__)
+  @playwright_package "assets/node_modules/playwright/package.json"
 
   if not File.exists?(@playwright_package) do
     @moduletag skip: "Install Playwright with npm --prefix assets install playwright."

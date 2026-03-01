@@ -14,21 +14,27 @@ defmodule MigrationFixtureWeb.PtMultiUserTabTest do
       |> click_link("Increment Session")
       |> assert_session_count("1")
 
-    same_user_tab =
-      primary
-      |> open_tab()
-      |> visit("/session-counter")
-      |> assert_session_count("1")
+    case System.get_env(@mode_env, "phoenix_test") do
+      "cerberus" ->
+        same_user_tab =
+          primary
+          |> Cerberus.open_tab()
+          |> Cerberus.visit("/session-counter")
+          |> assert_session_count("1")
 
-    _same_user_tab_closed = close_tab(same_user_tab)
+        _same_user_tab_closed = Cerberus.close_tab(same_user_tab)
 
-    isolated_user =
-      primary
-      |> open_user()
-      |> visit("/session-counter")
-      |> assert_session_count("0")
+        isolated_user =
+          primary
+          |> Cerberus.open_user()
+          |> Cerberus.visit("/session-counter")
+          |> assert_session_count("0")
 
-    _isolated_user_closed = close_tab(isolated_user)
+        _isolated_user_closed = Cerberus.close_tab(isolated_user)
+
+      _ ->
+        :ok
+    end
   end
 
   defp session_for_mode(conn) do

@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 
+env:
+  CERBERUS_CHROME_VERSION: 145.0.7632.117
+  CERBERUS_FIREFOX_VERSION: latest
+  CERBERUS_GECKODRIVER_VERSION: 0.36.0
+
 jobs:
   ci:
     name: CI
@@ -65,9 +70,6 @@ jobs:
       - name: Install deps
         run: mix deps.get
 
-      - name: Build fixture assets
-        run: mix assets.build
-
       - name: Run precommit
         run: mix precommit
 
@@ -75,22 +77,20 @@ jobs:
         uses: actions/cache@v4
         with:
           path: tmp/browser-tools
-          key: ${{ runner.os }}-browser-tools-ci-${{ hashFiles('bin/check_browser_bidi_ready.sh', 'bin/check_chrome_bidi_ready.sh', 'bin/check_firefox_bidi_ready.sh') }}
-          restore-keys: |
-            ${{ runner.os }}-browser-tools-
+          key: ${{ runner.os }}-browser-tools
 
       - name: Install local Chrome runtime
         run: |
-          bin/check_browser_bidi_ready.sh chrome --install
+          bin/chrome.sh --install
           sed 's/^export //' tmp/browser-tools/env.sh >> "$GITHUB_ENV"
 
       - name: Install local Firefox runtime
         run: |
-          bin/check_browser_bidi_ready.sh firefox --install
+          bin/firefox.sh --install
           sed 's/^export //' tmp/browser-tools/env.sh >> "$GITHUB_ENV"
 
       - name: Run full test suite (default local Chrome)
-        run: mix test --warnings-as-errors --max-failures 1 --exclude firefox
+        run: mix test --warnings-as-errors --max-failures 1
 
       # TODO: Re-enable websocket lanes after fixing remote BiDi sandbox metadata compatibility.
       # Suspected root cause from current investigation:
@@ -101,31 +101,13 @@ jobs:
       #
       # - name: Run browser-driver tests in websocket Chrome lane
       #   run: |
-      #     BROWSER_DRIVER_FILES="$(
-      #       find test -name '*_test.exs' -print0 \
-      #         | xargs -0 grep -El '@(module)?tag[[:space:]]+:(browser|chrome|firefox)|@(module)?tag[[:space:]]+(browser|chrome|firefox):[[:space:]]*true' \
-      #         | sort
-      #     )"
-      #     [ -n "$BROWSER_DRIVER_FILES" ]
       #     mix test.websocket --warnings-as-errors --max-failures 1 --browsers chrome $BROWSER_DRIVER_FILES
 
       - name: Run browser-driver tests in local Firefox lane
         continue-on-error: true
         run: |
-          BROWSER_DRIVER_FILES="$(
-            find test -name '*_test.exs' -print0 \
-              | xargs -0 grep -El '@(module)?tag[[:space:]]+:(browser|chrome|firefox)|@(module)?tag[[:space:]]+(browser|chrome|firefox):[[:space:]]*true' \
-              | sort
-          )"
-          [ -n "$BROWSER_DRIVER_FILES" ]
-          CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors --max-failures 1 $BROWSER_DRIVER_FILES
+          CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors --max-failures 1
 
       # - name: Run browser-driver tests in websocket Firefox lane
       #   run: |
-      #     BROWSER_DRIVER_FILES="$(
-      #       find test -name '*_test.exs' -print0 \
-      #         | xargs -0 grep -El '@(module)?tag[[:space:]]+:(browser|chrome|firefox)|@(module)?tag[[:space:]]+(browser|chrome|firefox):[[:space:]]*true' \
-      #         | sort
-      #     )"
-      #     [ -n "$BROWSER_DRIVER_FILES" ]
       #     mix test.websocket --warnings-as-errors --max-failures 1 --browsers firefox $BROWSER_DRIVER_FILES

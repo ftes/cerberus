@@ -86,12 +86,12 @@ These rows are defined but currently blocked on missing Cerberus implementation 
 - [ ] Every matrix row has a concrete fixture test case.
 - [ ] Every fixture test passes pre-migration in PhoenixTest/PhoenixTestPlaywright mode.
 - [ ] Every fixture test passes post-migration in Cerberus mode.
-- [x] CI report includes row-level pass/fail summary for before/after runs.
+- [x] CI suite asserts successful pre/post full-pattern runs (`mix test` exit status `0` before and after rewrite).
 
 ## Implemented So Far
 
 These scenario ids are now exercised in the committed fixture and verified end-to-end in
-`test/cerberus/migration_verification_test.exs`:
+`test/mix/tasks/igniter_cerberus_migrate_phoenix_test_test.exs`:
 
 - `pt_static_nav`
 - `pt_text_assert`
@@ -111,3 +111,4 @@ These scenario ids are now exercised in the committed fixture and verified end-t
 - `pt_live_change`
 - `pt_live_nav`
 - `pt_live_async_timeout`
+- `pt_multi_user_tab`

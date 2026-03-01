@@ -11,7 +11,7 @@ updated_at: 2026-02-27T19:49:10Z
 Create an Igniter-powered migration path so consumers can migrate existing PhoenixTest test modules to Cerberus with minimal manual edits.
 
 ## Proposed Scope
-- [x] Add an Igniter task (e.g. `mix igniter.cerberus.migrate_phoenix_test`) that scans test files.
+- [x] Add an Igniter task (e.g. `mix cerberus.migrate_phoenix_test`) that scans test files.
 - [x] Rewrite core module references from `PhoenixTest` to `Cerberus` where safe.
 - [x] Migrate common API calls to Cerberus equivalents and flag unsupported cases.
 - [x] Add dry-run + diff output so users can preview changes.
@@ -19,7 +19,7 @@ Create an Igniter-powered migration path so consumers can migrate existing Phoen
 - [x] Document migration usage and caveats in guides/README.
 
 ## Summary of Changes
-- Added `mix igniter.cerberus.migrate_phoenix_test` migration task for PhoenixTest test files.
+- Added `mix cerberus.migrate_phoenix_test` migration task for PhoenixTest test files.
 - Implemented safe rewrites for import/use/alias references that can be transformed deterministically.
 - Added unsupported-pattern warnings for manual migration cases (Playwright, `conn |> visit`, `visit(conn, ...)`, direct `PhoenixTest.<function>` calls, and PhoenixTest submodule aliases/test helpers).
 - Added dry-run diff preview via `git diff --no-index` and write mode via `--write`.

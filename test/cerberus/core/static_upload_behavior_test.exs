@@ -26,6 +26,6 @@ defmodule Cerberus.CoreStaticUploadBehaviorTest do
   end
 
   defp upload_fixture_path(file_name) do
-    Path.expand("../support/files/#{file_name}", __DIR__)
+    "test/support/files/#{file_name}"
   end
 end

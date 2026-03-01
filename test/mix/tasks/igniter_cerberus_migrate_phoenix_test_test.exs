@@ -3,7 +3,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
   import ExUnit.CaptureIO
 
-  @task "igniter.cerberus.migrate_phoenix_test"
+  @task "cerberus.migrate_phoenix_test"
   @moduletag :tmp_dir
 
   test "dry-run prints diff and keeps files unchanged", %{tmp_dir: tmp_dir} do
@@ -171,7 +171,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
   end
 
   test "can run against committed nested Phoenix fixture project tests", %{tmp_dir: tmp_dir} do
-    fixture_dir = Path.expand("../../../fixtures/migration_project", __DIR__)
+    fixture_dir = "fixtures/migration_project"
     project_copy = Path.join(tmp_dir, "migration_project")
     test_dir = Path.join(project_copy, "test/features")
     static_copy = Path.join(test_dir, "phoenix_test_baseline_test.exs")
@@ -191,5 +191,54 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     assert rewritten_static =~ "import Cerberus"
     assert rewritten_playwright =~ "use Cerberus.Playwright.Case"
     assert output =~ "WARNING #{playwright_copy}:"
+  end
+
+  @tag :migration_verification
+  @tag timeout: 180_000
+  test "runs full sample suite before and after migration", %{tmp_dir: tmp_dir} do
+    fixture_dir = "fixtures/migration_project"
+    work_dir = Path.join(tmp_dir, "work")
+    test_glob = "test/features/pt_*_test.exs"
+
+    File.rm_rf!(work_dir)
+    File.cp_r!(fixture_dir, work_dir)
+
+    assert {_output, 0} = run_mix(work_dir, ["deps.get"])
+
+    test_paths = expand_test_paths(work_dir, test_glob)
+    assert test_paths != [], "no test files matched #{test_glob}"
+
+    pre_args = ["test" | test_paths]
+    {pre_output, pre_status} = run_mix(work_dir, pre_args, mode: "phoenix_test")
+    assert pre_status == 0, "pre-migration suite failed:\n#{pre_output}"
+
+    {migrate_output, migrate_status} =
+      run_mix(work_dir, ["cerberus.migrate_phoenix_test", "--write", test_glob])
+
+    assert migrate_status == 0, "migration failed:\n#{migrate_output}"
+
+    post_args = ["test" | test_paths]
+    {post_output, post_status} = run_mix(work_dir, post_args, mode: "cerberus")
+    assert post_status == 0, "post-migration suite failed:\n#{post_output}"
+  end
+
+  defp run_mix(work_dir, args, opts \\ []) do
+    base_env = [{"MIX_ENV", "test"}, {"CERBERUS_PATH", Path.expand(".")}]
+
+    env =
+      case Keyword.fetch(opts, :mode) do
+        {:ok, mode} -> [{"CERBERUS_MIGRATION_FIXTURE_MODE", mode} | base_env]
+        :error -> base_env
+      end
+
+    System.cmd("mix", args, cd: work_dir, env: env, stderr_to_stdout: true)
+  end
+
+  defp expand_test_paths(work_dir, test_glob) do
+    work_dir
+    |> Path.join(test_glob)
+    |> Path.wildcard()
+    |> Enum.map(&Path.relative_to(&1, work_dir))
+    |> Enum.sort()
   end
 end

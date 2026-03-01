@@ -4,7 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TOOLS_DIR="${CERBERUS_BROWSER_TOOLS_DIR:-$ROOT_DIR/tmp/browser-tools}"
 CHROMEDRIVER_PORT="${CERBERUS_CHROMEDRIVER_PORT:-9515}"
-PINNED_CHROME_VERSION="${CERBERUS_CHROME_VERSION:-145.0.7632.117}"
 METADATA_URL="https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json"
 
 INSTALL=0
@@ -153,7 +152,7 @@ write_env_file() {
 
   {
     printf "export CERBERUS_BROWSER_TOOLS_DIR=%q\n" "$TOOLS_DIR"
-    printf "export CERBERUS_CHROME_VERSION=%q\n" "$PINNED_CHROME_VERSION"
+    printf "export CERBERUS_CHROME_VERSION=%q\n" "$CERBERUS_CHROME_VERSION"
     printf "export CERBERUS_CFT_PLATFORM=%q\n" "$PLATFORM_KEY"
     printf "export CHROME=%q\n" "$chrome_bin"
     printf "export CHROMEDRIVER=%q\n" "$chromedriver_bin"
@@ -166,8 +165,8 @@ install_pinned_runtime() {
   local chrome_bin
   local chromedriver_bin
 
-  chrome_unpack="$(download_artifact "chrome" "$PINNED_CHROME_VERSION" "$PLATFORM_KEY")"
-  chromedriver_unpack="$(download_artifact "chromedriver" "$PINNED_CHROME_VERSION" "$PLATFORM_KEY")"
+  chrome_unpack="$(download_artifact "chrome" "$CERBERUS_CHROME_VERSION" "$PLATFORM_KEY")"
+  chromedriver_unpack="$(download_artifact "chromedriver" "$CERBERUS_CHROME_VERSION" "$PLATFORM_KEY")"
 
   chrome_bin="$chrome_unpack/$(chrome_binary_relpath "$PLATFORM_KEY")"
   chromedriver_bin="$chromedriver_unpack/$(chromedriver_binary_relpath "$PLATFORM_KEY")"
@@ -231,12 +230,12 @@ if [[ "$CHROME_BUILD" != "$CHROMEDRIVER_BUILD" ]]; then
 fi
 
 if [[ "$INSTALL" -eq 1 ]]; then
-  if [[ "$CHROME_VERSION" != "$PINNED_CHROME_VERSION" ]]; then
-    fail "installed Chrome version $CHROME_VERSION does not match pinned $PINNED_CHROME_VERSION."
+  if [[ "$CHROME_VERSION" != "$CERBERUS_CHROME_VERSION" ]]; then
+      fail "installed Chrome version $CHROME_VERSION does not match pinned $CERBERUS_CHROME_VERSION."
   fi
 
-  if [[ "$CHROMEDRIVER_VERSION" != "$PINNED_CHROME_VERSION" ]]; then
-    fail "installed ChromeDriver version $CHROMEDRIVER_VERSION does not match pinned $PINNED_CHROME_VERSION."
+  if [[ "$CHROMEDRIVER_VERSION" != "$CERBERUS_CHROME_VERSION" ]]; then
+    fail "installed ChromeDriver version $CHROMEDRIVER_VERSION does not match pinned $CERBERUS_CHROME_VERSION."
   fi
 fi
 

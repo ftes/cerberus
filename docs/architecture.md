@@ -12,7 +12,7 @@ flowchart LR
   C --> D[Static Driver\nConnTest]
   C --> E[Live Driver\nLiveViewTest]
   C --> F[Browser Driver\nWebDriver BiDi]
-  D --> G[HTML Semantics\nCerberus.Driver.Html]
+  D --> G[HTML Semantics\nCerberus.Html]
   E --> G
   E --> H[LiveView Semantics\nCerberus.Driver.LiveViewHtml]
   F --> I[Browser Runtime\nShared worker + per-test context]

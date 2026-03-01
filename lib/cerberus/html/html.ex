@@ -1,4 +1,4 @@
-defmodule Cerberus.Driver.Html do
+defmodule Cerberus.Html do
   @moduledoc false
 
   alias Cerberus.Query
