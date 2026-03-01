@@ -3,55 +3,38 @@ defmodule Cerberus.CoreApiExamplesTest do
 
   import Cerberus
 
-  alias Cerberus.Harness
+  for driver <- [:phoenix, :browser] do
+    test "static page text presence and absence use public API example flow (#{driver})" do
+      unquote(driver)
+      |> session()
+      |> visit("/articles")
+      |> assert_has(text("Articles"))
+      |> assert_has(text("This is an articles index page"))
+      |> refute_has(text("500 Internal Server Error"))
+    end
 
-  @tag :static
-  @tag :browser
-  test "static page text presence and absence use public API example flow", context do
-    Harness.run!(
-      context,
-      fn session ->
-        session
-        |> visit("/articles")
-        |> assert_has(text("Articles"))
-        |> assert_has(text("This is an articles index page"))
-        |> refute_has(text("500 Internal Server Error"))
-      end
-    )
-  end
-
-  @tag :live
-  @tag :browser
-  test "same counter click example runs in live and browser drivers", context do
-    Harness.run!(context, fn session ->
-      session
+    test "same counter click example runs in live and browser drivers (#{driver})" do
+      unquote(driver)
+      |> session()
       |> visit("/live/counter")
       |> click(role(:button, name: "Increment"))
       |> assert_has(text("Count: 1", exact: true))
-    end)
-  end
+    end
 
-  @tag :static
-  @tag :browser
-  test "failure messages include locator and options for reproducible debugging", context do
-    results =
-      Harness.run(
-        context,
-        fn session ->
-          session
+    test "failure messages include locator and options for reproducible debugging (#{driver})" do
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          unquote(driver)
+          |> session()
           |> visit("/articles")
           |> assert_has(text: "DOES NOT EXIST", exact: true)
         end
-      )
 
-    assert Enum.all?(results, &(&1.status == :error))
-
-    Enum.each(results, fn result ->
-      assert result.message =~ "assert_has failed"
-      assert result.message =~ ~s(locator: [text: "DOES NOT EXIST", exact: true])
-      assert result.message =~ "opts:"
-      assert result.message =~ "visible: true"
-      assert result.message =~ ~r/timeout: (0|500)/
-    end)
+      assert error.message =~ "assert_has failed"
+      assert error.message =~ ~s(locator: [text: "DOES NOT EXIST", exact: true])
+      assert error.message =~ "opts:"
+      assert error.message =~ "visible: true"
+      assert error.message =~ ~r/timeout: (0|500)/
+    end
   end
 end

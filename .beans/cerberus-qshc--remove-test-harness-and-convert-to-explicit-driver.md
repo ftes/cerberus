@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-01T17:33:28Z
-updated_at: 2026-03-01T18:43:57Z
+updated_at: 2026-03-01T18:48:20Z
 parent: cerberus-whq9
 ---
 
@@ -70,3 +70,12 @@ Goals:
   - helper_locator_behavior_test.exs
 - Replaced harness runs with explicit public API driver loops (`:phoenix/:browser` and explicit `:chrome/:firefox` where applicable).
 - Validation: targeted run for this slice passed (33 tests, 0 failures) and mix precommit passed.
+
+- Converted another remaining harness batch in core tests:
+  - api_examples_test.exs
+  - assertion_filter_semantics_test.exs
+  - form_actions_test.exs
+  - form_button_ownership_test.exs
+  - live_nested_scope_behavior_test.exs
+- Replaced Harness.run error-aggregation assertions with explicit per-driver `assert_raise` checks to preserve failure-message coverage.
+- Validation: targeted run for this slice passed (35 tests, 0 failures) and mix precommit passed.

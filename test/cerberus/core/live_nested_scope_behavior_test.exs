@@ -3,39 +3,28 @@ defmodule Cerberus.CoreLiveNestedScopeBehaviorTest do
 
   import Cerberus
 
-  alias Cerberus.Harness
-
-  @tag :static
-  @tag :live
-  @tag :browser
-  test "within preserves nested scope stack and isolates nested child actions", context do
-    Harness.run!(
-      context,
-      fn session ->
-        session
-        |> visit("/live/nested")
-        |> within("#child-live-view", fn scoped ->
-          scoped
-          |> within(".actions", fn nested ->
-            click(nested, button("Save"))
-          end)
-          |> assert_has(text("Child saved: 1", exact: true))
-          |> refute_has(text("Parent saved: 1", exact: true))
+  for driver <- [:phoenix, :browser] do
+    test "within preserves nested scope stack and isolates nested child actions (#{driver})" do
+      unquote(driver)
+      |> session()
+      |> visit("/live/nested")
+      |> within("#child-live-view", fn scoped ->
+        scoped
+        |> within(".actions", fn nested ->
+          click(nested, button("Save"))
         end)
         |> assert_has(text("Child saved: 1", exact: true))
         |> refute_has(text("Parent saved: 1", exact: true))
-      end
-    )
-  end
+      end)
+      |> assert_has(text("Child saved: 1", exact: true))
+      |> refute_has(text("Parent saved: 1", exact: true))
+    end
 
-  @tag :live
-  @tag :browser
-  test "scoped not-found failures include scope details", context do
-    results =
-      Harness.run(
-        context,
-        fn session ->
-          session
+    test "scoped not-found failures include scope details (#{driver})" do
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          unquote(driver)
+          |> session()
           |> visit("/live/nested")
           |> within("#child-live-view", fn scoped ->
             within(scoped, ".child-actions", fn nested ->
@@ -43,11 +32,9 @@ defmodule Cerberus.CoreLiveNestedScopeBehaviorTest do
             end)
           end)
         end
-      )
 
-    assert Enum.all?(results, fn result ->
-             result.status == :error and String.contains?(result.message || "", "scope:") and
-               String.contains?(result.message || "", ".child-actions")
-           end)
+      assert error.message =~ "scope:"
+      assert error.message =~ ".child-actions"
+    end
   end
 end
