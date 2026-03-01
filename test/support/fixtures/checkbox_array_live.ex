@@ -34,6 +34,7 @@ defmodule Cerberus.Fixtures.CheckboxArrayLive do
           name="items[]"
           value="one"
           checked={"one" in @selected_items}
+          data-testid="live-item-one-checkbox"
         />
 
         <label for="live_item_two">Two</label>
@@ -43,6 +44,7 @@ defmodule Cerberus.Fixtures.CheckboxArrayLive do
           name="items[]"
           value="two"
           checked={"two" in @selected_items}
+          data-testid="live-item-two-checkbox"
         />
 
         <label for="live_item_three">Three</label>
@@ -52,6 +54,7 @@ defmodule Cerberus.Fixtures.CheckboxArrayLive do
           name="items[]"
           value="three"
           checked={"three" in @selected_items}
+          data-testid="live-item-three-checkbox"
         />
       </form>
 

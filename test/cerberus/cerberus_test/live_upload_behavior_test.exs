@@ -57,6 +57,18 @@ defmodule CerberusTest.LiveUploadBehaviorTest do
       |> assert_has(text("phx-change triggered on file selection", exact: true))
     end
 
+    test "upload supports testid locators on live file inputs (#{driver})" do
+      jpg = upload_fixture_path("elixir.jpg")
+
+      unquote(driver)
+      |> session()
+      |> visit("/live/uploads")
+      |> within("#upload-change-form", fn scoped ->
+        upload(scoped, testid("live-upload-change-avatar"), jpg)
+      end)
+      |> assert_has(text("phx-change triggered on file selection", exact: true))
+    end
+
     test "upload follows redirects from progress callbacks (#{driver})" do
       jpg = upload_fixture_path("elixir.jpg")
 

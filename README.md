@@ -126,7 +126,7 @@ session
 ## Locator Quick Look
 
 - Helper constructors:
-  - `text("...")`, `link("...")`, `button("...")`, `label("...")`, `css("...")`, `role(:button, name: "...")`
+  - `text("...")`, `link("...")`, `button("...")`, `label("...")`, `testid("...")`, `css("...")`, `role(:button, name: "...")`
 - Sigil:
   - `~l"text"` (text locator)
   - modifiers:

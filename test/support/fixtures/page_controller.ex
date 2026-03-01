@@ -25,7 +25,7 @@ defmodule Cerberus.Fixtures.PageController do
             title="Hero image"
           />
           <p style="display:none">Hidden helper text</p>
-          <a href="/live/counter">Counter</a>
+          <a href="/live/counter" data-testid="articles-counter-link">Counter</a>
         </main>
       </body>
     </html>
@@ -207,8 +207,8 @@ defmodule Cerberus.Fixtures.PageController do
             enctype="multipart/form-data"
           >
             <label for="static_upload_avatar">Avatar</label>
-            <input id="static_upload_avatar" type="file" name="avatar" />
-            <button type="submit">Upload Avatar</button>
+            <input id="static_upload_avatar" type="file" name="avatar" data-testid="static-avatar-upload" />
+            <button type="submit" data-testid="static-upload-submit">Upload Avatar</button>
           </form>
         </main>
       </body>
@@ -250,7 +250,7 @@ defmodule Cerberus.Fixtures.PageController do
 
           <form id="controls-form" action="/controls/result" method="get">
             <label for="controls_race">Race</label>
-            <select id="controls_race" name="race">
+            <select id="controls_race" name="race" data-testid="controls-race-select">
               <option value="human">Human</option>
               <option value="elf">Elf</option>
               <option value="dwarf">Dwarf</option>
@@ -258,7 +258,7 @@ defmodule Cerberus.Fixtures.PageController do
             </select>
 
             <label for="controls_race_2">Race 2</label>
-            <select id="controls_race_2" name="race_2[]" multiple>
+            <select id="controls_race_2" name="race_2[]" multiple data-testid="controls-race-2-select">
               <option value="elf">Elf</option>
               <option value="dwarf">Dwarf</option>
               <option value="orc">Orc</option>
@@ -266,13 +266,13 @@ defmodule Cerberus.Fixtures.PageController do
 
             <fieldset>
               <legend>Contact</legend>
-              <input type="radio" id="controls_contact_email" name="contact" value="email" />
+              <input type="radio" id="controls_contact_email" name="contact" value="email" data-testid="controls-contact-email" />
               <label for="controls_contact_email">Email Choice</label>
 
-              <input type="radio" id="controls_contact_phone" name="contact" value="phone" />
+              <input type="radio" id="controls_contact_phone" name="contact" value="phone" data-testid="controls-contact-phone" />
               <label for="controls_contact_phone">Phone Choice</label>
 
-              <input type="radio" id="controls_contact_mail" name="contact" value="mail" checked />
+              <input type="radio" id="controls_contact_mail" name="contact" value="mail" checked data-testid="controls-contact-mail" />
               <label for="controls_contact_mail">Mail Choice</label>
             </fieldset>
 
@@ -281,7 +281,7 @@ defmodule Cerberus.Fixtures.PageController do
               <option value="cannot_submit">Cannot submit</option>
             </select>
 
-            <button type="submit">Save Controls</button>
+            <button type="submit" data-testid="save-controls">Save Controls</button>
           </form>
         </main>
       </body>
@@ -630,15 +630,15 @@ defmodule Cerberus.Fixtures.PageController do
             <input type="hidden" name="items[]" value="" />
 
             <label for="item_one">One</label>
-            <input id="item_one" type="checkbox" name="items[]" value="one" checked />
+            <input id="item_one" type="checkbox" name="items[]" value="one" checked data-testid="item-one-checkbox" />
 
             <label for="item_two">Two</label>
-            <input id="item_two" type="checkbox" name="items[]" value="two" />
+            <input id="item_two" type="checkbox" name="items[]" value="two" data-testid="item-two-checkbox" />
 
             <label for="item_three">Three</label>
-            <input id="item_three" type="checkbox" name="items[]" value="three" />
+            <input id="item_three" type="checkbox" name="items[]" value="three" data-testid="item-three-checkbox" />
 
-            <button type="submit">Save Items</button>
+            <button type="submit" data-testid="save-items-submit">Save Items</button>
           </form>
         </main>
       </body>

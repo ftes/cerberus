@@ -44,6 +44,7 @@
 - `link("...")`
 - `button("...")`
 - `label("...")`
+- `testid("...")`
 - `css("...")`
 - `role(:button, name: "...")`
 

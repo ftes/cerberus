@@ -35,7 +35,7 @@ defmodule Cerberus.Fixtures.SelectControlsLive do
         </select>
 
         <label for="live_controls_race_2">Race 2</label>
-        <select id="live_controls_race_2" name="race_2[]" multiple>
+        <select id="live_controls_race_2" name="race_2[]" multiple data-testid="live-race-2-select">
           <option value="elf">Elf</option>
           <option value="dwarf">Dwarf</option>
           <option value="orc">Orc</option>
@@ -43,13 +43,32 @@ defmodule Cerberus.Fixtures.SelectControlsLive do
 
         <fieldset>
           <legend>Contact</legend>
-          <input type="radio" id="live_controls_contact_email" name="contact" value="email" />
+          <input
+            type="radio"
+            id="live_controls_contact_email"
+            name="contact"
+            value="email"
+            data-testid="live-contact-email"
+          />
           <label for="live_controls_contact_email">Email Choice</label>
 
-          <input type="radio" id="live_controls_contact_phone" name="contact" value="phone" />
+          <input
+            type="radio"
+            id="live_controls_contact_phone"
+            name="contact"
+            value="phone"
+            data-testid="live-contact-phone"
+          />
           <label for="live_controls_contact_phone">Phone Choice</label>
 
-          <input type="radio" id="live_controls_contact_mail" name="contact" value="mail" checked />
+          <input
+            type="radio"
+            id="live_controls_contact_mail"
+            name="contact"
+            value="mail"
+            checked
+            data-testid="live-contact-mail"
+          />
           <label for="live_controls_contact_mail">Mail Choice</label>
         </fieldset>
 

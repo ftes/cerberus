@@ -3,7 +3,7 @@ defmodule Cerberus.Driver.Live do
 
   @behaviour Cerberus.Driver
 
-  import Phoenix.LiveViewTest, only: [element: 2, element: 3, render: 1, render_click: 1]
+  import Phoenix.LiveViewTest, only: [element: 2, render: 1, render_click: 1]
 
   alias Cerberus.Driver.Live.FormData
   alias Cerberus.Driver.Static, as: StaticSession
@@ -708,7 +708,13 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp live_button_element(view, button, scope) do
-    element(view, scoped_selector("button", scope), button.text)
+    case live_button_selector(button) do
+      selector when is_binary(selector) and selector != "" ->
+        element(view, scoped_selector(selector, scope))
+
+      _ ->
+        raise ArgumentError, "live button click requires a resolvable selector"
+    end
   end
 
   defp live_link_element(view, %{selector: selector}, scope) when is_binary(selector) and selector != "" do
@@ -716,8 +722,56 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp live_link_element(view, link, scope) do
-    element(view, scoped_selector("a", scope), link.text)
+    case live_link_selector(link) do
+      selector when is_binary(selector) and selector != "" ->
+        element(view, scoped_selector(selector, scope))
+
+      _ ->
+        raise ArgumentError, "live link click requires a resolvable selector"
+    end
   end
+
+  defp live_button_selector(button) when is_map(button) do
+    Enum.find(
+      [
+        attr_selector("button", "data-testid", Map.get(button, :testid)),
+        attr_selector("button", "title", Map.get(button, :title)),
+        attr_selector("button", "name", Map.get(button, :button_name)),
+        attr_selector("button", "value", Map.get(button, :button_value)),
+        attr_selector("button", "form", Map.get(button, :form))
+      ],
+      &(is_binary(&1) and &1 != "")
+    )
+  end
+
+  defp live_link_selector(link) when is_map(link) do
+    Enum.find(
+      [
+        attr_selector("a", "data-testid", Map.get(link, :testid)),
+        attr_selector("a", "title", Map.get(link, :title)),
+        attr_selector("a", "href", Map.get(link, :href))
+      ],
+      &(is_binary(&1) and &1 != "")
+    )
+  end
+
+  defp attr_selector(tag, attr_name, value)
+       when is_binary(tag) and is_binary(attr_name) and is_binary(value) and value != "" do
+    ~s(#{tag}[#{attr_name}="#{css_attr_escape(value)}"])
+  end
+
+  defp attr_selector(_tag, _attr_name, _value), do: nil
+
+  defp css_attr_escape(value) do
+    value
+    |> String.to_charlist()
+    |> Enum.map_join(&css_attr_char_escape/1)
+  end
+
+  defp css_attr_char_escape(?\\), do: "\\\\"
+  defp css_attr_char_escape(?"), do: "\\\""
+  defp css_attr_char_escape(char) when char in [?\n, ?\r, ?\t, ?\f], do: "\\#{Integer.to_string(char, 16)} "
+  defp css_attr_char_escape(char), do: <<char::utf8>>
 
   defp redirected_result(session, clicked, to, reason, action \\ :button) do
     updated = visit(session, to, [])

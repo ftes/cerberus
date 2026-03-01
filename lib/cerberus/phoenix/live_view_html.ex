@@ -87,16 +87,28 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
 
   defp maybe_live_clickable_match(root_node, node, lazy_html, expected, opts) do
     text = node_text(node)
+    value = live_clickable_match_value(root_node, node, opts)
 
-    if live_clickable_button_node?(root_node, node) and Query.match_text?(text, expected, opts) do
+    if live_clickable_button_node?(root_node, node) and Query.match_text?(value, expected, opts) do
       mapped =
         node
         |> build_live_clickable_button(root_node, text)
         |> maybe_put_unique_selector(lazy_html, node)
+        |> maybe_put_match_selector(node, opts)
 
       {:ok, mapped}
     else
       false
+    end
+  end
+
+  defp live_clickable_match_value(root_node, node, opts) do
+    case match_by_opt(opts) do
+      :button -> node_text(node)
+      :title -> attr(node, "title") || ""
+      :testid -> attr(node, "data-testid") || ""
+      :alt -> button_alt_text(node, root_node)
+      _ -> node_text(node)
     end
   end
 
@@ -258,6 +270,8 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
 
     %{
       text: text,
+      title: attr(node, "title") || "",
+      testid: attr(node, "data-testid") || "",
       button_name: attr(node, "name"),
       button_value: attr(node, "value"),
       form: form_id,
@@ -281,6 +295,24 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
         end)
     end
   end
+
+  defp button_alt_text(node, root_node) do
+    case attr(node, "alt") do
+      direct when is_binary(direct) and direct != "" ->
+        direct
+
+      _ ->
+        nested_button_alt_text(node, root_node)
+    end
+  end
+
+  defp nested_button_alt_text(node, root_node) do
+    node
+    |> safe_query("img[alt],input[type='image'][alt]")
+    |> Enum.find_value("", &matching_alt_value(&1, root_node))
+  end
+
+  defp matching_alt_value(image_node, _root_node), do: attr(image_node, "alt") || ""
 
   defp form_selector(_root_node, nil, nil), do: nil
 
@@ -308,6 +340,35 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
       selector -> Map.put(mapped, :selector, selector)
     end
   end
+
+  defp maybe_put_match_selector(%{selector: selector} = mapped, _node, _opts)
+       when is_binary(selector) and selector != "" do
+    mapped
+  end
+
+  defp maybe_put_match_selector(mapped, node, opts) do
+    case match_selector_for(node, match_by_opt(opts)) do
+      selector when is_binary(selector) and selector != "" -> Map.put(mapped, :selector, selector)
+      _ -> mapped
+    end
+  end
+
+  defp match_selector_for(node, :testid) do
+    attr_selector("button", "data-testid", attr(node, "data-testid"))
+  end
+
+  defp match_selector_for(node, :title) do
+    attr_selector("button", "title", attr(node, "title"))
+  end
+
+  defp match_selector_for(_node, _match_by), do: nil
+
+  defp attr_selector(tag, attr_name, value)
+       when is_binary(tag) and is_binary(attr_name) and is_binary(value) and value != "" do
+    ~s(#{tag}[#{attr_name}="#{css_attr_escape(value)}"])
+  end
+
+  defp attr_selector(_tag, _attr_name, _value), do: nil
 
   defp unique_selector(lazy_html, node) do
     tag = node_tag(node)
@@ -426,6 +487,13 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     case Keyword.get(opts, :selector) do
       selector when is_binary(selector) and selector != "" -> selector
       _ -> nil
+    end
+  end
+
+  defp match_by_opt(opts) do
+    case Keyword.get(opts, :match_by) do
+      value when value in [:button, :title, :testid, :alt] -> value
+      _ -> :text
     end
   end
 

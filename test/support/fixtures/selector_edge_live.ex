@@ -31,13 +31,13 @@ defmodule Cerberus.Fixtures.SelectorEdgeLive do
       <a href="/articles">Articles</a>
 
       <section id="primary-actions">
-        <button phx-click="select_primary" class="action primary" data-kind={"p\"a\\th"}>
+        <button phx-click="select_primary" class="action primary" data-kind={"p\"a\\th"} data-testid="apply-primary">
           Apply
         </button>
       </section>
 
       <section id="secondary-actions">
-        <button phx-click="select_secondary" class="action secondary" data-kind="secondary">
+        <button phx-click="select_secondary" class="action secondary" data-kind="secondary" data-testid="apply-secondary">
           Apply
         </button>
       </section>

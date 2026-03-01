@@ -45,8 +45,8 @@ defmodule Cerberus.Fixtures.UploadLive do
 
       <form id="full-form" phx-change="upload-change" phx-submit="save-avatar">
         <label for={@uploads.avatar.ref}>Avatar</label>
-        <.live_file_input upload={@uploads.avatar} />
-        <button type="submit">Save Avatar</button>
+        <.live_file_input upload={@uploads.avatar} data-testid="live-avatar-upload" />
+        <button type="submit" data-testid="live-save-avatar">Save Avatar</button>
       </form>
 
       <div :if={@saved_file} id="upload-save-result">
@@ -55,12 +55,12 @@ defmodule Cerberus.Fixtures.UploadLive do
 
       <form id="tiny-upload-form">
         <label for={@uploads.tiny.ref}>Tiny</label>
-        <.live_file_input upload={@uploads.tiny} />
+        <.live_file_input upload={@uploads.tiny} data-testid="live-tiny-upload" />
       </form>
 
       <form id="upload-change-form" phx-change="upload-change">
         <label for={@uploads.avatar_3.ref}>Avatar</label>
-        <.live_file_input upload={@uploads.avatar_3} />
+        <.live_file_input upload={@uploads.avatar_3} data-testid="live-upload-change-avatar" />
       </form>
 
       <div :if={@upload_change_triggered} id="upload-change-result">
@@ -69,7 +69,7 @@ defmodule Cerberus.Fixtures.UploadLive do
 
       <form id="upload-redirect-form" phx-change="upload-change">
         <label for={@uploads.redirect_avatar.ref}>Redirect Avatar</label>
-        <.live_file_input upload={@uploads.redirect_avatar} />
+        <.live_file_input upload={@uploads.redirect_avatar} data-testid="live-redirect-avatar-upload" />
       </form>
     </main>
     """

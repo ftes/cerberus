@@ -3,7 +3,7 @@ defmodule CerberusTest.StaticUploadBehaviorTest do
 
   import Cerberus
 
-  test "upload submits file inputs on static routes in phoenix mode" do
+  test "upload and submit support testid locators on static routes in phoenix mode" do
     jpg = upload_fixture_path("elixir.jpg")
 
     :phoenix
@@ -11,8 +11,8 @@ defmodule CerberusTest.StaticUploadBehaviorTest do
     |> visit("/upload/static")
     |> within("#static-upload-form", fn scoped ->
       scoped
-      |> upload("Avatar", jpg)
-      |> submit(text: "Upload Avatar", exact: true)
+      |> upload(testid("static-avatar-upload"), jpg)
+      |> submit(testid("static-upload-submit"))
     end)
     |> assert_has(text("Uploaded file: elixir.jpg", exact: true))
   end

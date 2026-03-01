@@ -79,6 +79,23 @@ defmodule CerberusTest.HelperLocatorBehaviorTest do
       |> assert_has(text("Search query: gandalf", exact: true))
     end
 
+    test "testid helper supports click targets on live routes (#{driver})" do
+      unquote(driver)
+      |> session()
+      |> visit("/articles")
+      |> click(testid("articles-counter-link"))
+      |> click(testid("counter-increment-button"))
+      |> assert_has(text("Count: 1", exact: true))
+    end
+
+    test "testid click disambiguates duplicate live button text without relying on text fallback (#{driver})" do
+      unquote(driver)
+      |> session()
+      |> visit("/live/selector-edge")
+      |> click(testid("apply-secondary"))
+      |> assert_has(text("Selected: secondary", exact: true))
+    end
+
     test "placeholder/title/alt helpers behave consistently in static and browser (#{driver})" do
       unquote(driver)
       |> session()

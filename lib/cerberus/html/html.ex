@@ -155,7 +155,12 @@ defmodule Cerberus.Html do
       opts,
       scope,
       fn node, text, _root_node ->
-        %{text: text, href: attr(node, "href")}
+        %{
+          text: text,
+          href: attr(node, "href"),
+          title: attr(node, "title") || "",
+          testid: attr(node, "data-testid") || ""
+        }
       end,
       fn _root_node, node -> link_node?(node) end,
       fn root_node, node -> link_match_value(root_node, node, match_by) end
@@ -172,8 +177,14 @@ defmodule Cerberus.Html do
       expected,
       opts,
       scope,
-      fn _node, text, _root_node ->
-        %{text: text}
+      fn node, text, _root_node ->
+        %{
+          text: text,
+          title: attr(node, "title") || "",
+          testid: attr(node, "data-testid") || "",
+          button_name: attr(node, "name"),
+          button_value: attr(node, "value")
+        }
       end,
       fn _root_node, node -> button_node?(node) end,
       fn root_node, node -> button_match_value(root_node, node, match_by) end
