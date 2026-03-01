@@ -234,7 +234,7 @@ defmodule Cerberus.Driver.Browser.WS do
         :ok
 
       [_, code, message] ->
-        {:error, %WebSockex.RequestError{code: String.to_integer(code), message: message}}
+        {:error, {:http_ws_handshake_error, code, message}}
 
       _ ->
         {:error, {:invalid_handshake_response, status_line}}
