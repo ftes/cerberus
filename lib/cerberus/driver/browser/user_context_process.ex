@@ -119,7 +119,7 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     bidi_opts = Keyword.get(opts, :bidi_opts, opts)
 
     browser_context_defaults =
-      Keyword.get(opts, :browser_context_defaults, %{viewport: nil, user_agent: nil, init_scripts: []})
+      Keyword.get(opts, :browser_context_defaults, %{viewport: nil, user_agent: nil, init_scripts: [], popup_mode: :allow})
 
     with {:ok, browsing_context_supervisor} <- BrowsingContextSupervisor.start_link(),
          {:ok, user_context_id} <- create_user_context(bidi_opts),

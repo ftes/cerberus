@@ -5,6 +5,7 @@ defmodule Cerberus.Driver.Browser do
 
   alias Cerberus.Driver.Browser.AssertionHelpers
   alias Cerberus.Driver.Browser.BiDi
+  alias Cerberus.Driver.Browser.PopupHelpers
   alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.Locator
@@ -18,13 +19,14 @@ defmodule Cerberus.Driver.Browser do
   @default_ready_quiet_ms 40
   @default_screenshot_full_page false
   @user_context_supervisor Cerberus.Driver.Browser.UserContextSupervisor
-  @empty_browser_context_defaults %{viewport: nil, user_agent: nil, init_scripts: []}
+  @empty_browser_context_defaults %{viewport: nil, user_agent: nil, init_scripts: [], popup_mode: :allow}
 
   @type viewport :: %{width: pos_integer(), height: pos_integer()}
   @type browser_context_defaults :: %{
           viewport: viewport() | nil,
           user_agent: String.t() | nil,
-          init_scripts: [String.t()]
+          init_scripts: [String.t()],
+          popup_mode: :allow | :same_tab
         }
 
   @type t :: %__MODULE__{
@@ -266,17 +268,10 @@ defmodule Cerberus.Driver.Browser do
 
     case navigate_browser(state, url) do
       {:ok, _} ->
-        case with_snapshot(state) do
-          {state, snapshot} ->
-            update_session(session, state, :visit, %{path: snapshot.path, title: snapshot.title})
-
-          {:error, reason, details} ->
-            raise ArgumentError,
-                  "failed to collect browser snapshot after visit: #{reason} (#{inspect(details)})"
-        end
+        snapshot_after_visit!(session, state)
 
       {:error, reason, details} ->
-        raise ArgumentError, "browser navigate failed: #{reason} (#{inspect(details)})"
+        handle_visit_navigation_error!(session, state, reason, details)
     end
   end
 
@@ -1051,6 +1046,45 @@ defmodule Cerberus.Driver.Browser do
     UserContextProcess.navigate(state.user_context_pid, url, state.tab_id)
   end
 
+  defp snapshot_after_visit!(session, state) do
+    case with_snapshot(state) do
+      {state, snapshot} ->
+        update_session(session, state, :visit, %{path: snapshot.path, title: snapshot.title})
+
+      {:error, reason, details} ->
+        raise ArgumentError,
+              "failed to collect browser snapshot after visit: #{reason} (#{inspect(details)})"
+    end
+  end
+
+  defp handle_visit_navigation_error!(session, state, reason, details) do
+    if navigate_interrupted_by_followup?(reason, details) do
+      await_ready_after_navigation_interrupt!(state)
+      snapshot_after_visit!(session, state)
+    else
+      raise ArgumentError, "browser navigate failed: #{reason} (#{inspect(details)})"
+    end
+  end
+
+  defp await_ready_after_navigation_interrupt!(state) do
+    case await_driver_ready(state) do
+      {:ok, _readiness} ->
+        :ok
+
+      {:error, ready_reason, ready_details} ->
+        raise ArgumentError,
+              "browser navigate interrupted and readiness wait failed: #{ready_reason} (#{inspect(ready_details)})"
+    end
+  end
+
+  defp navigate_interrupted_by_followup?(reason, details)
+       when reason in ["unknown error", "navigation canceled by concurrent navigation"] and is_map(details) do
+    message = details["message"] || details[:message] || ""
+    is_binary(message) and String.contains?(message, "navigation canceled by concurrent navigation")
+  end
+
+  defp navigate_interrupted_by_followup?(_reason, _details), do: false
+
   defp eval_json(state, expression, timeout_ms \\ 10_000)
 
   defp eval_json(state, expression, timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
@@ -1567,15 +1601,17 @@ defmodule Cerberus.Driver.Browser do
 
       nil ->
         browser_opts = merged_browser_opts(opts)
+        popup_mode = normalize_popup_mode(opt_value(opts, browser_opts, :popup_mode))
 
         %{
           viewport: normalize_viewport(opt_value(opts, browser_opts, :viewport)),
           user_agent: normalize_user_agent(opt_value(opts, browser_opts, :user_agent)),
+          popup_mode: popup_mode,
           init_scripts:
             opts
             |> opt_value(browser_opts, :init_scripts)
             |> normalize_init_scripts(opt_value(opts, browser_opts, :init_script))
-            |> ensure_internal_init_scripts()
+            |> ensure_internal_init_scripts(popup_mode)
         }
 
       other ->
@@ -1694,19 +1730,28 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp normalize_browser_context_defaults!(defaults) when is_map(defaults) do
+    popup_mode = normalize_popup_mode(Map.get(defaults, :popup_mode))
+
     %{
       viewport: normalize_viewport(Map.get(defaults, :viewport)),
       user_agent: normalize_user_agent(Map.get(defaults, :user_agent)),
+      popup_mode: popup_mode,
       init_scripts:
         defaults
         |> Map.get(:init_scripts)
         |> normalize_init_scripts(nil)
-        |> ensure_internal_init_scripts()
+        |> ensure_internal_init_scripts(popup_mode)
     }
   end
 
-  defp ensure_internal_init_scripts(scripts) when is_list(scripts) do
-    [AssertionHelpers.preload_script() | scripts]
+  defp ensure_internal_init_scripts(scripts, popup_mode) when is_list(scripts) do
+    popup_script =
+      case popup_mode do
+        :same_tab -> [PopupHelpers.same_tab_popup_preload_script()]
+        :allow -> []
+      end
+
+    [AssertionHelpers.preload_script() | popup_script] ++ scripts
   end
 
   defp merged_browser_opts(opts) do
@@ -1765,6 +1810,14 @@ defmodule Cerberus.Driver.Browser do
 
   defp normalize_user_agent(user_agent) do
     raise ArgumentError, ":user_agent must be a string, got: #{inspect(user_agent)}"
+  end
+
+  defp normalize_popup_mode(nil), do: :allow
+  defp normalize_popup_mode(:allow), do: :allow
+  defp normalize_popup_mode(:same_tab), do: :same_tab
+
+  defp normalize_popup_mode(mode) do
+    raise ArgumentError, ":popup_mode must be :allow or :same_tab, got: #{inspect(mode)}"
   end
 
   defp normalize_init_scripts(scripts, script) do

@@ -43,6 +43,8 @@ defmodule Cerberus.Fixtures.Router do
     get("/controls", PageController, :controls_form)
     get("/controls/result", PageController, :controls_result)
     get("/browser/extensions", PageController, :browser_extensions)
+    get("/browser/popup/auto", PageController, :popup_auto)
+    get("/browser/popup/destination", PageController, :popup_destination)
     get("/session/user", PageController, :session_user)
     get("/session/user/:value", PageController, :set_session_user)
     get("/owner-form", PageController, :owner_form)

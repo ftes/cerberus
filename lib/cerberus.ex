@@ -63,6 +63,7 @@ defmodule Cerberus do
 
   - `browser: [viewport: [width: ..., height: ...] | {w, h}]`
   - `browser: [user_agent: "..."]`
+  - `browser: [popup_mode: :allow | :same_tab]` to control `window.open` behavior
   - `browser: [init_script: "..."]` or `browser: [init_scripts: ["...", ...]]`
   - `webdriver_url: "http://remote-webdriver:4444"` to use a remote WebDriver endpoint
     without local browser/chromedriver launch.

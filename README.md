@@ -161,7 +161,12 @@ session(:browser,
 Isolation strategy:
 - runtime process + BiDi transport stay shared,
 - each `session(:browser, ...)` creates an isolated browser user context,
-- context-level overrides (viewport/user-agent/init scripts) are isolated per session and do not require a dedicated browser process.
+- context-level overrides (viewport/user-agent/popup mode/init scripts) are isolated per session and do not require a dedicated browser process.
+
+Popup behavior:
+- `popup_mode: :allow` keeps browser default popup/new-window behavior (default).
+- `popup_mode: :same_tab` injects an early preload script that rewrites `window.open(...)` to same-tab navigation.
+- `:same_tab` is a pragmatic workaround for autonomous popup flows until first-class multi-window lifecycle APIs land.
 
 ## Browser Defaults and Runtime Options
 
@@ -192,7 +197,7 @@ Assertion-timeout fallback:
 - Static assertions remain immediate unless you pass explicit call/session/app timeout overrides.
 
 Option scopes:
-- Per-session context options: `ready_timeout_ms`, `ready_quiet_ms`, `browser: [viewport: ..., user_agent: ..., init_script: ... | init_scripts: [...]]`.
+- Per-session context options: `ready_timeout_ms`, `ready_quiet_ms`, `browser: [viewport: ..., user_agent: ..., popup_mode: :allow | :same_tab, init_script: ... | init_scripts: [...]]`.
 - Global runtime launch options: `browser_name`, `webdriver_url`, `chrome_webdriver_url`, `firefox_webdriver_url`, `show_browser`, `headless`, `chrome_args`, `firefox_args`, `chrome_binary`, `firefox_binary`, `chromedriver_binary`, `geckodriver_binary` (`webdriver_urls` is still accepted for compatibility).
 - Global browser defaults: `bidi_command_timeout_ms`, `runtime_http_timeout_ms`, `dialog_timeout_ms`, `screenshot_full_page`, `screenshot_artifact_dir`, `screenshot_path`.
 

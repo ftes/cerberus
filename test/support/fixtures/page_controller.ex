@@ -469,6 +469,50 @@ defmodule Cerberus.Fixtures.PageController do
     """)
   end
 
+  def popup_auto(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Popup Auto</title>
+        <script>
+          (() => {
+            window.open("/browser/popup/destination?source=auto-load", "fixture-popup");
+          })();
+        </script>
+      </head>
+      <body>
+        <main>
+          <h1>Popup Auto Source</h1>
+          <p id="popup-source-note">Opened popup from source page.</p>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def popup_destination(conn, params) do
+    params = merged_request_params(conn, params)
+    source = Map.get(params, "source", "unknown")
+
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Popup Destination</title>
+      </head>
+      <body>
+        <main>
+          <h1>Popup Destination</h1>
+          <p id="popup-source">popup source: #{source}</p>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
   def session_user(conn, _params) do
     value = Plug.Conn.get_session(conn, :session_user) || "unset"
 
