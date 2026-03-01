@@ -95,4 +95,21 @@ defmodule CerberusTest.BrowserExtensionsTest do
     assert fixture_session_cookie.http_only
     assert fixture_session_cookie.session
   end
+
+  test "with_dialog reports callback completion when no dialog opens" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+
+    error =
+      assert_raise AssertionError, fn ->
+        Browser.with_dialog(session, fn dialog_session ->
+          dialog_session
+        end)
+      end
+
+    assert error.message =~
+             "with_dialog/3 callback completed before browsingContext.userPromptOpened was observed"
+  end
 end

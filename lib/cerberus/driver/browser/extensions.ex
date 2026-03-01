@@ -6,7 +6,13 @@ defmodule Cerberus.Driver.Browser.Extensions do
   alias Cerberus.Driver.Browser.UserContextProcess
   alias ExUnit.AssertionError
 
+  @dialog_events [
+    "browsingContext.userPromptOpened",
+    "browsingContext.userPromptClosed"
+  ]
+
   @default_dialog_timeout_ms 1_500
+  @dialog_poll_ms 25
 
   @spec type(BrowserSession.t(), String.t(), keyword()) :: BrowserSession.t()
   def type(%BrowserSession{} = session, text, opts \\ []) when is_binary(text) and is_list(opts) do
@@ -65,14 +71,18 @@ defmodule Cerberus.Driver.Browser.Extensions do
     timeout_ms = dialog_timeout_ms(opts)
     expected_message = Keyword.get(opts, :message)
 
+    protocol_subscription_id = subscribe_dialog_protocol_events!(session)
     :ok = subscribe_dialog_events!(session)
+    flush_stale_dialog_events(session.tab_id)
     action_task = Task.async(fn -> action.(session) end)
 
     try do
-      opened = await_dialog_event!("browsingContext.userPromptOpened", session.tab_id, timeout_ms)
+      {opened, action_outcome} =
+        await_dialog_opened_event!(session.tab_id, action_task, timeout_ms)
+
       handle_dialog_prompt!(session, timeout_ms)
       closed = await_dialog_event!("browsingContext.userPromptClosed", session.tab_id, timeout_ms)
-      next_session = await_dialog_action_result!(action_task, timeout_ms)
+      next_session = await_dialog_action_result!(action_task, action_outcome, timeout_ms)
 
       if !match?(%BrowserSession{}, next_session) do
         raise ArgumentError, "with_dialog/3 callback must return a browser session"
@@ -90,6 +100,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
     after
       _ = Task.shutdown(action_task, :brutal_kill)
       unsubscribe_dialog_events(session)
+      unsubscribe_dialog_protocol_events(protocol_subscription_id, session)
     end
   end
 
@@ -297,10 +308,102 @@ defmodule Cerberus.Driver.Browser.Extensions do
     BiDi.subscribe(self(), bidi_opts(session))
   end
 
+  defp subscribe_dialog_protocol_events!(session) do
+    case BiDi.command(
+           "session.subscribe",
+           %{"events" => @dialog_events, "contexts" => [session.tab_id]},
+           bidi_opts(session)
+         ) do
+      {:ok, %{"subscription" => subscription_id}} when is_binary(subscription_id) ->
+        subscription_id
+
+      {:ok, payload} ->
+        raise ArgumentError, "failed to subscribe to dialog events: #{inspect(payload)}"
+
+      {:error, reason, details} ->
+        raise ArgumentError, "failed to subscribe to dialog events: #{reason} (#{inspect(details)})"
+    end
+  end
+
   defp unsubscribe_dialog_events(session) do
     opts = bidi_opts(session)
     _ = BiDi.unsubscribe(self(), opts)
     :ok
+  end
+
+  defp unsubscribe_dialog_protocol_events(subscription_id, session) when is_binary(subscription_id) do
+    _ = BiDi.command("session.unsubscribe", %{"subscriptions" => [subscription_id]}, bidi_opts(session))
+    :ok
+  end
+
+  defp flush_stale_dialog_events(context_id) do
+    receive do
+      {:cerberus_bidi_event,
+       %{
+         "method" => method,
+         "params" => %{"context" => ^context_id}
+       }}
+      when method in @dialog_events ->
+        flush_stale_dialog_events(context_id)
+    after
+      0 ->
+        :ok
+    end
+  end
+
+  defp await_dialog_opened_event!(context_id, action_task, timeout_ms) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    await_dialog_opened_event_loop(context_id, action_task, deadline, :pending)
+  end
+
+  defp await_dialog_opened_event_loop(context_id, action_task, deadline, action_outcome) do
+    action_outcome = poll_action_task(action_task, action_outcome)
+
+    case action_outcome do
+      {:exit, reason} ->
+        raise AssertionError, message: "with_dialog/3 callback failed: #{Exception.format_exit(reason)}"
+
+      _ ->
+        now = System.monotonic_time(:millisecond)
+        remaining = max(deadline - now, 0)
+
+        if remaining == 0 do
+          raise_dialog_open_timeout!(action_outcome)
+        else
+          wait_ms = min(remaining, @dialog_poll_ms)
+
+          receive do
+            {:cerberus_bidi_event,
+             %{
+               "method" => "browsingContext.userPromptOpened",
+               "params" => %{"context" => ^context_id} = params
+             }} ->
+              {params, action_outcome}
+
+            {:cerberus_bidi_event, _other} ->
+              await_dialog_opened_event_loop(context_id, action_task, deadline, action_outcome)
+          after
+            wait_ms ->
+              await_dialog_opened_event_loop(context_id, action_task, deadline, action_outcome)
+          end
+        end
+    end
+  end
+
+  defp poll_action_task(_action_task, {:ok, _} = action_outcome), do: action_outcome
+  defp poll_action_task(_action_task, {:exit, _} = action_outcome), do: action_outcome
+
+  defp poll_action_task(action_task, :pending) do
+    Task.yield(action_task, 0) || :pending
+  end
+
+  defp raise_dialog_open_timeout!(:pending) do
+    raise AssertionError, message: "with_dialog/3 timed out waiting for browsingContext.userPromptOpened"
+  end
+
+  defp raise_dialog_open_timeout!({:ok, _result}) do
+    raise AssertionError,
+      message: "with_dialog/3 callback completed before browsingContext.userPromptOpened was observed"
   end
 
   defp await_dialog_event!(method, context_id, timeout_ms) do
@@ -340,7 +443,13 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  defp await_dialog_action_result!(action_task, timeout_ms) do
+  defp await_dialog_action_result!(_action_task, {:ok, result}, _timeout_ms), do: result
+
+  defp await_dialog_action_result!(_action_task, {:exit, reason}, _timeout_ms) do
+    raise AssertionError, message: "with_dialog/3 callback failed: #{Exception.format_exit(reason)}"
+  end
+
+  defp await_dialog_action_result!(action_task, :pending, timeout_ms) do
     wait_ms = timeout_ms + 1_000
 
     case Task.yield(action_task, wait_ms) || Task.shutdown(action_task, :brutal_kill) do
