@@ -483,6 +483,12 @@ defmodule Cerberus.Assertions do
         locator: locator_input,
         message: "selector locator option is not supported for assert_has/3 or refute_has/3 in this slice"
     end
+
+    if Keyword.has_key?(locator_opts, :has) do
+      raise InvalidLocatorError,
+        locator: locator_input,
+        message: "has locator option is not supported for assert_has/3 or refute_has/3 in this slice"
+    end
   end
 
   defp merge_locator_selector_opts(%Locator{opts: locator_opts}, opts) when is_list(locator_opts) do

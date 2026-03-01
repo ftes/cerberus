@@ -106,6 +106,14 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       |> assert_has(text("Selected: secondary", exact: true))
     end
 
+    test "has locator option disambiguates duplicate live buttons with nested marker elements (#{driver})" do
+      unquote(driver)
+      |> session()
+      |> visit("/live/selector-edge")
+      |> click(button("Apply", has: testid("apply-secondary-marker")))
+      |> assert_has(text("Selected: secondary", exact: true))
+    end
+
     test "placeholder/title/alt helpers behave consistently in static and browser (#{driver})" do
       unquote(driver)
       |> session()

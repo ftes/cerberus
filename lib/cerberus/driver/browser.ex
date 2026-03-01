@@ -8,6 +8,7 @@ defmodule Cerberus.Driver.Browser do
   alias Cerberus.Driver.Browser.Expressions
   alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.UserContextProcess
+  alias Cerberus.Html
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
   alias Cerberus.Options
@@ -963,7 +964,9 @@ defmodule Cerberus.Driver.Browser do
     matches =
       Enum.filter(items, fn item ->
         value = clickable_match_value(item, Keyword.get(opts, :match_by, :text))
-        Query.match_text?(value, expected, opts) and Query.matches_state_filters?(item, opts)
+
+        Query.match_text?(value, expected, opts) and Query.matches_state_filters?(item, opts) and
+          matches_composition_filters?(item, opts)
       end)
 
     Query.pick_match(matches, opts)
@@ -982,10 +985,31 @@ defmodule Cerberus.Driver.Browser do
     matches =
       Enum.filter(items, fn item ->
         value = field_match_value(item, Keyword.get(opts, :match_by, :label))
-        Query.match_text?(value, expected, opts) and Query.matches_state_filters?(item, opts)
+
+        Query.match_text?(value, expected, opts) and Query.matches_state_filters?(item, opts) and
+          matches_composition_filters?(item, opts)
       end)
 
     Query.pick_match(matches, opts)
+  end
+
+  defp matches_composition_filters?(item, opts) do
+    case Keyword.get(opts, :has) do
+      nil ->
+        true
+
+      %Locator{} ->
+        case item["outer_html"] do
+          html when is_binary(html) and html != "" ->
+            Html.fragment_matches_locator_filters?(html, opts)
+
+          _ ->
+            false
+        end
+
+      _other ->
+        false
+    end
   end
 
   defp clickable_match_value(item, match_by) when is_map(item),

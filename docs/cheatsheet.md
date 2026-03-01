@@ -47,6 +47,7 @@
 - `testid("...")`
 - `css("...")`
 - `role(:button, name: "...")`
+- Composition: `button("Apply", has: testid("apply-secondary-marker"))`
 
 ### Supported role aliases
 - Click/assert roles: `button`, `menuitem`, `tab`, `link`, `heading`, `img`

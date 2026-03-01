@@ -96,7 +96,8 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     text = node_text(node)
     value = live_clickable_match_value(root_node, node, opts)
 
-    if live_clickable_button_node?(root_node, node) and Query.match_text?(value, expected, opts) do
+    if live_clickable_button_node?(root_node, node) and Query.match_text?(value, expected, opts) and
+         Html.node_matches_locator_filters?(node, opts) do
       mapped =
         node
         |> build_live_clickable_button(root_node, text)

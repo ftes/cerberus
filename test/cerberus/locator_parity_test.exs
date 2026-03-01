@@ -236,6 +236,38 @@ defmodule Cerberus.LocatorParityTest do
                        """ <>
                        @html_suffix
 
+  @chained_locator_html @html_prefix <>
+                          """
+                            <main>
+                            <section id="chained-clickables">
+                              <button id="apply-primary">
+                                <span data-testid="apply-primary-marker" aria-hidden="true">primary</span>
+                                Apply
+                              </button>
+                              <button id="apply-secondary">
+                                <span data-testid="apply-secondary-marker" aria-hidden="true">secondary</span>
+                                Apply
+                              </button>
+                            </section>
+
+                            <form id="chained-submit-form" action="/search/results" method="get">
+                              <label for="chained_q">Search term</label>
+                              <input id="chained_q" name="q" type="text" />
+
+                              <button id="submit-primary" type="submit">
+                                <span class="kind-primary" data-testid="submit-primary-marker" aria-hidden="true">primary</span>
+                                Run Search
+                              </button>
+
+                              <button id="submit-secondary" type="submit">
+                                <span class="kind-secondary" data-testid="submit-secondary-marker" aria-hidden="true">secondary</span>
+                                Run Search
+                              </button>
+                            </form>
+                            </main>
+                          """ <>
+                          @html_suffix
+
   setup do
     upload_path =
       Path.join(System.tmp_dir!(), "cerberus-locator-oracle-#{System.unique_integer([:positive])}.txt")
@@ -475,6 +507,39 @@ defmodule Cerberus.LocatorParityTest do
         html: @state_filter_html,
         expect: :ok,
         run: &choose(&1, label("State Contact"), selected: false)
+      },
+      # locator composition / chaining
+      %{
+        name: "submit supports has testid nested locator filter",
+        html: @chained_locator_html,
+        expect: :ok,
+        run: &submit(&1, button("Run Search", has: testid("submit-secondary-marker")))
+      },
+      %{
+        name: "submit supports has text nested locator filter",
+        html: @chained_locator_html,
+        expect: :ok,
+        run: &submit(&1, button("Run Search", has: text("secondary", exact: true)))
+      },
+      %{
+        name: "submit has filter errors when nested locator does not match",
+        html: @chained_locator_html,
+        expect: :error,
+        error_module: AssertionError,
+        run: &submit(&1, button("Run Search", has: testid("missing-marker")))
+      },
+      %{
+        name: "submit supports has css nested locator filter",
+        html: @chained_locator_html,
+        expect: :ok,
+        run: &submit(&1, button("Run Search", has: css(".kind-secondary")))
+      },
+      %{
+        name: "assert_has rejects has locator option in this slice",
+        html: @chained_locator_html,
+        expect: :error,
+        error_module: InvalidLocatorError,
+        run: &assert_has(&1, text("Apply", has: text("secondary")))
       },
       # upload
       %{name: "upload file input by label", expect: :ok, run: &upload(&1, label("Avatar"), upload_path)},

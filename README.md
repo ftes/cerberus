@@ -127,6 +127,9 @@ session
 
 - Helper constructors:
   - `text("...")`, `link("...")`, `button("...")`, `label("...")`, `testid("...")`, `css("...")`, `role(:button, name: "...")`
+- Locator composition:
+  - `has:` filters matched elements by requiring a descendant locator (`css(...)`, `text(...)`, or `testid(...)`)
+  - Example: `click(button("Apply", has: testid("apply-secondary-marker")))`
 - Sigil:
   - `~l"text"` (text locator)
   - modifiers:

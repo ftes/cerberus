@@ -222,6 +222,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
         .map((element, index) => ({
         index,
         text: normalize(element.textContent),
+        outer_html: element.outerHTML || "",
         checked: false,
         selected: false,
         disabled: false,
@@ -243,6 +244,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
         .map((element, index) => ({
         index,
         text: normalize(element.textContent),
+        outer_html: element.outerHTML || "",
         checked: false,
         selected: false,
         disabled: element.disabled === true,
@@ -356,6 +358,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
             index,
             id: element.id || "",
             name: element.name || "",
+            outer_html: element.outerHTML || "",
             label: labelForControl(element),
             placeholder: element.getAttribute("placeholder") || "",
             title: element.getAttribute("title") || "",
@@ -446,6 +449,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
           index,
           id: element.id || "",
           name: element.name || "",
+          outer_html: element.outerHTML || "",
           label: labels.get(element.id) || "",
           placeholder: element.getAttribute("placeholder") || "",
           title: element.getAttribute("title") || "",

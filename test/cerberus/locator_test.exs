@@ -91,6 +91,28 @@ defmodule Cerberus.LocatorTest do
     assert locator.opts[:selector] == "#primary-actions button"
   end
 
+  test "normalizes has locator option for supported nested locators" do
+    locator = Locator.normalize(button: "Apply", has: testid("apply-secondary"))
+    has_locator = locator.opts[:has]
+
+    assert %Locator{kind: :button, value: "Apply"} = locator
+    assert %Locator{kind: :testid, value: "apply-secondary"} = has_locator
+    assert has_locator.opts[:exact] == true
+
+    text_has_locator = Locator.normalize(text: "Apply", has: text("secondary", exact: true)).opts[:has]
+    assert %Locator{kind: :text, value: "secondary", opts: [exact: true]} = text_has_locator
+  end
+
+  test "rejects unsupported has locator kinds and nested has locators" do
+    assert_raise InvalidLocatorError, ~r/:has only supports nested css\(...\), text\(...\), or testid\(...\)/, fn ->
+      Locator.normalize(button: "Apply", has: button("Nested"))
+    end
+
+    assert_raise InvalidLocatorError, ~r/nested :has locators are not supported/, fn ->
+      Locator.normalize(text: "Apply", has: text("secondary", has: css(".badge")))
+    end
+  end
+
   test "normalizes role locator to operation-specific kind" do
     assert %Locator{kind: :button, value: "Increment"} = Locator.normalize(role: :button, name: "Increment")
     assert %Locator{kind: :button, value: "Tab Primary"} = Locator.normalize(role: :tab, name: "Tab Primary")

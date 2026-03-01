@@ -3,6 +3,8 @@ defmodule Cerberus.Locator do
 
   alias Cerberus.InvalidLocatorError
 
+  @has_supported_kinds [:css, :text, :testid]
+
   @enforce_keys [:kind, :value]
   defstruct [:kind, :value, opts: []]
 
@@ -105,56 +107,56 @@ defmodule Cerberus.Locator do
   defp normalize_kind(:text, locator_map, original) do
     text = key_value(locator_map, :text)
     ensure_text_value!(:text, text, original)
-    ensure_only_keys!(locator_map, original, [:text, :exact, :selector])
+    ensure_only_keys!(locator_map, original, [:text, :exact, :selector, :has])
     %__MODULE__{kind: :text, value: text, opts: locator_opts(locator_map, original)}
   end
 
   defp normalize_kind(:label, locator_map, original) do
     label = key_value(locator_map, :label)
     ensure_text_value!(:label, label, original)
-    ensure_only_keys!(locator_map, original, [:label, :exact, :selector])
+    ensure_only_keys!(locator_map, original, [:label, :exact, :selector, :has])
     %__MODULE__{kind: :label, value: label, opts: locator_opts(locator_map, original)}
   end
 
   defp normalize_kind(:link, locator_map, original) do
     link = key_value(locator_map, :link)
     ensure_text_value!(:link, link, original)
-    ensure_only_keys!(locator_map, original, [:link, :exact, :selector])
+    ensure_only_keys!(locator_map, original, [:link, :exact, :selector, :has])
     %__MODULE__{kind: :link, value: link, opts: locator_opts(locator_map, original)}
   end
 
   defp normalize_kind(:button, locator_map, original) do
     button = key_value(locator_map, :button)
     ensure_text_value!(:button, button, original)
-    ensure_only_keys!(locator_map, original, [:button, :exact, :selector])
+    ensure_only_keys!(locator_map, original, [:button, :exact, :selector, :has])
     %__MODULE__{kind: :button, value: button, opts: locator_opts(locator_map, original)}
   end
 
   defp normalize_kind(:placeholder, locator_map, original) do
     placeholder = key_value(locator_map, :placeholder)
     ensure_text_value!(:placeholder, placeholder, original)
-    ensure_only_keys!(locator_map, original, [:placeholder, :exact, :selector])
+    ensure_only_keys!(locator_map, original, [:placeholder, :exact, :selector, :has])
     %__MODULE__{kind: :placeholder, value: placeholder, opts: locator_opts(locator_map, original)}
   end
 
   defp normalize_kind(:title, locator_map, original) do
     title = key_value(locator_map, :title)
     ensure_text_value!(:title, title, original)
-    ensure_only_keys!(locator_map, original, [:title, :exact, :selector])
+    ensure_only_keys!(locator_map, original, [:title, :exact, :selector, :has])
     %__MODULE__{kind: :title, value: title, opts: locator_opts(locator_map, original)}
   end
 
   defp normalize_kind(:alt, locator_map, original) do
     alt = key_value(locator_map, :alt)
     ensure_text_value!(:alt, alt, original)
-    ensure_only_keys!(locator_map, original, [:alt, :exact, :selector])
+    ensure_only_keys!(locator_map, original, [:alt, :exact, :selector, :has])
     %__MODULE__{kind: :alt, value: alt, opts: locator_opts(locator_map, original)}
   end
 
   defp normalize_kind(:css, locator_map, original) do
     css = key_value(locator_map, :css)
     ensure_css_selector_value!(:css, css, original)
-    ensure_only_keys!(locator_map, original, [:css, :exact])
+    ensure_only_keys!(locator_map, original, [:css, :exact, :has])
     %__MODULE__{kind: :css, value: css, opts: locator_opts(locator_map, original)}
   end
 
@@ -162,7 +164,7 @@ defmodule Cerberus.Locator do
     testid = key_value(locator_map, :testid)
 
     if is_binary(testid) and testid != "" do
-      ensure_only_keys!(locator_map, original, [:testid, :exact])
+      ensure_only_keys!(locator_map, original, [:testid, :exact, :has])
       %__MODULE__{kind: :testid, value: testid, opts: locator_opts(locator_map, original)}
     else
       raise InvalidLocatorError,
@@ -175,7 +177,7 @@ defmodule Cerberus.Locator do
     role = key_value(locator_map, :role)
     name = key_value(locator_map, :name)
 
-    ensure_only_keys!(locator_map, original, [:role, :name, :exact, :selector])
+    ensure_only_keys!(locator_map, original, [:role, :name, :exact, :selector, :has])
     ensure_text_value!(:name, name, original)
     role_name = normalize_role_name!(role, original)
     role_kind = role_to_kind!(role_name, original)
@@ -210,6 +212,7 @@ defmodule Cerberus.Locator do
     []
     |> maybe_put_exact(locator_map, original)
     |> maybe_put_selector(locator_map, original)
+    |> maybe_put_has(locator_map, original)
   end
 
   defp maybe_put_exact(opts, locator_map, original) do
@@ -247,6 +250,53 @@ defmodule Cerberus.Locator do
           message: "invalid locator #{inspect(original)}; :selector must be a non-empty CSS selector string"
     end
   end
+
+  defp maybe_put_has(opts, locator_map, original) do
+    case key_value(locator_map, :has) do
+      :__missing__ ->
+        opts
+
+      has_locator_input ->
+        Keyword.put(opts, :has, normalize_has_locator!(has_locator_input, original))
+    end
+  end
+
+  defp normalize_has_locator!(value, original) do
+    has_locator = normalize(value)
+    ensure_no_nested_has!(has_locator, original)
+    ensure_supported_has_kind!(has_locator, original)
+    normalize_has_testid_exact(has_locator)
+  end
+
+  defp ensure_no_nested_has!(has_locator, original) do
+    if Keyword.has_key?(has_locator.opts, :has) do
+      raise InvalidLocatorError,
+        locator: original,
+        message: "invalid locator #{inspect(original)}; nested :has locators are not supported"
+    end
+  end
+
+  defp ensure_supported_has_kind!(has_locator, original) do
+    if has_locator.kind not in @has_supported_kinds do
+      raise InvalidLocatorError,
+        locator: original,
+        message:
+          "invalid locator #{inspect(original)}; :has only supports nested css(...), text(...), or testid(...) locators"
+    end
+  end
+
+  defp normalize_has_testid_exact(%__MODULE__{kind: :testid, opts: opts} = has_locator) do
+    normalized_opts =
+      if Keyword.has_key?(opts, :exact) do
+        opts
+      else
+        Keyword.put(opts, :exact, true)
+      end
+
+    %{has_locator | opts: normalized_opts}
+  end
+
+  defp normalize_has_testid_exact(has_locator), do: has_locator
 
   defp ensure_only_keys!(locator_map, original, allowed_atom_keys) do
     allowed =

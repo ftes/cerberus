@@ -1,6 +1,7 @@
 defmodule Cerberus.Html do
   @moduledoc false
 
+  alias Cerberus.Locator
   alias Cerberus.Query
 
   @spec texts(String.t(), true | false | :any, String.t() | nil) :: [String.t()]
@@ -41,6 +42,38 @@ defmodule Cerberus.Html do
     case parse_document(html) do
       {:ok, lazy_html} -> collect_assertion_values_in_doc(lazy_html, match_by, visibility, scope)
       _ -> []
+    end
+  end
+
+  @spec node_matches_locator_filters?(term(), keyword()) :: boolean()
+  def node_matches_locator_filters?(node, opts) when is_list(opts) do
+    case Keyword.get(opts, :has) do
+      nil ->
+        true
+
+      %Locator{} = has_locator ->
+        node_has_locator?(node, has_locator)
+
+      _other ->
+        false
+    end
+  end
+
+  @spec fragment_matches_locator_filters?(String.t(), keyword()) :: boolean()
+  def fragment_matches_locator_filters?(fragment_html, opts) when is_binary(fragment_html) and is_list(opts) do
+    if Keyword.has_key?(opts, :has) do
+      fragment_matches_locator_filters_in_doc?(fragment_html, opts)
+    else
+      true
+    end
+  end
+
+  defp fragment_matches_locator_filters_in_doc?(fragment_html, opts) do
+    with {:ok, lazy_html} <- parse_document(fragment_wrapper(fragment_html)),
+         root_node when not is_nil(root_node) <- Enum.at(safe_query(lazy_html, "#__cerberus_fragment_root__ > *"), 0) do
+      node_matches_locator_filters?(root_node, opts)
+    else
+      _ -> false
     end
   end
 
@@ -378,7 +411,8 @@ defmodule Cerberus.Html do
     match_value = button_match_value(root_node, button_node, match_by)
 
     if submit_button_match?(type, match_value, expected, opts) and
-         node_matches_selector?(root_node, button_node, selector) do
+         node_matches_selector?(root_node, button_node, selector) and
+         node_matches_locator_filters?(button_node, opts) do
       action = attr(button_node, "formaction") || form_meta.action
       method = attr(button_node, "formmethod") || form_meta.method
 
@@ -464,7 +498,8 @@ defmodule Cerberus.Html do
     with true <- Query.match_text?(label_text, expected, opts),
          {:ok, %{name: name, node: field_node} = field} <- field_for_label(root_node, label_node),
          true <- is_binary(name) and name != "",
-         true <- field_matches_selector?(root_node, field, selector) do
+         true <- field_matches_selector?(root_node, field, selector),
+         true <- node_matches_locator_filters?(field_node, opts) do
       build_form_field_match(root_node, label_text, name, field, field_node)
     else
       _ -> nil
@@ -490,7 +525,8 @@ defmodule Cerberus.Html do
          value when is_binary(value) <- field_match_value(root_node, field_node, kind),
          true <- value != "",
          true <- Query.match_text?(value, expected, opts),
-         true <- field_matches_selector?(root_node, field, selector) do
+         true <- field_matches_selector?(root_node, field, selector),
+         true <- node_matches_locator_filters?(field_node, opts) do
       build_form_field_match(root_node, field_label_for_node(root_node, field_node), name, field, field_node)
     else
       _ -> nil
@@ -543,7 +579,8 @@ defmodule Cerberus.Html do
     text = node_text(node)
     value = match_value_fun.(root_node, node)
 
-    if node_predicate.(root_node, node) and is_binary(value) and Query.match_text?(value, expected, opts) do
+    if node_predicate.(root_node, node) and is_binary(value) and Query.match_text?(value, expected, opts) and
+         node_matches_locator_filters?(node, opts) do
       mapped =
         node
         |> build_fun.(text, root_node)
@@ -904,6 +941,56 @@ defmodule Cerberus.Html do
   end
 
   defp alt_value(node), do: attr(node, "alt") || ""
+
+  defp node_has_locator?(node, %Locator{kind: :css, value: selector}) do
+    selector
+    |> safe_query_in_node(node)
+    |> Enum.any?()
+  end
+
+  defp node_has_locator?(node, %Locator{kind: :text, value: expected, opts: has_opts}) do
+    selector = selector_opt(has_opts) || "*"
+
+    selector
+    |> safe_query_in_node(node)
+    |> Enum.any?(fn candidate_node ->
+      Query.match_text?(node_text(candidate_node), expected, has_opts) and
+        node_matches_locator_filters?(candidate_node, has_opts)
+    end)
+  end
+
+  defp node_has_locator?(node, %Locator{kind: :testid, value: expected, opts: has_opts}) do
+    selector = selector_opt(has_opts) || "[data-testid]"
+
+    selector
+    |> safe_query_in_node(node)
+    |> Enum.any?(fn candidate_node ->
+      value = attr(candidate_node, "data-testid") || ""
+
+      value != "" and Query.match_text?(value, expected, has_opts) and
+        node_matches_locator_filters?(candidate_node, has_opts)
+    end)
+  end
+
+  defp node_has_locator?(_node, _locator), do: false
+
+  defp safe_query_in_node(selector, node) when is_binary(selector) do
+    safe_query(node, selector)
+  end
+
+  defp safe_query_in_node(_selector, _node), do: []
+
+  defp fragment_wrapper(fragment_html) do
+    """
+    <!doctype html>
+    <html>
+      <head><meta charset="utf-8" /></head>
+      <body>
+        <div id="__cerberus_fragment_root__">#{fragment_html}</div>
+      </body>
+    </html>
+    """
+  end
 
   defp field_for_label(root_node, label_node) do
     case attr(label_node, "for") do

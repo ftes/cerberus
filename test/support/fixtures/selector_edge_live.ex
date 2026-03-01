@@ -32,12 +32,14 @@ defmodule Cerberus.Fixtures.SelectorEdgeLive do
 
       <section id="primary-actions">
         <button phx-click="select_primary" class="action primary" data-kind={"p\"a\\th"} data-testid="apply-primary">
+          <span data-testid="apply-primary-marker" aria-hidden="true"></span>
           Apply
         </button>
       </section>
 
       <section id="secondary-actions">
         <button phx-click="select_secondary" class="action secondary" data-kind="secondary" data-testid="apply-secondary">
+          <span data-testid="apply-secondary-marker" aria-hidden="true"></span>
           Apply
         </button>
       </section>

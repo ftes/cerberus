@@ -84,6 +84,17 @@ session()
 |> fill_in(label("Name"), "secondary", last: true, count: 2)
 ```
 
+## Locator Composition With has
+
+You can require nested descendants while resolving a locator by passing `has:` with a nested `css(...)`, `text(...)`, or `testid(...)` locator.
+
+```elixir
+session()
+|> visit("/live/selector-edge")
+|> click(button("Apply", has: testid("apply-secondary-marker")))
+|> assert_has(text("Selected: secondary", exact: true))
+```
+
 ## Step 5: Multi-User + Multi-Tab
 
 ```elixir

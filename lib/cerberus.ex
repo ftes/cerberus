@@ -217,18 +217,27 @@ defmodule Cerberus do
     build_text_locator(:alt, value, opts)
   end
 
-  @spec css(String.t()) :: keyword()
-  def css(value) when is_binary(value), do: [css: value]
+  @spec css(String.t(), keyword()) :: keyword()
+  def css(value, opts \\ []) when is_binary(value) and is_list(opts) do
+    [css: value]
+    |> maybe_put_locator_opt(opts, :exact)
+    |> maybe_put_locator_opt(opts, :has)
+  end
 
   @spec role(String.t() | atom(), keyword()) :: keyword()
   def role(role, opts \\ []) when is_list(opts) do
     [role: role, name: Keyword.get(opts, :name)]
     |> maybe_put_locator_opt(opts, :exact)
     |> maybe_put_locator_opt(opts, :selector)
+    |> maybe_put_locator_opt(opts, :has)
   end
 
-  @spec testid(String.t()) :: keyword()
-  def testid(value) when is_binary(value), do: [testid: value]
+  @spec testid(String.t(), keyword()) :: keyword()
+  def testid(value, opts \\ []) when is_binary(value) and is_list(opts) do
+    [testid: value]
+    |> maybe_put_locator_opt(opts, :exact)
+    |> maybe_put_locator_opt(opts, :has)
+  end
 
   @spec sigil_l(String.t(), charlist()) :: Locator.t()
   def sigil_l(value, modifiers) when is_list(modifiers), do: Locator.sigil(value, modifiers)
@@ -717,6 +726,7 @@ defmodule Cerberus do
     [{kind, value}]
     |> maybe_put_locator_opt(opts, :exact)
     |> maybe_put_locator_opt(opts, :selector)
+    |> maybe_put_locator_opt(opts, :has)
   end
 
   defp maybe_put_locator_opt(locator, opts, key) do
