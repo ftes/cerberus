@@ -93,6 +93,24 @@ defmodule Cerberus.Browser do
 
   def evaluate_js(session, _expression), do: Assertions.unsupported(session, :evaluate_js)
 
+  @spec evaluate_js(Session.t(), String.t(), (term() -> term())) :: Session.t()
+  def evaluate_js(%BrowserSession{} = session, expression, callback)
+      when is_binary(expression) and is_function(callback, 1) do
+    session
+    |> Extensions.evaluate_js(expression)
+    |> callback.()
+
+    session
+  end
+
+  def evaluate_js(session, _expression, callback) when is_function(callback, 1) do
+    Assertions.unsupported(session, :evaluate_js)
+  end
+
+  def evaluate_js(_session, _expression, _callback) do
+    raise ArgumentError, "Browser.evaluate_js/3 expects an expression string and callback with arity 1"
+  end
+
   @spec cookies(Session.t()) :: [cookie]
   def cookies(%BrowserSession{} = session), do: Extensions.cookies(session)
   def cookies(session), do: Assertions.unsupported(session, :cookies)
