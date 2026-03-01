@@ -3,9 +3,9 @@ defmodule Cerberus.Driver.Browser do
 
   @behaviour Cerberus.Driver
 
-  alias Cerberus.Driver.Browser.AssertionHelpers
   alias Cerberus.Driver.Browser.BiDi
   alias Cerberus.Driver.Browser.Config
+  alias Cerberus.Driver.Browser.Expressions
   alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.Locator
@@ -184,7 +184,7 @@ defmodule Cerberus.Driver.Browser do
   def open_browser(%__MODULE__{} = session, open_fun) when is_function(open_fun, 1) do
     state = state!(session)
 
-    case eval_json(state, browser_html_expression()) do
+    case eval_json(state, Expressions.browser_html()) do
       {:ok, payload} ->
         html = Map.get(payload, "html", "")
         url = Map.get(payload, "url")
@@ -221,7 +221,7 @@ defmodule Cerberus.Driver.Browser do
   def refresh_path(%__MODULE__{} = session) do
     state = state!(session)
 
-    case eval_json(state, current_path_expression()) do
+    case eval_json(state, Expressions.current_path()) do
       {:ok, %{"path" => path}} when is_binary(path) ->
         %{session | current_path: path}
 
@@ -1191,7 +1191,7 @@ defmodule Cerberus.Driver.Browser do
   defp do_run_text_assertion(state, expected, visible, match_opts, timeout_ms, mode) do
     match_by = Keyword.get(match_opts, :match_by, :text)
     payload = build_text_assertion_payload(state, expected, visible, match_opts, timeout_ms, mode, match_by)
-    expression = text_assertion_expression(payload)
+    expression = Expressions.text_assertion(payload)
 
     case eval_json(state, expression, command_timeout_ms(timeout_ms)) do
       {:ok, %{"ok" => true} = result} ->
@@ -1279,13 +1279,7 @@ defmodule Cerberus.Driver.Browser do
     deadline = assertion.deadline
     remaining_timeout = max(deadline - System.monotonic_time(:millisecond), 0)
 
-    expression =
-      path_assertion_expression(
-        expected_payload,
-        expected_query,
-        exact,
-        op
-      )
+    expression = Expressions.path_assertion(expected_payload, expected_query, exact, op)
 
     case eval_json(state, expression, command_timeout_ms(remaining_timeout)) do
       {:ok, result} ->
@@ -1348,7 +1342,7 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp maybe_ensure_assertion_helpers(%{browser_name: :firefox} = state) do
-    expression = assertion_helpers_preload_expression()
+    expression = Expressions.assertion_helpers_preload()
 
     case eval_json(state, expression) do
       {:ok, %{"ok" => true}} ->
@@ -1562,17 +1556,6 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp browser_html_expression do
-    """
-    (() => {
-      const doc = document.documentElement;
-      const html = doc ? doc.outerHTML : "";
-      const doctype = document.doctype ? `<!DOCTYPE ${document.doctype.name}>` : "<!DOCTYPE html>";
-      return JSON.stringify({ html: doctype + html, url: window.location.href });
-    })()
-    """
-  end
-
   defp snapshot_base_url(default_base_url, url) when is_binary(url) do
     uri = URI.parse(url)
 
@@ -1680,84 +1663,6 @@ defmodule Cerberus.Driver.Browser do
 
   defp ensure_popup_mode_supported!(browser_name, popup_mode),
     do: Config.ensure_popup_mode_supported!(browser_name, popup_mode)
-
-  defp current_path_expression do
-    """
-    (() => JSON.stringify({ path: window.location.pathname + window.location.search }))()
-    """
-  end
-
-  defp assertion_helpers_preload_expression do
-    """
-    (() => {
-      #{AssertionHelpers.preload_script()}
-
-      const helper = window.__cerberusAssert;
-
-      return JSON.stringify({
-        ok: !!(helper && typeof helper.text === "function" && typeof helper.pathCheck === "function")
-      });
-    })()
-    """
-  end
-
-  defp text_assertion_expression(payload) when is_map(payload) do
-    encoded_payload = JSON.encode!(payload)
-    mode_value = Map.get(payload, :mode, "assert")
-
-    """
-    (() => {
-      const helper = window.__cerberusAssert;
-      if (helper && typeof helper.text === "function") {
-        return helper.text(#{encoded_payload});
-      }
-
-      const mode = #{JSON.encode!(mode_value)};
-      const reason = mode === "assert" ? "expected text not found" : "unexpected matching text found";
-
-      return JSON.stringify({
-        ok: false,
-        reason,
-        path: window.location.pathname + window.location.search,
-        title: document.title || "",
-        texts: [],
-        matched: [],
-        helperMissing: true
-      });
-    })()
-    """
-  end
-
-  defp path_assertion_expression(expected, expected_query, exact, op) when op in [:assert_path, :refute_path] do
-    payload = %{
-      expected: expected,
-      expectedQuery: expected_query,
-      exact: exact,
-      op: Atom.to_string(op)
-    }
-
-    encoded_payload = JSON.encode!(payload)
-
-    """
-    (() => {
-      const helper = window.__cerberusAssert;
-      if (helper && typeof helper.pathCheck === "function") {
-        return helper.pathCheck(#{encoded_payload});
-      }
-
-      const path = window.location.pathname + window.location.search;
-
-      return JSON.stringify({
-        ok: false,
-        reason: "helper-missing",
-        path,
-        "path_match?": false,
-        "query_match?": false,
-        helperMissing: true
-      });
-    })()
-    """
-  end
 
   defp snapshot_expression(scope) do
     encoded_scope = JSON.encode!(scope)

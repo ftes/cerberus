@@ -19,6 +19,7 @@ Goals:
 - [x] Extract browser option/context normalization into `Cerberus.Driver.Browser.Config`
 - [x] Extract static form-state and submit payload logic into `Cerberus.Driver.Static.FormData`
 - [x] Extract live form-state, payload encoding, and target path helpers into `Cerberus.Driver.Live.FormData`
+- [x] Extract browser assertion/path/html expression builders into `Cerberus.Driver.Browser.Expressions`
 - [ ] Continue splitting browser driver monolith (navigation/forms/assertions/expression builders)
 - [ ] Split remaining live/static responsibilities into focused modules
 - [ ] Keep per-driver APIs coherent and discoverable
