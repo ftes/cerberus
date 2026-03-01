@@ -59,6 +59,31 @@ end)
 |> assert_path("/search")
 ```
 
+## Match Count And Position Filters
+
+Locator operations support shared count filters:
+
+- `count: n`
+- `min: n`
+- `max: n`
+- `between: {min, max}` or `between: min..max`
+
+Element-targeting actions also support position filters:
+
+- `first: true`
+- `last: true`
+- `nth: n` (1-based)
+- `index: n` (0-based)
+
+Example:
+
+```elixir
+session()
+|> visit("/live/selector-edge")
+|> fill_in(label("Name"), "primary", first: true, count: 2)
+|> fill_in(label("Name"), "secondary", last: true, count: 2)
+```
+
 ## Step 5: Multi-User + Multi-Tab
 
 ```elixir

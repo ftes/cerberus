@@ -162,6 +162,51 @@ defmodule CerberusTest.LocatorOracleHarnessTest do
                         """ <>
                         @html_suffix
 
+  @count_position_html @html_prefix <>
+                         """
+                           <main>
+                           <h2 title="Alpha cluster one">Alpha One</h2>
+                           <h2 title="Alpha cluster two">Alpha Two</h2>
+                           <h2 title="Beta cluster">Beta One</h2>
+
+                           <form id="count-position-form">
+                             <label for="code_1">Code</label>
+                             <input id="code_1" name="codes[one]" type="text" value="" />
+
+                             <label for="code_2">Code</label>
+                             <input id="code_2" name="codes[two]" type="text" value="" />
+
+                             <label for="code_3">Code</label>
+                             <input id="code_3" name="codes[three]" type="text" value="" />
+
+                             <label for="agree_1">Agree</label>
+                             <input id="agree_1" name="agree[]" type="checkbox" value="one" />
+
+                             <label for="agree_2">Agree</label>
+                             <input id="agree_2" name="agree[]" type="checkbox" value="two" />
+
+                             <label for="contact_1">Contact</label>
+                             <input id="contact_1" name="contact_primary" type="radio" value="email" />
+
+                             <label for="contact_2">Contact</label>
+                             <input id="contact_2" name="contact_secondary" type="radio" value="sms" />
+
+                             <label for="pet_1">Pet</label>
+                             <select id="pet_1" name="pet[one]">
+                               <option value="cat">Cat</option>
+                               <option value="dog">Dog</option>
+                             </select>
+
+                             <label for="pet_2">Pet</label>
+                             <select id="pet_2" name="pet[two]">
+                               <option value="bird">Bird</option>
+                               <option value="fish">Fish</option>
+                             </select>
+                           </form>
+                           </main>
+                         """ <>
+                         @html_suffix
+
   setup do
     upload_path =
       Path.join(System.tmp_dir!(), "cerberus-locator-oracle-#{System.unique_integer([:positive])}.txt")
@@ -402,6 +447,162 @@ defmodule CerberusTest.LocatorOracleHarnessTest do
         expect: :error,
         error_module: InvalidLocatorError,
         run: &assert_has(&1, ~l"button:Increment"rc)
+      },
+      # count/position filters (assertions + form actions)
+      %{
+        name: "count filters on assertions support exact count",
+        html: @count_position_html,
+        expect: :ok,
+        run: &assert_has(&1, title("Alpha"), count: 2)
+      },
+      %{
+        name: "count filters on assertions support min/max",
+        html: @count_position_html,
+        expect: :ok,
+        run: &assert_has(&1, title("Alpha"), min: 2, max: 2)
+      },
+      %{
+        name: "count filters on assertions support between tuple",
+        html: @count_position_html,
+        expect: :ok,
+        run: &assert_has(&1, title("Alpha"), between: {1, 2})
+      },
+      %{
+        name: "count filters on assertions support between range",
+        html: @count_position_html,
+        expect: :ok,
+        run: &assert_has(&1, title("Alpha"), between: 2..3)
+      },
+      %{
+        name: "count filters on assertions fail when count mismatches",
+        html: @count_position_html,
+        expect: :error,
+        error_module: AssertionError,
+        run: &assert_has(&1, title("Alpha"), count: 3)
+      },
+      %{
+        name: "refute_has with count filter passes when constraints are not satisfied",
+        html: @count_position_html,
+        expect: :ok,
+        run: &refute_has(&1, title("Alpha"), count: 3)
+      },
+      %{
+        name: "refute_has with count filter fails when constraints are satisfied",
+        html: @count_position_html,
+        expect: :error,
+        error_module: AssertionError,
+        run: &refute_has(&1, title("Alpha"), count: 2)
+      },
+      %{
+        name: "assert_has rejects position filters",
+        html: @count_position_html,
+        expect: :error,
+        error_module: ArgumentError,
+        run: &assert_has(&1, title("Alpha"), first: true)
+      },
+      %{
+        name: "assert_has validates between bounds",
+        html: @count_position_html,
+        expect: :error,
+        error_module: ArgumentError,
+        run: &assert_has(&1, title("Alpha"), between: {2, 1})
+      },
+      %{
+        name: "fill_in supports first count-position filter",
+        html: @count_position_html,
+        expect: :ok,
+        run: &fill_in(&1, label("Code"), "first-code", first: true, count: 3)
+      },
+      %{
+        name: "fill_in supports last count-position filter",
+        html: @count_position_html,
+        expect: :ok,
+        run: &fill_in(&1, label("Code"), "last-code", last: true, between: {2, 3})
+      },
+      %{
+        name: "fill_in supports nth count-position filter",
+        html: @count_position_html,
+        expect: :ok,
+        run: &fill_in(&1, label("Code"), "second-code", nth: 2, min: 3)
+      },
+      %{
+        name: "fill_in supports index count-position filter",
+        html: @count_position_html,
+        expect: :ok,
+        run: &fill_in(&1, label("Code"), "third-code", index: 2, max: 3)
+      },
+      %{
+        name: "fill_in fails when count filter mismatches",
+        html: @count_position_html,
+        expect: :error,
+        error_module: AssertionError,
+        run: &fill_in(&1, label("Code"), "mismatch", count: 2)
+      },
+      %{
+        name: "fill_in fails when nth is out of bounds",
+        html: @count_position_html,
+        expect: :error,
+        error_module: AssertionError,
+        run: &fill_in(&1, label("Code"), "out-of-bounds", nth: 4)
+      },
+      %{
+        name: "fill_in validates mutually exclusive position filters",
+        html: @count_position_html,
+        expect: :error,
+        error_module: ArgumentError,
+        run: &fill_in(&1, label("Code"), "invalid", first: true, nth: 2)
+      },
+      %{
+        name: "check supports count-position filters",
+        html: @count_position_html,
+        expect: :ok,
+        run: &check(&1, label("Agree"), last: true, count: 2)
+      },
+      %{
+        name: "check fails when count filter mismatches",
+        html: @count_position_html,
+        expect: :error,
+        error_module: AssertionError,
+        run: &check(&1, label("Agree"), count: 1)
+      },
+      %{
+        name: "choose supports count-position filters",
+        html: @count_position_html,
+        expect: :ok,
+        run: &choose(&1, label("Contact"), index: 1, between: {2, 2})
+      },
+      %{
+        name: "choose fails when count filter mismatches",
+        html: @count_position_html,
+        expect: :error,
+        error_module: AssertionError,
+        run: &choose(&1, label("Contact"), count: 1)
+      },
+      %{
+        name: "select supports first count-position filter",
+        html: @count_position_html,
+        expect: :ok,
+        run: &select(&1, label("Pet"), option: "Dog", first: true, count: 2)
+      },
+      %{
+        name: "select supports last count-position filter",
+        html: @count_position_html,
+        expect: :ok,
+        run: &select(&1, label("Pet"), option: "Fish", last: true, between: {2, 2})
+      },
+      %{
+        name: "select fails when position is out of bounds",
+        html: @count_position_html,
+        expect: :error,
+        error_module: AssertionError,
+        run: &select(&1, label("Pet"), option: "Dog", nth: 3)
+      },
+      %{
+        name: "select fails when count filter mismatches",
+        html: @count_position_html,
+        expect: :error,
+        error_module: AssertionError,
+        run: &select(&1, label("Pet"), option: "Dog", count: 1)
       },
       # selector-only disambiguation snippet
       %{

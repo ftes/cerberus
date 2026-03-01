@@ -148,7 +148,7 @@ defmodule Cerberus.Html do
     query_selector = selector_opt(opts) || "a[href]"
     match_by = match_by_opt(opts)
 
-    find_first_matching(
+    find_matching(
       lazy_html,
       query_selector,
       expected,
@@ -171,7 +171,7 @@ defmodule Cerberus.Html do
     query_selector = selector_opt(opts) || "button"
     match_by = match_by_opt(opts)
 
-    find_first_matching(
+    find_matching(
       lazy_html,
       query_selector,
       expected,
@@ -192,22 +192,26 @@ defmodule Cerberus.Html do
   end
 
   defp find_form_field_in_doc(lazy_html, expected, opts, scope) do
-    lazy_html
-    |> scoped_nodes(scope)
-    |> Enum.find_value(:error, fn root_node -> find_form_field_in_root(root_node, expected, opts) end)
+    matches =
+      lazy_html
+      |> scoped_nodes(scope)
+      |> Enum.flat_map(&find_form_field_in_root(&1, expected, opts))
+
+    pick_match_result(matches, opts)
   end
 
   defp find_submit_button_in_doc(lazy_html, expected, opts, scope) do
     selector = selector_opt(opts)
 
-    lazy_html
-    |> scoped_nodes(scope)
-    |> Enum.find_value(:error, fn root_node ->
-      case find_submit_button_in_forms(root_node, expected, opts, selector) do
-        {:ok, _button} = ok -> ok
-        :error -> find_submit_button_in_owner_form(root_node, expected, opts, selector)
-      end
-    end)
+    matches =
+      lazy_html
+      |> scoped_nodes(scope)
+      |> Enum.flat_map(fn root_node ->
+        find_submit_button_in_forms(root_node, expected, opts, selector) ++
+          find_submit_button_in_owner_form(root_node, expected, opts, selector)
+      end)
+
+    pick_match_result(matches, opts)
   end
 
   defp select_values_in_doc(lazy_html, field, option, opts, scope) do
@@ -321,12 +325,7 @@ defmodule Cerberus.Html do
   defp find_submit_button_in_forms(root_node, expected, opts, selector) do
     root_node
     |> safe_query("form")
-    |> Enum.reduce_while(:error, fn form_node, _acc ->
-      case find_submit_button_in_form(root_node, form_node, expected, opts, selector) do
-        {:ok, _button} = ok -> {:halt, ok}
-        :error -> {:cont, :error}
-      end
-    end)
+    |> Enum.flat_map(&find_submit_button_in_form(root_node, &1, expected, opts, selector))
   end
 
   defp find_submit_button_in_form(root_node, form_node, expected, opts, selector) do
@@ -334,25 +333,32 @@ defmodule Cerberus.Html do
 
     form_node
     |> LazyHTML.query("button")
-    |> Enum.find_value(:error, fn button_node ->
-      build_submit_button(button_node, form_meta, expected, opts, root_node, selector)
-    end)
+    |> Enum.flat_map(&maybe_submit_button_match(&1, form_meta, expected, opts, root_node, selector))
   end
 
   defp find_submit_button_in_owner_form(root_node, expected, opts, selector) do
     root_node
     |> safe_query("button[form]")
-    |> Enum.find_value(:error, fn button_node ->
-      owner_form = attr(button_node, "form")
+    |> Enum.flat_map(&owner_submit_button_matches(&1, root_node, expected, opts, selector))
+  end
 
-      with true <- is_binary(owner_form) and owner_form != "",
-           form_node when not is_nil(form_node) <- form_by_id(root_node, owner_form) do
-        form_meta = form_meta_from_form_node(root_node, form_node, owner_form)
-        build_submit_button(button_node, form_meta, expected, opts, root_node, selector)
-      else
-        _ -> false
-      end
-    end)
+  defp maybe_submit_button_match(button_node, form_meta, expected, opts, root_node, selector) do
+    case build_submit_button(button_node, form_meta, expected, opts, root_node, selector) do
+      nil -> []
+      button -> [button]
+    end
+  end
+
+  defp owner_submit_button_matches(button_node, root_node, expected, opts, selector) do
+    owner_form = attr(button_node, "form")
+
+    with true <- is_binary(owner_form) and owner_form != "",
+         form_node when not is_nil(form_node) <- form_by_id(root_node, owner_form) do
+      form_meta = form_meta_from_form_node(root_node, form_node, owner_form)
+      maybe_submit_button_match(button_node, form_meta, expected, opts, root_node, selector)
+    else
+      _ -> []
+    end
   end
 
   defp build_submit_button(button_node, form_meta, expected, opts, root_node, selector) do
@@ -366,21 +372,18 @@ defmodule Cerberus.Html do
       action = attr(button_node, "formaction") || form_meta.action
       method = attr(button_node, "formmethod") || form_meta.method
 
-      {:ok,
-       %{
-         text: text,
-         title: attr(button_node, "title") || "",
-         alt: button_alt_text(button_node),
-         testid: attr(button_node, "data-testid") || "",
-         action: action,
-         method: method,
-         form: form_meta.form,
-         form_selector: form_meta.form_selector,
-         button_name: attr(button_node, "name"),
-         button_value: attr(button_node, "value")
-       }}
-    else
-      false
+      %{
+        text: text,
+        title: attr(button_node, "title") || "",
+        alt: button_alt_text(button_node),
+        testid: attr(button_node, "data-testid") || "",
+        action: action,
+        method: method,
+        form: form_meta.form,
+        form_selector: form_meta.form_selector,
+        button_name: attr(button_node, "name"),
+        button_value: attr(button_node, "value")
+      }
     end
   end
 
@@ -403,21 +406,24 @@ defmodule Cerberus.Html do
     type in ["submit", ""] and is_binary(value) and Query.match_text?(value, expected, opts)
   end
 
-  defp find_first_matching(lazy_html, selector, expected, opts, scope, build_fun, node_predicate, match_value_fun) do
-    lazy_html
-    |> scoped_nodes(scope)
-    |> Enum.find_value(:error, fn root_node ->
-      find_first_matching_in_root(
-        root_node,
-        lazy_html,
-        selector,
-        expected,
-        opts,
-        build_fun,
-        node_predicate,
-        match_value_fun
-      )
-    end)
+  defp find_matching(lazy_html, selector, expected, opts, scope, build_fun, node_predicate, match_value_fun) do
+    matches =
+      lazy_html
+      |> scoped_nodes(scope)
+      |> Enum.flat_map(fn root_node ->
+        find_matching_in_root(
+          root_node,
+          lazy_html,
+          selector,
+          expected,
+          opts,
+          build_fun,
+          node_predicate,
+          match_value_fun
+        )
+      end)
+
+    pick_match_result(matches, opts)
   end
 
   defp find_form_field_in_root(root_node, expected, opts) do
@@ -428,15 +434,13 @@ defmodule Cerberus.Html do
       :label ->
         root_node
         |> safe_query("label")
-        |> Enum.find_value(false, fn label_node ->
-          maybe_form_field_match(label_node, root_node, expected, opts, selector)
-        end)
+        |> Enum.flat_map(&maybe_form_field_match_list(&1, root_node, expected, opts, selector))
 
       kind when kind in [:placeholder, :title, :testid] ->
         find_form_field_by_control_attr(root_node, expected, opts, selector, kind)
 
       _ ->
-        false
+        []
     end
   end
 
@@ -449,16 +453,21 @@ defmodule Cerberus.Html do
          true <- field_matches_selector?(root_node, field, selector) do
       build_form_field_match(root_node, label_text, name, field, field_node)
     else
-      _ -> false
+      _ -> nil
+    end
+  end
+
+  defp maybe_form_field_match_list(label_node, root_node, expected, opts, selector) do
+    case maybe_form_field_match(label_node, root_node, expected, opts, selector) do
+      nil -> []
+      match -> [match]
     end
   end
 
   defp find_form_field_by_control_attr(root_node, expected, opts, selector, kind) do
     root_node
     |> safe_query("input,textarea,select")
-    |> Enum.find_value(false, fn field_node ->
-      maybe_form_field_attr_match(field_node, root_node, expected, opts, selector, kind)
-    end)
+    |> Enum.flat_map(&maybe_form_field_attr_match_list(&1, root_node, expected, opts, selector, kind))
   end
 
   defp maybe_form_field_attr_match(field_node, root_node, expected, opts, selector, kind) do
@@ -470,7 +479,14 @@ defmodule Cerberus.Html do
          true <- field_matches_selector?(root_node, field, selector) do
       build_form_field_match(root_node, field_label_for_node(root_node, field_node), name, field, field_node)
     else
-      _ -> false
+      _ -> nil
+    end
+  end
+
+  defp maybe_form_field_attr_match_list(field_node, root_node, expected, opts, selector, kind) do
+    case maybe_form_field_attr_match(field_node, root_node, expected, opts, selector, kind) do
+      nil -> []
+      match -> [match]
     end
   end
 
@@ -479,41 +495,31 @@ defmodule Cerberus.Html do
     form_id = field_form_id(field, form_node)
     input_type = input_type(field_node)
 
-    {:ok,
-     %{
-       label: label_text,
-       name: name,
-       id: field.id,
-       form: form_id,
-       selector: field_selector(root_node, field),
-       form_selector: form_selector(root_node, form_node, form_id),
-       input_type: input_type,
-       placeholder: attr(field_node, "placeholder") || "",
-       title: attr(field_node, "title") || "",
-       testid: attr(field_node, "data-testid") || "",
-       input_value: input_value(field_node, input_type),
-       input_checked: checked?(field_node)
-     }}
+    %{
+      label: label_text,
+      name: name,
+      id: field.id,
+      form: form_id,
+      selector: field_selector(root_node, field),
+      form_selector: form_selector(root_node, form_node, form_id),
+      input_type: input_type,
+      placeholder: attr(field_node, "placeholder") || "",
+      title: attr(field_node, "title") || "",
+      testid: attr(field_node, "data-testid") || "",
+      input_value: input_value(field_node, input_type),
+      input_checked: checked?(field_node)
+    }
   end
 
   defp field_form_id(%{form: form}, _form_node) when is_binary(form) and form != "", do: form
   defp field_form_id(_field, form_node), do: attr_or_nil(form_node, "id")
 
-  defp find_first_matching_in_root(
-         root_node,
-         lazy_html,
-         selector,
-         expected,
-         opts,
-         build_fun,
-         node_predicate,
-         match_value_fun
-       ) do
+  defp find_matching_in_root(root_node, lazy_html, selector, expected, opts, build_fun, node_predicate, match_value_fun) do
     root_node
     |> safe_query(selector)
-    |> Enum.find_value(false, fn node ->
-      maybe_matching_node(root_node, node, lazy_html, expected, opts, build_fun, node_predicate, match_value_fun)
-    end)
+    |> Enum.flat_map(
+      &maybe_matching_node_list(&1, root_node, lazy_html, expected, opts, build_fun, node_predicate, match_value_fun)
+    )
   end
 
   defp maybe_matching_node(root_node, node, lazy_html, expected, opts, build_fun, node_predicate, match_value_fun) do
@@ -526,9 +532,21 @@ defmodule Cerberus.Html do
         |> build_fun.(text, root_node)
         |> maybe_put_unique_selector(lazy_html, node)
 
-      {:ok, mapped}
-    else
-      false
+      mapped
+    end
+  end
+
+  defp maybe_matching_node_list(node, root_node, lazy_html, expected, opts, build_fun, node_predicate, match_value_fun) do
+    case maybe_matching_node(root_node, node, lazy_html, expected, opts, build_fun, node_predicate, match_value_fun) do
+      nil -> []
+      match -> [match]
+    end
+  end
+
+  defp pick_match_result(matches, opts) do
+    case Query.pick_match(matches, opts) do
+      {:ok, match} -> {:ok, match}
+      {:error, _reason} -> :error
     end
   end
 

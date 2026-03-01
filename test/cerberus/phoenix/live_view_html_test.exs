@@ -44,6 +44,28 @@ defmodule Cerberus.Phoenix.LiveViewHTMLTest do
             }} = LiveViewHTML.find_live_clickable_button(html, "delete", exact: true)
   end
 
+  test "find_live_clickable_button supports count and position filters" do
+    html = """
+    <main>
+      <form id="first-form" phx-change="validate">
+        <button type="button" name="items_drop[]" value="1" phx-click="delete">Apply</button>
+      </form>
+      <form id="second-form" phx-change="validate">
+        <button type="button" name="items_drop[]" value="2" phx-click="delete">Apply</button>
+      </form>
+    </main>
+    """
+
+    assert {:ok, %{button_value: "1"}} =
+             LiveViewHTML.find_live_clickable_button(html, "Apply", exact: true, first: true, count: 2)
+
+    assert {:ok, %{button_value: "2"}} =
+             LiveViewHTML.find_live_clickable_button(html, "Apply", exact: true, last: true, count: 2)
+
+    assert :error = LiveViewHTML.find_live_clickable_button(html, "Apply", exact: true, count: 1)
+    assert :error = LiveViewHTML.find_live_clickable_button(html, "Apply", exact: true, nth: 3)
+  end
+
   test "find_live_clickable_button excludes dispatch-only buttons without form phx-change context" do
     html = """
     <main>

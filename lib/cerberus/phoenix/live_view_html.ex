@@ -76,13 +76,19 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   defp find_live_clickable_button_in_doc(lazy_html, expected, opts, scope) do
     query_selector = selector_opt(opts) || "button[phx-click]"
 
-    lazy_html
-    |> scoped_nodes(scope)
-    |> Enum.find_value(:error, fn root_node ->
-      root_node
-      |> safe_query(query_selector)
-      |> Enum.find_value(false, &maybe_live_clickable_match(root_node, &1, lazy_html, expected, opts))
-    end)
+    matches =
+      lazy_html
+      |> scoped_nodes(scope)
+      |> Enum.flat_map(fn root_node ->
+        root_node
+        |> safe_query(query_selector)
+        |> Enum.flat_map(&maybe_live_clickable_match_list(root_node, &1, lazy_html, expected, opts))
+      end)
+
+    case Query.pick_match(matches, opts) do
+      {:ok, match} -> {:ok, match}
+      {:error, _reason} -> :error
+    end
   end
 
   defp maybe_live_clickable_match(root_node, node, lazy_html, expected, opts) do
@@ -96,9 +102,14 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
         |> maybe_put_unique_selector(lazy_html, node)
         |> maybe_put_match_selector(node, opts)
 
-      {:ok, mapped}
-    else
-      false
+      mapped
+    end
+  end
+
+  defp maybe_live_clickable_match_list(root_node, node, lazy_html, expected, opts) do
+    case maybe_live_clickable_match(root_node, node, lazy_html, expected, opts) do
+      nil -> []
+      mapped -> [mapped]
     end
   end
 

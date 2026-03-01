@@ -458,30 +458,21 @@ defmodule Cerberus.Driver.Browser do
     kind = Keyword.get(opts, :kind, :any)
     links = Map.get(clickables_data, "links", [])
     buttons = Map.get(clickables_data, "buttons", [])
+    link = maybe_matching_clickable(kind, :button, links, expected, opts)
 
-    link =
-      if kind == :button do
-        nil
-      else
-        find_matching_clickable(links, expected, opts)
-      end
+    case link do
+      nil ->
+        case maybe_matching_clickable(kind, :link, buttons, expected, opts) do
+          nil ->
+            observed = %{action: :click, path: state.current_path, clickables: clickables_data}
+            {:error, session, observed, no_clickable_error(kind)}
 
-    if link == nil do
-      button =
-        if kind == :link do
-          nil
-        else
-          find_matching_clickable(buttons, expected, opts)
+          button ->
+            click_button(session, state, button, selector)
         end
 
-      if button == nil do
-        observed = %{action: :click, path: state.current_path, clickables: clickables_data}
-        {:error, session, observed, no_clickable_error(kind)}
-      else
-        click_button(session, state, button, selector)
-      end
-    else
-      click_link(session, state, link)
+      found_link ->
+        click_link(session, state, found_link)
     end
   end
 
@@ -492,11 +483,11 @@ defmodule Cerberus.Driver.Browser do
       |> Enum.filter(&submit_control?/1)
 
     case find_matching_clickable(buttons, expected, opts) do
-      nil ->
+      {:error, reason} ->
         observed = %{action: :submit, path: state.current_path, clickables: clickables_data}
-        {:error, session, observed, "no submit button matched locator"}
+        {:error, session, observed, reason}
 
-      button ->
+      {:ok, button} ->
         submit_button(session, state, button, selector)
     end
   end
@@ -505,11 +496,11 @@ defmodule Cerberus.Driver.Browser do
     fields = Map.get(fields_data, "fields", [])
 
     case find_matching_field(fields, expected, opts) do
-      nil ->
+      {:error, reason} ->
         observed = %{action: :fill_in, path: state.current_path, fields: fields_data}
-        {:error, session, observed, "no form field matched locator"}
+        {:error, session, observed, reason}
 
-      field ->
+      {:ok, field} ->
         fill_field(session, state, field, value, selector)
     end
   end
@@ -518,11 +509,11 @@ defmodule Cerberus.Driver.Browser do
     fields = Map.get(fields_data, "fields", [])
 
     case find_matching_field(fields, expected, opts) do
-      nil ->
+      {:error, reason} ->
         observed = %{action: :select, path: state.current_path, fields: fields_data, option: option}
-        {:error, session, observed, "no form field matched locator"}
+        {:error, session, observed, reason}
 
-      field ->
+      {:ok, field} ->
         cond do
           not select_field?(field) ->
             observed = %{action: :select, path: state.current_path, field: field, option: option}
@@ -544,11 +535,11 @@ defmodule Cerberus.Driver.Browser do
     fields = Map.get(fields_data, "fields", [])
 
     case find_matching_field(fields, expected, opts) do
-      nil ->
+      {:error, reason} ->
         observed = %{action: :choose, path: state.current_path, fields: fields_data}
-        {:error, session, observed, "no form field matched locator"}
+        {:error, session, observed, reason}
 
-      field ->
+      {:ok, field} ->
         cond do
           not radio_field?(field) ->
             observed = %{action: :choose, path: state.current_path, field: field}
@@ -568,11 +559,11 @@ defmodule Cerberus.Driver.Browser do
     fields = Map.get(fields_data, "fields", [])
 
     case find_matching_field(fields, expected, opts) do
-      nil ->
+      {:error, reason} ->
         observed = %{action: :upload, path: state.current_path, fields: fields_data, file_path: path}
-        {:error, session, observed, "no file input matched locator"}
+        {:error, session, observed, reason}
 
-      field ->
+      {:ok, field} ->
         upload_field(session, state, field, path, selector)
     end
   end
@@ -581,11 +572,11 @@ defmodule Cerberus.Driver.Browser do
     fields = Map.get(fields_data, "fields", [])
 
     case find_matching_field(fields, expected, opts) do
-      nil ->
+      {:error, reason} ->
         observed = %{action: op, path: state.current_path, fields: fields_data}
-        {:error, session, observed, "no form field matched locator"}
+        {:error, session, observed, reason}
 
-      field ->
+      {:ok, field} ->
         if checkbox_field?(field) do
           toggle_checkbox_field(session, state, field, checked?, selector, op)
         else
@@ -969,17 +960,32 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp find_matching_clickable(items, expected, opts) do
-    Enum.find(items, fn item ->
-      value = clickable_match_value(item, Keyword.get(opts, :match_by, :text))
-      Query.match_text?(value, expected, opts)
-    end)
+    matches =
+      Enum.filter(items, fn item ->
+        value = clickable_match_value(item, Keyword.get(opts, :match_by, :text))
+        Query.match_text?(value, expected, opts)
+      end)
+
+    Query.pick_match(matches, opts)
+  end
+
+  defp maybe_matching_clickable(kind, skip_kind, _items, _expected, _opts) when kind == skip_kind, do: nil
+
+  defp maybe_matching_clickable(_kind, _skip_kind, items, expected, opts) do
+    case find_matching_clickable(items, expected, opts) do
+      {:ok, item} -> item
+      {:error, _reason} -> nil
+    end
   end
 
   defp find_matching_field(items, expected, opts) do
-    Enum.find(items, fn item ->
-      value = field_match_value(item, Keyword.get(opts, :match_by, :label))
-      Query.match_text?(value, expected, opts)
-    end)
+    matches =
+      Enum.filter(items, fn item ->
+        value = field_match_value(item, Keyword.get(opts, :match_by, :label))
+        Query.match_text?(value, expected, opts)
+      end)
+
+    Query.pick_match(matches, opts)
   end
 
   defp clickable_match_value(item, match_by) when is_map(item),
@@ -1194,12 +1200,14 @@ defmodule Cerberus.Driver.Browser do
     expression = Expressions.text_assertion(payload)
 
     case eval_json(state, expression, command_timeout_ms(timeout_ms)) do
-      {:ok, %{"ok" => true} = result} ->
-        next_state = %{state | current_path: result["path"] || state.current_path}
-        {:ok, next_state, text_assertion_observed(result, expected, visible, match_by)}
-
       {:ok, result} ->
-        {:error, text_assertion_reason(mode), text_assertion_observed(result, expected, visible, match_by)}
+        next_state = %{state | current_path: result["path"] || state.current_path}
+        observed = text_assertion_observed(result, expected, visible, match_by)
+
+        case text_assertion_outcome(result, match_opts, mode) do
+          :ok -> {:ok, next_state, observed}
+          {:error, reason} -> {:error, reason, observed}
+        end
 
       {:error, reason, details} ->
         observed = %{path: state.current_path, details: details}
@@ -1208,6 +1216,8 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp build_text_assertion_payload(state, expected, visible, match_opts, timeout_ms, mode, match_by) do
+    {between_min, between_max} = between_bounds(match_opts)
+
     %{
       scopeSelector: Session.scope(state),
       selector: Keyword.get(match_opts, :selector),
@@ -1218,8 +1228,44 @@ defmodule Cerberus.Driver.Browser do
       visibility: visibility_mode(visible),
       timeoutMs: timeout_ms,
       mode: Atom.to_string(mode),
+      count: Keyword.get(match_opts, :count),
+      min: Keyword.get(match_opts, :min),
+      max: Keyword.get(match_opts, :max),
+      betweenMin: between_min,
+      betweenMax: between_max,
       pollMs: 250
     }
+  end
+
+  defp text_assertion_outcome(result, match_opts, mode) when mode in [:assert, :refute] do
+    if Query.has_count_constraints?(match_opts) do
+      match_count =
+        case Map.get(result, "matchCount") do
+          value when is_integer(value) and value >= 0 ->
+            value
+
+          _ ->
+            result
+            |> Map.get("matched", [])
+            |> List.wrap()
+            |> length()
+        end
+
+      Query.assertion_count_outcome(match_count, match_opts, mode)
+    else
+      if result["ok"] == true do
+        :ok
+      else
+        {:error, text_assertion_reason(mode)}
+      end
+    end
+  end
+
+  defp between_bounds(opts) do
+    case Keyword.get(opts, :between) do
+      {min, max} -> {min, max}
+      _ -> {nil, nil}
+    end
   end
 
   defp text_assertion_reason(:assert), do: "expected text not found"

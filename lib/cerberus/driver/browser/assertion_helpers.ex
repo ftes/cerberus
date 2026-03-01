@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAssert && window.__cerberusAssert.__version === 2) return;
+    if (window.__cerberusAssert && window.__cerberusAssert.__version === 3) return;
 
     const helper = {};
-    helper.__version = 2;
+    helper.__version = 3;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -226,6 +226,70 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       return value || null;
     };
 
+    helper.numberOrNull = (value) => {
+      if (value === null || value === undefined) return null;
+      const number = Number(value);
+      if (!Number.isFinite(number) || number < 0) return null;
+      return Math.floor(number);
+    };
+
+    helper.matchFilters = (options) => {
+      const betweenMin = helper.numberOrNull(options.betweenMin);
+      const betweenMax = helper.numberOrNull(options.betweenMax);
+
+      return {
+        count: helper.numberOrNull(options.count),
+        min: helper.numberOrNull(options.min),
+        max: helper.numberOrNull(options.max),
+        betweenMin,
+        betweenMax
+      };
+    };
+
+    helper.hasMatchFilters = (filters) => {
+      return (
+        filters.count !== null ||
+        filters.min !== null ||
+        filters.max !== null ||
+        (filters.betweenMin !== null && filters.betweenMax !== null)
+      );
+    };
+
+    helper.countSatisfiesFilters = (count, filters) => {
+      if (filters.count !== null && count !== filters.count) return false;
+      if (filters.min !== null && count < filters.min) return false;
+      if (filters.max !== null && count > filters.max) return false;
+
+      if (filters.betweenMin !== null && filters.betweenMax !== null) {
+        if (count < filters.betweenMin || count > filters.betweenMax) return false;
+      }
+
+      return true;
+    };
+
+    helper.assertionSatisfied = (mode, matchCount, filters) => {
+      if (helper.hasMatchFilters(filters)) {
+        const satisfies = helper.countSatisfiesFilters(matchCount, filters);
+        return mode === "assert" ? satisfies : !satisfies;
+      }
+
+      return mode === "assert" ? matchCount > 0 : matchCount === 0;
+    };
+
+    helper.assertionReason = (mode, matchCount, filters, ok) => {
+      if (ok) return "matched";
+
+      if (helper.hasMatchFilters(filters)) {
+        if (mode === "assert") {
+          return `expected count constraints to match, got ${matchCount}`;
+        }
+
+        return `unexpected matching text count satisfied constraints (${matchCount})`;
+      }
+
+      return mode === "assert" ? "expected text not found" : "unexpected matching text found";
+    };
+
     helper.textQuick = (options) => {
       const visibility = options.visibility || "visible";
       const mode = options.mode || "assert";
@@ -237,7 +301,9 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const needsHiddenState = visibility !== "all" || helper.isTextLikeMatchBy(matchBy);
       const roots = helper.resolveRoots(options.scopeSelector || null);
       const matchText = helper.buildTextMatcher(options.expected, exact, normalizeWs);
-      let matchedAny = false;
+      const filters = helper.matchFilters(options);
+      const hasFilters = helper.hasMatchFilters(filters);
+      let matchCount = 0;
 
       helper.eachCandidateElement(roots, selector, prefilterSelector, (element) => {
         const hidden = needsHiddenState ? helper.isHidden(element) : false;
@@ -247,19 +313,23 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         if (!value) return true;
 
         if (matchText(value)) {
-          matchedAny = true;
-          return false;
+          matchCount += 1;
+
+          if (!hasFilters) {
+            return false;
+          }
         }
 
         return true;
       });
 
-      const ok = mode === "assert" ? matchedAny : !matchedAny;
-      const reason = ok ? "matched" : mode === "assert" ? "expected text not found" : "unexpected matching text found";
+      const ok = helper.assertionSatisfied(mode, matchCount, filters);
+      const reason = helper.assertionReason(mode, matchCount, filters, ok);
 
       return {
         ok,
         reason,
+        matchCount,
         path: window.location.pathname + window.location.search,
         title: document.title || ""
       };
@@ -275,6 +345,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const prefilterSelector = helper.selectorForMatchBy(matchBy);
       const roots = helper.resolveRoots(options.scopeSelector || null);
       const matchText = helper.buildTextMatcher(options.expected, exact, normalizeWs);
+      const filters = helper.matchFilters(options);
       const visibleTexts = [];
       const hiddenTexts = [];
       const visibleSet = new Set();
@@ -306,8 +377,8 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
             : visibleTexts.concat(hiddenTexts);
 
       const matched = texts.filter((text) => matchText(text));
-      const ok = mode === "assert" ? matched.length > 0 : matched.length === 0;
-      const reason = mode === "assert" ? "expected text not found" : "unexpected matching text found";
+      const ok = helper.assertionSatisfied(mode, matched.length, filters);
+      const reason = helper.assertionReason(mode, matched.length, filters, ok);
 
       return {
         ok,

@@ -448,10 +448,12 @@ defmodule Cerberus.Driver.Live do
       transition: Session.transition(session)
     }
 
-    if matched == [] do
-      {:error, session, observed, "expected text not found"}
-    else
-      {:ok, update_session(session, :assert_has, observed), observed}
+    case Query.assertion_count_outcome(length(matched), match_opts, :assert) do
+      :ok ->
+        {:ok, update_session(session, :assert_has, observed), observed}
+
+      {:error, reason} ->
+        {:error, session, observed, reason}
     end
   end
 
@@ -473,10 +475,12 @@ defmodule Cerberus.Driver.Live do
       transition: Session.transition(session)
     }
 
-    if matched == [] do
-      {:ok, update_session(session, :refute_has, observed), observed}
-    else
-      {:error, session, observed, "unexpected matching text found"}
+    case Query.assertion_count_outcome(length(matched), match_opts, :refute) do
+      :ok ->
+        {:ok, update_session(session, :refute_has, observed), observed}
+
+      {:error, reason} ->
+        {:error, session, observed, reason}
     end
   end
 
