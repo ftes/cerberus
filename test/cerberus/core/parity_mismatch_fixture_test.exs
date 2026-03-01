@@ -3,31 +3,19 @@ defmodule Cerberus.CoreParityMismatchFixtureTest do
 
   import Cerberus
 
-  alias Cerberus.Harness
+  for driver <- [:phoenix, :browser] do
+    test "parity static mismatch fixture is reachable in static and browser drivers (#{driver})" do
+      unquote(driver)
+      |> session()
+      |> visit("/oracle/mismatch")
+      |> assert_has(text: "Oracle mismatch static fixture marker", exact: true)
+    end
 
-  @tag :static
-  @tag :browser
-  test "parity static mismatch fixture is reachable in static and browser drivers", context do
-    Harness.run!(
-      context,
-      fn session ->
-        session
-        |> visit("/oracle/mismatch")
-        |> assert_has(text: "Oracle mismatch static fixture marker", exact: true)
-      end
-    )
-  end
-
-  @tag :live
-  @tag :browser
-  test "parity live mismatch fixture is reachable in live and browser drivers", context do
-    Harness.run!(
-      context,
-      fn session ->
-        session
-        |> visit("/live/oracle/mismatch")
-        |> assert_has(text: "Oracle mismatch live fixture marker", exact: true)
-      end
-    )
+    test "parity live mismatch fixture is reachable in live and browser drivers (#{driver})" do
+      unquote(driver)
+      |> session()
+      |> visit("/live/oracle/mismatch")
+      |> assert_has(text: "Oracle mismatch live fixture marker", exact: true)
+    end
   end
 end

@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-01T17:33:28Z
-updated_at: 2026-03-01T18:22:02Z
+updated_at: 2026-03-01T18:37:36Z
 parent: cerberus-whq9
 ---
 
@@ -45,3 +45,12 @@ Goals:
 - Kept non-browser public API constrained to session()/session(:phoenix); explicit :static/:live public aliases were not introduced.
 - Preserved live default assertion-timeout semantics (500ms) when phoenix sessions transition into LiveView mode.
 - Tightened shared assertion timeout resolution so static sessions remain fail-fast by default (timeout 0) unless explicitly overridden per call.
+
+- Converted another harness-removal batch in test/cerberus/core:
+  - current_path_test.exs
+  - path_scope_behavior_test.exs
+  - parity_mismatch_fixture_test.exs
+  - cross_driver_multi_tab_user_test.exs
+  - live_click_bindings_behavior_test.exs
+- Replaced Harness.run!/run contexts with direct session(driver) flows using explicit `for driver <- [:phoenix, :browser]` loops where applicable.
+- Validation: targeted chrome batch run passed (25 tests, 0 failures) and mix precommit passed.

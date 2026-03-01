@@ -3,16 +3,11 @@ defmodule Cerberus.CoreCrossDriverMultiTabUserTest do
 
   import Cerberus
 
-  alias Cerberus.Harness
-
-  @moduletag :static
-  @moduletag :live
-  @moduletag :browser
-
-  test "multi-tab sharing and multi-user isolation work with one API across drivers", context do
-    Harness.run!(context, fn session ->
+  for driver <- [:phoenix, :browser] do
+    test "multi-tab sharing and multi-user isolation work with one API across drivers (#{driver})" do
       primary =
-        session
+        unquote(driver)
+        |> session()
         |> visit("/session/user/alice")
         |> assert_has(text("Session user: alice", exact: true))
 
@@ -47,7 +42,7 @@ defmodule Cerberus.CoreCrossDriverMultiTabUserTest do
       primary = assert_has(primary, text("Session user: alice", exact: true))
 
       close_tab(isolated_tab)
-      primary
-    end)
+      assert_has(primary, text("Session user: alice", exact: true))
+    end
   end
 end
