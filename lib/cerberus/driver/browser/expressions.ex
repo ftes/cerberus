@@ -165,4 +165,285 @@ defmodule Cerberus.Driver.Browser.Expressions do
     })()
     """
   end
+
+  @spec clickables(String.t() | nil, String.t() | nil) :: String.t()
+  def clickables(scope, selector) do
+    encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
+
+    """
+    (() => {
+      const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
+      const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
+      const links = queryWithinRoots("a[href]")
+        .filter(selectorMatches)
+        .map((element, index) => ({
+        index,
+        text: normalize(element.textContent),
+        title: element.getAttribute("title") || "",
+        alt: (() => {
+          const direct = element.getAttribute("alt");
+          if (direct) return direct;
+          const nested = element.querySelector("img[alt],input[type='image'][alt],[role='img'][alt]");
+          return nested ? (nested.getAttribute("alt") || "") : "";
+        })(),
+        testid: element.getAttribute("data-testid") || "",
+        href: element.getAttribute("href") || "",
+        resolvedHref: element.href || ""
+      }));
+
+      const buttons = queryWithinRoots("button")
+        .filter(selectorMatches)
+        .map((element, index) => ({
+        index,
+        text: normalize(element.textContent),
+        title: element.getAttribute("title") || "",
+        alt: (() => {
+          const direct = element.getAttribute("alt");
+          if (direct) return direct;
+          const nested = element.querySelector("img[alt],input[type='image'][alt]");
+          return nested ? (nested.getAttribute("alt") || "") : "";
+        })(),
+        testid: element.getAttribute("data-testid") || "",
+        type: (element.getAttribute("type") || "submit").toLowerCase(),
+        name: element.getAttribute("name") || "",
+        value: element.getAttribute("value") || ""
+      }));
+
+      return JSON.stringify({
+        path: window.location.pathname + window.location.search,
+        links,
+        buttons
+      });
+    })()
+    """
+  end
+
+  @spec form_fields(String.t() | nil, String.t() | nil) :: String.t()
+  def form_fields(scope, selector) do
+    encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
+
+    """
+    (() => {
+      const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
+      const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const labels = new Map();
+
+      queryWithinRoots("label[for]").forEach((label) => {
+        const id = label.getAttribute("for");
+        if (id) labels.set(id, normalize(label.textContent));
+      });
+
+      const labelForControl = (element) => {
+        const byId = labels.get(element.id || "");
+        if (byId) return byId;
+
+        const wrappingLabel = element.closest("label");
+        if (wrappingLabel) return normalize(wrappingLabel.textContent);
+
+        return "";
+      };
+
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
+      const fields = queryWithinRoots("input, textarea, select")
+        .filter((element) => {
+          const type = (element.getAttribute("type") || "").toLowerCase();
+          return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
+        })
+        .map((element, index) => {
+          const tag = (element.tagName || "").toLowerCase();
+          const rawType = (element.getAttribute("type") || "").toLowerCase();
+          const type = tag === "select" ? (element.multiple ? "select-multiple" : "select-one") : rawType;
+          const value = tag === "select"
+            ? (element.multiple
+              ? Array.from(element.selectedOptions || []).map((option) => option.value || option.textContent || "")
+              : (element.value || ""))
+            : (element.value || "");
+
+          return {
+            index,
+            id: element.id || "",
+            name: element.name || "",
+            label: labelForControl(element),
+            placeholder: element.getAttribute("placeholder") || "",
+            title: element.getAttribute("title") || "",
+            testid: element.getAttribute("data-testid") || "",
+            type,
+            value,
+            checked: element.checked === true,
+            tag,
+            multiple: tag === "select" && element.multiple === true,
+            disabled: element.disabled === true
+          };
+        });
+
+      return JSON.stringify({
+        path: window.location.pathname + window.location.search,
+        fields
+      });
+    })()
+    """
+  end
+
+  @spec file_fields(String.t() | nil, String.t() | nil) :: String.t()
+  def file_fields(scope, selector) do
+    encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
+
+    """
+    (() => {
+      const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
+      const scopeSelector = #{encoded_scope};
+      const elementSelector = #{encoded_selector};
+      const defaultRoot = document.body || document.documentElement;
+      let roots = defaultRoot ? [defaultRoot] : [];
+
+      if (scopeSelector) {
+        try {
+          roots = Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          roots = [];
+        }
+      }
+
+      const queryWithinRoots = (selector) => {
+        const seen = new Set();
+        const matches = [];
+
+        for (const root of roots) {
+          if (root.matches && root.matches(selector) && !seen.has(root)) {
+            seen.add(root);
+            matches.push(root);
+          }
+
+          for (const element of root.querySelectorAll(selector)) {
+            if (!seen.has(element)) {
+              seen.add(element);
+              matches.push(element);
+            }
+          }
+        }
+
+        return matches;
+      };
+
+      const labels = new Map();
+
+      queryWithinRoots("label[for]").forEach((label) => {
+        const id = label.getAttribute("for");
+        if (id) labels.set(id, normalize(label.textContent));
+      });
+
+      const selectorMatches = (element) => {
+        if (!elementSelector) return true;
+        try {
+          return element.matches(elementSelector);
+        } catch (_error) {
+          return false;
+        }
+      };
+
+      const fields = queryWithinRoots("input[type='file']")
+        .filter(selectorMatches)
+        .map((element, index) => ({
+          index,
+          id: element.id || "",
+          name: element.name || "",
+          label: labels.get(element.id) || "",
+          placeholder: element.getAttribute("placeholder") || "",
+          title: element.getAttribute("title") || "",
+          testid: element.getAttribute("data-testid") || ""
+        }));
+
+      return JSON.stringify({
+        path: window.location.pathname + window.location.search,
+        fields
+      });
+    })()
+    """
+  end
 end
