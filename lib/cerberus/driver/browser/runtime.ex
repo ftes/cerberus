@@ -166,7 +166,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
   defp start_managed_service(opts, browser_name) do
     binary = opts |> webdriver_binary!(browser_name) |> Path.expand()
     port = Keyword.get(opts, :chromedriver_port) || random_port!()
-    args = [to_charlist("--port=#{port}")]
+    args = webdriver_service_args(browser_name, port)
 
     process =
       Port.open({:spawn_executable, to_charlist(binary)}, [
@@ -189,6 +189,14 @@ defmodule Cerberus.Driver.Browser.Runtime do
   rescue
     error ->
       {:error, Exception.message(error)}
+  end
+
+  defp webdriver_service_args(:chrome, port) do
+    [to_charlist("--port=#{port}")]
+  end
+
+  defp webdriver_service_args(:firefox, port) do
+    [to_charlist("--port=#{port}"), ~c"--websocket-port=0"]
   end
 
   defp start_webdriver_session(service, opts) do
@@ -439,7 +447,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
     headless? = headless?(opts, merged)
     custom_args = Keyword.get(opts, :chrome_args, Keyword.get(merged, :chrome_args, []))
     defaults = if headless?, do: ["--headless=new"], else: []
-    defaults ++ ["--disable-gpu", "--no-sandbox"] ++ custom_args
+    defaults ++ ["--disable-gpu", "--no-sandbox", "--remote-debugging-port=0"] ++ custom_args
   end
 
   defp chrome_args(opts, merged, false) do

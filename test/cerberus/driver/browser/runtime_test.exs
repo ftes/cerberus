@@ -88,6 +88,7 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
 
       assert chrome_opts["binary"] == chrome_path
       assert is_list(chrome_opts["args"])
+      assert "--remote-debugging-port=0" in chrome_opts["args"]
     end
 
     test "firefox payload uses moz:firefoxOptions and browserName firefox" do

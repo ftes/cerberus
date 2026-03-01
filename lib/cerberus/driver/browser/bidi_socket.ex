@@ -134,7 +134,7 @@ defmodule Cerberus.Driver.Browser.BiDiSocket do
   defp connect_socket(state, browser_name, url, sockets) do
     with {:ok, owner} <- resolve_owner(state.owner),
          {:ok, normalized_browser} <- normalize_browser_name(browser_name),
-         {:ok, socket} <- WS.start_link(url, owner) do
+         {:ok, socket} <- WS.start_link(url, owner, ws_opts(normalized_browser)) do
       monitor_ref = Process.monitor(socket)
       sockets = Map.put(sockets, normalized_browser, %{socket: socket, url: url, monitor_ref: monitor_ref})
       {:reply, {:ok, socket}, %{state | sockets: sockets}}
@@ -152,5 +152,9 @@ defmodule Cerberus.Driver.Browser.BiDiSocket do
     {:ok, Runtime.browser_name(browser_name: browser_name)}
   rescue
     _ -> {:error, :invalid_browser_name}
+  end
+
+  defp ws_opts(_browser_name) do
+    [extra_headers: [{"Sec-WebSocket-Protocol", "webDriverBidi"}]]
   end
 end
