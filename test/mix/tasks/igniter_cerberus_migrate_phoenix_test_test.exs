@@ -193,7 +193,6 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     assert output =~ "WARNING #{playwright_copy}:"
   end
 
-  @tag :migration_verification
   @tag timeout: 180_000
   test "runs full sample suite before and after migration", %{tmp_dir: tmp_dir} do
     fixture_dir = "fixtures/migration_project"

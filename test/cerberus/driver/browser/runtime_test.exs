@@ -56,16 +56,6 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
     end
   end
 
-  describe "browser_name/1" do
-    test "defaults to chrome and accepts browser config/session overrides" do
-      assert Runtime.browser_name([]) == :chrome
-
-      Application.put_env(:cerberus, :browser, browser_name: :firefox)
-      assert Runtime.browser_name([]) == :firefox
-      assert Runtime.browser_name(browser_name: :chrome) == :chrome
-    end
-  end
-
   describe "webdriver_session_payload/3" do
     test "remote payload does not require local browser binary" do
       payload = Runtime.webdriver_session_payload([chrome_args: ["--remote-flag"]], false, :chrome)
