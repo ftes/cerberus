@@ -27,7 +27,7 @@ defmodule Cerberus.Fixtures.SelectControlsLive do
 
       <form id="live-controls-form" phx-change="change" phx-submit="save">
         <label for="live_controls_race">Race</label>
-        <select id="live_controls_race" name="race">
+        <select id="live_controls_race" name="race" title="Live race select" data-testid="live-race-select">
           <option value="human">Human</option>
           <option value="elf">Elf</option>
           <option value="dwarf">Dwarf</option>
@@ -58,7 +58,9 @@ defmodule Cerberus.Fixtures.SelectControlsLive do
           <option value="cannot_submit">Cannot submit</option>
         </select>
 
-        <button type="submit">Save Live Controls</button>
+        <button type="submit" title="Save live controls" data-testid="save-live-controls">
+          Save Live Controls
+        </button>
       </form>
 
       <div id="form-data">

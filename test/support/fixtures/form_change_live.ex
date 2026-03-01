@@ -50,7 +50,15 @@ defmodule Cerberus.Fixtures.FormChangeLive do
 
       <form id="change-form" phx-change="validate">
         <label for="change_name">Name</label>
-        <input id="change_name" name="name" type="text" value={@name} />
+        <input
+          id="change_name"
+          name="name"
+          type="text"
+          value={@name}
+          placeholder="Live name"
+          title="Live name input"
+          data-testid="live-change-name"
+        />
 
         <label for="change_email">Email</label>
         <input id="change_email" name="email" type="text" value={@email} />

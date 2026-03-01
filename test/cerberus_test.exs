@@ -169,12 +169,16 @@ defmodule CerberusTest do
            )
   end
 
-  test "testid helper is explicit about unsupported operations in this slice" do
-    assert_raise InvalidLocatorError, ~r/testid locators are not yet supported/, fn ->
+  test "testid helper matches first-class test ids in assertions and actions" do
+    session =
       session()
       |> visit("/articles")
       |> assert_has(testid("articles-title"))
-    end
+      |> visit("/search")
+      |> fill_in(testid("search-input"), "phoenix")
+      |> submit(testid("search-submit"))
+
+    assert session.current_path == "/search/results?q=phoenix"
   end
 
   test "unsupported driver is rejected" do

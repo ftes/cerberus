@@ -107,19 +107,53 @@ defmodule Cerberus.CoreHelperLocatorBehaviorTest do
 
   @tag :static
   @tag :browser
-  test "testid helper reports explicit unsupported behavior across drivers", context do
-    results =
-      Harness.run(context, fn session ->
+  test "testid helper works across drivers for assertions and form actions", context do
+    Harness.run!(
+      context,
+      fn session ->
         session
         |> visit("/articles")
         |> assert_has(testid("articles-title"))
-      end)
+        |> visit("/search")
+        |> fill_in(testid("search-input"), "gandalf")
+        |> submit(testid("search-submit"))
+        |> assert_has(text("Search query: gandalf", exact: true))
+      end
+    )
+  end
 
-    assert results != []
-    assert Enum.all?(results, &(&1.status == :error))
+  @tag :static
+  @tag :browser
+  test "placeholder/title/alt helpers behave consistently in static and browser", context do
+    Harness.run!(
+      context,
+      fn session ->
+        session
+        |> visit("/articles")
+        |> assert_has(title("Articles heading", exact: true))
+        |> assert_has(alt("Articles hero image", exact: true))
+        |> visit("/search")
+        |> assert_has(testid("search-title"))
+        |> fill_in(placeholder("Search by term"), "boromir")
+        |> submit(title("Run search button", exact: true))
+        |> assert_has(text("Search query: boromir", exact: true))
+      end
+    )
+  end
 
-    Enum.each(results, fn result ->
-      assert result.message =~ "testid locators are not yet supported"
-    end)
+  @tag :live
+  @tag :browser
+  test "placeholder/title/testid helpers behave consistently in live and browser", context do
+    Harness.run!(
+      context,
+      fn session ->
+        session
+        |> visit("/live/form-change")
+        |> assert_has(title("Live name input", exact: true))
+        |> fill_in(placeholder("Live name"), "Eowyn")
+        |> assert_has(testid("live-change-name"))
+        |> assert_has(text("name: Eowyn", exact: true))
+      end
+    )
   end
 end

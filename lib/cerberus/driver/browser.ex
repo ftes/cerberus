@@ -461,7 +461,7 @@ defmodule Cerberus.Driver.Browser do
       if kind == :button do
         nil
       else
-        Enum.find(links, &Query.match_text?(&1["text"] || "", expected, opts))
+        find_matching_clickable(links, expected, opts)
       end
 
     if link == nil do
@@ -469,7 +469,7 @@ defmodule Cerberus.Driver.Browser do
         if kind == :link do
           nil
         else
-          Enum.find(buttons, &Query.match_text?(&1["text"] || "", expected, opts))
+          find_matching_clickable(buttons, expected, opts)
         end
 
       if button == nil do
@@ -489,7 +489,7 @@ defmodule Cerberus.Driver.Browser do
       |> Map.get("buttons", [])
       |> Enum.filter(&submit_control?/1)
 
-    case find_matching_by_text(buttons, expected, opts) do
+    case find_matching_clickable(buttons, expected, opts) do
       nil ->
         observed = %{action: :submit, path: state.current_path, clickables: clickables_data}
         {:error, session, observed, "no submit button matched locator"}
@@ -502,7 +502,7 @@ defmodule Cerberus.Driver.Browser do
   defp do_fill_in(session, state, fields_data, expected, value, opts, selector) do
     fields = Map.get(fields_data, "fields", [])
 
-    case find_matching_by_label(fields, expected, opts) do
+    case find_matching_field(fields, expected, opts) do
       nil ->
         observed = %{action: :fill_in, path: state.current_path, fields: fields_data}
         {:error, session, observed, "no form field matched locator"}
@@ -515,7 +515,7 @@ defmodule Cerberus.Driver.Browser do
   defp do_select(session, state, fields_data, expected, option, opts, selector) do
     fields = Map.get(fields_data, "fields", [])
 
-    case find_matching_by_label(fields, expected, opts) do
+    case find_matching_field(fields, expected, opts) do
       nil ->
         observed = %{action: :select, path: state.current_path, fields: fields_data, option: option}
         {:error, session, observed, "no form field matched locator"}
@@ -541,7 +541,7 @@ defmodule Cerberus.Driver.Browser do
   defp do_choose_radio(session, state, fields_data, expected, opts, selector) do
     fields = Map.get(fields_data, "fields", [])
 
-    case find_matching_by_label(fields, expected, opts) do
+    case find_matching_field(fields, expected, opts) do
       nil ->
         observed = %{action: :choose, path: state.current_path, fields: fields_data}
         {:error, session, observed, "no form field matched locator"}
@@ -565,7 +565,7 @@ defmodule Cerberus.Driver.Browser do
   defp do_upload(session, state, fields_data, expected, path, opts, selector) do
     fields = Map.get(fields_data, "fields", [])
 
-    case find_matching_by_label(fields, expected, opts) do
+    case find_matching_field(fields, expected, opts) do
       nil ->
         observed = %{action: :upload, path: state.current_path, fields: fields_data, file_path: path}
         {:error, session, observed, "no file input matched locator"}
@@ -578,7 +578,7 @@ defmodule Cerberus.Driver.Browser do
   defp do_toggle_checkbox(session, state, fields_data, expected, opts, selector, checked?, op) do
     fields = Map.get(fields_data, "fields", [])
 
-    case find_matching_by_label(fields, expected, opts) do
+    case find_matching_field(fields, expected, opts) do
       nil ->
         observed = %{action: op, path: state.current_path, fields: fields_data}
         {:error, session, observed, "no form field matched locator"}
@@ -966,12 +966,40 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp find_matching_by_text(items, expected, opts) do
-    Enum.find(items, &Query.match_text?(&1["text"] || "", expected, opts))
+  defp find_matching_clickable(items, expected, opts) do
+    Enum.find(items, fn item ->
+      value = clickable_match_value(item, Keyword.get(opts, :match_by, :text))
+      Query.match_text?(value, expected, opts)
+    end)
   end
 
-  defp find_matching_by_label(items, expected, opts) do
-    Enum.find(items, &Query.match_text?(&1["label"] || "", expected, opts))
+  defp find_matching_field(items, expected, opts) do
+    Enum.find(items, fn item ->
+      value = field_match_value(item, Keyword.get(opts, :match_by, :label))
+      Query.match_text?(value, expected, opts)
+    end)
+  end
+
+  defp clickable_match_value(item, match_by) when is_map(item) do
+    case match_by do
+      :text -> item["text"] || ""
+      :link -> item["text"] || ""
+      :button -> item["text"] || ""
+      :title -> item["title"] || ""
+      :alt -> item["alt"] || ""
+      :testid -> item["testid"] || ""
+      _ -> item["text"] || ""
+    end
+  end
+
+  defp field_match_value(item, match_by) when is_map(item) do
+    case match_by do
+      :label -> item["label"] || ""
+      :placeholder -> item["placeholder"] || ""
+      :title -> item["title"] || ""
+      :testid -> item["testid"] || ""
+      _ -> item["label"] || ""
+    end
   end
 
   defp submit_control?(button) do
@@ -1162,42 +1190,37 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp run_text_assertion(state, expected, visible, match_opts, timeout_ms, mode) when mode in [:assert, :refute] do
-    case maybe_ensure_assertion_helpers(state) do
-      :ok ->
-        scope = Session.scope(state)
-        selector = Keyword.get(match_opts, :selector)
-        exact = Keyword.get(match_opts, :exact, false)
-        normalize_ws = Keyword.get(match_opts, :normalize_ws, true)
+    scope = Session.scope(state)
+    selector = Keyword.get(match_opts, :selector)
+    exact = Keyword.get(match_opts, :exact, false)
+    normalize_ws = Keyword.get(match_opts, :normalize_ws, true)
+    match_by = Keyword.get(match_opts, :match_by, :text)
 
-        expression =
-          text_assertion_expression(
-            scope,
-            selector,
-            text_expectation_payload(expected),
-            exact,
-            normalize_ws,
-            visible,
-            timeout_ms,
-            mode
-          )
+    expression =
+      text_assertion_expression(
+        scope,
+        selector,
+        text_expectation_payload(expected),
+        exact,
+        normalize_ws,
+        match_by,
+        visible,
+        timeout_ms,
+        mode
+      )
 
-        case eval_json(state, expression, command_timeout_ms(timeout_ms)) do
-          {:ok, %{"ok" => true} = result} ->
-            next_state = %{state | current_path: result["path"] || state.current_path}
-            {:ok, next_state, text_assertion_observed(result, expected, visible)}
+    case eval_json(state, expression, command_timeout_ms(timeout_ms)) do
+      {:ok, %{"ok" => true} = result} ->
+        next_state = %{state | current_path: result["path"] || state.current_path}
+        {:ok, next_state, text_assertion_observed(result, expected, visible, match_by)}
 
-          {:ok, result} ->
-            reason = if mode == :assert, do: "expected text not found", else: "unexpected matching text found"
-            {:error, reason, text_assertion_observed(result, expected, visible)}
-
-          {:error, reason, details} ->
-            observed = %{path: state.current_path, details: details}
-            {:error, "failed to evaluate browser text assertion: #{reason}", observed}
-        end
+      {:ok, result} ->
+        reason = if mode == :assert, do: "expected text not found", else: "unexpected matching text found"
+        {:error, reason, text_assertion_observed(result, expected, visible, match_by)}
 
       {:error, reason, details} ->
         observed = %{path: state.current_path, details: details}
-        {:error, "failed to load browser assertion helpers: #{reason}", observed}
+        {:error, "failed to evaluate browser text assertion: #{reason}", observed}
     end
   end
 
@@ -1224,25 +1247,7 @@ defmodule Cerberus.Driver.Browser do
       deadline: System.monotonic_time(:millisecond) + timeout_ms
     }
 
-    case maybe_ensure_assertion_helpers(state) do
-      :ok ->
-        do_run_path_assertion(session, state, assertion)
-
-      {:error, reason, details} ->
-        observed = %{
-          path: state.current_path,
-          scope: Session.scope(session),
-          expected: expected,
-          query: expected_query,
-          exact: exact,
-          timeout: timeout_ms,
-          path_match?: false,
-          query_match?: false,
-          details: details
-        }
-
-        {:error, session, observed, "failed to load browser assertion helpers: #{reason}"}
-    end
+    do_run_path_assertion(session, state, assertion)
   end
 
   defp do_run_path_assertion(session, state, assertion) do
@@ -1311,33 +1316,17 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp text_assertion_observed(result, expected, visible) when is_map(result) do
+  defp text_assertion_observed(result, expected, visible, match_by) when is_map(result) do
     %{
       path: result["path"],
       title: result["title"] || "",
       visible: visible,
+      match_by: match_by,
       texts: result["texts"] || [],
       matched: result["matched"] || [],
       expected: expected
     }
   end
-
-  defp maybe_ensure_assertion_helpers(%{browser_name: :firefox} = state) do
-    expression = assertion_helpers_preload_expression()
-
-    case eval_json(state, expression) do
-      {:ok, %{"ok" => true}} ->
-        :ok
-
-      {:ok, result} ->
-        {:error, "assertion helper preload failed", %{result: result}}
-
-      {:error, reason, details} ->
-        {:error, reason, details}
-    end
-  end
-
-  defp maybe_ensure_assertion_helpers(_state), do: :ok
 
   defp click_button_after_eval(session, state, button) do
     case await_driver_ready(state) do
@@ -1902,21 +1891,7 @@ defmodule Cerberus.Driver.Browser do
     """
   end
 
-  defp assertion_helpers_preload_expression do
-    """
-    (() => {
-      #{AssertionHelpers.preload_script()}
-
-      const helper = window.__cerberusAssert;
-
-      return JSON.stringify({
-        ok: !!(helper && typeof helper.text === "function" && typeof helper.pathCheck === "function")
-      });
-    })()
-    """
-  end
-
-  defp text_assertion_expression(scope, selector, expected, exact, normalize_ws, visible, timeout_ms, mode)
+  defp text_assertion_expression(scope, selector, expected, exact, normalize_ws, match_by, visible, timeout_ms, mode)
        when mode in [:assert, :refute] do
     payload = %{
       scopeSelector: scope,
@@ -1924,6 +1899,7 @@ defmodule Cerberus.Driver.Browser do
       expected: expected,
       exact: exact,
       normalizeWs: normalize_ws,
+      matchBy: Atom.to_string(match_by),
       visibility: visibility_mode(visible),
       timeoutMs: timeout_ms,
       mode: Atom.to_string(mode),
@@ -2109,6 +2085,14 @@ defmodule Cerberus.Driver.Browser do
         .map((element, index) => ({
         index,
         text: normalize(element.textContent),
+        title: element.getAttribute("title") || "",
+        alt: (() => {
+          const direct = element.getAttribute("alt");
+          if (direct) return direct;
+          const nested = element.querySelector("img[alt],input[type='image'][alt],[role='img'][alt]");
+          return nested ? (nested.getAttribute("alt") || "") : "";
+        })(),
+        testid: element.getAttribute("data-testid") || "",
         href: element.getAttribute("href") || "",
         resolvedHref: element.href || ""
       }));
@@ -2118,6 +2102,14 @@ defmodule Cerberus.Driver.Browser do
         .map((element, index) => ({
         index,
         text: normalize(element.textContent),
+        title: element.getAttribute("title") || "",
+        alt: (() => {
+          const direct = element.getAttribute("alt");
+          if (direct) return direct;
+          const nested = element.querySelector("img[alt],input[type='image'][alt]");
+          return nested ? (nested.getAttribute("alt") || "") : "";
+        })(),
+        testid: element.getAttribute("data-testid") || "",
         type: (element.getAttribute("type") || "submit").toLowerCase(),
         name: element.getAttribute("name") || "",
         value: element.getAttribute("value") || ""
@@ -2219,6 +2211,9 @@ defmodule Cerberus.Driver.Browser do
             id: element.id || "",
             name: element.name || "",
             label: labelForControl(element),
+            placeholder: element.getAttribute("placeholder") || "",
+            title: element.getAttribute("title") || "",
+            testid: element.getAttribute("data-testid") || "",
             type,
             value,
             checked: element.checked === true,
@@ -2299,7 +2294,10 @@ defmodule Cerberus.Driver.Browser do
           index,
           id: element.id || "",
           name: element.name || "",
-          label: labels.get(element.id) || ""
+          label: labels.get(element.id) || "",
+          placeholder: element.getAttribute("placeholder") || "",
+          title: element.getAttribute("title") || "",
+          testid: element.getAttribute("data-testid") || ""
         }));
 
       return JSON.stringify({

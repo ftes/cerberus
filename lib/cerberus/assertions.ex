@@ -274,17 +274,28 @@ defmodule Cerberus.Assertions do
             "label locators target form-field lookup and are not supported for click/3; use text(...) for generic element text matching"
 
       %Locator{kind: :link, value: value} ->
-        {%{locator | kind: :text, value: value}, Keyword.put(opts, :kind, :link)}
+        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :link)}, Keyword.put(opts, :kind, :link)}
 
       %Locator{kind: :button, value: value} ->
-        {%{locator | kind: :text, value: value}, Keyword.put(opts, :kind, :button)}
+        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :button)},
+         Keyword.put(opts, :kind, :button)}
+
+      %Locator{kind: :title, value: value} ->
+        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :title)}, opts}
+
+      %Locator{kind: :alt, value: value} ->
+        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :alt)}, opts}
 
       %Locator{kind: :css, value: selector} ->
         updated_locator = %{locator | kind: :text, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
         {updated_locator, Keyword.put(opts, :selector, selector)}
 
-      %Locator{kind: :testid} ->
-        raise InvalidLocatorError, locator: locator_input, message: "testid locators are not yet supported for click/3"
+      %Locator{kind: :placeholder} ->
+        raise InvalidLocatorError, locator: locator_input, message: "placeholder locators are not supported for click/3"
+
+      %Locator{kind: :testid, value: value} ->
+        normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
+        {%{locator | kind: :text, value: value, opts: normalized_opts}, opts}
     end
   end
 
@@ -306,6 +317,18 @@ defmodule Cerberus.Assertions do
       %Locator{kind: :label, value: value} ->
         {%Locator{kind: :label, value: value}, opts}
 
+      %Locator{kind: :placeholder, value: value} ->
+        normalized_opts = put_match_by(locator.opts, :placeholder)
+        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
+
+      %Locator{kind: :title, value: value} ->
+        normalized_opts = put_match_by(locator.opts, :title)
+        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
+
+      %Locator{kind: :testid, value: value} ->
+        normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
+        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
+
       %Locator{kind: :css, value: selector} ->
         updated_locator = %{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
         {updated_locator, Keyword.put(opts, :selector, selector)}
@@ -316,8 +339,8 @@ defmodule Cerberus.Assertions do
       %Locator{kind: :button} ->
         raise InvalidLocatorError, locator: locator_input, message: "button locators are not supported for fill_in/4"
 
-      %Locator{kind: :testid} ->
-        raise InvalidLocatorError, locator: locator_input, message: "testid locators are not yet supported for fill_in/4"
+      %Locator{kind: :alt} ->
+        raise InvalidLocatorError, locator: locator_input, message: "alt locators are not supported for fill_in/4"
     end
   end
 
@@ -339,6 +362,18 @@ defmodule Cerberus.Assertions do
       %Locator{kind: :label, value: value} ->
         {%Locator{kind: :label, value: value}, opts}
 
+      %Locator{kind: :placeholder, value: value} ->
+        normalized_opts = put_match_by(locator.opts, :placeholder)
+        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
+
+      %Locator{kind: :title, value: value} ->
+        normalized_opts = put_match_by(locator.opts, :title)
+        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
+
+      %Locator{kind: :testid, value: value} ->
+        normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
+        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
+
       %Locator{kind: :css, value: selector} ->
         updated_locator = %{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
         {updated_locator, Keyword.put(opts, :selector, selector)}
@@ -349,8 +384,8 @@ defmodule Cerberus.Assertions do
       %Locator{kind: :button} ->
         raise InvalidLocatorError, locator: locator_input, message: "button locators are not supported for upload/4"
 
-      %Locator{kind: :testid} ->
-        raise InvalidLocatorError, locator: locator_input, message: "testid locators are not yet supported for upload/4"
+      %Locator{kind: :alt} ->
+        raise InvalidLocatorError, locator: locator_input, message: "alt locators are not supported for upload/4"
     end
   end
 
@@ -372,6 +407,18 @@ defmodule Cerberus.Assertions do
       %Locator{kind: :label, value: value} ->
         {%Locator{kind: :label, value: value}, opts}
 
+      %Locator{kind: :placeholder, value: value} ->
+        normalized_opts = put_match_by(locator.opts, :placeholder)
+        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
+
+      %Locator{kind: :title, value: value} ->
+        normalized_opts = put_match_by(locator.opts, :title)
+        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
+
+      %Locator{kind: :testid, value: value} ->
+        normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
+        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
+
       %Locator{kind: :css, value: selector} ->
         updated_locator = %{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
         {updated_locator, Keyword.put(opts, :selector, selector)}
@@ -382,8 +429,8 @@ defmodule Cerberus.Assertions do
       %Locator{kind: :button} ->
         raise InvalidLocatorError, locator: locator_input, message: "button locators are not supported for #{op_name}"
 
-      %Locator{kind: :testid} ->
-        raise InvalidLocatorError, locator: locator_input, message: "testid locators are not yet supported for #{op_name}"
+      %Locator{kind: :alt} ->
+        raise InvalidLocatorError, locator: locator_input, message: "alt locators are not supported for #{op_name}"
     end
   end
 
@@ -405,6 +452,18 @@ defmodule Cerberus.Assertions do
       %Locator{kind: :label, value: value} ->
         {%Locator{kind: :label, value: value}, opts}
 
+      %Locator{kind: :placeholder, value: value} ->
+        normalized_opts = put_match_by(locator.opts, :placeholder)
+        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
+
+      %Locator{kind: :title, value: value} ->
+        normalized_opts = put_match_by(locator.opts, :title)
+        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
+
+      %Locator{kind: :testid, value: value} ->
+        normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
+        {%Locator{kind: :label, value: value, opts: normalized_opts}, opts}
+
       %Locator{kind: :css, value: selector} ->
         updated_locator = %{locator | kind: :label, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
         {updated_locator, Keyword.put(opts, :selector, selector)}
@@ -415,8 +474,8 @@ defmodule Cerberus.Assertions do
       %Locator{kind: :button} ->
         raise InvalidLocatorError, locator: locator_input, message: "button locators are not supported for select/3"
 
-      %Locator{kind: :testid} ->
-        raise InvalidLocatorError, locator: locator_input, message: "testid locators are not yet supported for select/3"
+      %Locator{kind: :alt} ->
+        raise InvalidLocatorError, locator: locator_input, message: "alt locators are not supported for select/3"
     end
   end
 
@@ -433,7 +492,17 @@ defmodule Cerberus.Assertions do
         {locator, opts}
 
       %Locator{kind: :button, value: value} ->
-        {%{locator | kind: :text, value: value}, opts}
+        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :button)}, opts}
+
+      %Locator{kind: :title, value: value} ->
+        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :title)}, opts}
+
+      %Locator{kind: :alt, value: value} ->
+        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :alt)}, opts}
+
+      %Locator{kind: :testid, value: value} ->
+        normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
+        {%{locator | kind: :text, value: value, opts: normalized_opts}, opts}
 
       %Locator{kind: :css, value: selector} ->
         updated_locator = %{locator | kind: :text, value: "", opts: Keyword.put(locator.opts, :selector, selector)}
@@ -444,9 +513,6 @@ defmodule Cerberus.Assertions do
 
       %Locator{kind: :link} ->
         raise InvalidLocatorError, locator: locator_input, message: "link locators are not supported for submit/3"
-
-      %Locator{kind: :testid} ->
-        raise InvalidLocatorError, locator: locator_input, message: "testid locators are not yet supported for submit/3"
     end
   end
 
@@ -459,20 +525,31 @@ defmodule Cerberus.Assertions do
         {locator, opts}
 
       %Locator{kind: :label, value: value} ->
-        {%{locator | kind: :text, value: value}, opts}
+        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :label)}, opts}
 
-      %Locator{kind: kind, value: value} when kind in [:link, :button] ->
-        {%{locator | kind: :text, value: value}, opts}
+      %Locator{kind: :link, value: value} ->
+        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :link)}, opts}
+
+      %Locator{kind: :button, value: value} ->
+        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :button)}, opts}
+
+      %Locator{kind: :placeholder, value: value} ->
+        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :placeholder)}, opts}
+
+      %Locator{kind: :title, value: value} ->
+        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :title)}, opts}
+
+      %Locator{kind: :alt, value: value} ->
+        {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, :alt)}, opts}
+
+      %Locator{kind: :testid, value: value} ->
+        normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
+        {%{locator | kind: :text, value: value, opts: normalized_opts}, opts}
 
       %Locator{kind: :css} ->
         raise InvalidLocatorError,
           locator: locator_input,
           message: "css locators are not supported for assert_has/3 or refute_has/3 in this slice"
-
-      %Locator{kind: :testid} ->
-        raise InvalidLocatorError,
-          locator: locator_input,
-          message: "testid locators are not yet supported for assert_has/3 or refute_has/3"
     end
   end
 
@@ -503,6 +580,18 @@ defmodule Cerberus.Assertions do
 
   defp select_label_shorthand?(locator_input) do
     is_binary(locator_input) or is_struct(locator_input, Regex)
+  end
+
+  defp put_match_by(opts, value) when is_list(opts) do
+    Keyword.put(opts, :match_by, value)
+  end
+
+  defp ensure_exact_opt(opts, default) when is_list(opts) and is_boolean(default) do
+    if Keyword.has_key?(opts, :exact) do
+      opts
+    else
+      Keyword.put(opts, :exact, default)
+    end
   end
 
   defp ensure_non_empty_upload_path!(path) do

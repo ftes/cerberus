@@ -17,8 +17,13 @@ defmodule Cerberus.Fixtures.PageController do
       </head>
       <body>
         <main>
-          <h1>Articles</h1>
+          <h1 data-testid="articles-title" title="Articles heading">Articles</h1>
           <p>This is an articles index page</p>
+          <img
+            src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
+            alt="Articles hero image"
+            title="Hero image"
+          />
           <p style="display:none">Hidden helper text</p>
           <a href="/live/counter">Counter</a>
         </main>
@@ -115,12 +120,20 @@ defmodule Cerberus.Fixtures.PageController do
       </head>
       <body>
         <main>
-          <h1>Search</h1>
+          <h1 data-testid="search-title" title="Search heading">Search</h1>
           <a href="/articles">Articles</a>
           <form action="/search/results" method="get">
             <label for="search_q">Search term</label>
-            <input id="search_q" name="q" type="text" value="" />
-            <button type="submit">Run Search</button>
+            <input
+              id="search_q"
+              name="q"
+              type="text"
+              value=""
+              placeholder="Search by term"
+              title="Search input"
+              data-testid="search-input"
+            />
+            <button type="submit" title="Run search button" data-testid="search-submit">Run Search</button>
           </form>
 
           <form action="/search/nested/results" method="get">

@@ -28,24 +28,53 @@ defmodule Cerberus.CoreLocatorOracleHarnessTest do
   @default_html @html_prefix <>
                   """
                     <main id="root">
-                    <h1 data-testid="articles-title">Articles</h1>
+                    <h1 data-testid="articles-title" title="Articles heading">Articles</h1>
                     <p id="multiline">Alpha
                     Beta</p>
+                    <img
+                      id="hero"
+                      src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
+                      alt="Hero banner"
+                      title="Hero image"
+                    />
                     <div style="display: none;">Secret Hidden Copy</div>
                     <div hidden>Hidden Attribute Copy</div>
-                    <a href="#counter" id="counter-link">Counter Link</a>
-                    <button id="increment">Increment</button>
+                    <a href="/search" id="counter-link" data-testid="counter-link-id" title="Counter link title">
+                      Counter Link
+                    </a>
+                    <button id="increment" data-testid="increment-button" title="Increment title">Increment</button>
 
                     <section id="primary">
-                      <form id="profile">
+                      <form id="profile" action="/search/results" method="get">
                         <label for="email_input">Email Address</label>
-                        <input id="email_input" name="profile[email]" type="text" value="" />
+                        <input
+                          id="email_input"
+                          name="profile[email]"
+                          type="text"
+                          value=""
+                          placeholder="Email placeholder"
+                          title="Email input title"
+                          data-testid="email-input"
+                        />
 
                         <label for="search_q">Search term</label>
-                        <input id="search_q" name="search[q]" type="text" value="" />
+                        <input
+                          id="search_q"
+                          name="search[q]"
+                          type="text"
+                          value=""
+                          placeholder="Search placeholder"
+                          title="Search input title"
+                          data-testid="search-input"
+                        />
 
                         <label for="language_select">Language</label>
-                        <select id="language_select" name="profile[language]">
+                        <select
+                          id="language_select"
+                          name="profile[language]"
+                          title="Language selector"
+                          data-testid="language-select"
+                        >
                           <option value="">Choose one</option>
                           <option value="elixir"> Elixir </option>
                           <option value="erlang">Erlang</option>
@@ -69,6 +98,10 @@ defmodule Cerberus.CoreLocatorOracleHarnessTest do
 
                         <label for="nickname">Nickname</label>
                         <input id="nickname" name="profile[nickname]" type="text" />
+
+                        <button type="submit" data-testid="profile-submit" title="Save profile title">
+                          Save Profile
+                        </button>
                       </form>
                     </section>
 
@@ -199,20 +232,23 @@ defmodule Cerberus.CoreLocatorOracleHarnessTest do
       },
       # helper mappings in assertions
       %{
-        name: "assert_has label helper maps to text",
+        name: "assert_has label helper",
         expect: :ok,
         run: &assert_has(&1, label("Email Address", exact: true))
       },
       %{
-        name: "assert_has role button helper maps to text",
+        name: "assert_has role button helper",
         expect: :ok,
         run: &assert_has(&1, role(:button, name: "Increment", exact: true))
       },
       %{
-        name: "assert_has role link helper maps to text",
+        name: "assert_has role link helper",
         expect: :ok,
         run: &assert_has(&1, role(:link, name: "Counter Link", exact: true))
       },
+      %{name: "assert_has title helper", expect: :ok, run: &assert_has(&1, title("Articles heading", exact: true))},
+      %{name: "assert_has alt helper", expect: :ok, run: &assert_has(&1, alt("Hero banner", exact: true))},
+      %{name: "assert_has placeholder helper", expect: :ok, run: &assert_has(&1, placeholder("Search placeholder"))},
       %{
         name: "assert_has css locator unsupported in this slice",
         expect: :error,
@@ -225,12 +261,7 @@ defmodule Cerberus.CoreLocatorOracleHarnessTest do
         error_module: ArgumentError,
         run: &assert_has(&1, text("Articles"), selector: "h1")
       },
-      %{
-        name: "assert_has testid unsupported in this slice",
-        expect: :error,
-        error_module: InvalidLocatorError,
-        run: &assert_has(&1, testid("articles-title"))
-      },
+      %{name: "assert_has testid helper", expect: :ok, run: &assert_has(&1, testid("articles-title"))},
       # fill_in
       %{name: "fill_in label locator", expect: :ok, run: &fill_in(&1, label("Email Address"), "alice@example.com")},
       %{
@@ -262,6 +293,13 @@ defmodule Cerberus.CoreLocatorOracleHarnessTest do
         expect: :ok,
         run: &fill_in(&1, label("Email Address"), "secondary@example.com", selector: "#secondary input")
       },
+      %{
+        name: "fill_in by placeholder",
+        expect: :ok,
+        run: &fill_in(&1, placeholder("Search placeholder"), "by placeholder")
+      },
+      %{name: "fill_in by title", expect: :ok, run: &fill_in(&1, title("Search input title"), "by title")},
+      %{name: "fill_in by testid", expect: :ok, run: &fill_in(&1, testid("search-input"), "by testid")},
       %{
         name: "fill_in wrapped label input",
         html: @inline_label_html,
@@ -328,12 +366,6 @@ defmodule Cerberus.CoreLocatorOracleHarnessTest do
         expect: :error,
         error_module: InvalidLocatorError,
         run: &click(&1, label("Search term"))
-      },
-      %{
-        name: "click with testid locator rejected",
-        expect: :error,
-        error_module: InvalidLocatorError,
-        run: &click(&1, testid("articles-title"))
       },
       %{
         name: "submit with label locator rejected",

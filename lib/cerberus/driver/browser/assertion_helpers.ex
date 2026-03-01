@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAssert && window.__cerberusAssert.__version === 1) return;
+    if (window.__cerberusAssert && window.__cerberusAssert.__version === 2) return;
 
     const helper = {};
-    helper.__version = 1;
+    helper.__version = 2;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -41,7 +41,39 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       }
     };
 
-    helper.eachCandidateElement = (roots, selector, callback) => {
+    helper.selectorForMatchBy = (matchBy) => {
+      switch (matchBy) {
+        case "label":
+          return "label";
+        case "link":
+          return "a[href]";
+        case "button":
+          return "button";
+        case "placeholder":
+          return "input[placeholder],textarea[placeholder],select[placeholder]";
+        case "title":
+          return "[title]";
+        case "testid":
+          return "[data-testid]";
+        default:
+          return null;
+      }
+    };
+
+    helper.isTextLikeMatchBy = (matchBy) => {
+      return matchBy === "text" || matchBy === "label" || matchBy === "link" || matchBy === "button";
+    };
+
+    helper.matchesSelector = (element, selector) => {
+      if (!selector || typeof element.matches !== "function") return true;
+      try {
+        return element.matches(selector);
+      } catch (_error) {
+        return false;
+      }
+    };
+
+    helper.eachCandidateElement = (roots, selector, prefilterSelector, callback) => {
       const seen = new Set();
 
       const visit = (candidate) => {
@@ -53,30 +85,42 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       for (const root of roots) {
         if (!root) continue;
 
-        if (!selector) {
-          if (!visit(root)) return false;
-        } else if (typeof root.matches === "function") {
-          try {
-            if (root.matches(selector) && !visit(root)) return false;
-          } catch (_error) {
-            // ignored
+        const effectiveSelector = selector || prefilterSelector;
+
+        if (effectiveSelector && typeof root.querySelectorAll === "function") {
+          if (helper.matchesSelector(root, effectiveSelector) && helper.matchesSelector(root, prefilterSelector)) {
+            if (!visit(root)) return false;
           }
+
+          let nodes = [];
+          try {
+            nodes = root.querySelectorAll(effectiveSelector);
+          } catch (_error) {
+            nodes = [];
+          }
+
+          for (const node of nodes) {
+            if (!helper.matchesSelector(node, prefilterSelector)) continue;
+            if (!visit(node)) return false;
+          }
+          continue;
         }
+
+        if (!selector && !prefilterSelector) {
+          if (!visit(root)) return false;
+        } else if (helper.matchesSelector(root, selector) && helper.matchesSelector(root, prefilterSelector)) {
+          if (!visit(root)) return false;
+        }
+
+        if (typeof document.createTreeWalker !== "function") continue;
 
         const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
         let node = walker.nextNode();
 
         while (node) {
-          if (!selector) {
+          if (helper.matchesSelector(node, selector) && helper.matchesSelector(node, prefilterSelector)) {
             if (!visit(node)) return false;
-          } else {
-            try {
-              if (node.matches(selector) && !visit(node)) return false;
-            } catch (_error) {
-              // ignored
-            }
           }
-
           node = walker.nextNode();
         }
       }
@@ -105,6 +149,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
     helper.buildTextMatcher = (expected, exact, normalizeWs) => {
       const expectedRegex = helper.regexFromExpected(expected);
+      const expectedValue = helper.normalize(expected && expected.value ? expected.value : "", normalizeWs);
 
       return (actual) => {
         const normalizedActual = helper.normalize(actual, normalizeWs);
@@ -113,9 +158,72 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           return expectedRegex.test(normalizedActual);
         }
 
-        const expectedValue = helper.normalize(expected && expected.value ? expected.value : "", normalizeWs);
         return exact ? normalizedActual === expectedValue : normalizedActual.includes(expectedValue);
       };
+    };
+
+    helper.valueForMatch = (element, hidden, matchBy, normalizeWs) => {
+      const tag = (element.tagName || "").toLowerCase();
+      if (tag === "script" || tag === "style" || tag === "noscript") return null;
+
+      switch (matchBy) {
+        case "label":
+          if (tag !== "label") return null;
+          break;
+        case "link":
+          if (tag !== "a" || !element.hasAttribute("href")) return null;
+          break;
+        case "button":
+          if (tag !== "button") return null;
+          break;
+        case "placeholder":
+          if (!(tag === "input" || tag === "textarea" || tag === "select")) return null;
+          break;
+        case "title":
+          break;
+        case "alt":
+          break;
+        case "testid":
+          break;
+        default:
+          break;
+      }
+
+      let source = "";
+
+      switch (matchBy) {
+        case "label":
+        case "link":
+        case "button":
+        case "text":
+          source = hidden ? element.textContent : element.innerText || element.textContent;
+          break;
+        case "placeholder":
+          source = element.getAttribute("placeholder") || "";
+          break;
+        case "title":
+          source = element.getAttribute("title") || "";
+          break;
+        case "testid":
+          source = element.getAttribute("data-testid") || "";
+          break;
+        case "alt": {
+          const direct = element.getAttribute("alt");
+          if (direct) {
+            source = direct;
+          } else {
+            const nested = element.querySelector("img[alt],input[type='image'][alt],[role='img'][alt]");
+            source = nested ? (nested.getAttribute("alt") || "") : "";
+          }
+          break;
+        }
+        default:
+          source = hidden ? element.textContent : element.innerText || element.textContent;
+          break;
+      }
+
+      const value = helper.normalize(source, normalizeWs);
+      return value || null;
     };
 
     helper.textQuick = (options) => {
@@ -124,19 +232,18 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const normalizeWs = options.normalizeWs !== false;
       const exact = options.exact === true;
       const selector = options.selector || null;
+      const matchBy = options.matchBy || "text";
+      const prefilterSelector = helper.selectorForMatchBy(matchBy);
+      const needsHiddenState = visibility !== "all" || helper.isTextLikeMatchBy(matchBy);
       const roots = helper.resolveRoots(options.scopeSelector || null);
       const matchText = helper.buildTextMatcher(options.expected, exact, normalizeWs);
       let matchedAny = false;
 
-      helper.eachCandidateElement(roots, selector, (element) => {
-        const tag = (element.tagName || "").toLowerCase();
-        if (tag === "script" || tag === "style" || tag === "noscript") return true;
+      helper.eachCandidateElement(roots, selector, prefilterSelector, (element) => {
+        const hidden = needsHiddenState ? helper.isHidden(element) : false;
+        if (visibility !== "all" && !helper.selectedVisibility(visibility, hidden)) return true;
 
-        const hidden = helper.isHidden(element);
-        if (!helper.selectedVisibility(visibility, hidden)) return true;
-
-        const source = hidden ? element.textContent : element.innerText || element.textContent;
-        const value = helper.normalize(source, normalizeWs);
+        const value = helper.valueForMatch(element, hidden, matchBy, normalizeWs);
         if (!value) return true;
 
         if (matchText(value)) {
@@ -164,6 +271,8 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const normalizeWs = options.normalizeWs !== false;
       const exact = options.exact === true;
       const selector = options.selector || null;
+      const matchBy = options.matchBy || "text";
+      const prefilterSelector = helper.selectorForMatchBy(matchBy);
       const roots = helper.resolveRoots(options.scopeSelector || null);
       const matchText = helper.buildTextMatcher(options.expected, exact, normalizeWs);
       const visibleTexts = [];
@@ -171,13 +280,9 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const visibleSet = new Set();
       const hiddenSet = new Set();
 
-      helper.eachCandidateElement(roots, selector, (element) => {
-        const tag = (element.tagName || "").toLowerCase();
-        if (tag === "script" || tag === "style" || tag === "noscript") return true;
-
+      helper.eachCandidateElement(roots, selector, prefilterSelector, (element) => {
         const hidden = helper.isHidden(element);
-        const source = hidden ? element.textContent : element.innerText || element.textContent;
-        const value = helper.normalize(source, normalizeWs);
+        const value = helper.valueForMatch(element, hidden, matchBy, normalizeWs);
         if (!value) return true;
 
         if (hidden) {
@@ -233,6 +338,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         let dirty = true;
         let pendingCheck = false;
         const cleanupFns = [];
+        const observedRoots = helper.resolveRoots(options.scopeSelector || null);
 
         const finish = (result) => {
           if (resolved) return;
@@ -267,18 +373,23 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         };
 
         try {
-          const root = document.documentElement || document.body || document;
           const observer = new MutationObserver(() => {
             dirty = true;
             scheduleCheck();
           });
 
-          observer.observe(root, {
-            subtree: true,
-            childList: true,
-            attributes: true,
-            characterData: true
-          });
+          const roots = observedRoots.length > 0 ? observedRoots : [document.documentElement || document.body || document];
+
+          for (const root of roots) {
+            if (!root) continue;
+
+            observer.observe(root, {
+              subtree: true,
+              childList: true,
+              attributes: true,
+              characterData: true
+            });
+          }
 
           cleanupFns.push(() => observer.disconnect());
         } catch (_error) {

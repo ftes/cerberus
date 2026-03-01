@@ -267,7 +267,8 @@ defmodule Cerberus.Driver.Static do
   def assert_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
     match_opts = locator_match_opts(locator, opts)
     visible = Keyword.get(opts, :visible, true)
-    texts = Html.texts(session.html, visible, Session.scope(session))
+    match_by = Keyword.get(match_opts, :match_by, :text)
+    texts = Html.assertion_values(session.html, match_by, visible, Session.scope(session))
     matched = Enum.filter(texts, &Query.match_text?(&1, expected, match_opts))
 
     observed = %{
@@ -290,7 +291,8 @@ defmodule Cerberus.Driver.Static do
   def refute_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
     match_opts = locator_match_opts(locator, opts)
     visible = Keyword.get(opts, :visible, true)
-    texts = Html.texts(session.html, visible, Session.scope(session))
+    match_by = Keyword.get(match_opts, :match_by, :text)
+    texts = Html.assertion_values(session.html, match_by, visible, Session.scope(session))
     matched = Enum.filter(texts, &Query.match_text?(&1, expected, match_opts))
 
     observed = %{

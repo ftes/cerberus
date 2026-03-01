@@ -30,6 +30,37 @@ defmodule Cerberus.Html do
     end
   end
 
+  @spec assertion_values(String.t(), atom(), true | false | :any, String.t() | nil) :: [String.t()]
+  def assertion_values(html, match_by, visibility \\ true, scope \\ nil) when is_binary(html) and is_atom(match_by) do
+    if match_by == :text do
+      texts(html, visibility, scope)
+    else
+      case parse_document(html) do
+        {:ok, lazy_html} ->
+          {visible, hidden} =
+            lazy_html
+            |> scoped_nodes(scope)
+            |> Enum.reduce({[], []}, fn root, acc ->
+              root
+              |> LazyHTML.to_tree()
+              |> collect_assertion_values(match_by, false, acc)
+            end)
+
+          visible = Enum.uniq(visible)
+          hidden = Enum.uniq(hidden)
+
+          case visibility do
+            true -> visible
+            false -> hidden
+            :any -> visible ++ hidden
+          end
+
+        _ ->
+          []
+      end
+    end
+  end
+
   @spec find_link(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
           {:ok,
            %{
@@ -132,6 +163,7 @@ defmodule Cerberus.Html do
 
   defp find_link_in_doc(lazy_html, expected, opts, scope) do
     query_selector = selector_opt(opts) || "a[href]"
+    match_by = match_by_opt(opts)
 
     find_first_matching(
       lazy_html,
@@ -142,12 +174,14 @@ defmodule Cerberus.Html do
       fn node, text, _root_node ->
         %{text: text, href: attr(node, "href")}
       end,
-      fn _root_node, node -> link_node?(node) end
+      fn _root_node, node -> link_node?(node) end,
+      fn root_node, node -> link_match_value(root_node, node, match_by) end
     )
   end
 
   defp find_button_in_doc(lazy_html, expected, opts, scope) do
     query_selector = selector_opt(opts) || "button"
+    match_by = match_by_opt(opts)
 
     find_first_matching(
       lazy_html,
@@ -158,7 +192,8 @@ defmodule Cerberus.Html do
       fn _node, text, _root_node ->
         %{text: text}
       end,
-      fn _root_node, node -> button_node?(node) end
+      fn _root_node, node -> button_node?(node) end,
+      fn root_node, node -> button_match_value(root_node, node, match_by) end
     )
   end
 
@@ -329,8 +364,10 @@ defmodule Cerberus.Html do
   defp build_submit_button(button_node, form_meta, expected, opts, root_node, selector) do
     text = node_text(button_node)
     type = attr(button_node, "type") || "submit"
+    match_by = match_by_opt(opts)
+    match_value = button_match_value(root_node, button_node, match_by)
 
-    if submit_button_match?(type, text, expected, opts) and
+    if submit_button_match?(type, match_value, expected, opts) and
          node_matches_selector?(root_node, button_node, selector) do
       action = attr(button_node, "formaction") || form_meta.action
       method = attr(button_node, "formmethod") || form_meta.method
@@ -338,6 +375,9 @@ defmodule Cerberus.Html do
       {:ok,
        %{
          text: text,
+         title: attr(button_node, "title") || "",
+         alt: button_alt_text(button_node),
+         testid: attr(button_node, "data-testid") || "",
          action: action,
          method: method,
          form: form_meta.form,
@@ -365,26 +405,45 @@ defmodule Cerberus.Html do
     }
   end
 
-  defp submit_button_match?(type, text, expected, opts) do
-    type in ["submit", ""] and Query.match_text?(text, expected, opts)
+  defp submit_button_match?(type, value, expected, opts) do
+    type in ["submit", ""] and is_binary(value) and Query.match_text?(value, expected, opts)
   end
 
-  defp find_first_matching(lazy_html, selector, expected, opts, scope, build_fun, node_predicate) do
+  defp find_first_matching(lazy_html, selector, expected, opts, scope, build_fun, node_predicate, match_value_fun) do
     lazy_html
     |> scoped_nodes(scope)
     |> Enum.find_value(:error, fn root_node ->
-      find_first_matching_in_root(root_node, lazy_html, selector, expected, opts, build_fun, node_predicate)
+      find_first_matching_in_root(
+        root_node,
+        lazy_html,
+        selector,
+        expected,
+        opts,
+        build_fun,
+        node_predicate,
+        match_value_fun
+      )
     end)
   end
 
   defp find_form_field_in_root(root_node, expected, opts) do
     selector = selector_opt(opts)
+    match_by = match_by_opt(opts, :label)
 
-    root_node
-    |> safe_query("label")
-    |> Enum.find_value(false, fn label_node ->
-      maybe_form_field_match(label_node, root_node, expected, opts, selector)
-    end)
+    case match_by do
+      :label ->
+        root_node
+        |> safe_query("label")
+        |> Enum.find_value(false, fn label_node ->
+          maybe_form_field_match(label_node, root_node, expected, opts, selector)
+        end)
+
+      kind when kind in [:placeholder, :title, :testid] ->
+        find_form_field_by_control_attr(root_node, expected, opts, selector, kind)
+
+      _ ->
+        false
+    end
   end
 
   defp maybe_form_field_match(label_node, root_node, expected, opts, selector) do
@@ -395,6 +454,27 @@ defmodule Cerberus.Html do
          true <- is_binary(name) and name != "",
          true <- field_matches_selector?(root_node, field, selector) do
       build_form_field_match(root_node, label_text, name, field, field_node)
+    else
+      _ -> false
+    end
+  end
+
+  defp find_form_field_by_control_attr(root_node, expected, opts, selector, kind) do
+    root_node
+    |> safe_query("input,textarea,select")
+    |> Enum.find_value(false, fn field_node ->
+      maybe_form_field_attr_match(field_node, root_node, expected, opts, selector, kind)
+    end)
+  end
+
+  defp maybe_form_field_attr_match(field_node, root_node, expected, opts, selector, kind) do
+    with {:ok, %{name: name} = field} <- field_node_to_map(root_node, field_node),
+         true <- is_binary(name) and name != "",
+         value when is_binary(value) <- field_match_value(root_node, field_node, kind),
+         true <- value != "",
+         true <- Query.match_text?(value, expected, opts),
+         true <- field_matches_selector?(root_node, field, selector) do
+      build_form_field_match(root_node, field_label_for_node(root_node, field_node), name, field, field_node)
     else
       _ -> false
     end
@@ -414,6 +494,9 @@ defmodule Cerberus.Html do
        selector: field_selector(root_node, field),
        form_selector: form_selector(root_node, form_node, form_id),
        input_type: input_type,
+       placeholder: attr(field_node, "placeholder") || "",
+       title: attr(field_node, "title") || "",
+       testid: attr(field_node, "data-testid") || "",
        input_value: input_value(field_node, input_type),
        input_checked: checked?(field_node)
      }}
@@ -422,18 +505,28 @@ defmodule Cerberus.Html do
   defp field_form_id(%{form: form}, _form_node) when is_binary(form) and form != "", do: form
   defp field_form_id(_field, form_node), do: attr_or_nil(form_node, "id")
 
-  defp find_first_matching_in_root(root_node, lazy_html, selector, expected, opts, build_fun, node_predicate) do
+  defp find_first_matching_in_root(
+         root_node,
+         lazy_html,
+         selector,
+         expected,
+         opts,
+         build_fun,
+         node_predicate,
+         match_value_fun
+       ) do
     root_node
     |> safe_query(selector)
     |> Enum.find_value(false, fn node ->
-      maybe_matching_node(root_node, node, lazy_html, expected, opts, build_fun, node_predicate)
+      maybe_matching_node(root_node, node, lazy_html, expected, opts, build_fun, node_predicate, match_value_fun)
     end)
   end
 
-  defp maybe_matching_node(root_node, node, lazy_html, expected, opts, build_fun, node_predicate) do
+  defp maybe_matching_node(root_node, node, lazy_html, expected, opts, build_fun, node_predicate, match_value_fun) do
     text = node_text(node)
+    value = match_value_fun.(root_node, node)
 
-    if node_predicate.(root_node, node) and Query.match_text?(text, expected, opts) do
+    if node_predicate.(root_node, node) and is_binary(value) and Query.match_text?(value, expected, opts) do
       mapped =
         node
         |> build_fun.(text, root_node)
@@ -528,6 +621,71 @@ defmodule Cerberus.Html do
 
   defp css_attr_char_escape(char), do: <<char::utf8>>
 
+  defp collect_assertion_values(nodes, match_by, hidden_parent?, acc) when is_list(nodes) do
+    Enum.reduce(nodes, acc, fn node, acc ->
+      case node do
+        {_tag, attrs, children} when is_list(attrs) and is_list(children) ->
+          tag = node_tree_tag(node)
+          hidden? = hidden_parent? or hidden_element?(attrs)
+          acc = maybe_append_assertion_value(node, tag, attrs, children, match_by, hidden?, acc)
+          collect_assertion_values(children, match_by, hidden?, acc)
+
+        _ ->
+          acc
+      end
+    end)
+  end
+
+  defp maybe_append_assertion_value(_node, tag, attrs, children, match_by, hidden?, acc) do
+    value =
+      case match_by do
+        :label when tag == "label" -> normalize_text(tree_text(children))
+        :link when tag == "a" -> if(is_binary(attr_from_attrs(attrs, "href")), do: normalize_text(tree_text(children)))
+        :button when tag == "button" -> normalize_text(tree_text(children))
+        :title -> attr_from_attrs(attrs, "title")
+        :placeholder when tag in ["input", "textarea", "select"] -> attr_from_attrs(attrs, "placeholder")
+        :alt -> attr_from_attrs(attrs, "alt")
+        :testid -> attr_from_attrs(attrs, "data-testid")
+        _ -> nil
+      end
+
+    append_text(value || "", hidden?, acc)
+  end
+
+  defp tree_text(nodes) when is_list(nodes) do
+    Enum.map_join(nodes, " ", fn
+      text when is_binary(text) -> text
+      {_tag, _attrs, children} when is_list(children) -> tree_text(children)
+      _ -> ""
+    end)
+  end
+
+  defp normalize_text(value) when is_binary(value) do
+    value
+    |> String.replace("\u00A0", " ")
+    |> String.replace(~r/\s+/, " ")
+    |> String.trim()
+  end
+
+  defp node_tree_tag(node) do
+    case node do
+      {tag, _attrs, _children} -> to_string(tag)
+      _ -> "*"
+    end
+  end
+
+  defp attr_from_attrs(attrs, name) when is_list(attrs) and is_binary(name) do
+    Enum.find_value(attrs, nil, fn
+      {attr_name, value} ->
+        if to_string(attr_name) == name do
+          value_to_string(value)
+        end
+
+      _ ->
+        nil
+    end)
+  end
+
   defp collect(nodes, hidden_parent?, acc) when is_list(nodes) do
     Enum.reduce(nodes, acc, fn node, acc ->
       case node do
@@ -605,6 +763,102 @@ defmodule Cerberus.Html do
     end
   end
 
+  defp link_match_value(root_node, node, match_by) do
+    case match_by do
+      :text -> node_text(node)
+      :link -> node_text(node)
+      :title -> attr(node, "title") || ""
+      :testid -> attr(node, "data-testid") || ""
+      :alt -> node_alt_text(root_node, node)
+      _ -> node_text(node)
+    end
+  end
+
+  defp button_match_value(root_node, node, match_by) do
+    case match_by do
+      :text -> node_text(node)
+      :button -> node_text(node)
+      :title -> attr(node, "title") || ""
+      :testid -> attr(node, "data-testid") || ""
+      :alt -> button_alt_text(node, root_node)
+      _ -> node_text(node)
+    end
+  end
+
+  defp field_match_value(root_node, field_node, match_by) do
+    case match_by do
+      :label -> field_label_for_node(root_node, field_node)
+      :placeholder -> attr(field_node, "placeholder") || ""
+      :title -> attr(field_node, "title") || ""
+      :testid -> attr(field_node, "data-testid") || ""
+      _ -> ""
+    end
+  end
+
+  defp field_label_for_node(root_node, field_node) do
+    id = attr(field_node, "id")
+
+    with value when is_binary(value) <- id,
+         true <- value != "",
+         label when not is_nil(label) <- label_for_id(root_node, value) do
+      node_text(label)
+    else
+      _ ->
+        case wrapping_label_for_control(root_node, field_node) do
+          nil -> ""
+          label -> node_text(label)
+        end
+    end
+  end
+
+  defp label_for_id(root_node, id) when is_binary(id) and id != "" do
+    root_node
+    |> safe_query("label[for]")
+    |> Enum.find(fn label_node -> attr(label_node, "for") == id end)
+  end
+
+  defp wrapping_label_for_control(root_node, field_node) do
+    root_node
+    |> safe_query("label")
+    |> Enum.find(fn label_node ->
+      label_node
+      |> safe_query("input,textarea,select")
+      |> Enum.any?(&same_node?(&1, field_node))
+    end)
+  end
+
+  defp node_alt_text(root_node, node) do
+    direct = attr(node, "alt")
+
+    if is_binary(direct) and direct != "" do
+      direct
+    else
+      node
+      |> safe_query("img[alt],input[type='image'][alt],[role='img'][alt]")
+      |> Enum.find_value("", fn image_node ->
+        if node_matches_selector?(root_node, image_node, nil) do
+          attr(image_node, "alt") || ""
+        end
+      end)
+    end
+  end
+
+  defp button_alt_text(node, root_node \\ nil) do
+    direct = attr(node, "alt")
+
+    if is_binary(direct) and direct != "" do
+      direct
+    else
+      node
+      |> safe_query("img[alt],input[type='image'][alt]")
+      |> Enum.find_value("", fn image_node ->
+        if is_nil(root_node) or node_matches_selector?(root_node, image_node, nil) do
+          attr(image_node, "alt") || ""
+        end
+      end)
+    end
+  end
+
   defp field_for_label(root_node, label_node) do
     case attr(label_node, "for") do
       nil ->
@@ -629,6 +883,9 @@ defmodule Cerberus.Html do
        name: name,
        id: id,
        form: form,
+       placeholder: attr(node, "placeholder"),
+       title: attr(node, "title"),
+       testid: attr(node, "data-testid"),
        node: node,
        selector: field_selector(root_node, %{id: id, name: name, node: node})
      }}
@@ -960,6 +1217,13 @@ defmodule Cerberus.Html do
     case Keyword.get(opts, :selector) do
       selector when is_binary(selector) and selector != "" -> selector
       _ -> nil
+    end
+  end
+
+  defp match_by_opt(opts, default \\ :text) do
+    case Keyword.get(opts, :match_by) do
+      value when value in [:label, :link, :button, :placeholder, :title, :alt, :testid] -> value
+      _ -> default
     end
   end
 

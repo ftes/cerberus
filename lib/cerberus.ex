@@ -201,6 +201,21 @@ defmodule Cerberus do
     build_text_locator(:label, value, opts)
   end
 
+  @spec placeholder(String.t() | Regex.t(), keyword()) :: keyword()
+  def placeholder(value, opts \\ []) when is_list(opts) do
+    build_text_locator(:placeholder, value, opts)
+  end
+
+  @spec title(String.t() | Regex.t(), keyword()) :: keyword()
+  def title(value, opts \\ []) when is_list(opts) do
+    build_text_locator(:title, value, opts)
+  end
+
+  @spec alt(String.t() | Regex.t(), keyword()) :: keyword()
+  def alt(value, opts \\ []) when is_list(opts) do
+    build_text_locator(:alt, value, opts)
+  end
+
   @spec css(String.t()) :: keyword()
   def css(value) when is_binary(value), do: [css: value]
 

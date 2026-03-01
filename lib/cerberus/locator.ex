@@ -6,7 +6,8 @@ defmodule Cerberus.Locator do
   @enforce_keys [:kind, :value]
   defstruct [:kind, :value, opts: []]
 
-  @type locator_kind :: :text | :label | :link | :button | :testid | :css
+  @type locator_kind ::
+          :text | :label | :link | :button | :placeholder | :title | :alt | :testid | :css
   @type t :: %__MODULE__{
           kind: locator_kind(),
           value: String.t() | Regex.t(),
@@ -71,6 +72,9 @@ defmodule Cerberus.Locator do
       {:label, key_value(locator_map, :label)},
       {:link, key_value(locator_map, :link)},
       {:button, key_value(locator_map, :button)},
+      {:placeholder, key_value(locator_map, :placeholder)},
+      {:title, key_value(locator_map, :title)},
+      {:alt, key_value(locator_map, :alt)},
       {:role, key_value(locator_map, :role)},
       {:css, key_value(locator_map, :css)},
       {:testid, key_value(locator_map, :testid)}
@@ -86,7 +90,7 @@ defmodule Cerberus.Locator do
         raise InvalidLocatorError,
           locator: original,
           message:
-            "invalid locator #{inspect(original)}; expected one of :text, :label, :link, :button, :role, :css, or :testid"
+            "invalid locator #{inspect(original)}; expected one of :text, :label, :link, :button, :placeholder, :title, :alt, :role, :css, or :testid"
 
       [kind] ->
         normalize_kind(kind, locator_map, original)
@@ -124,6 +128,27 @@ defmodule Cerberus.Locator do
     ensure_text_value!(:button, button, original)
     ensure_only_keys!(locator_map, original, [:button, :exact, :selector])
     %__MODULE__{kind: :button, value: button, opts: locator_opts(locator_map, original)}
+  end
+
+  defp normalize_kind(:placeholder, locator_map, original) do
+    placeholder = key_value(locator_map, :placeholder)
+    ensure_text_value!(:placeholder, placeholder, original)
+    ensure_only_keys!(locator_map, original, [:placeholder, :exact, :selector])
+    %__MODULE__{kind: :placeholder, value: placeholder, opts: locator_opts(locator_map, original)}
+  end
+
+  defp normalize_kind(:title, locator_map, original) do
+    title = key_value(locator_map, :title)
+    ensure_text_value!(:title, title, original)
+    ensure_only_keys!(locator_map, original, [:title, :exact, :selector])
+    %__MODULE__{kind: :title, value: title, opts: locator_opts(locator_map, original)}
+  end
+
+  defp normalize_kind(:alt, locator_map, original) do
+    alt = key_value(locator_map, :alt)
+    ensure_text_value!(:alt, alt, original)
+    ensure_only_keys!(locator_map, original, [:alt, :exact, :selector])
+    %__MODULE__{kind: :alt, value: alt, opts: locator_opts(locator_map, original)}
   end
 
   defp normalize_kind(:css, locator_map, original) do
@@ -260,6 +285,11 @@ defmodule Cerberus.Locator do
   defp role_to_kind!("textbox", _original), do: :label
   defp role_to_kind!("searchbox", _original), do: :label
   defp role_to_kind!("combobox", _original), do: :label
+  defp role_to_kind!("checkbox", _original), do: :label
+  defp role_to_kind!("radio", _original), do: :label
+  defp role_to_kind!("switch", _original), do: :label
+  defp role_to_kind!("img", _original), do: :alt
+  defp role_to_kind!("heading", _original), do: :text
 
   defp role_to_kind!(role_name, original) do
     raise InvalidLocatorError,

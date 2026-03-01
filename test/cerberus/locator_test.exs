@@ -72,6 +72,9 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :link, value: "Counter"} = Locator.normalize(link: "Counter")
     assert %Locator{kind: :button, value: "Save"} = Locator.normalize(button: "Save")
     assert %Locator{kind: :label, value: "Search term"} = Locator.normalize(label: "Search term")
+    assert %Locator{kind: :placeholder, value: "Search"} = Locator.normalize(placeholder: "Search")
+    assert %Locator{kind: :title, value: "Main Heading"} = Locator.normalize(title: "Main Heading")
+    assert %Locator{kind: :alt, value: "Hero image"} = Locator.normalize(alt: "Hero image")
     assert %Locator{kind: :css, value: "#save"} = Locator.normalize(css: "#save")
     assert %Locator{kind: :testid, value: "submit-btn"} = Locator.normalize(testid: "submit-btn")
   end
@@ -88,6 +91,9 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :button, value: "Increment"} = Locator.normalize(role: :button, name: "Increment")
     assert %Locator{kind: :link, value: "Counter"} = Locator.normalize(role: "link", name: "Counter")
     assert %Locator{kind: :label, value: "Search term"} = Locator.normalize(role: :textbox, name: "Search term")
+    assert %Locator{kind: :label, value: "Email updates"} = Locator.normalize(role: :checkbox, name: "Email updates")
+    assert %Locator{kind: :alt, value: "Logo"} = Locator.normalize(role: :img, name: "Logo")
+    assert %Locator{kind: :text, value: "Dashboard"} = Locator.normalize(role: :heading, name: "Dashboard")
   end
 
   test "role locator requires supported role and name" do

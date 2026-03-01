@@ -433,7 +433,8 @@ defmodule Cerberus.Driver.Live do
   def assert_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
     match_opts = locator_match_opts(locator, opts)
     visible = Keyword.get(opts, :visible, true)
-    {session, texts} = assertion_texts(session, visible)
+    match_by = Keyword.get(match_opts, :match_by, :text)
+    {session, texts} = assertion_values(session, visible, match_by)
     matched = Enum.filter(texts, &Query.match_text?(&1, expected, match_opts))
 
     observed = %{
@@ -457,7 +458,8 @@ defmodule Cerberus.Driver.Live do
   def refute_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
     match_opts = locator_match_opts(locator, opts)
     visible = Keyword.get(opts, :visible, true)
-    {session, texts} = assertion_texts(session, visible)
+    match_by = Keyword.get(match_opts, :match_by, :text)
+    {session, texts} = assertion_values(session, visible, match_by)
     matched = Enum.filter(texts, &Query.match_text?(&1, expected, match_opts))
 
     observed = %{
@@ -780,6 +782,15 @@ defmodule Cerberus.Driver.Live do
         session = with_latest_html(session)
         {session, Html.texts(session.html, visibility, Session.scope(session))}
     end
+  end
+
+  defp assertion_values(session, visibility, :text) do
+    assertion_texts(session, visibility)
+  end
+
+  defp assertion_values(%__MODULE__{} = session, visibility, match_by) do
+    session = with_latest_html(session)
+    {session, Html.assertion_values(session.html, match_by, visibility, Session.scope(session))}
   end
 
   defp live_texts_from_tree(%__MODULE__{view: view} = session, visibility) when not is_nil(view) do
