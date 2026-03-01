@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreFormActionsTest do
+defmodule CerberusTest.FormActionsTest do
   use ExUnit.Case, async: true
 
   import Cerberus

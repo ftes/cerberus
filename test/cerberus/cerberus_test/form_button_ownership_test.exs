@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreFormButtonOwnershipTest do
+defmodule CerberusTest.FormButtonOwnershipTest do
   use ExUnit.Case, async: true
 
   import Cerberus

@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreLiveNestedScopeBehaviorTest do
+defmodule CerberusTest.LiveNestedScopeBehaviorTest do
   use ExUnit.Case, async: true
 
   import Cerberus

@@ -1,4 +1,4 @@
-defmodule Cerberus.CoreAssertionFilterSemanticsTest do
+defmodule CerberusTest.AssertionFilterSemanticsTest do
   use ExUnit.Case, async: true
 
   import Cerberus
