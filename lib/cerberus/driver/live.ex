@@ -14,6 +14,7 @@ defmodule Cerberus.Driver.Live do
   alias Cerberus.Query
   alias Cerberus.Session
   alias Cerberus.UploadFile
+  alias Phoenix.LiveViewTest.TreeDOM
 
   @type t :: %__MODULE__{
           endpoint: module(),
@@ -430,10 +431,9 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def assert_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
-    session = with_latest_html(session)
     match_opts = locator_match_opts(locator, opts)
     visible = Keyword.get(opts, :visible, true)
-    texts = Html.texts(session.html, visible, Session.scope(session))
+    {session, texts} = assertion_texts(session, visible)
     matched = Enum.filter(texts, &Query.match_text?(&1, expected, match_opts))
 
     observed = %{
@@ -455,10 +455,9 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def refute_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
-    session = with_latest_html(session)
     match_opts = locator_match_opts(locator, opts)
     visible = Keyword.get(opts, :visible, true)
-    texts = Html.texts(session.html, visible, Session.scope(session))
+    {session, texts} = assertion_texts(session, visible)
     matched = Enum.filter(texts, &Query.match_text?(&1, expected, match_opts))
 
     observed = %{
@@ -771,6 +770,128 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp with_latest_html(session), do: session
+
+  defp assertion_texts(%__MODULE__{} = session, visibility) do
+    case live_texts_from_tree(session, visibility) do
+      {:ok, texts} ->
+        {session, texts}
+
+      :error ->
+        session = with_latest_html(session)
+        {session, Html.texts(session.html, visibility, Session.scope(session))}
+    end
+  end
+
+  defp live_texts_from_tree(%__MODULE__{view: view} = session, visibility) when not is_nil(view) do
+    with {:ok, html_tree} <- live_html_tree(view) do
+      view_tree = TreeDOM.by_id!(html_tree, view.id)
+
+      {visible, hidden} =
+        view_tree
+        |> scoped_live_tree_nodes(Session.scope(session))
+        |> Enum.reduce({[], []}, fn root, acc ->
+          collect_live_texts(List.wrap(root), false, acc)
+        end)
+
+      visible = Enum.uniq(visible)
+      hidden = Enum.uniq(hidden)
+
+      texts =
+        case visibility do
+          true -> visible
+          false -> hidden
+          :any -> visible ++ hidden
+        end
+
+      {:ok, texts}
+    end
+  rescue
+    _ -> :error
+  end
+
+  defp live_texts_from_tree(_session, _visibility), do: :error
+
+  defp live_html_tree(%{proxy: {_ref, _topic, proxy_pid}}) when is_pid(proxy_pid) do
+    case GenServer.call(proxy_pid, :html, :infinity) do
+      {:ok, {html_tree, _static_path}} -> {:ok, html_tree}
+      _ -> :error
+    end
+  catch
+    :exit, _ -> :error
+  end
+
+  defp live_html_tree(_view), do: :error
+
+  defp scoped_live_tree_nodes(view_tree, nil), do: [view_tree]
+  defp scoped_live_tree_nodes(view_tree, ""), do: [view_tree]
+
+  defp scoped_live_tree_nodes(view_tree, scope) when is_binary(scope) do
+    view_tree
+    |> List.wrap()
+    |> LazyHTML.from_tree()
+    |> safe_query(scope)
+    |> Enum.flat_map(&LazyHTML.to_tree/1)
+  end
+
+  defp collect_live_texts(nodes, hidden_parent?, acc) when is_list(nodes) do
+    Enum.reduce(nodes, acc, fn node, acc ->
+      case node do
+        text when is_binary(text) ->
+          append_live_text(text, hidden_parent?, acc)
+
+        {"script", _attrs, _children} ->
+          acc
+
+        {"style", _attrs, _children} ->
+          acc
+
+        {_tag, attrs, children} when is_list(attrs) and is_list(children) ->
+          hidden? = hidden_parent? or hidden_live_element?(attrs)
+          collect_live_texts(children, hidden?, acc)
+
+        _ ->
+          acc
+      end
+    end)
+  end
+
+  defp append_live_text(text, hidden?, {visible, hidden}) do
+    text =
+      text
+      |> String.replace("\u00A0", " ")
+      |> String.trim()
+
+    cond do
+      text == "" ->
+        {visible, hidden}
+
+      hidden? ->
+        {visible, hidden ++ [text]}
+
+      true ->
+        {visible ++ [text], hidden}
+    end
+  end
+
+  defp hidden_live_element?(attrs) do
+    hidden_attr? = Enum.any?(attrs, fn {name, _} -> to_string(name) == "hidden" end)
+
+    style =
+      attrs
+      |> Enum.find_value("", fn {name, value} ->
+        if to_string(name) == "style", do: String.downcase(to_string(value)), else: false
+      end)
+      |> String.replace(" ", "")
+
+    hidden_attr? or String.contains?(style, "display:none") or
+      String.contains?(style, "visibility:hidden")
+  end
+
+  defp safe_query(node, selector) do
+    LazyHTML.query(node, selector)
+  rescue
+    _ -> []
+  end
 
   defp snapshot_html(%__MODULE__{view: view}) when not is_nil(view), do: render(view)
   defp snapshot_html(%__MODULE__{html: html}) when is_binary(html), do: html

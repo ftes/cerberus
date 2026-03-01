@@ -11,6 +11,13 @@ Cerberus is an experimental Phoenix testing harness with one API across:
 
 Minimal API: You control your tests. Easily run single tests/describe blocks/entire modules in one or more browsers.
 
+## Performance Highlight
+
+Live (non-browser) assertions are optimized for large pages:
+- `assert_has` / `refute_has` in live mode read from LiveViewTest's internal patched DOM tree,
+- they avoid the previous `render(view)` -> HTML string -> LazyHTML re-parse loop on each assertion,
+- matcher semantics stay in Cerberus so locators/matching remain consistent across drivers.
+
 ## 30-Second Start
 ```ex
 # mix.exs

@@ -1223,8 +1223,8 @@ defmodule Cerberus.Driver.Browser do
             {:ok, updated, observed}
 
           result["reason"] == "navigation-transition" and remaining_timeout > 0 ->
-            Process.sleep(25)
-            do_run_path_assertion(session, state, assertion)
+            updated_session = wait_for_assertion_signal(session, remaining_timeout)
+            do_run_path_assertion(updated_session, state!(updated_session), assertion)
 
           true ->
             {:error, session, observed, "path assertion failed"}
@@ -1812,7 +1812,8 @@ defmodule Cerberus.Driver.Browser do
       const visibility = #{encoded_visible};
       const timeoutMs = #{timeout_ms};
       const mode = #{encoded_mode};
-      const pollMs = 50;
+      const pollMs = 250;
+      const deadline = Date.now() + timeoutMs;
 
       const normalize = (value) => {
         const source = (value || "").replace(/\\u00A0/g, " ");
@@ -1858,22 +1859,24 @@ defmodule Cerberus.Driver.Browser do
         return false;
       };
 
-      const pushUnique = (list, value) => {
-        if (!list.includes(value)) list.push(value);
+      const selectedVisibility = (hidden) => {
+        if (visibility === "visible") return !hidden;
+        if (visibility === "hidden") return hidden;
+        return true;
       };
 
-      const collectTexts = () => {
+      const collectRoots = () => {
         const defaultRoot = document.body || document.documentElement;
-        let roots = defaultRoot ? [defaultRoot] : [];
+        if (!scopeSelector) return defaultRoot ? [defaultRoot] : [];
 
-        if (scopeSelector) {
-          try {
-            roots = Array.from(document.querySelectorAll(scopeSelector));
-          } catch (_error) {
-            roots = [];
-          }
+        try {
+          return Array.from(document.querySelectorAll(scopeSelector));
+        } catch (_error) {
+          return [];
         }
+      };
 
+      const collectElements = (roots) => {
         const elements = [];
         const seen = new Set();
 
@@ -1910,23 +1913,53 @@ defmodule Cerberus.Driver.Browser do
           }
         }
 
-        const visibleTexts = [];
-        const hiddenTexts = [];
+        return elements;
+      };
+
+      const collectTexts = (diagnostics) => {
+        const roots = collectRoots();
+        const elements = collectElements(roots);
+        const visibleTexts = diagnostics ? [] : null;
+        const hiddenTexts = diagnostics ? [] : null;
+        const visibleSet = diagnostics ? new Set() : null;
+        const hiddenSet = diagnostics ? new Set() : null;
+        let matchedAny = false;
 
         for (const element of elements) {
           const tag = (element.tagName || "").toLowerCase();
           if (tag === "script" || tag === "style" || tag === "noscript") continue;
 
           const hidden = isHidden(element);
+          if (!selectedVisibility(hidden) && !diagnostics) continue;
+
           const source = hidden ? element.textContent : (element.innerText || element.textContent);
           const value = normalize(source);
           if (!value) continue;
 
-          if (hidden) {
-            pushUnique(hiddenTexts, value);
-          } else {
-            pushUnique(visibleTexts, value);
+          if (diagnostics) {
+            if (hidden) {
+              if (!hiddenSet.has(value)) {
+                hiddenSet.add(value);
+                hiddenTexts.push(value);
+              }
+            } else {
+              if (!visibleSet.has(value)) {
+                visibleSet.add(value);
+                visibleTexts.push(value);
+              }
+            }
           }
+
+          if (selectedVisibility(hidden) && matchText(value)) {
+            matchedAny = true;
+            if (!diagnostics) {
+              break;
+            }
+          }
+        }
+
+        if (!diagnostics) {
+          return { matchedAny };
         }
 
         const texts = visibility === "visible"
@@ -1936,7 +1969,7 @@ defmodule Cerberus.Driver.Browser do
             : visibleTexts.concat(hiddenTexts);
 
         const matched = texts.filter((text) => matchText(text));
-        const ok = mode === "assert" ? matched.length > 0 : matched.length === 0;
+        const ok = mode === "assert" ? matchedAny : matched.length === 0;
         const reason = mode === "assert" ? "expected text not found" : "unexpected matching text found";
 
         return {
@@ -1949,10 +1982,22 @@ defmodule Cerberus.Driver.Browser do
         };
       };
 
+      const quickCheck = () => {
+        const { matchedAny } = collectTexts(false);
+
+        return {
+          ok: mode === "assert" ? matchedAny : !matchedAny,
+          path: window.location.pathname + window.location.search,
+          title: document.title || ""
+        };
+      };
+
       return new Promise((resolve) => {
         let resolved = false;
         const cleanupFns = [];
-        let lastResult = collectTexts();
+        let dirty = true;
+        let pendingCheck = false;
+        let lastQuick = quickCheck();
 
         const finish = (result) => {
           if (resolved) return;
@@ -1967,22 +2012,39 @@ defmodule Cerberus.Driver.Browser do
           resolve(JSON.stringify(result));
         };
 
-        if (lastResult.ok || timeoutMs <= 0) {
-          finish(lastResult);
-          return;
-        }
+        const scheduleCheck = () => {
+          if (resolved || pendingCheck || !dirty) return;
+          pendingCheck = true;
 
-        const check = () => {
-          if (resolved) return;
-          lastResult = collectTexts();
-          if (lastResult.ok) {
-            finish(lastResult);
+          const run = () => {
+            pendingCheck = false;
+            if (resolved) return;
+            dirty = false;
+            lastQuick = quickCheck();
+
+            if (lastQuick.ok) {
+              finish(collectTexts(true));
+            }
+          };
+
+          if (typeof window.requestAnimationFrame === "function") {
+            window.requestAnimationFrame(() => run());
+          } else {
+            setTimeout(run, 0);
           }
         };
 
+        if (lastQuick.ok || timeoutMs <= 0) {
+          finish(collectTexts(true));
+          return;
+        }
+
         try {
           const root = document.documentElement || document.body || document;
-          const observer = new MutationObserver(() => check());
+          const observer = new MutationObserver(() => {
+            dirty = true;
+            scheduleCheck();
+          });
           observer.observe(root, {
             subtree: true,
             childList: true,
@@ -1994,10 +2056,20 @@ defmodule Cerberus.Driver.Browser do
           // ignored
         }
 
-        const intervalRef = setInterval(check, pollMs);
+        scheduleCheck();
+
+        const intervalRef = setInterval(() => {
+          if (Date.now() >= deadline) {
+            finish(collectTexts(true));
+            return;
+          }
+
+          dirty = true;
+          scheduleCheck();
+        }, pollMs);
         cleanupFns.push(() => clearInterval(intervalRef));
 
-        const timeoutRef = setTimeout(() => finish(lastResult), timeoutMs);
+        const timeoutRef = setTimeout(() => finish(collectTexts(true)), timeoutMs);
         cleanupFns.push(() => clearTimeout(timeoutRef));
       });
     })()

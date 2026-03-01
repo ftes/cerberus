@@ -25,6 +25,7 @@ defmodule Cerberus.Fixtures.CounterPageLive do
     <main>
       <h1>Counter</h1>
       <p>Count: <%= @count %></p>
+      <p style="display:none">Hidden live helper text</p>
       <p id="connect-timezone">connect timezone: <%= @timezone %></p>
       <a href="/articles">Articles</a>
       <button phx-click="increment">Increment</button>
