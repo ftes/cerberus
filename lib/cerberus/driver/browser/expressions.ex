@@ -415,13 +415,8 @@ defmodule Cerberus.Driver.Browser.Expressions do
         transfer.items.add(file);
         field.files = transfer.files;
 
-        field.dispatchEvent(new Event("input", { bubbles: true }));
-        field.dispatchEvent(new Event("change", { bubbles: true }));
-
-        return JSON.stringify({
-          ok: true,
-          path: window.location.pathname + window.location.search
-        });
+        #{dispatch_input_change_events("field")}
+        #{ok_path_payload()}
       } catch (error) {
         return JSON.stringify({
           ok: false,
@@ -451,13 +446,8 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
       const value = #{encoded_value};
       field.value = value;
-      field.dispatchEvent(new Event("input", { bubbles: true }));
-      field.dispatchEvent(new Event("change", { bubbles: true }));
-
-      return JSON.stringify({
-        ok: true,
-        path: window.location.pathname + window.location.search
-      });
+      #{dispatch_input_change_events("field")}
+      #{ok_path_payload()}
     })()
     """
   end
@@ -554,18 +544,13 @@ defmodule Cerberus.Driver.Browser.Expressions do
         }
       }
 
-      field.dispatchEvent(new Event("input", { bubbles: true }));
-      field.dispatchEvent(new Event("change", { bubbles: true }));
+      #{dispatch_input_change_events("field")}
 
       const value = field.multiple
         ? Array.from(field.selectedOptions || []).map((option) => option.value || normalize(option.textContent))
         : field.value;
 
-      return JSON.stringify({
-        ok: true,
-        path: window.location.pathname + window.location.search,
-        value
-      });
+      #{ok_path_payload(["value"])}
     })()
     """
   end
@@ -597,13 +582,8 @@ defmodule Cerberus.Driver.Browser.Expressions do
       }
 
       field.checked = shouldCheck;
-      field.dispatchEvent(new Event("input", { bubbles: true }));
-      field.dispatchEvent(new Event("change", { bubbles: true }));
-
-      return JSON.stringify({
-        ok: true,
-        path: window.location.pathname + window.location.search
-      });
+      #{dispatch_input_change_events("field")}
+      #{ok_path_payload()}
     })()
     """
   end
@@ -633,14 +613,8 @@ defmodule Cerberus.Driver.Browser.Expressions do
       }
 
       field.checked = true;
-      field.dispatchEvent(new Event("input", { bubbles: true }));
-      field.dispatchEvent(new Event("change", { bubbles: true }));
-
-      return JSON.stringify({
-        ok: true,
-        path: window.location.pathname + window.location.search,
-        value: field.value || "on"
-      });
+      #{dispatch_input_change_events("field")}
+      #{ok_path_payload([~s(value: field.value || "on")])}
     })()
     """
   end
@@ -663,10 +637,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
       button.click();
 
-      return JSON.stringify({
-        ok: true,
-        path: window.location.pathname + window.location.search
-      });
+      #{ok_path_payload()}
     })()
     """
   end
@@ -747,6 +718,28 @@ defmodule Cerberus.Driver.Browser.Expressions do
     queryWithinRoots("label[for]").forEach((label) => {
       const id = label.getAttribute("for");
       if (id) labels.set(id, normalize(label.textContent));
+    });
+    """
+  end
+
+  defp dispatch_input_change_events(target_name) when is_binary(target_name) do
+    """
+    #{target_name}.dispatchEvent(new Event("input", { bubbles: true }));
+    #{target_name}.dispatchEvent(new Event("change", { bubbles: true }));
+    """
+  end
+
+  defp ok_path_payload(extra_fields \\ []) when is_list(extra_fields) do
+    extra_payload =
+      case extra_fields do
+        [] -> ""
+        fields -> ",\n  " <> Enum.join(fields, ",\n  ")
+      end
+
+    """
+    return JSON.stringify({
+      ok: true,
+      path: window.location.pathname + window.location.search#{extra_payload}
     });
     """
   end

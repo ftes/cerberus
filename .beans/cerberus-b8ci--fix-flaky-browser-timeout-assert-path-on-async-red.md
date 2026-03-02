@@ -5,7 +5,7 @@ status: completed
 type: bug
 priority: normal
 created_at: 2026-03-02T06:28:28Z
-updated_at: 2026-03-02T06:37:38Z
+updated_at: 2026-03-02T06:38:46Z
 ---
 
 Investigate intermittent CI failure in BrowserTimeoutAssertionsTest where assert_path reports mismatch despite matching actual/expected path.
@@ -23,3 +23,5 @@ Investigate intermittent CI failure in BrowserTimeoutAssertionsTest where assert
 - Updated browser path assertion expression fallback to compute path/query matching directly from window.location using the same payload semantics (string/regex + exact + query + assert/refute op).
 - Added regression test that deletes window.__cerberusAssert and verifies assert_path("/articles") still passes.
 - Ran mix format, mix test test/cerberus/browser_timeout_assertions_test.exs, and mix precommit successfully.
+
+- Follow-up verification: expression fallback implementation remains in lib/cerberus/driver/browser/expressions.ex and passes browser timeout assertion coverage.
