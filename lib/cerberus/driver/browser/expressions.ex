@@ -432,8 +432,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
     (() => {
       #{scoped_query_setup(encoded_scope, encoded_selector)}
-      #{form_field_candidates_snippet()}
-      #{indexed_lookup_snippet("fields", "field", index, "field_not_found")}
+      #{indexed_form_field_snippet(index)}
 
       const value = #{encoded_value};
       field.value = value;
@@ -464,8 +463,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
       const exactOption = #{encoded_exact_option};
 
       #{normalize_collapsed_snippet()}
-      #{form_field_candidates_snippet()}
-      #{indexed_lookup_snippet("fields", "field", index, "field_not_found")}
+      #{indexed_form_field_snippet(index)}
 
       #{guard_condition_snippet(~s/(field.tagName || "").toLowerCase() !== "select"/, "field_not_select")}
       #{guard_condition_snippet("field.disabled", "field_disabled")}
@@ -541,11 +539,9 @@ defmodule Cerberus.Driver.Browser.Expressions do
     (() => {
       #{scoped_query_setup(encoded_scope, encoded_selector)}
       const shouldCheck = #{encoded_checked};
-      #{form_field_candidates_snippet()}
-      #{indexed_lookup_snippet("fields", "field", index, "field_not_found")}
+      #{indexed_form_field_snippet(index)}
 
-      #{guard_condition_snippet(~s/(field.getAttribute("type") || "").toLowerCase() !== "checkbox"/, "field_not_checkbox")}
-      #{guard_condition_snippet("field.disabled", "field_disabled")}
+      #{typed_enabled_field_guards_snippet("checkbox", "field_not_checkbox")}
 
       field.checked = shouldCheck;
       #{dispatch_input_change_events("field")}
@@ -562,11 +558,9 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
     (() => {
       #{scoped_query_setup(encoded_scope, encoded_selector)}
-      #{form_field_candidates_snippet()}
-      #{indexed_lookup_snippet("fields", "field", index, "field_not_found")}
+      #{indexed_form_field_snippet(index)}
 
-      #{guard_condition_snippet(~s/(field.getAttribute("type") || "").toLowerCase() !== "radio"/, "field_not_radio")}
-      #{guard_condition_snippet("field.disabled", "field_disabled")}
+      #{typed_enabled_field_guards_snippet("radio", "field_not_radio")}
 
       field.checked = true;
       #{dispatch_input_change_events("field")}
@@ -727,6 +721,23 @@ defmodule Cerberus.Driver.Browser.Expressions do
     if (!#{variable_name}) {
       #{reason_payload}
     }
+    """
+  end
+
+  defp indexed_form_field_snippet(index, reason \\ "field_not_found") when is_integer(index) and is_binary(reason) do
+    """
+    #{form_field_candidates_snippet()}
+    #{indexed_lookup_snippet("fields", "field", index, reason)}
+    """
+  end
+
+  defp typed_enabled_field_guards_snippet(type, not_type_reason) when is_binary(type) and is_binary(not_type_reason) do
+    encoded_type = JSON.encode!(type)
+    type_mismatch_condition = ~s{(field.getAttribute("type") || "").toLowerCase() !== } <> encoded_type
+
+    """
+    #{guard_condition_snippet(type_mismatch_condition, not_type_reason)}
+    #{guard_condition_snippet("field.disabled", "field_disabled")}
     """
   end
 
