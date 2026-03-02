@@ -28,7 +28,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
     (() => {
       #{AssertionHelpers.preload_script()}
 
-      const helper = window.__cerberusAssert;
+      #{assert_helper_binding_snippet()}
 
       return JSON.stringify({
         ok: !!(helper && typeof helper.text === "function" && typeof helper.pathCheck === "function")
@@ -44,7 +44,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
     """
     (() => {
-      const helper = window.__cerberusAssert;
+      #{assert_helper_binding_snippet()}
       if (helper && typeof helper.text === "function") {
         return helper.text(#{encoded_payload});
       }
@@ -78,7 +78,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
     """
     (() => {
-      const helper = window.__cerberusAssert;
+      #{assert_helper_binding_snippet()}
       if (helper && typeof helper.pathCheck === "function") {
         return helper.pathCheck(#{encoded_payload});
       }
@@ -469,15 +469,15 @@ defmodule Cerberus.Driver.Browser.Expressions do
       #{indexed_lookup_snippet("fields", "field", index, "field_not_found")}
 
       if ((field.tagName || "").toLowerCase() !== "select") {
-        return JSON.stringify({ ok: false, reason: "field_not_select" });
+        #{error_reason_payload("field_not_select")}
       }
 
       if (field.disabled) {
-        return JSON.stringify({ ok: false, reason: "field_disabled" });
+        #{error_reason_payload("field_disabled")}
       }
 
       if (!field.multiple && requestedOptions.length > 1) {
-        return JSON.stringify({ ok: false, reason: "select_not_multiple" });
+        #{error_reason_payload("select_not_multiple")}
       }
 
       const matchOption = (option, requested) => {
@@ -504,10 +504,10 @@ defmodule Cerberus.Driver.Browser.Expressions do
         const disabled = Array.from(field.options || []).find((option) => matchOption(option, requested) && option.disabled);
 
         if (disabled) {
-          return JSON.stringify({ ok: false, reason: "option_disabled", option: requested });
+          #{error_reason_payload("option_disabled", ["option: requested"])}
         }
 
-        return JSON.stringify({ ok: false, reason: "option_not_found", option: requested });
+        #{error_reason_payload("option_not_found", ["option: requested"])}
       }
 
       if (field.multiple) {
@@ -558,11 +558,11 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
       const type = (field.getAttribute("type") || "").toLowerCase();
       if (type !== "checkbox") {
-        return JSON.stringify({ ok: false, reason: "field_not_checkbox" });
+        #{error_reason_payload("field_not_checkbox")}
       }
 
       if (field.disabled) {
-        return JSON.stringify({ ok: false, reason: "field_disabled" });
+        #{error_reason_payload("field_disabled")}
       }
 
       field.checked = shouldCheck;
@@ -585,11 +585,11 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
       const type = (field.getAttribute("type") || "").toLowerCase();
       if (type !== "radio") {
-        return JSON.stringify({ ok: false, reason: "field_not_radio" });
+        #{error_reason_payload("field_not_radio")}
       }
 
       if (field.disabled) {
-        return JSON.stringify({ ok: false, reason: "field_disabled" });
+        #{error_reason_payload("field_disabled")}
       }
 
       field.checked = true;
@@ -734,15 +734,38 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
   defp current_path_expression, do: "window.location.pathname + window.location.search"
 
+  defp assert_helper_binding_snippet do
+    """
+    const helper = window.__cerberusAssert;
+    """
+  end
+
   defp indexed_lookup_snippet(collection_name, variable_name, index, reason)
        when is_binary(collection_name) and is_binary(variable_name) and is_integer(index) and is_binary(reason) do
-    encoded_reason = JSON.encode!(reason)
+    reason_payload = error_reason_payload(reason)
 
     """
     const #{variable_name} = #{collection_name}[#{index}];
     if (!#{variable_name}) {
-      return JSON.stringify({ ok: false, reason: #{encoded_reason} });
+      #{reason_payload}
     }
+    """
+  end
+
+  defp error_reason_payload(reason, extra_fields \\ []) when is_binary(reason) and is_list(extra_fields) do
+    encoded_reason = JSON.encode!(reason)
+
+    extra_payload =
+      case extra_fields do
+        [] -> ""
+        fields -> ",\n  " <> Enum.join(fields, ",\n  ")
+      end
+
+    """
+    return JSON.stringify({
+      ok: false,
+      reason: #{encoded_reason}#{extra_payload}
+    });
     """
   end
 end
