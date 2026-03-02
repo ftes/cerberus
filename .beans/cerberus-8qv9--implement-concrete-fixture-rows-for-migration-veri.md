@@ -1,11 +1,11 @@
 ---
 # cerberus-8qv9
 title: Implement concrete fixture rows for migration verification matrix
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-02-28T15:08:23Z
-updated_at: 2026-02-28T19:27:17Z
+updated_at: 2026-03-02T06:43:58Z
 parent: cerberus-it5x
 ---
 
@@ -113,3 +113,13 @@ Missing-tests follow-up: migration verification matrix declares rows that are no
 - Added missing migration fixture feature files: pt_select, pt_choose, pt_unwrap, pt_live_change, pt_live_nav, and pt_live_async_timeout.
 - Added missing fixture LiveView modules: LiveChangeLive, LiveNavLive, and LiveAsyncLive.
 - Verified locally with mix test test/cerberus/migration_verification_test.exs and mix precommit.
+
+## Progress Update 12
+
+- Updated docs migration verification matrix checklist to reflect current reality: all non-browser PhoenixTest rows are covered and passing pre/post.
+- Kept browser-only PhoenixTestPlaywright rows explicitly tracked as blocked by cerberus-55qd.
+- Removed pt_multi_user_tab from matrix implemented rows and moved it to an explicit non-matrix scenario section.
+
+## Summary of Changes
+
+Completed the matrix-row fixture parity work for non-browser PhoenixTest APIs and aligned matrix documentation with actual execution scope. Remaining browser-only migration matrix work is now fully delegated to cerberus-55qd.

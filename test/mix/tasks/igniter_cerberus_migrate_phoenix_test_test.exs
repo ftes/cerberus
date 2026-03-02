@@ -197,7 +197,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
   test "runs full sample suite before and after migration", %{tmp_dir: tmp_dir} do
     fixture_dir = "fixtures/migration_project"
     work_dir = Path.join(tmp_dir, "work")
-    test_glob = "test/features/pt_*_test.exs"
+    test_glob = "test/features/pt*_test.exs"
 
     File.cp_r!(fixture_dir, work_dir)
 
@@ -205,6 +205,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
     test_paths = expand_test_paths(work_dir, test_glob)
     assert test_paths != [], "no test files matched #{test_glob}"
+    assert "test/features/ptpw_screenshot_test.exs" in test_paths
 
     pre_args = ["test" | test_paths]
     {pre_output, pre_status} = run_mix(work_dir, pre_args, mode: "phoenix_test")

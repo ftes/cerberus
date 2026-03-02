@@ -83,9 +83,10 @@ These rows are defined but currently blocked on missing Cerberus implementation 
 
 ## Scenario Completion Checklist
 
-- [ ] Every matrix row has a concrete fixture test case.
-- [ ] Every fixture test passes pre-migration in PhoenixTest/PhoenixTestPlaywright mode.
-- [ ] Every fixture test passes post-migration in Cerberus mode.
+- [x] Every non-browser PhoenixTest matrix row has a concrete `pt_*` fixture test case.
+- [x] Every `pt_*` fixture test passes pre-migration in PhoenixTest mode.
+- [x] Every `pt_*` fixture test passes post-migration in Cerberus mode.
+- [ ] Browser-only `ptpw_*` rows run pre/post in a dedicated migration lane (blocked by `cerberus-55qd`).
 - [x] CI suite asserts successful pre/post full-pattern runs (`mix test` exit status `0` before and after rewrite).
 
 ## Implemented So Far
@@ -111,4 +112,7 @@ These scenario ids are now exercised in the committed fixture and verified end-t
 - `pt_live_change`
 - `pt_live_nav`
 - `pt_live_async_timeout`
-- `pt_multi_user_tab`
+
+## Additional Non-Matrix Fixture Scenarios
+
+- `pt_multi_user_tab` (Cerberus capability coverage; not a PhoenixTest source-API migration row)
