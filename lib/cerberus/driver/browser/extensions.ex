@@ -81,19 +81,11 @@ defmodule Cerberus.Driver.Browser.Extensions do
     Process.unlink(action_task.pid)
 
     try do
-      {opened, action_outcome} =
-        await_dialog_opened_event!(session.tab_id, action_task, timeout_ms)
+      {opened_event, action_outcome} =
+        await_dialog_opened_event!(session, action_task, timeout_ms)
 
-      handle_dialog_prompt!(session, timeout_ms)
-      closed = await_dialog_event!("browsingContext.userPromptClosed", session.tab_id, timeout_ms)
+      observed = handle_dialog_flow!(session, opened_event, timeout_ms)
       _ = await_dialog_action_result!(action_task, action_outcome, timeout_ms)
-
-      observed = %{
-        type: opened["type"],
-        message: opened["message"],
-        handler: opened["handler"],
-        accepted: Map.get(closed, "accepted", false)
-      }
 
       assert_dialog_message!(observed, expected_message)
       restore_main_tab!(session, main_tab_id, "with_dialog/3")
@@ -421,19 +413,42 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  defp await_dialog_opened_event!(context_id, action_task, timeout_ms) do
-    deadline = System.monotonic_time(:millisecond) + timeout_ms
-    await_dialog_opened_event_loop(context_id, action_task, deadline, :pending)
+  defp handle_dialog_flow!(session, {:opened, opened}, timeout_ms) do
+    handle_dialog_prompt!(session, timeout_ms)
+    closed = await_dialog_event!("browsingContext.userPromptClosed", session.tab_id, timeout_ms)
+
+    %{
+      type: opened["type"],
+      message: opened["message"],
+      handler: opened["handler"],
+      accepted: Map.get(closed, "accepted", false)
+    }
   end
 
-  defp await_dialog_opened_event_loop(context_id, action_task, deadline, action_outcome) do
+  defp handle_dialog_flow!(_session, :handled_without_open_event, _timeout_ms) do
+    %{type: nil, message: nil, handler: nil, accepted: false}
+  end
+
+  defp await_dialog_opened_event!(session, action_task, timeout_ms) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    await_dialog_opened_event_loop(session, action_task, deadline, :pending, timeout_ms)
+  end
+
+  defp await_dialog_opened_event_loop(session, action_task, deadline, action_outcome, timeout_ms) do
     action_outcome = poll_action_task(action_task, action_outcome)
+    context_id = session.tab_id
 
     now = System.monotonic_time(:millisecond)
     remaining = max(deadline - now, 0)
 
     if remaining == 0 do
-      raise_dialog_open_timeout!(action_outcome)
+      case maybe_handle_prompt_without_open_event!(session, timeout_ms) do
+        :handled ->
+          {:handled_without_open_event, poll_action_task(action_task, action_outcome)}
+
+        :not_open ->
+          raise_dialog_open_timeout!(action_outcome)
+      end
     else
       wait_ms = min(remaining, @dialog_poll_ms)
 
@@ -443,14 +458,32 @@ defmodule Cerberus.Driver.Browser.Extensions do
            "method" => "browsingContext.userPromptOpened",
            "params" => %{"context" => ^context_id} = params
          }} ->
-          {params, action_outcome}
+          {{:opened, params}, action_outcome}
 
         {:cerberus_bidi_event, _other} ->
-          await_dialog_opened_event_loop(context_id, action_task, deadline, action_outcome)
+          await_dialog_opened_event_loop(session, action_task, deadline, action_outcome, timeout_ms)
       after
         wait_ms ->
-          await_dialog_opened_event_loop(context_id, action_task, deadline, action_outcome)
+          await_dialog_opened_event_loop(session, action_task, deadline, action_outcome, timeout_ms)
       end
+    end
+  end
+
+  defp maybe_handle_prompt_without_open_event!(session, timeout_ms) do
+    fallback_timeout_ms = max(min(timeout_ms, 500), @dialog_poll_ms * 4)
+    params = %{"context" => session.tab_id, "accept" => false}
+    opts = Keyword.put(bidi_opts(session), :timeout, fallback_timeout_ms)
+
+    case BiDi.command("browsingContext.handleUserPrompt", params, opts) do
+      {:ok, _payload} ->
+        :handled
+
+      {:error, _reason, %{"error" => "no such alert"}} ->
+        :not_open
+
+      {:error, reason, details} ->
+        raise ArgumentError,
+              "with_dialog/3 failed to verify prompt after missing open event: #{reason} (#{inspect(details)})"
     end
   end
 
