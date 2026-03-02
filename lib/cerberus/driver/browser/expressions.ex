@@ -104,7 +104,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
     (() => {
       const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
-      const scopeSelector = #{encoded_scope};
+      #{scoped_roots_setup(encoded_scope)}
 
       const isElementHidden = (element) => {
         let current = element;
@@ -123,16 +123,6 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
       const visible = [];
       const hiddenTexts = [];
-      const defaultRoot = document.body || document.documentElement;
-      let roots = defaultRoot ? [defaultRoot] : [];
-
-      if (scopeSelector) {
-        try {
-          roots = Array.from(document.querySelectorAll(scopeSelector));
-        } catch (_error) {
-          roots = [];
-        }
-      }
 
       const elements = [];
       for (const root of roots) {
@@ -174,48 +164,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
     (() => {
       const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
-      const scopeSelector = #{encoded_scope};
-      const elementSelector = #{encoded_selector};
-      const defaultRoot = document.body || document.documentElement;
-      let roots = defaultRoot ? [defaultRoot] : [];
-
-      if (scopeSelector) {
-        try {
-          roots = Array.from(document.querySelectorAll(scopeSelector));
-        } catch (_error) {
-          roots = [];
-        }
-      }
-
-      const queryWithinRoots = (selector) => {
-        const seen = new Set();
-        const matches = [];
-
-        for (const root of roots) {
-          if (root.matches && root.matches(selector) && !seen.has(root)) {
-            seen.add(root);
-            matches.push(root);
-          }
-
-          for (const element of root.querySelectorAll(selector)) {
-            if (!seen.has(element)) {
-              seen.add(element);
-              matches.push(element);
-            }
-          }
-        }
-
-        return matches;
-      };
-
-      const selectorMatches = (element) => {
-        if (!elementSelector) return true;
-        try {
-          return element.matches(elementSelector);
-        } catch (_error) {
-          return false;
-        }
-      };
+      #{scoped_query_setup(encoded_scope, encoded_selector)}
 
       const links = queryWithinRoots("a[href]")
         .filter(selectorMatches)
@@ -279,46 +228,8 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
     (() => {
       const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
-      const scopeSelector = #{encoded_scope};
-      const elementSelector = #{encoded_selector};
-      const defaultRoot = document.body || document.documentElement;
-      let roots = defaultRoot ? [defaultRoot] : [];
-
-      if (scopeSelector) {
-        try {
-          roots = Array.from(document.querySelectorAll(scopeSelector));
-        } catch (_error) {
-          roots = [];
-        }
-      }
-
-      const queryWithinRoots = (selector) => {
-        const seen = new Set();
-        const matches = [];
-
-        for (const root of roots) {
-          if (root.matches && root.matches(selector) && !seen.has(root)) {
-            seen.add(root);
-            matches.push(root);
-          }
-
-          for (const element of root.querySelectorAll(selector)) {
-            if (!seen.has(element)) {
-              seen.add(element);
-              matches.push(element);
-            }
-          }
-        }
-
-        return matches;
-      };
-
-      const labels = new Map();
-
-      queryWithinRoots("label[for]").forEach((label) => {
-        const id = label.getAttribute("for");
-        if (id) labels.set(id, normalize(label.textContent));
-      });
+      #{scoped_query_setup(encoded_scope, encoded_selector)}
+      #{labels_by_for_snippet()}
 
       const labelForControl = (element) => {
         const byId = labels.get(element.id || "");
@@ -330,20 +241,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
         return "";
       };
 
-      const selectorMatches = (element) => {
-        if (!elementSelector) return true;
-        try {
-          return element.matches(elementSelector);
-        } catch (_error) {
-          return false;
-        }
-      };
-
-      const fields = queryWithinRoots("input, textarea, select")
-        .filter((element) => {
-          const type = (element.getAttribute("type") || "").toLowerCase();
-          return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
-        })
+      #{form_field_candidates_snippet()}
         .map((element, index) => {
           const tag = (element.tagName || "").toLowerCase();
           const rawType = (element.getAttribute("type") || "").toLowerCase();
@@ -393,58 +291,10 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
     (() => {
       const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
-      const scopeSelector = #{encoded_scope};
-      const elementSelector = #{encoded_selector};
-      const defaultRoot = document.body || document.documentElement;
-      let roots = defaultRoot ? [defaultRoot] : [];
+      #{scoped_query_setup(encoded_scope, encoded_selector)}
+      #{labels_by_for_snippet()}
 
-      if (scopeSelector) {
-        try {
-          roots = Array.from(document.querySelectorAll(scopeSelector));
-        } catch (_error) {
-          roots = [];
-        }
-      }
-
-      const queryWithinRoots = (selector) => {
-        const seen = new Set();
-        const matches = [];
-
-        for (const root of roots) {
-          if (root.matches && root.matches(selector) && !seen.has(root)) {
-            seen.add(root);
-            matches.push(root);
-          }
-
-          for (const element of root.querySelectorAll(selector)) {
-            if (!seen.has(element)) {
-              seen.add(element);
-              matches.push(element);
-            }
-          }
-        }
-
-        return matches;
-      };
-
-      const labels = new Map();
-
-      queryWithinRoots("label[for]").forEach((label) => {
-        const id = label.getAttribute("for");
-        if (id) labels.set(id, normalize(label.textContent));
-      });
-
-      const selectorMatches = (element) => {
-        if (!elementSelector) return true;
-        try {
-          return element.matches(elementSelector);
-        } catch (_error) {
-          return false;
-        }
-      };
-
-      const fields = queryWithinRoots("input[type='file']")
-        .filter(selectorMatches)
+      #{file_field_candidates_snippet()}
         .map((element, index) => ({
           index,
           id: element.id || "",
@@ -488,54 +338,12 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
     """
     (() => {
-      const scopeSelector = #{encoded_scope};
-      const elementSelector = #{encoded_selector};
+      #{scoped_query_setup(encoded_scope, encoded_selector)}
       const fileName = #{encoded_file_name};
       const mimeType = #{encoded_mime_type};
       const lastModified = #{encoded_last_modified};
       const contentBase64 = #{encoded_content};
-      const defaultRoot = document.body || document.documentElement;
-      let roots = defaultRoot ? [defaultRoot] : [];
-
-      if (scopeSelector) {
-        try {
-          roots = Array.from(document.querySelectorAll(scopeSelector));
-        } catch (_error) {
-          roots = [];
-        }
-      }
-
-      const queryWithinRoots = (selector) => {
-        const seen = new Set();
-        const matches = [];
-
-        for (const root of roots) {
-          if (root.matches && root.matches(selector) && !seen.has(root)) {
-            seen.add(root);
-            matches.push(root);
-          }
-
-          for (const element of root.querySelectorAll(selector)) {
-            if (!seen.has(element)) {
-              seen.add(element);
-              matches.push(element);
-            }
-          }
-        }
-
-        return matches;
-      };
-
-      const selectorMatches = (element) => {
-        if (!elementSelector) return true;
-        try {
-          return element.matches(elementSelector);
-        } catch (_error) {
-          return false;
-        }
-      };
-
-      const fields = queryWithinRoots("input[type='file']").filter(selectorMatches);
+      #{file_field_candidates_snippet()}
       const field = fields[#{index}];
 
       if (!field) {
@@ -581,54 +389,8 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
     """
     (() => {
-      const scopeSelector = #{encoded_scope};
-      const elementSelector = #{encoded_selector};
-      const defaultRoot = document.body || document.documentElement;
-      let roots = defaultRoot ? [defaultRoot] : [];
-
-      if (scopeSelector) {
-        try {
-          roots = Array.from(document.querySelectorAll(scopeSelector));
-        } catch (_error) {
-          roots = [];
-        }
-      }
-
-      const queryWithinRoots = (selector) => {
-        const seen = new Set();
-        const matches = [];
-
-        for (const root of roots) {
-          if (root.matches && root.matches(selector) && !seen.has(root)) {
-            seen.add(root);
-            matches.push(root);
-          }
-
-          for (const element of root.querySelectorAll(selector)) {
-            if (!seen.has(element)) {
-              seen.add(element);
-              matches.push(element);
-            }
-          }
-        }
-
-        return matches;
-      };
-
-      const selectorMatches = (element) => {
-        if (!elementSelector) return true;
-        try {
-          return element.matches(elementSelector);
-        } catch (_error) {
-          return false;
-        }
-      };
-
-      const fields = queryWithinRoots("input, textarea, select")
-        .filter((element) => {
-          const type = (element.getAttribute("type") || "").toLowerCase();
-          return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
-        });
+      #{scoped_query_setup(encoded_scope, encoded_selector)}
+      #{form_field_candidates_snippet()}
 
       const field = fields[#{index}];
       if (!field) {
@@ -652,76 +414,24 @@ defmodule Cerberus.Driver.Browser.Expressions do
           non_neg_integer(),
           [String.t()],
           boolean(),
-          boolean(),
-          [String.t()],
           String.t() | nil,
           String.t() | nil
         ) ::
           String.t()
-  def select_set(index, options, exact_option, preserve_existing, remembered_values, scope, selector) do
+  def select_set(index, options, exact_option, scope, selector) do
     encoded_options = JSON.encode!(options)
     encoded_exact_option = JSON.encode!(exact_option)
-    encoded_preserve_existing = JSON.encode!(preserve_existing)
-    encoded_remembered_values = JSON.encode!(remembered_values)
     encoded_scope = JSON.encode!(scope)
     encoded_selector = JSON.encode!(selector)
 
     """
     (() => {
-      const scopeSelector = #{encoded_scope};
-      const elementSelector = #{encoded_selector};
+      #{scoped_query_setup(encoded_scope, encoded_selector)}
       const requestedOptions = #{encoded_options};
       const exactOption = #{encoded_exact_option};
-      const preserveExisting = #{encoded_preserve_existing};
-      const rememberedValues = #{encoded_remembered_values};
-      const defaultRoot = document.body || document.documentElement;
-      let roots = defaultRoot ? [defaultRoot] : [];
-
-      if (scopeSelector) {
-        try {
-          roots = Array.from(document.querySelectorAll(scopeSelector));
-        } catch (_error) {
-          roots = [];
-        }
-      }
 
       const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").replace(/\\s+/g, " ").trim();
-
-      const queryWithinRoots = (selector) => {
-        const seen = new Set();
-        const matches = [];
-
-        for (const root of roots) {
-          if (root.matches && root.matches(selector) && !seen.has(root)) {
-            seen.add(root);
-            matches.push(root);
-          }
-
-          for (const element of root.querySelectorAll(selector)) {
-            if (!seen.has(element)) {
-              seen.add(element);
-              matches.push(element);
-            }
-          }
-        }
-
-        return matches;
-      };
-
-      const selectorMatches = (element) => {
-        if (!elementSelector) return true;
-        try {
-          return element.matches(elementSelector);
-        } catch (_error) {
-          return false;
-        }
-      };
-
-      const fields = queryWithinRoots("input, textarea, select")
-        .filter((element) => {
-          const type = (element.getAttribute("type") || "").toLowerCase();
-          return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
-        });
+      #{form_field_candidates_snippet()}
 
       const field = fields[#{index}];
       if (!field) {
@@ -771,13 +481,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
       }
 
       if (field.multiple) {
-        const remembered = new Set((rememberedValues || []).map((value) => String(value)));
-        const selectedValues = preserveExisting
-          ? new Set(
-              Array.from(field.selectedOptions || []).map((option) => option.value || normalize(option.textContent))
-                .concat(Array.from(remembered))
-            )
-          : new Set();
+        const selectedValues = new Set();
 
         for (const option of matched) {
           selectedValues.add(option.value || normalize(option.textContent));
@@ -822,55 +526,9 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
     """
     (() => {
-      const scopeSelector = #{encoded_scope};
-      const elementSelector = #{encoded_selector};
+      #{scoped_query_setup(encoded_scope, encoded_selector)}
       const shouldCheck = #{encoded_checked};
-      const defaultRoot = document.body || document.documentElement;
-      let roots = defaultRoot ? [defaultRoot] : [];
-
-      if (scopeSelector) {
-        try {
-          roots = Array.from(document.querySelectorAll(scopeSelector));
-        } catch (_error) {
-          roots = [];
-        }
-      }
-
-      const queryWithinRoots = (selector) => {
-        const seen = new Set();
-        const matches = [];
-
-        for (const root of roots) {
-          if (root.matches && root.matches(selector) && !seen.has(root)) {
-            seen.add(root);
-            matches.push(root);
-          }
-
-          for (const element of root.querySelectorAll(selector)) {
-            if (!seen.has(element)) {
-              seen.add(element);
-              matches.push(element);
-            }
-          }
-        }
-
-        return matches;
-      };
-
-      const selectorMatches = (element) => {
-        if (!elementSelector) return true;
-        try {
-          return element.matches(elementSelector);
-        } catch (_error) {
-          return false;
-        }
-      };
-
-      const fields = queryWithinRoots("input, textarea, select")
-        .filter((element) => {
-          const type = (element.getAttribute("type") || "").toLowerCase();
-          return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
-        });
+      #{form_field_candidates_snippet()}
 
       const field = fields[#{index}];
       if (!field) {
@@ -905,54 +563,8 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
     """
     (() => {
-      const scopeSelector = #{encoded_scope};
-      const elementSelector = #{encoded_selector};
-      const defaultRoot = document.body || document.documentElement;
-      let roots = defaultRoot ? [defaultRoot] : [];
-
-      if (scopeSelector) {
-        try {
-          roots = Array.from(document.querySelectorAll(scopeSelector));
-        } catch (_error) {
-          roots = [];
-        }
-      }
-
-      const queryWithinRoots = (selector) => {
-        const seen = new Set();
-        const matches = [];
-
-        for (const root of roots) {
-          if (root.matches && root.matches(selector) && !seen.has(root)) {
-            seen.add(root);
-            matches.push(root);
-          }
-
-          for (const element of root.querySelectorAll(selector)) {
-            if (!seen.has(element)) {
-              seen.add(element);
-              matches.push(element);
-            }
-          }
-        }
-
-        return matches;
-      };
-
-      const selectorMatches = (element) => {
-        if (!elementSelector) return true;
-        try {
-          return element.matches(elementSelector);
-        } catch (_error) {
-          return false;
-        }
-      };
-
-      const fields = queryWithinRoots("input, textarea, select")
-        .filter((element) => {
-          const type = (element.getAttribute("type") || "").toLowerCase();
-          return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
-        });
+      #{scoped_query_setup(encoded_scope, encoded_selector)}
+      #{form_field_candidates_snippet()}
 
       const field = fields[#{index}];
       if (!field) {
@@ -988,48 +600,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
     """
     (() => {
-      const scopeSelector = #{encoded_scope};
-      const elementSelector = #{encoded_selector};
-      const defaultRoot = document.body || document.documentElement;
-      let roots = defaultRoot ? [defaultRoot] : [];
-
-      if (scopeSelector) {
-        try {
-          roots = Array.from(document.querySelectorAll(scopeSelector));
-        } catch (_error) {
-          roots = [];
-        }
-      }
-
-      const queryWithinRoots = (selector) => {
-        const seen = new Set();
-        const matches = [];
-
-        for (const root of roots) {
-          if (root.matches && root.matches(selector) && !seen.has(root)) {
-            seen.add(root);
-            matches.push(root);
-          }
-
-          for (const element of root.querySelectorAll(selector)) {
-            if (!seen.has(element)) {
-              seen.add(element);
-              matches.push(element);
-            }
-          }
-        }
-
-        return matches;
-      };
-
-      const selectorMatches = (element) => {
-        if (!elementSelector) return true;
-        try {
-          return element.matches(elementSelector);
-        } catch (_error) {
-          return false;
-        }
-      };
+      #{scoped_query_setup(encoded_scope, encoded_selector)}
 
       const buttons = queryWithinRoots("button").filter(selectorMatches);
       const button = buttons[#{index}];
@@ -1045,6 +616,86 @@ defmodule Cerberus.Driver.Browser.Expressions do
         path: window.location.pathname + window.location.search
       });
     })()
+    """
+  end
+
+  defp scoped_roots_setup(encoded_scope) do
+    """
+    const scopeSelector = #{encoded_scope};
+    const defaultRoot = document.body || document.documentElement;
+    let roots = defaultRoot ? [defaultRoot] : [];
+
+    if (scopeSelector) {
+      try {
+        roots = Array.from(document.querySelectorAll(scopeSelector));
+      } catch (_error) {
+        roots = [];
+      }
+    }
+    """
+  end
+
+  defp scoped_query_setup(encoded_scope, encoded_selector) do
+    """
+    #{scoped_roots_setup(encoded_scope)}
+    const elementSelector = #{encoded_selector};
+
+    const queryWithinRoots = (selector) => {
+      const seen = new Set();
+      const matches = [];
+
+      for (const root of roots) {
+        if (root.matches && root.matches(selector) && !seen.has(root)) {
+          seen.add(root);
+          matches.push(root);
+        }
+
+        for (const element of root.querySelectorAll(selector)) {
+          if (!seen.has(element)) {
+            seen.add(element);
+            matches.push(element);
+          }
+        }
+      }
+
+      return matches;
+    };
+
+    const selectorMatches = (element) => {
+      if (!elementSelector) return true;
+      try {
+        return element.matches(elementSelector);
+      } catch (_error) {
+        return false;
+      }
+    };
+    """
+  end
+
+  defp form_field_candidates_snippet do
+    """
+    const fields = queryWithinRoots("input, textarea, select")
+      .filter((element) => {
+        const type = (element.getAttribute("type") || "").toLowerCase();
+        return type !== "hidden" && type !== "submit" && type !== "button" && selectorMatches(element);
+      })
+    """
+  end
+
+  defp file_field_candidates_snippet do
+    """
+    const fields = queryWithinRoots("input[type='file']").filter(selectorMatches)
+    """
+  end
+
+  defp labels_by_for_snippet do
+    """
+    const labels = new Map();
+
+    queryWithinRoots("label[for]").forEach((label) => {
+      const id = label.getAttribute("for");
+      if (id) labels.set(id, normalize(label.textContent));
+    });
     """
   end
 end
