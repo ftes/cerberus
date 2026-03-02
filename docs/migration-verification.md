@@ -24,7 +24,7 @@ The suite runs directly against the committed fixture project at:
 
 ## What Is Asserted
 
-The test performs one end-to-end flow over `test/features/pt*_test.exs`:
+The test performs one end-to-end flow over `test/features/pt_*_test.exs`:
 
 1. `mix deps.get`
 2. pre-migration run: `mix test ...` with `CERBERUS_MIGRATION_FIXTURE_MODE=phoenix_test`
@@ -41,19 +41,12 @@ The CI job runs this suite:
 
 This keeps migration verification in the non-browser phase by default and avoids coupling parity checks to browser-runtime setup.
 
-Optional browser lane knobs for Playwright migration rows:
-
-- `CERBERUS_INSTALL_PLAYWRIGHT_ASSETS=true` to run `npm --prefix assets install playwright` in the copied fixture before Playwright row execution.
-- `CERBERUS_REQUIRE_PLAYWRIGHT_EXECUTION=true` to fail if the Playwright row is skipped.
-
 ## Intentional Boundaries
 
 Current loop scope is intentionally narrow:
 
 - `pt_*` rows are the required migration gate.
-- `ptpw_*` rows are included in the suite but may skip when Playwright node assets are not installed in the fixture app.
 - Matrix breadth in `docs/migration-verification-matrix.md` is a roadmap, not fully implemented row coverage yet.
-- Browser-specific PhoenixTest.Playwright parity rows are still pending broader migration support and runtime-cost decisions.
 - The Igniter task remains a safe-rewrite tool; unsupported patterns are warnings and require manual migration follow-up.
 
 ## Extending Coverage

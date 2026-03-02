@@ -19,7 +19,6 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     "test/**/*_test.ex"
   ]
 
-  @warning_playwright "PhoenixTest.Playwright calls need manual migration to browser-only Cerberus APIs."
   @warning_test_helpers "PhoenixTest.TestHelpers import has no direct Cerberus equivalent and needs manual migration."
 
   @warning_submodule_alias "PhoenixTest submodule alias detected; verify Cerberus module equivalents manually."
@@ -151,8 +150,8 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
           [:PhoenixTest, :TestHelpers] ->
             {node, add_warning(state, @warning_test_helpers)}
 
-          [:PhoenixTest, :Playwright | _] ->
-            {node, add_warning(state, @warning_playwright)}
+          [:PhoenixTest | _] ->
+            {node, add_warning(state, @warning_submodule_alias)}
 
           _ ->
             {node, state}
@@ -167,15 +166,12 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     case args do
       [module_ast | rest] ->
         case alias_parts(module_ast) do
-          [:PhoenixTest | suffix] ->
-            updated = {:use, meta, [alias_ast(module_ast, [:Cerberus | suffix]) | rest]}
+          [:PhoenixTest] ->
+            updated = {:use, meta, [alias_ast(module_ast, [:Cerberus]) | rest]}
+            {updated, mark_changed(state)}
 
-            next_state =
-              state
-              |> mark_changed()
-              |> maybe_warn_playwright(suffix)
-
-            {updated, next_state}
+          [:PhoenixTest | _] ->
+            {node, add_warning(state, @warning_submodule_alias)}
 
           _ ->
             {node, state}
@@ -193,9 +189,6 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
           [:PhoenixTest] ->
             updated = {:alias, meta, [alias_ast(module_ast, [:Cerberus]) | rest]}
             {updated, mark_changed(state)}
-
-          [:PhoenixTest, :Playwright | _] ->
-            {node, add_warning(state, @warning_playwright)}
 
           [:PhoenixTest | _] ->
             {node, add_warning(state, @warning_submodule_alias)}
@@ -227,7 +220,6 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
       |> maybe_warn_browser_helper(fun)
       |> maybe_warn_visit_conn(fun, args)
       |> maybe_warn_direct_phoenix_test_call(module_ast)
-      |> maybe_warn_playwright_call(module_ast)
 
     {node, next_state}
   end
@@ -255,16 +247,6 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
       _ -> state
     end
   end
-
-  defp maybe_warn_playwright_call(state, module_ast) do
-    case alias_parts(module_ast) do
-      [:PhoenixTest, :Playwright | _] -> add_warning(state, @warning_playwright)
-      _ -> state
-    end
-  end
-
-  defp maybe_warn_playwright(state, [:Playwright | _]), do: add_warning(state, @warning_playwright)
-  defp maybe_warn_playwright(state, _suffix), do: state
 
   defp maybe_warn_browser_helper(state, fun) when fun in @browser_helpers, do: add_warning(state, @warning_browser_helper)
   defp maybe_warn_browser_helper(state, _fun), do: state

@@ -1,11 +1,11 @@
 ---
 # cerberus-55qd
 title: Add browser migration verification lane for PhoenixTest.Playwright rows
-status: in-progress
+status: scrapped
 type: task
 priority: normal
 created_at: 2026-02-28T18:02:12Z
-updated_at: 2026-03-02T06:48:48Z
+updated_at: 2026-03-02T06:56:04Z
 parent: cerberus-it5x
 ---
 
@@ -31,3 +31,9 @@ MigrationVerification currently runs only phoenix_test -> cerberus non-browser m
   - CERBERUS_INSTALL_PLAYWRIGHT_ASSETS=true installs Playwright node assets in the copied fixture.
   - CERBERUS_REQUIRE_PLAYWRIGHT_EXECUTION=true fails the test when the Playwright row is skipped.
 - Updated migration verification docs to describe these browser-lane controls.
+
+## Reasons for Scrapping
+
+- Scope decision changed: Playwright migration is explicitly excluded for now.
+- This bean aimed to add browser migration rows and CI lane support for Playwright APIs, which is now out of scope.
+- Follow-up is handled by a new bean that removes Playwright migration rows and related migration code paths.

@@ -10,7 +10,4 @@ config :phoenix, :plug_init_mode, :runtime
 
 config :phoenix_test,
   endpoint: MigrationFixtureWeb.Endpoint,
-  otp_app: :migration_fixture,
-  playwright: [
-    assets_dir: "./assets"
-  ]
+  otp_app: :migration_fixture

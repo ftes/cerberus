@@ -31,8 +31,7 @@ defmodule MigrationFixture.MixProject do
       {:plug_cowboy, "~> 2.7"},
       {:jason, "~> 1.4"},
       {:lazy_html, ">= 0.1.0", only: :test},
-      {:phoenix_test, "~> 0.9", only: :test, runtime: false},
-      {:phoenix_test_playwright, "~> 0.12", only: :test, runtime: false}
+      {:phoenix_test, "~> 0.9", only: :test, runtime: false}
     ]
   end
 end
