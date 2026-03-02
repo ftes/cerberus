@@ -18,7 +18,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
   @spec current_path() :: String.t()
   def current_path do
     """
-    (() => JSON.stringify({ path: window.location.pathname + window.location.search }))()
+    (() => JSON.stringify({ path: #{current_path_expression()} }))()
     """
   end
 
@@ -55,7 +55,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
       return JSON.stringify({
         ok: false,
         reason,
-        path: window.location.pathname + window.location.search,
+        path: #{current_path_expression()},
         title: document.title || "",
         texts: [],
         matched: [],
@@ -88,7 +88,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
       const expectedQuery = payload.expectedQuery;
       const exact = payload.exact === true;
       const op = payload.op || "assert_path";
-      const path = window.location.pathname + window.location.search;
+      const path = #{current_path_expression()};
       const pathOnly = (() => {
         try {
           const idx = path.indexOf("?");
@@ -264,7 +264,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
       }));
 
       return JSON.stringify({
-        path: window.location.pathname + window.location.search,
+        path: #{current_path_expression()},
         links,
         buttons
       });
@@ -328,7 +328,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
         });
 
       return JSON.stringify({
-        path: window.location.pathname + window.location.search,
+        path: #{current_path_expression()},
         fields
       });
     })()
@@ -363,7 +363,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
         }));
 
       return JSON.stringify({
-        path: window.location.pathname + window.location.search,
+        path: #{current_path_expression()},
         fields
       });
     })()
@@ -715,10 +715,12 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
     return JSON.stringify({
       ok: true,
-      path: window.location.pathname + window.location.search#{extra_payload}
+      path: #{current_path_expression()}#{extra_payload}
     });
     """
   end
+
+  defp current_path_expression, do: "window.location.pathname + window.location.search"
 
   defp indexed_lookup_snippet(collection_name, variable_name, index, reason)
        when is_binary(collection_name) and is_binary(variable_name) and is_integer(index) and is_binary(reason) do
