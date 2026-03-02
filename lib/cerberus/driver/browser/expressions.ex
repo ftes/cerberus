@@ -396,11 +396,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
       const lastModified = #{encoded_last_modified};
       const contentBase64 = #{encoded_content};
       #{file_field_candidates_snippet()}
-      const field = fields[#{index}];
-
-      if (!field) {
-        return JSON.stringify({ ok: false, reason: "field_not_found" });
-      }
+      #{indexed_lookup_snippet("fields", "field", index, "field_not_found")}
 
       try {
         const decoded = atob(contentBase64);
@@ -438,11 +434,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
     (() => {
       #{scoped_query_setup(encoded_scope, encoded_selector)}
       #{form_field_candidates_snippet()}
-
-      const field = fields[#{index}];
-      if (!field) {
-        return JSON.stringify({ ok: false, reason: "field_not_found" });
-      }
+      #{indexed_lookup_snippet("fields", "field", index, "field_not_found")}
 
       const value = #{encoded_value};
       field.value = value;
@@ -474,11 +466,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
       const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").replace(/\\s+/g, " ").trim();
       #{form_field_candidates_snippet()}
-
-      const field = fields[#{index}];
-      if (!field) {
-        return JSON.stringify({ ok: false, reason: "field_not_found" });
-      }
+      #{indexed_lookup_snippet("fields", "field", index, "field_not_found")}
 
       if ((field.tagName || "").toLowerCase() !== "select") {
         return JSON.stringify({ ok: false, reason: "field_not_select" });
@@ -566,11 +554,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
       #{scoped_query_setup(encoded_scope, encoded_selector)}
       const shouldCheck = #{encoded_checked};
       #{form_field_candidates_snippet()}
-
-      const field = fields[#{index}];
-      if (!field) {
-        return JSON.stringify({ ok: false, reason: "field_not_found" });
-      }
+      #{indexed_lookup_snippet("fields", "field", index, "field_not_found")}
 
       const type = (field.getAttribute("type") || "").toLowerCase();
       if (type !== "checkbox") {
@@ -597,11 +581,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
     (() => {
       #{scoped_query_setup(encoded_scope, encoded_selector)}
       #{form_field_candidates_snippet()}
-
-      const field = fields[#{index}];
-      if (!field) {
-        return JSON.stringify({ ok: false, reason: "field_not_found" });
-      }
+      #{indexed_lookup_snippet("fields", "field", index, "field_not_found")}
 
       const type = (field.getAttribute("type") || "").toLowerCase();
       if (type !== "radio") {
@@ -629,11 +609,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
       #{scoped_query_setup(encoded_scope, encoded_selector)}
 
       const buttons = queryWithinRoots("button").filter(selectorMatches);
-      const button = buttons[#{index}];
-
-      if (!button) {
-        return JSON.stringify({ ok: false, reason: "button_not_found" });
-      }
+      #{indexed_lookup_snippet("buttons", "button", index, "button_not_found")}
 
       button.click();
 
@@ -741,6 +717,18 @@ defmodule Cerberus.Driver.Browser.Expressions do
       ok: true,
       path: window.location.pathname + window.location.search#{extra_payload}
     });
+    """
+  end
+
+  defp indexed_lookup_snippet(collection_name, variable_name, index, reason)
+       when is_binary(collection_name) and is_binary(variable_name) and is_integer(index) and is_binary(reason) do
+    encoded_reason = JSON.encode!(reason)
+
+    """
+    const #{variable_name} = #{collection_name}[#{index}];
+    if (!#{variable_name}) {
+      return JSON.stringify({ ok: false, reason: #{encoded_reason} });
+    }
     """
   end
 end
