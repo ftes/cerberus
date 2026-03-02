@@ -101,16 +101,8 @@ jobs:
       - name: Run tests with Chrome
         run: mix test --warnings-as-errors --max-failures 1
 
-      # TODO: Re-enable websocket lanes after fixing remote BiDi sandbox metadata compatibility.
-      # Suspected root cause from current investigation:
-      # - selenium/standalone-chromium:126.0 in mix test.websocket does not support
-      #   emulation.setUserAgentOverride or network.setExtraHeaders in our environment.
-      # - Browser sandbox metadata setup currently depends on these commands, so the websocket lane fails
-      #   during browser session initialization (for example CoreSQLSandboxBehaviorTest).
-      #
-      # - name: Run browser-driver tests in websocket Chrome lane
-      #   run: |
-      #     mix test.websocket --warnings-as-errors --max-failures 1 --browsers chrome $BROWSER_DRIVER_FILES
+      - name: Run tests with Chrome via Websocket (remote)
+        run: mix test.websocket --warnings-as-errors --max-failures 1
 
       - name: Run tests with Firefox
         run: CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors --max-failures 1
