@@ -1,7 +1,7 @@
 ---
 # cerberus-hhaf
 title: Flatten remaining cerberus_test files into test/cerberus
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-03-01T20:41:11Z

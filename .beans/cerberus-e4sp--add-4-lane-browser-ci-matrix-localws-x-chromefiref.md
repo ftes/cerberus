@@ -1,7 +1,7 @@
 ---
 # cerberus-e4sp
 title: Add 4-lane browser CI matrix (local/ws x chrome/firefox)
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-02-28T20:40:01Z

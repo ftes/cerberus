@@ -1,7 +1,7 @@
 ---
 # cerberus-it5x
 title: End-to-end migration verification loop for PhoenixTest and PhoenixTestPlaywright
-status: in-progress
+status: completed
 type: feature
 priority: normal
 created_at: 2026-02-28T07:18:58Z
