@@ -394,8 +394,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
       const mimeType = #{encoded_mime_type};
       const lastModified = #{encoded_last_modified};
       const contentBase64 = #{encoded_content};
-      #{file_field_candidates_snippet()}
-      #{indexed_lookup_snippet("fields", "field", index, "field_not_found")}
+      #{indexed_file_field_snippet(index)}
 
       try {
         const decoded = atob(contentBase64);
@@ -726,6 +725,13 @@ defmodule Cerberus.Driver.Browser.Expressions do
   defp indexed_form_field_snippet(index, reason \\ "field_not_found") when is_integer(index) and is_binary(reason) do
     """
     #{form_field_candidates_snippet()}
+    #{indexed_lookup_snippet("fields", "field", index, reason)}
+    """
+  end
+
+  defp indexed_file_field_snippet(index, reason \\ "field_not_found") when is_integer(index) and is_binary(reason) do
+    """
+    #{file_field_candidates_snippet()}
     #{indexed_lookup_snippet("fields", "field", index, reason)}
     """
   end
