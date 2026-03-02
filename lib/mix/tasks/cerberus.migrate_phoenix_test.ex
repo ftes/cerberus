@@ -119,9 +119,8 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
       Igniter.assign(igniter, :cerberus_migration_summary, %{files_scanned: 0, files_changed: 0, warnings: 0})
     else
       {igniter, changed_count, warning_count} =
-        Enum.reduce(files, {igniter, 0, 0}, fn file, {acc_igniter, changed_acc, warning_acc} ->
-          {next_igniter, changed?, file_warning_count} = migrate_file(acc_igniter, file, dry_run)
-          {next_igniter, changed_acc + if(changed?, do: 1, else: 0), warning_acc + file_warning_count}
+        Enum.reduce(files, {igniter, 0, 0}, fn file, acc ->
+          reduce_migrated_file(file, acc, dry_run)
         end)
 
       Igniter.assign(igniter, :cerberus_migration_summary, %{
@@ -131,6 +130,15 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
       })
     end
   end
+
+  defp reduce_migrated_file(file, {igniter, changed_acc, warning_acc}, dry_run) do
+    {next_igniter, changed?, file_warning_count} = migrate_file(igniter, file, dry_run)
+
+    {next_igniter, changed_acc + changed_to_count(changed?), warning_acc + file_warning_count}
+  end
+
+  defp changed_to_count(true), do: 1
+  defp changed_to_count(false), do: 0
 
   defp resolve_dry_run(opts) do
     cond do
@@ -173,28 +181,34 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     original = File.read!(file)
     {rewritten, warnings} = rewrite_with_ast(original)
     print_warnings(file, warnings)
+    warning_count = length(warnings)
 
-    if rewritten == original do
-      {igniter, false, length(warnings)}
-    else
-      if dry_run do
+    cond do
+      rewritten == original ->
+        {igniter, false, warning_count}
+
+      dry_run ->
         print_diff(file, original, rewritten)
-        {igniter, true, length(warnings)}
-      else
-        igniter =
-          Igniter.update_file(
-            igniter,
-            file,
-            fn source ->
-              Source.update(source, :content, rewritten, by: :cerberus_migrate_phoenix_test)
-            end,
-            source_handler: Rewrite.Source.Ex
-          )
+        {igniter, true, warning_count}
 
+      true ->
+        igniter = persist_migrated_file(igniter, file, rewritten)
         IO.puts("updated #{file}")
-        {igniter, true, length(warnings)}
-      end
+        {igniter, true, warning_count}
     end
+  end
+
+  defp persist_migrated_file(igniter, file, rewritten) do
+    Igniter.update_file(
+      igniter,
+      file,
+      &update_source_content(&1, rewritten),
+      source_handler: Rewrite.Source.Ex
+    )
+  end
+
+  defp update_source_content(source, rewritten) do
+    Source.update(source, :content, rewritten, by: :cerberus_migrate_phoenix_test)
   end
 
   defp print_summary(files_scanned, changed_count, warning_count, dry_run) do
@@ -206,27 +220,30 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   end
 
   defp rewrite_with_ast(content) do
-    case Code.string_to_quoted(content, token_metadata: true, columns: true) do
+    case Sourceror.parse_string(content) do
       {:ok, ast} ->
         {rewritten_ast, state} = Macro.prewalk(ast, %RewriteState{}, &rewrite_node/2)
         {canonical_ast, canonical_changed?} = canonicalize_calls(rewritten_ast)
         changed? = state.changed? or canonical_changed?
 
-        rewritten =
-          if changed? do
-            canonical_ast
-            |> Macro.to_string()
-            |> Code.format_string!()
-            |> IO.iodata_to_binary()
-          else
-            content
-          end
-
+        rewritten = render_rewritten_content(content, canonical_ast, changed?)
         {rewritten, Enum.reverse(state.warnings)}
 
       {:error, {_line, error, _token}} ->
         {content, ["Could not parse file for AST migration: #{error}"]}
+
+      {:error, reason} ->
+        {content, ["Could not parse file for AST migration: #{inspect(reason)}"]}
     end
+  end
+
+  defp render_rewritten_content(content, _canonical_ast, false), do: content
+
+  defp render_rewritten_content(_content, canonical_ast, true) do
+    canonical_ast
+    |> Sourceror.to_string()
+    |> Code.format_string!()
+    |> IO.iodata_to_binary()
   end
 
   defp rewrite_node({:import, meta, args} = node, state) do
@@ -350,23 +367,12 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   end
 
   defp canonicalize_text_assertion_args(fun, args) when fun in @canonical_text_assertions do
-    case args do
-      [session, maybe_opts] ->
-        case pop_keyword_ast(maybe_opts, :text) do
-          {:ok, text_value, []} -> {:ok, [session, text_value]}
-          {:ok, text_value, remaining_opts} -> {:ok, [session, text_value, remaining_opts]}
-          :no_change -> :no_change
-        end
-
-      [session, scope, maybe_opts] ->
-        case pop_keyword_ast(maybe_opts, :text) do
-          {:ok, text_value, []} -> {:ok, [session, scope, text_value]}
-          {:ok, text_value, remaining_opts} -> {:ok, [session, scope, text_value, remaining_opts]}
-          :no_change -> :no_change
-        end
-
-      _ ->
-        :no_change
+    with {:ok, prefix, maybe_opts, trailing_opts} <- split_text_assertion_args(args),
+         {:ok, text_value, remaining_opts} <- pop_keyword_ast(maybe_opts, :text),
+         {:ok, merged_opts} <- merge_trailing_opts(remaining_opts, trailing_opts) do
+      {:ok, build_value_args(prefix, text_value, merged_opts)}
+    else
+      _ -> :no_change
     end
   end
 
@@ -383,40 +389,42 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   end
 
   defp canonicalize_labeled_value_call_args_by_key(args, key) do
-    case args do
-      [locator, maybe_opts] ->
-        case pop_keyword_ast(maybe_opts, key) do
-          {:ok, value, []} -> {:ok, [locator, value]}
-          {:ok, value, remaining_opts} -> {:ok, [locator, value, remaining_opts]}
-          :no_change -> :no_change
-        end
-
-      [session, locator, maybe_opts] ->
-        case pop_keyword_ast(maybe_opts, key) do
-          {:ok, value, []} -> {:ok, [session, locator, value]}
-          {:ok, value, remaining_opts} -> {:ok, [session, locator, value, remaining_opts]}
-          :no_change -> :no_change
-        end
-
-      [session, locator, maybe_opts, trailing_opts] ->
-        with {:ok, value, remaining_opts} <- pop_keyword_ast(maybe_opts, key),
-             true <- keyword_ast?(trailing_opts) do
-          merged_opts =
-            if remaining_opts == [] do
-              trailing_opts
-            else
-              Keyword.merge(remaining_opts, trailing_opts)
-            end
-
-          {:ok, [session, locator, value, merged_opts]}
-        else
-          _ -> :no_change
-        end
-
-      _ ->
-        :no_change
+    with {:ok, prefix, maybe_opts, trailing_opts} <- split_labeled_value_args(args),
+         {:ok, value, remaining_opts} <- pop_keyword_ast(maybe_opts, key),
+         {:ok, merged_opts} <- merge_trailing_opts(remaining_opts, trailing_opts) do
+      {:ok, build_value_args(prefix, value, merged_opts)}
+    else
+      _ -> :no_change
     end
   end
+
+  defp split_text_assertion_args([session, maybe_opts]), do: {:ok, [session], maybe_opts, :none}
+  defp split_text_assertion_args([session, scope, maybe_opts]), do: {:ok, [session, scope], maybe_opts, :none}
+  defp split_text_assertion_args(_args), do: :error
+
+  defp split_labeled_value_args([locator, maybe_opts]), do: {:ok, [locator], maybe_opts, :none}
+  defp split_labeled_value_args([session, locator, maybe_opts]), do: {:ok, [session, locator], maybe_opts, :none}
+
+  defp split_labeled_value_args([session, locator, maybe_opts, trailing_opts]),
+    do: {:ok, [session, locator], maybe_opts, trailing_opts}
+
+  defp split_labeled_value_args(_args), do: :error
+
+  defp merge_trailing_opts(remaining_opts, :none), do: {:ok, remaining_opts}
+
+  defp merge_trailing_opts(remaining_opts, trailing_opts) do
+    if keyword_ast?(trailing_opts) do
+      {:ok, merge_keyword_opts(remaining_opts, trailing_opts)}
+    else
+      :error
+    end
+  end
+
+  defp merge_keyword_opts([], trailing_opts), do: trailing_opts
+  defp merge_keyword_opts(remaining_opts, trailing_opts), do: Keyword.merge(remaining_opts, trailing_opts)
+
+  defp build_value_args(prefix, value, []), do: prefix ++ [value]
+  defp build_value_args(prefix, value, merged_opts), do: prefix ++ [value, merged_opts]
 
   defp pop_keyword_ast(maybe_keyword, key) when is_atom(key) do
     if keyword_ast?(maybe_keyword) do
