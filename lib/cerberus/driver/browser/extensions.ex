@@ -482,13 +482,23 @@ defmodule Cerberus.Driver.Browser.Extensions do
       {:ok, _payload} ->
         :handled
 
-      {:error, _reason, %{"error" => "no such alert"}} ->
-        :not_open
-
       {:error, reason, details} ->
-        raise ArgumentError,
-              "with_dialog/3 failed to verify prompt after missing open event: #{reason} (#{inspect(details)})"
+        if prompt_not_open_or_timeout?(reason, details) do
+          :not_open
+        else
+          raise ArgumentError,
+                "with_dialog/3 failed to verify prompt after missing open event: #{reason} (#{inspect(details)})"
+        end
     end
+  end
+
+  defp prompt_not_open_or_timeout?(_reason, %{"error" => "no such alert"}), do: true
+
+  defp prompt_not_open_or_timeout?(reason, _details) when reason in ["bidi command timeout", "browser readiness timeout"],
+    do: true
+
+  defp prompt_not_open_or_timeout?(reason, _details) when is_binary(reason) do
+    String.contains?(String.downcase(reason), "timeout")
   end
 
   defp poll_action_task(_action_task, {:ok, _} = action_outcome), do: action_outcome
