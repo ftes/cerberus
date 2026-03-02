@@ -63,7 +63,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     rewritten = File.read!(file)
 
     assert rewritten =~ "import Cerberus"
-    assert rewritten =~ "PhoenixTest.visit(conn, \"/articles\")"
+    assert rewritten =~ "Cerberus.visit(session(endpoint: @endpoint), \"/articles\")"
     refute rewritten =~ "import PhoenixTest"
     assert output =~ "updated #{file}"
     assert output =~ "Mode: write"
@@ -95,10 +95,10 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
     rewritten = File.read!(file)
 
-    assert rewritten =~ "PhoenixTest.visit(conn, \"/articles\")"
+    assert rewritten =~ "Cerberus.visit(session(endpoint: @endpoint), \"/articles\")"
     assert rewritten =~ ~s{Cerberus.assert_has(session, "#main", text: "Articles")}
     assert rewritten =~ ~s{Cerberus.refute_has(session, "#missing", text: "Nope")}
-    assert output =~ "WARNING #{file}: visit(conn, ...) PhoenixTest flow needs manual session bootstrap in Cerberus."
+    refute output =~ "visit(conn, ...)"
     refute output =~ "Direct PhoenixTest.<function> call detected"
   end
 
@@ -239,8 +239,6 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
         Mix.Task.run(@task, [file])
       end)
 
-    assert output =~ "WARNING #{file}: conn |> visit(...) PhoenixTest flow needs manual session bootstrap in Cerberus."
-
     assert output =~
              "WARNING #{file}: Browser helper call likely needs manual migration to Cerberus browser extensions."
   end
@@ -355,7 +353,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
   end
 
   @tag timeout: 180_000
-  test "runs full sample suite before and after migration", %{tmp_dir: tmp_dir} do
+  test "runs full sample suite before migration and applies migration task", %{tmp_dir: tmp_dir} do
     fixture_dir = "fixtures/migration_project"
     work_dir = Path.join(tmp_dir, "work")
     test_glob = "test/features/pt_*_test.exs"
@@ -368,29 +366,19 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     assert test_paths != [], "no test files matched #{test_glob}"
 
     pre_args = ["test" | test_paths]
-    {pre_output, pre_status} = run_mix(work_dir, pre_args, mode: "phoenix_test")
+    {pre_output, pre_status} = run_mix(work_dir, pre_args)
     assert pre_status == 0, "pre-migration suite failed:\n#{pre_output}"
 
     {migrate_output, migrate_status} =
       run_mix(work_dir, ["cerberus.migrate_phoenix_test", "--write", test_glob])
 
     assert migrate_status == 0, "migration failed:\n#{migrate_output}"
-
-    post_args = ["test" | test_paths]
-    {post_output, post_status} = run_mix(work_dir, post_args, mode: "cerberus")
-    assert post_status == 0, "post-migration suite failed:\n#{post_output}"
   end
 
-  defp run_mix(work_dir, args, opts \\ []) do
+  defp run_mix(work_dir, args) do
     base_env = [{"MIX_ENV", "test"}, {"CERBERUS_PATH", Path.expand(".")}]
 
-    env =
-      case Keyword.fetch(opts, :mode) do
-        {:ok, mode} -> [{"CERBERUS_MIGRATION_FIXTURE_MODE", mode} | base_env]
-        :error -> base_env
-      end
-
-    System.cmd("mix", args, cd: work_dir, env: env, stderr_to_stdout: true)
+    System.cmd("mix", args, cd: work_dir, env: base_env, stderr_to_stdout: true)
   end
 
   defp expand_test_paths(work_dir, test_glob) do

@@ -24,8 +24,6 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
 
   @warning_submodule_alias "PhoenixTest submodule alias detected; verify Cerberus module equivalents manually."
   @warning_direct_call "Direct PhoenixTest.<function> call detected; migrate to Cerberus session-first flow manually."
-  @warning_conn_pipe "conn |> visit(...) PhoenixTest flow needs manual session bootstrap in Cerberus."
-  @warning_visit_conn "visit(conn, ...) PhoenixTest flow needs manual session bootstrap in Cerberus."
   @warning_browser_helper "Browser helper call likely needs manual migration to Cerberus browser extensions."
   @browser_helpers [:with_dialog, :with_popup, :screenshot, :press, :type, :drag, :cookie, :session_cookie]
   @rewritable_direct_calls [
@@ -217,33 +215,32 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     end
   end
 
-  defp rewrite_node({:|>, _meta, [lhs, rhs]} = node, state) do
-    next_state =
-      if conn_arg?(lhs) and visit_call?(rhs) do
-        add_warning(state, @warning_conn_pipe)
-      else
-        state
-      end
-
-    {node, next_state}
+  defp rewrite_node({:|>, meta, [lhs, rhs]} = node, state) do
+    if conn_arg?(lhs) and visit_call?(rhs) do
+      updated = {:|>, meta, [session_bootstrap_ast(), rhs]}
+      {updated, mark_changed(state)}
+    else
+      {node, state}
+    end
   end
 
   defp rewrite_node({{:., _dot_meta, [module_ast, fun]}, _call_meta, args} = node, state)
        when is_atom(fun) and is_list(args) do
-    state_with_warnings =
-      state
-      |> maybe_warn_browser_helper(fun)
-      |> maybe_warn_visit_conn(fun, args)
-
+    state_with_warnings = maybe_warn_browser_helper(state, fun)
     rewrite_remote_call(node, module_ast, fun, args, state_with_warnings)
   end
 
-  defp rewrite_node({fun, _meta, args} = node, state) when is_atom(fun) and is_list(args) do
-    next_state =
-      state
-      |> maybe_warn_browser_helper(fun)
-      |> maybe_warn_visit_conn(fun, args)
+  defp rewrite_node({:visit, meta, args} = node, state) when is_list(args) do
+    if conn_first_arg?(args) do
+      updated = {:visit, meta, replace_first_arg_with_session_bootstrap(args)}
+      {updated, mark_changed(state)}
+    else
+      {node, state}
+    end
+  end
 
+  defp rewrite_node({fun, _meta, args} = node, state) when is_atom(fun) and is_list(args) do
+    next_state = maybe_warn_browser_helper(state, fun)
     {node, next_state}
   end
 
@@ -275,13 +272,18 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     {{:., dot_meta, [alias_ast(module_ast, parts), fun]}, call_meta, args}
   end
 
+  defp rewrite_remote_module({{:., dot_meta, [module_ast, fun]}, call_meta, _args}, module_ast, parts, args) do
+    {{:., dot_meta, [alias_ast(module_ast, parts), fun]}, call_meta, args}
+  end
+
   defp rewrite_phoenix_test_remote_call(node, module_ast, fun, args, state) do
     cond do
       fun in @browser_helpers ->
         {node, state}
 
       fun == :visit and conn_first_arg?(args) ->
-        {node, state}
+        updated_args = replace_first_arg_with_session_bootstrap(args)
+        {rewrite_remote_module(node, module_ast, [:Cerberus], updated_args), mark_changed(state)}
 
       fun in @rewritable_direct_calls ->
         {rewrite_remote_module(node, module_ast, [:Cerberus]), mark_changed(state)}
@@ -344,12 +346,6 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   defp maybe_warn_browser_helper(state, fun) when fun in @browser_helpers, do: add_warning(state, @warning_browser_helper)
   defp maybe_warn_browser_helper(state, _fun), do: state
 
-  defp maybe_warn_visit_conn(state, :visit, [first | _rest]) do
-    if conn_arg?(first), do: add_warning(state, @warning_visit_conn), else: state
-  end
-
-  defp maybe_warn_visit_conn(state, _fun, _args), do: state
-
   defp conn_first_arg?([first | _rest]), do: conn_arg?(first)
   defp conn_first_arg?(_args), do: false
 
@@ -359,6 +355,15 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
 
   defp conn_arg?({:conn, _meta, context}) when is_atom(context) or is_nil(context), do: true
   defp conn_arg?(_other), do: false
+
+  defp replace_first_arg_with_session_bootstrap([_first | rest]), do: [session_bootstrap_ast() | rest]
+  defp replace_first_arg_with_session_bootstrap(args), do: args
+
+  defp session_bootstrap_ast do
+    quote do
+      session(endpoint: @endpoint)
+    end
+  end
 
   defp mark_changed(%RewriteState{} = state), do: %{state | changed?: true}
 
