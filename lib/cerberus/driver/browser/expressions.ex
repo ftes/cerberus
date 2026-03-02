@@ -240,8 +240,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
         resolvedHref: element.href || ""
       }));
 
-      const buttons = queryWithinRoots("button")
-        .filter(selectorMatches)
+      const buttons = #{button_candidates_expression()}
         .map((element, index) => ({
         index,
         text: normalize(element.textContent),
@@ -468,17 +467,9 @@ defmodule Cerberus.Driver.Browser.Expressions do
       #{form_field_candidates_snippet()}
       #{indexed_lookup_snippet("fields", "field", index, "field_not_found")}
 
-      if ((field.tagName || "").toLowerCase() !== "select") {
-        #{error_reason_payload("field_not_select")}
-      }
-
-      if (field.disabled) {
-        #{error_reason_payload("field_disabled")}
-      }
-
-      if (!field.multiple && requestedOptions.length > 1) {
-        #{error_reason_payload("select_not_multiple")}
-      }
+      #{guard_condition_snippet(~s/(field.tagName || "").toLowerCase() !== "select"/, "field_not_select")}
+      #{guard_condition_snippet("field.disabled", "field_disabled")}
+      #{guard_condition_snippet("!field.multiple && requestedOptions.length > 1", "select_not_multiple")}
 
       const matchOption = (option, requested) => {
         const optionText = normalize(option.textContent);
@@ -503,10 +494,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
         const disabled = Array.from(field.options || []).find((option) => matchOption(option, requested) && option.disabled);
 
-        if (disabled) {
-          #{error_reason_payload("option_disabled", ["option: requested"])}
-        }
-
+        #{guard_condition_snippet("disabled", "option_disabled", ["option: requested"])}
         #{error_reason_payload("option_not_found", ["option: requested"])}
       }
 
@@ -556,14 +544,8 @@ defmodule Cerberus.Driver.Browser.Expressions do
       #{form_field_candidates_snippet()}
       #{indexed_lookup_snippet("fields", "field", index, "field_not_found")}
 
-      const type = (field.getAttribute("type") || "").toLowerCase();
-      if (type !== "checkbox") {
-        #{error_reason_payload("field_not_checkbox")}
-      }
-
-      if (field.disabled) {
-        #{error_reason_payload("field_disabled")}
-      }
+      #{guard_condition_snippet(~s/(field.getAttribute("type") || "").toLowerCase() !== "checkbox"/, "field_not_checkbox")}
+      #{guard_condition_snippet("field.disabled", "field_disabled")}
 
       field.checked = shouldCheck;
       #{dispatch_input_change_events("field")}
@@ -583,14 +565,8 @@ defmodule Cerberus.Driver.Browser.Expressions do
       #{form_field_candidates_snippet()}
       #{indexed_lookup_snippet("fields", "field", index, "field_not_found")}
 
-      const type = (field.getAttribute("type") || "").toLowerCase();
-      if (type !== "radio") {
-        #{error_reason_payload("field_not_radio")}
-      }
-
-      if (field.disabled) {
-        #{error_reason_payload("field_disabled")}
-      }
+      #{guard_condition_snippet(~s/(field.getAttribute("type") || "").toLowerCase() !== "radio"/, "field_not_radio")}
+      #{guard_condition_snippet("field.disabled", "field_disabled")}
 
       field.checked = true;
       #{dispatch_input_change_events("field")}
@@ -608,7 +584,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
     (() => {
       #{scoped_query_setup(encoded_scope, encoded_selector)}
 
-      const buttons = queryWithinRoots("button").filter(selectorMatches);
+      const buttons = #{button_candidates_expression()};
       #{indexed_lookup_snippet("buttons", "button", index, "button_not_found")}
 
       button.click();
@@ -687,6 +663,8 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
   end
 
+  defp button_candidates_expression, do: ~s/queryWithinRoots("button").filter(selectorMatches)/
+
   defp labels_by_for_snippet do
     """
     const labels = new Map();
@@ -748,6 +726,15 @@ defmodule Cerberus.Driver.Browser.Expressions do
     const #{variable_name} = #{collection_name}[#{index}];
     if (!#{variable_name}) {
       #{reason_payload}
+    }
+    """
+  end
+
+  defp guard_condition_snippet(condition, reason, extra_fields \\ [])
+       when is_binary(condition) and is_binary(reason) and is_list(extra_fields) do
+    """
+    if (#{condition}) {
+      #{error_reason_payload(reason, extra_fields)}
     }
     """
   end
