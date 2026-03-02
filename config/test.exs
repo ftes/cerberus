@@ -14,9 +14,12 @@ default_port =
       1_000
     )
 
+base_url_host = System.get_env("CERBERUS_BASE_URL_HOST", "localhost")
+
 config :cerberus, Endpoint,
   server: true,
   http: [port: "PORT" |> System.get_env(Integer.to_string(default_port)) |> String.to_integer()],
+  url: [host: base_url_host],
   secret_key_base: String.duplicate("cerberus-secret-key-base-", 5),
   live_view: [signing_salt: "cerberus-live-view-signing-salt"],
   pubsub_server: Cerberus.Fixtures.PubSub
