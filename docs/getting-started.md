@@ -17,6 +17,13 @@ session()
 > `session()` (or explicit `session(:phoenix)`) gives a PhoenixTest-style flow: static and live routes are handled automatically behind one API.
 > For browser mode, `session(:browser)` defaults to Chrome; use `session(:chrome)` or `session(:firefox)` for explicit targets. Chrome and Firefox are both first-class supported targets.
 
+Set the endpoint once globally (same style as PhoenixTest), then use plain `session()` in tests:
+
+```elixir
+# test/test_helper.exs
+Application.put_env(:cerberus, :endpoint, MyAppWeb.Endpoint)
+```
+
 ## Step 1: First Useful Flow
 
 ```elixir

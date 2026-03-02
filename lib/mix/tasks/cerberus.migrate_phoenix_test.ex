@@ -556,7 +556,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
 
   defp session_bootstrap_ast do
     quote do
-      session(endpoint: @endpoint)
+      session()
     end
   end
 

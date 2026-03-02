@@ -63,7 +63,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     rewritten = File.read!(file)
 
     assert rewritten =~ "import Cerberus"
-    assert rewritten =~ "Cerberus.visit(session(endpoint: @endpoint), \"/articles\")"
+    assert rewritten =~ "Cerberus.visit(session(), \"/articles\")"
     refute rewritten =~ "import PhoenixTest"
     assert output =~ "updated #{file}"
     assert output =~ "Mode: write"
@@ -97,7 +97,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
     rewritten = File.read!(file)
 
-    assert rewritten =~ "Cerberus.visit(session(endpoint: @endpoint), \"/articles\")"
+    assert rewritten =~ "Cerberus.visit(session(), \"/articles\")"
     assert rewritten =~ ~s{Cerberus.assert_has(session, "#main", "Articles")}
     assert rewritten =~ ~s{Cerberus.refute_has(session, "#missing", "Nope")}
     assert rewritten =~ ~s{Cerberus.fill_in(session, "Search term", "phoenix")}
