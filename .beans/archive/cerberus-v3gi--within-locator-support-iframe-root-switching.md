@@ -5,7 +5,7 @@ status: completed
 type: feature
 priority: normal
 created_at: 2026-03-02T10:47:54Z
-updated_at: 2026-03-02T11:02:30Z
+updated_at: 2026-03-02T11:20:13Z
 ---
 
 Implement locator-based within/3; static/live scope to located element; browser auto-switches root when located element is iframe (same-origin only).
@@ -24,3 +24,8 @@ Implement locator-based within/3; static/live scope to located element; browser 
 - Added frame-chain scope support in browser JS expressions and assertion helper root resolution so scoped actions/assertions work inside iframe documents.
 - Added same-origin iframe fixtures/routes and browser tests for successful iframe scoping and cross-origin rejection.
 - Added cross-driver `within(css(...))` behavior test and updated docs (`README.md`, `docs/cheatsheet.md`, `docs/getting-started.md`).
+
+## Notes (2026-03-02)
+- For wrapper scoping around a field label, descendant has matching is ambiguous when wrappers are nested.
+- Recommendation: keep has as descendant semantics and add explicit closest/ancestor relation support instead of implicit parent-of-label.
+- Proposed API direction: closest relation on a locator composition primitive, so users can scope to nearest wrapper for label/control before asserting related errors.
