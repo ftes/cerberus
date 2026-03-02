@@ -3,8 +3,6 @@ defmodule Cerberus.ExplicitBrowserTest do
 
   import Cerberus
 
-  @moduletag explicit_browser: true
-
   for driver <- [:chrome, :firefox] do
     test "explicit chrome/firefox drivers run as expected (#{driver})" do
       session =

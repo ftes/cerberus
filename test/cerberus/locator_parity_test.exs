@@ -8,8 +8,6 @@ defmodule Cerberus.LocatorParityTest do
   alias Cerberus.InvalidLocatorError
   alias ExUnit.AssertionError
 
-  @moduletag :browser
-
   @html_prefix """
   <!doctype html>
   <html>
