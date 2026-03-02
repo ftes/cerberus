@@ -19,9 +19,12 @@
 | --- | --- |
 | Visit page | `visit(session, "/articles")` |
 | Click link/button | `click(session, link("Counter"))` |
-| Fill input | `fill_in(session, label("Search term"), "Aragorn")` |
-| Select option | `select(session, label("Race"), option: "Elf")` |
-| Choose radio | `choose(session, label("Email Choice"))` |
+| Fill input | `fill_in(session, "Search term", "Aragorn")` |
+| Select option | `select(session, "Race", option: "Elf")` |
+| Choose radio | `choose(session, "Email Choice")` |
+| Check checkbox | `check(session, "Accept Terms")` |
+| Uncheck checkbox | `uncheck(session, "Receive updates")` |
+| Upload file | `upload(session, "Avatar", "/tmp/avatar.jpg")` |
 | Submit form | `submit(session, button("Run Search"))` |
 | Assert text present | `assert_has(session, text("Articles", exact: true))` |
 | Assert text absent | `refute_has(session, text("Error", exact: true))` |

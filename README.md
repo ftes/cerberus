@@ -63,7 +63,7 @@ session()
 ```elixir
 session()
 |> visit("/search")
-|> fill_in(label("Search term"), "Aragorn")
+|> fill_in("Search term", "Aragorn")
 |> submit(button("Run Search"))
 |> assert_path("/search/results", query: %{q: "Aragorn"})
 |> assert_has(text("Search query: Aragorn"))

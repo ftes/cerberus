@@ -40,7 +40,7 @@ session()
 ```elixir
 session()
 |> visit("/search")
-|> fill_in(label("Search term"), "Aragorn")
+|> fill_in("Search term", "Aragorn")
 |> submit(button("Run Search"))
 |> assert_path("/search/results", query: %{q: "Aragorn"})
 |> assert_has(text("Search query: Aragorn", exact: true))
@@ -82,8 +82,8 @@ Example:
 ```elixir
 session()
 |> visit("/live/selector-edge")
-|> fill_in(label("Name"), "primary", first: true, count: 2)
-|> fill_in(label("Name"), "secondary", last: true, count: 2)
+|> fill_in("Name", "primary", first: true, count: 2)
+|> fill_in("Name", "secondary", last: true, count: 2)
 ```
 
 ## Locator Composition With has

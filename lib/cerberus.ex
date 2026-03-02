@@ -425,11 +425,28 @@ defmodule Cerberus do
     click(session, locator, Keyword.put(opts, :kind, :button))
   end
 
+  @doc """
+  Fills a form field matched by `locator`.
+
+  Use plain string/regex label shorthand as the first option, for example:
+  `fill_in(session, "Search term", "Aragorn")`.
+
+  Helper locators like `label(...)`, `role(...)`, `placeholder(...)`, `title(...)`,
+  `testid(...)`, and `css(...)` are also supported.
+  """
   @spec fill_in(arg, term(), Options.fill_in_value(), Options.fill_in_opts()) :: arg when arg: var
   def fill_in(session, locator, value, opts \\ []) when is_list(opts) do
     Assertions.fill_in(session, locator, value, opts)
   end
 
+  @doc """
+  Uploads a file into a matched file input.
+
+  Use plain string/regex label shorthand as the first option, for example:
+  `upload(session, "Avatar", "/tmp/avatar.jpg")`.
+
+  Helper locators like `label(...)`, `testid(...)`, and `css(...)` are also supported.
+  """
   @spec upload(arg, term(), String.t(), Options.upload_opts()) :: arg when arg: var
   def upload(session, locator, path, opts \\ [])
 
@@ -449,6 +466,9 @@ defmodule Cerberus do
   @doc """
   Selects option text in a `<select>` field matched by `locator`.
 
+  Use plain string/regex label shorthand as the first option, for example:
+  `select(session, "Race", option: "Elf")`.
+
   For multi-select fields, pass the full desired selection on every call
   (`option: ["Elf", "Dwarf"]`). Each `select/3` call replaces the selection
   with the provided option value(s).
@@ -461,6 +481,14 @@ defmodule Cerberus do
     Assertions.select(session, locator, opts)
   end
 
+  @doc """
+  Chooses a radio input matched by `locator`.
+
+  Use plain string/regex label shorthand as the first option, for example:
+  `choose(session, "Email Choice")`.
+
+  Helper locators like `label(...)`, `testid(...)`, and `css(...)` are also supported.
+  """
   @spec choose(arg, term()) :: arg when arg: var
   def choose(session, locator), do: choose(session, locator, [])
 
@@ -469,6 +497,14 @@ defmodule Cerberus do
     Assertions.choose(session, locator, opts)
   end
 
+  @doc """
+  Checks a checkbox matched by `locator`.
+
+  Use plain string/regex label shorthand as the first option, for example:
+  `check(session, "Subscribe to newsletter")`.
+
+  Helper locators like `label(...)`, `testid(...)`, and `css(...)` are also supported.
+  """
   @spec check(arg, term()) :: arg when arg: var
   def check(session, locator), do: check(session, locator, [])
 
@@ -477,6 +513,14 @@ defmodule Cerberus do
     Assertions.check(session, locator, opts)
   end
 
+  @doc """
+  Unchecks a checkbox matched by `locator`.
+
+  Use plain string/regex label shorthand as the first option, for example:
+  `uncheck(session, "Subscribe to newsletter")`.
+
+  Helper locators like `label(...)`, `testid(...)`, and `css(...)` are also supported.
+  """
   @spec uncheck(arg, term()) :: arg when arg: var
   def uncheck(session, locator), do: uncheck(session, locator, [])
 
