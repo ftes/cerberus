@@ -780,7 +780,7 @@ defmodule Cerberus.Driver.Browser do
           readiness: readiness
         }
 
-        {:ok, update_last_result(session, :fill_in, observed), observed}
+        {:ok, session, observed}
 
       {:error, reason, readiness} ->
         observed = %{
@@ -812,7 +812,7 @@ defmodule Cerberus.Driver.Browser do
           readiness: readiness
         }
 
-        {:ok, update_last_result(session, op, observed), observed}
+        {:ok, session, observed}
 
       {:error, reason, readiness} ->
         observed = %{
@@ -845,7 +845,7 @@ defmodule Cerberus.Driver.Browser do
           readiness: readiness
         }
 
-        {:ok, update_last_result(session, :select, observed), observed}
+        {:ok, session, observed}
 
       {:error, reason, readiness} ->
         observed = %{
@@ -877,7 +877,7 @@ defmodule Cerberus.Driver.Browser do
           readiness: readiness
         }
 
-        {:ok, update_last_result(session, :choose, observed), observed}
+        {:ok, session, observed}
 
       {:error, reason, readiness} ->
         observed = %{
@@ -1528,8 +1528,6 @@ defmodule Cerberus.Driver.Browser do
         current_path: state.current_path
     }
   end
-
-  defp update_last_result(%__MODULE__{} = session, _op, _observed), do: session
 
   defp no_clickable_error(:link), do: "no link matched locator"
   defp no_clickable_error(:button), do: "no button matched locator"
