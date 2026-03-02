@@ -62,4 +62,31 @@ defmodule Cerberus.BrowserIframeLimitationsTest do
 
     assert error.message =~ "browser evaluate_js failed:"
   end
+
+  test "within locator scopes browser operations into same-origin iframe document" do
+    :browser
+    |> session()
+    |> visit("/browser/iframe/same-origin")
+    |> within(css("#same-origin-frame"), fn frame_scope ->
+      frame_scope
+      |> assert_has(text("Same-origin iframe body marker", exact: true))
+      |> click(button("Frame Increment", exact: true))
+      |> assert_has(text("Frame Count: 1", exact: true))
+    end)
+    |> assert_has(text("Outside iframe marker", exact: true))
+  end
+
+  test "within locator rejects cross-origin iframe root switching" do
+    error =
+      assert_raise ExUnit.AssertionError, fn ->
+        :browser
+        |> session()
+        |> visit("/browser/iframe/cross-origin")
+        |> within(css("#cross-origin-frame"), fn frame_scope ->
+          frame_scope
+        end)
+      end
+
+    assert error.message =~ "within/3 only supports same-origin iframes in browser mode"
+  end
 end

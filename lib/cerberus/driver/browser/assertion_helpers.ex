@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAssert && window.__cerberusAssert.__version === 4) return;
+    if (window.__cerberusAssert && window.__cerberusAssert.__version === 5) return;
 
     const helper = {};
-    helper.__version = 4;
+    helper.__version = 5;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -30,12 +30,83 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       }
     };
 
-    helper.resolveRoots = (scopeSelector) => {
-      const defaultRoot = document.body || document.documentElement;
-      if (!scopeSelector) return defaultRoot ? [defaultRoot] : [];
+    helper.normalizeScopeInput = (scopeInput) => {
+      if (typeof scopeInput === "string") {
+        const selector = scopeInput.trim();
+        return { frameChain: [], selector: selector === "" ? null : selector };
+      }
+
+      if (scopeInput && typeof scopeInput === "object") {
+        const frameChainSource = Array.isArray(scopeInput.frame_chain)
+          ? scopeInput.frame_chain
+          : (Array.isArray(scopeInput.frameChain) ? scopeInput.frameChain : []);
+
+        const frameChain = frameChainSource.filter((entry) => typeof entry === "string" && entry.trim() !== "");
+        const selector = typeof scopeInput.selector === "string" && scopeInput.selector.trim() !== ""
+          ? scopeInput.selector
+          : null;
+
+        return { frameChain, selector };
+      }
+
+      return { frameChain: [], selector: null };
+    };
+
+    helper.resolveScopeContext = (scopeInput) => {
+      const parsed = helper.normalizeScopeInput(scopeInput);
+      let scopeDocument = document;
+      let error = null;
+
+      for (const frameSelector of parsed.frameChain) {
+        let frame = null;
+
+        try {
+          frame = scopeDocument.querySelector(frameSelector);
+        } catch (_error) {
+          error = { reason: "invalid_frame_selector", selector: frameSelector };
+          break;
+        }
+
+        if (!frame || (frame.tagName || "").toLowerCase() !== "iframe") {
+          error = { reason: "frame_not_found", selector: frameSelector };
+          break;
+        }
+
+        let nextDocument = null;
+
+        try {
+          nextDocument = frame.contentDocument;
+        } catch (_error) {
+          error = { reason: "cross_origin_frame", selector: frameSelector };
+          break;
+        }
+
+        if (!nextDocument) {
+          error = { reason: "cross_origin_frame", selector: frameSelector };
+          break;
+        }
+
+        scopeDocument = nextDocument;
+      }
+
+      return {
+        document: scopeDocument,
+        frameChain: parsed.frameChain,
+        scopeSelector: parsed.selector,
+        error
+      };
+    };
+
+    helper.resolveRoots = (scopeInput) => {
+      const context = helper.resolveScopeContext(scopeInput);
+      if (context.error) return [];
+
+      const scopeDocument = context.document;
+      const defaultRoot = scopeDocument.body || scopeDocument.documentElement;
+      if (!context.scopeSelector) return defaultRoot ? [defaultRoot] : [];
 
       try {
-        return Array.from(document.querySelectorAll(scopeSelector));
+        return Array.from(scopeDocument.querySelectorAll(context.scopeSelector));
       } catch (_error) {
         return [];
       }
@@ -114,9 +185,10 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           if (!visit(root)) return false;
         }
 
-        if (typeof document.createTreeWalker !== "function") continue;
+        const rootDocument = root.ownerDocument || document;
+        if (!rootDocument || typeof rootDocument.createTreeWalker !== "function") continue;
 
-        const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+        const walker = rootDocument.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
         let node = walker.nextNode();
 
         while (node) {
@@ -135,7 +207,8 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
       while (current) {
         if (current.hasAttribute("hidden")) return true;
-        const style = window.getComputedStyle(current);
+        const view = (current.ownerDocument && current.ownerDocument.defaultView) || window;
+        const style = view.getComputedStyle(current);
         if (style.display === "none" || style.visibility === "hidden") return true;
         current = current.parentElement;
       }

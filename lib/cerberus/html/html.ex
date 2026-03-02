@@ -177,6 +177,18 @@ defmodule Cerberus.Html do
     end
   end
 
+  @spec find_scope_target(String.t(), Locator.t(), String.t() | nil) ::
+          {:ok, %{selector: String.t(), tag: String.t(), iframe?: boolean()}} | {:error, String.t()}
+  def find_scope_target(html, %Locator{} = locator, scope \\ nil) when is_binary(html) do
+    case parse_document(html) do
+      {:ok, lazy_html} ->
+        find_scope_target_in_doc(lazy_html, locator, scope)
+
+      _ ->
+        {:error, "failed to parse html while resolving within locator"}
+    end
+  end
+
   defp find_link_in_doc(lazy_html, expected, opts, scope) do
     query_selector = selector_opt(opts) || "a[href]"
     match_by = match_by_opt(opts)
@@ -288,6 +300,104 @@ defmodule Cerberus.Html do
       end
     end
   end
+
+  defp find_scope_target_in_doc(lazy_html, %Locator{} = locator, scope) do
+    opts = locator.opts
+    selector = selector_opt(opts)
+    query_selector = within_query_selector(locator)
+
+    matches =
+      lazy_html
+      |> scoped_nodes(scope)
+      |> Enum.flat_map(fn root_node ->
+        root_node
+        |> safe_query(query_selector)
+        |> Enum.flat_map(&maybe_scope_target_match_list(root_node, &1, lazy_html, locator, selector))
+      end)
+
+    case Query.pick_match(matches, opts) do
+      {:ok, %{selector: selector, tag: tag, iframe?: iframe?}}
+      when is_binary(selector) and selector != "" and is_binary(tag) ->
+        {:ok, %{selector: selector, tag: tag, iframe?: iframe?}}
+
+      {:ok, _match} ->
+        {:error, "within locator matched element but a unique selector could not be derived"}
+
+      {:error, _reason} ->
+        {:error, "no elements matched within locator"}
+    end
+  end
+
+  defp maybe_scope_target_match_list(root_node, node, lazy_html, locator, selector) do
+    case maybe_scope_target_match(root_node, node, lazy_html, locator, selector) do
+      nil -> []
+      match -> [match]
+    end
+  end
+
+  defp maybe_scope_target_match(root_node, node, lazy_html, %Locator{} = locator, selector) do
+    opts = locator.opts
+
+    if node_matches_within_locator?(root_node, node, locator) and node_matches_selector?(root_node, node, selector) and
+         node_matches_locator_filters?(node, opts) do
+      mapped =
+        maybe_put_unique_selector(
+          %{
+            tag: node_tag(node),
+            iframe?: node_tag(node) == "iframe",
+            checked: checked?(node),
+            disabled: disabled?(node),
+            readonly: readonly?(node),
+            selected: selected?(node, input_type(node))
+          },
+          lazy_html,
+          node
+        )
+
+      if Query.matches_state_filters?(mapped, opts), do: mapped
+    end
+  end
+
+  defp node_matches_within_locator?(root_node, node, %Locator{kind: :css, value: value}) do
+    root_node
+    |> safe_query(value)
+    |> Enum.any?(&same_node?(&1, node))
+  end
+
+  defp node_matches_within_locator?(root_node, node, %Locator{} = locator) do
+    value = within_locator_match_value(root_node, node, locator)
+
+    is_binary(value) and Query.match_text?(value, locator.value, locator.opts)
+  end
+
+  defp within_locator_match_value(_root_node, node, %Locator{kind: :text}), do: node_text(node)
+  defp within_locator_match_value(root_node, node, %Locator{kind: :link}), do: link_match_value(root_node, node, :link)
+
+  defp within_locator_match_value(root_node, node, %Locator{kind: :button}),
+    do: button_match_value(root_node, node, :button)
+
+  defp within_locator_match_value(_root_node, node, %Locator{kind: :label}), do: node_text(node)
+  defp within_locator_match_value(_root_node, node, %Locator{kind: :placeholder}), do: attr(node, "placeholder") || ""
+  defp within_locator_match_value(_root_node, node, %Locator{kind: :title}), do: attr(node, "title") || ""
+  defp within_locator_match_value(root_node, node, %Locator{kind: :alt}), do: node_alt_text(root_node, node)
+  defp within_locator_match_value(_root_node, node, %Locator{kind: :testid}), do: attr(node, "data-testid") || ""
+  defp within_locator_match_value(_root_node, _node, _locator), do: nil
+
+  defp within_query_selector(%Locator{kind: :css, value: value}), do: value
+  defp within_query_selector(%Locator{kind: :text}), do: "*"
+  defp within_query_selector(%Locator{kind: :link}), do: "a[href]"
+  defp within_query_selector(%Locator{kind: :button}), do: "button"
+  defp within_query_selector(%Locator{kind: :label}), do: "label"
+
+  defp within_query_selector(%Locator{kind: :placeholder}),
+    do: "input[placeholder],textarea[placeholder],select[placeholder]"
+
+  defp within_query_selector(%Locator{kind: :title}), do: "[title]"
+
+  defp within_query_selector(%Locator{kind: :alt}),
+    do: "[alt],img[alt],input[type='image'][alt],[role='img'][alt],button,a[href]"
+
+  defp within_query_selector(%Locator{kind: :testid}), do: "[data-testid]"
 
   defp match_select_values(select_node, requested, option_opts, multiple?) do
     options = safe_query(select_node, "option")

@@ -52,5 +52,18 @@ defmodule Cerberus.PathScopeBehaviorTest do
       |> assert_path("/live/redirects?details=true&foo=bar")
       |> refute_path("/live/counter")
     end
+
+    test "within accepts locator inputs across static and browser (#{driver})" do
+      unquote(driver)
+      |> session()
+      |> visit("/scoped")
+      |> within(css("#secondary-panel"), fn scoped ->
+        scoped
+        |> assert_has(text("Secondary Panel", exact: true))
+        |> click(link("Open"))
+      end)
+      |> assert_path("/search")
+      |> assert_has(text("Search", exact: true))
+    end
   end
 end

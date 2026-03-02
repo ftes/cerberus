@@ -17,6 +17,7 @@ defmodule Cerberus do
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.Static, as: StaticSession
+  alias Cerberus.Html
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
   alias Cerberus.Options
@@ -262,7 +263,15 @@ defmodule Cerberus do
     |> Path.normalize()
   end
 
-  @spec within(arg, String.t(), (arg -> arg)) :: arg when arg: var
+  @doc """
+  Executes `callback` within a narrowed scope.
+
+  `scope` may be a CSS selector string (existing behavior) or a full locator input.
+
+  Browser note: when locator-based `within/3` matches an `<iframe>`, Cerberus switches
+  the query root to that iframe document. Only same-origin iframes are supported.
+  """
+  @spec within(arg, term(), (arg -> arg)) :: arg when arg: var
   def within(%LiveSession{} = session, scope, callback) when is_binary(scope) and is_function(callback, 1) do
     if String.trim(scope) == "" do
       raise ArgumentError, "within/3 expects a non-empty CSS selector"
@@ -295,6 +304,46 @@ defmodule Cerberus do
 
     previous_scope = Session.scope(session)
     scoped_session = Session.with_scope(session, compose_scope(previous_scope, scope))
+    callback_result = callback.(scoped_session)
+
+    restore_scope(callback_result, previous_scope)
+  end
+
+  def within(%LiveSession{} = session, locator, callback) when not is_binary(locator) and is_function(callback, 1) do
+    previous_scope = Session.scope(session)
+    resolved_scope = resolve_within_scope!(session, locator, previous_scope)
+
+    case live_child_view_for_scope(session, resolved_scope) do
+      {:ok, child_view} ->
+        child_session =
+          session
+          |> Map.put(:view, child_view)
+          |> Map.put(:html, Phoenix.LiveViewTest.render(child_view))
+          |> Session.with_scope(nil)
+
+        callback_result = callback.(child_session)
+        restore_live_child_scope(callback_result, session, previous_scope)
+
+      :error ->
+        scoped_session = Session.with_scope(session, resolved_scope)
+        callback_result = callback.(scoped_session)
+        restore_scope(callback_result, previous_scope)
+    end
+  end
+
+  def within(%BrowserSession{} = session, locator, callback) when not is_binary(locator) and is_function(callback, 1) do
+    previous_scope = Session.scope(session)
+    resolved_scope = resolve_within_scope!(session, locator, previous_scope)
+    scoped_session = Session.with_scope(session, resolved_scope)
+    callback_result = callback.(scoped_session)
+
+    restore_scope(callback_result, previous_scope)
+  end
+
+  def within(session, locator, callback) when not is_binary(locator) and is_function(callback, 1) do
+    previous_scope = Session.scope(session)
+    resolved_scope = resolve_within_scope!(session, locator, previous_scope)
+    scoped_session = Session.with_scope(session, resolved_scope)
     callback_result = callback.(scoped_session)
 
     restore_scope(callback_result, previous_scope)
@@ -437,6 +486,34 @@ defmodule Cerberus do
   defp compose_scope(nil, scope), do: scope
   defp compose_scope("", scope), do: scope
   defp compose_scope(previous_scope, scope), do: previous_scope <> " " <> scope
+
+  defp resolve_within_scope!(%BrowserSession{} = session, locator, previous_scope) do
+    normalized_locator = Locator.normalize(locator)
+
+    case BrowserSession.resolve_within_scope(session, normalized_locator, previous_scope) do
+      {:ok, resolved_scope} ->
+        resolved_scope
+
+      {:error, reason} ->
+        raise AssertionError, message: "within/3 failed: #{reason}"
+    end
+  end
+
+  defp resolve_within_scope!(session, locator, previous_scope) do
+    normalized_locator = Locator.normalize(locator)
+    html = session_html!(session)
+
+    case Html.find_scope_target(html, normalized_locator, previous_scope) do
+      {:ok, %{selector: selector}} when is_binary(selector) and selector != "" ->
+        selector
+
+      {:error, reason} ->
+        raise AssertionError, message: "within/3 failed: #{reason}"
+    end
+  end
+
+  defp session_html!(%{html: html}) when is_binary(html), do: html
+  defp session_html!(_session), do: raise(ArgumentError, "within/3 requires a session with rendered html")
 
   defp restore_live_child_scope(%{__struct__: _} = callback_result, parent_session, previous_scope) do
     case callback_result do

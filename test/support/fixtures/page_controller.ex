@@ -588,6 +588,31 @@ defmodule Cerberus.Fixtures.PageController do
     """)
   end
 
+  def iframe_same_origin(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Same-Origin Iframe Source</title>
+      </head>
+      <body>
+        <main>
+          <h1>Same-Origin Iframe Source</h1>
+          <p id="iframe-source-marker">Outside iframe marker</p>
+          <iframe
+            id="same-origin-frame"
+            src="/browser/iframe/same-origin-target"
+            title="Same Origin Fixture Frame"
+            width="640"
+            height="240"
+          ></iframe>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
   def iframe_target(conn, _params) do
     html(conn, """
     <!doctype html>
@@ -600,6 +625,38 @@ defmodule Cerberus.Fixtures.PageController do
         <main>
           <p id="iframe-target-marker">Cross-origin iframe body marker</p>
         </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def iframe_same_origin_target(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Same-Origin Iframe Target</title>
+      </head>
+      <body>
+        <main>
+          <p id="iframe-same-origin-marker">Same-origin iframe body marker</p>
+          <button id="iframe-increment" type="button">Frame Increment</button>
+          <p id="iframe-count">Frame Count: 0</p>
+        </main>
+
+        <script>
+          (() => {
+            const button = document.getElementById("iframe-increment");
+            const count = document.getElementById("iframe-count");
+            let value = 0;
+
+            button.addEventListener("click", () => {
+              value += 1;
+              count.textContent = `Frame Count: ${value}`;
+            });
+          })();
+        </script>
       </body>
     </html>
     """)

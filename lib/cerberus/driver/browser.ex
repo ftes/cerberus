@@ -41,7 +41,7 @@ defmodule Cerberus.Driver.Browser do
           ready_quiet_ms: pos_integer(),
           browser_context_defaults: browser_context_defaults(),
           sandbox_metadata: String.t() | nil,
-          scope: String.t() | nil,
+          scope: String.t() | map() | nil,
           current_path: String.t() | nil
         }
 
@@ -201,6 +201,30 @@ defmodule Cerberus.Driver.Browser do
 
       _ ->
         session
+    end
+  end
+
+  @doc false
+  @spec resolve_within_scope(t(), Locator.t(), String.t() | map() | nil) ::
+          {:ok, String.t() | map()} | {:error, String.t()}
+  def resolve_within_scope(%__MODULE__{} = session, %Locator{} = locator, scope \\ nil) do
+    state = state!(session)
+
+    with {:ok, snapshot} <- eval_json(state, Expressions.within_scope_snapshot(scope)),
+         :ok <- validate_within_scope_snapshot(snapshot),
+         html when is_binary(html) <- Map.get(snapshot, "html"),
+         {:ok, target} <- Html.find_scope_target(html, locator, Map.get(snapshot, "scopeSelector")),
+         {:ok, resolved_scope} <- build_within_scope_from_target(state, scope, snapshot, target) do
+      {:ok, resolved_scope}
+    else
+      {:error, reason, _details} ->
+        {:error, "failed to inspect browser scope for within/3: #{reason}"}
+
+      {:error, reason} when is_binary(reason) ->
+        {:error, reason}
+
+      _other ->
+        {:error, "failed to inspect browser scope for within/3"}
     end
   end
 
@@ -1511,6 +1535,69 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp state!(_), do: raise(ArgumentError, "browser driver state is not initialized")
+
+  defp validate_within_scope_snapshot(%{"ok" => true, "html" => html}) when is_binary(html), do: :ok
+
+  defp validate_within_scope_snapshot(%{"ok" => false, "reason" => "cross_origin_frame"}) do
+    {:error, "within/3 only supports same-origin iframes in browser mode"}
+  end
+
+  defp validate_within_scope_snapshot(%{"ok" => false, "reason" => reason}) when is_binary(reason) do
+    {:error, "failed to resolve scoped roots: #{reason}"}
+  end
+
+  defp validate_within_scope_snapshot(_snapshot) do
+    {:error, "browser scope snapshot returned an unexpected payload"}
+  end
+
+  defp build_within_scope_from_target(state, scope, snapshot, %{selector: selector, iframe?: true})
+       when is_binary(selector) and selector != "" do
+    with {:ok, iframe_result} <- eval_json(state, Expressions.within_iframe_access(scope, selector)),
+         :ok <- validate_within_iframe_access(iframe_result) do
+      frame_chain = normalize_scope_frame_chain(snapshot)
+      {:ok, %{frame_chain: frame_chain ++ [selector], selector: nil}}
+    else
+      {:error, reason, _details} ->
+        {:error, "failed to inspect iframe access for within/3: #{reason}"}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp build_within_scope_from_target(_state, _scope, snapshot, %{selector: selector})
+       when is_binary(selector) and selector != "" do
+    frame_chain = normalize_scope_frame_chain(snapshot)
+    {:ok, scope_from_parts(frame_chain, selector)}
+  end
+
+  defp build_within_scope_from_target(_state, _scope, _snapshot, _target) do
+    {:error, "within locator matched element but a unique selector could not be derived"}
+  end
+
+  defp validate_within_iframe_access(%{"ok" => true, "sameOrigin" => true}), do: :ok
+
+  defp validate_within_iframe_access(%{"ok" => true, "sameOrigin" => false}) do
+    {:error, "within/3 only supports same-origin iframes in browser mode"}
+  end
+
+  defp validate_within_iframe_access(%{"ok" => false, "reason" => reason}) when is_binary(reason) do
+    {:error, "failed to resolve iframe scope: #{reason}"}
+  end
+
+  defp validate_within_iframe_access(_result) do
+    {:error, "iframe access check returned an unexpected payload"}
+  end
+
+  defp normalize_scope_frame_chain(snapshot) when is_map(snapshot) do
+    snapshot
+    |> Map.get("frameChain", [])
+    |> List.wrap()
+    |> Enum.filter(&(is_binary(&1) and String.trim(&1) != ""))
+  end
+
+  defp scope_from_parts([], selector), do: selector
+  defp scope_from_parts(frame_chain, selector), do: %{frame_chain: frame_chain, selector: selector}
 
   defp update_session(%__MODULE__{} = session, %{} = state, _op, _observed) do
     %{

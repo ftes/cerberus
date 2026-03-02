@@ -82,6 +82,9 @@ end)
 |> assert_path("/search")
 ```
 
+`within/3` also accepts full locators (for example, `within(css("#secondary-panel"), fn s -> ... end)`).
+In browser sessions, locator-based `within/3` can switch root into same-origin iframes.
+
 ### 5. Multi-User + Multi-Tab
 
 ```elixir

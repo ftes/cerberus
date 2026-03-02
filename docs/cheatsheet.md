@@ -26,7 +26,7 @@
 | Assert text present | `assert_has(session, text("Articles", exact: true))` |
 | Assert text absent | `refute_has(session, text("Error", exact: true))` |
 | Assert path/query | `assert_path(session, "/search/results", query: %{q: "Aragorn"}, timeout: 500)` |
-| Scope to subtree | `within(session, "#secondary-panel", fn s -> ... end)` |
+| Scope to subtree | `within(session, css("#secondary-panel"), fn s -> ... end)` |
 
 ## Multi-Session Operations
 

@@ -51,13 +51,15 @@ session()
 ```elixir
 session()
 |> visit("/scoped")
-|> within("#secondary-panel", fn scoped ->
+|> within(css("#secondary-panel"), fn scoped ->
   scoped
   |> assert_has(text("Status: secondary", exact: true))
   |> click(link("Open"))
 end)
 |> assert_path("/search")
 ```
+
+`within/3` supports CSS selectors and full locators. Browser locator scopes can switch into same-origin iframes.
 
 ## Match Count And Position Filters
 

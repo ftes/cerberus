@@ -149,7 +149,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
   end
 
-  @spec snapshot(String.t() | nil) :: String.t()
+  @spec snapshot(String.t() | map() | nil) :: String.t()
   def snapshot(scope) do
     encoded_scope = JSON.encode!(scope)
 
@@ -208,7 +208,79 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
   end
 
-  @spec clickables(String.t() | nil, String.t() | nil) :: String.t()
+  @spec within_scope_snapshot(String.t() | map() | nil) :: String.t()
+  def within_scope_snapshot(scope) do
+    encoded_scope = JSON.encode!(scope)
+
+    """
+    (() => {
+      #{scope_resolution_setup(encoded_scope)}
+
+      if (scopeContext.error) {
+        return JSON.stringify({
+          ok: false,
+          reason: scopeContext.error.reason,
+          selector: scopeContext.error.selector,
+          frameChain: scopeContext.frameChain
+        });
+      }
+
+      const doc = scopeContext.document;
+      const root = doc ? doc.documentElement : null;
+      const html = root ? root.outerHTML : "";
+      const doctype = doc && doc.doctype ? `<!DOCTYPE ${doc.doctype.name}>` : "<!DOCTYPE html>";
+
+      return JSON.stringify({
+        ok: true,
+        html: doctype + html,
+        scopeSelector: scopeContext.scopeSelector,
+        frameChain: scopeContext.frameChain
+      });
+    })()
+    """
+  end
+
+  @spec within_iframe_access(String.t() | map() | nil, String.t()) :: String.t()
+  def within_iframe_access(scope, selector) when is_binary(selector) and selector != "" do
+    encoded_scope = JSON.encode!(scope)
+    encoded_selector = JSON.encode!(selector)
+
+    """
+    (() => {
+      #{scope_resolution_setup(encoded_scope)}
+      const iframeSelector = #{encoded_selector};
+
+      if (scopeContext.error) {
+        return JSON.stringify({
+          ok: false,
+          reason: scopeContext.error.reason,
+          selector: scopeContext.error.selector
+        });
+      }
+
+      let iframe = null;
+
+      try {
+        iframe = scopeContext.document.querySelector(iframeSelector);
+      } catch (_error) {
+        return JSON.stringify({ ok: false, reason: "invalid_iframe_selector" });
+      }
+
+      if (!iframe || (iframe.tagName || "").toLowerCase() !== "iframe") {
+        return JSON.stringify({ ok: false, reason: "iframe_not_found" });
+      }
+
+      try {
+        const childDocument = iframe.contentDocument;
+        return JSON.stringify({ ok: true, sameOrigin: !!childDocument });
+      } catch (_error) {
+        return JSON.stringify({ ok: true, sameOrigin: false });
+      }
+    })()
+    """
+  end
+
+  @spec clickables(String.t() | map() | nil, String.t() | nil) :: String.t()
   def clickables(scope, selector) do
     encoded_scope = JSON.encode!(scope)
     encoded_selector = JSON.encode!(selector)
@@ -271,7 +343,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
   end
 
-  @spec form_fields(String.t() | nil, String.t() | nil) :: String.t()
+  @spec form_fields(String.t() | map() | nil, String.t() | nil) :: String.t()
   def form_fields(scope, selector) do
     encoded_scope = JSON.encode!(scope)
     encoded_selector = JSON.encode!(selector)
@@ -334,7 +406,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
   end
 
-  @spec file_fields(String.t() | nil, String.t() | nil) :: String.t()
+  @spec file_fields(String.t() | map() | nil, String.t() | nil) :: String.t()
   def file_fields(scope, selector) do
     encoded_scope = JSON.encode!(scope)
     encoded_selector = JSON.encode!(selector)
@@ -375,7 +447,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
           String.t(),
           integer(),
           binary(),
-          String.t() | nil,
+          String.t() | map() | nil,
           String.t() | nil
         ) ::
           String.t()
@@ -421,7 +493,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
   end
 
-  @spec field_set(non_neg_integer(), term(), String.t() | nil, String.t() | nil) :: String.t()
+  @spec field_set(non_neg_integer(), term(), String.t() | map() | nil, String.t() | nil) :: String.t()
   def field_set(index, value, scope, selector) do
     encoded_value = JSON.encode!(to_string(value))
     encoded_scope = JSON.encode!(scope)
@@ -442,7 +514,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
           non_neg_integer(),
           [String.t()],
           boolean(),
-          String.t() | nil,
+          String.t() | map() | nil,
           String.t() | nil
         ) ::
           String.t()
@@ -524,7 +596,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
   end
 
-  @spec checkbox_set(non_neg_integer(), boolean(), String.t() | nil, String.t() | nil) :: String.t()
+  @spec checkbox_set(non_neg_integer(), boolean(), String.t() | map() | nil, String.t() | nil) :: String.t()
   def checkbox_set(index, checked, scope, selector) do
     encoded_checked = JSON.encode!(checked)
     encoded_scope = JSON.encode!(scope)
@@ -543,7 +615,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
   end
 
-  @spec radio_set(non_neg_integer(), String.t() | nil, String.t() | nil) :: String.t()
+  @spec radio_set(non_neg_integer(), String.t() | map() | nil, String.t() | nil) :: String.t()
   def radio_set(index, scope, selector) do
     encoded_scope = JSON.encode!(scope)
     encoded_selector = JSON.encode!(selector)
@@ -560,7 +632,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
   end
 
-  @spec button_click(non_neg_integer(), String.t() | nil, String.t() | nil) :: String.t()
+  @spec button_click(non_neg_integer(), String.t() | map() | nil, String.t() | nil) :: String.t()
   def button_click(index, scope, selector) do
     encoded_scope = JSON.encode!(scope)
     encoded_selector = JSON.encode!(selector)
@@ -581,13 +653,15 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
   defp scoped_roots_setup(encoded_scope) do
     """
-    const scopeSelector = #{encoded_scope};
-    const defaultRoot = document.body || document.documentElement;
+    #{scope_resolution_setup(encoded_scope)}
+    const defaultRoot = scopeContext.document.body || scopeContext.document.documentElement;
     let roots = defaultRoot ? [defaultRoot] : [];
 
-    if (scopeSelector) {
+    if (scopeContext.error) {
+      roots = [];
+    } else if (scopeContext.scopeSelector) {
       try {
-        roots = Array.from(document.querySelectorAll(scopeSelector));
+        roots = Array.from(scopeContext.document.querySelectorAll(scopeContext.scopeSelector));
       } catch (_error) {
         roots = [];
       }
@@ -605,6 +679,8 @@ defmodule Cerberus.Driver.Browser.Expressions do
       const matches = [];
 
       for (const root of roots) {
+        if (!root || typeof root.querySelectorAll !== "function") continue;
+
         if (root.matches && root.matches(selector) && !seen.has(root)) {
           seen.add(root);
           matches.push(root);
@@ -703,6 +779,79 @@ defmodule Cerberus.Driver.Browser.Expressions do
   end
 
   defp current_path_expression, do: "window.location.pathname + window.location.search"
+
+  defp scope_resolution_setup(encoded_scope) do
+    """
+    const scopeInput = #{encoded_scope};
+
+    const normalizeScopeInput = (value) => {
+      if (typeof value === "string") {
+        const selector = value.trim();
+        return { frameChain: [], selector: selector === "" ? null : selector };
+      }
+
+      if (value && typeof value === "object") {
+        const frameChainSource = Array.isArray(value.frame_chain)
+          ? value.frame_chain
+          : (Array.isArray(value.frameChain) ? value.frameChain : []);
+
+        const frameChain = frameChainSource.filter((entry) => typeof entry === "string" && entry.trim() !== "");
+        const selector = typeof value.selector === "string" && value.selector.trim() !== "" ? value.selector : null;
+
+        return { frameChain, selector };
+      }
+
+      return { frameChain: [], selector: null };
+    };
+
+    const resolveScopeContext = (rawScope) => {
+      const parsed = normalizeScopeInput(rawScope);
+      let scopeDocument = document;
+      let error = null;
+
+      for (const frameSelector of parsed.frameChain) {
+        let frame = null;
+
+        try {
+          frame = scopeDocument.querySelector(frameSelector);
+        } catch (_error) {
+          error = { reason: "invalid_frame_selector", selector: frameSelector };
+          break;
+        }
+
+        if (!frame || (frame.tagName || "").toLowerCase() !== "iframe") {
+          error = { reason: "frame_not_found", selector: frameSelector };
+          break;
+        }
+
+        let nextDocument = null;
+
+        try {
+          nextDocument = frame.contentDocument;
+        } catch (_error) {
+          error = { reason: "cross_origin_frame", selector: frameSelector };
+          break;
+        }
+
+        if (!nextDocument) {
+          error = { reason: "cross_origin_frame", selector: frameSelector };
+          break;
+        }
+
+        scopeDocument = nextDocument;
+      }
+
+      return {
+        frameChain: parsed.frameChain,
+        scopeSelector: parsed.selector,
+        document: scopeDocument,
+        error
+      };
+    };
+
+    const scopeContext = resolveScopeContext(scopeInput);
+    """
+  end
 
   defp assert_helper_binding_snippet do
     """
