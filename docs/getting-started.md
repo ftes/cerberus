@@ -15,6 +15,7 @@ session()
 > #### Info
 >
 > `session()` (or explicit `session(:phoenix)`) gives a PhoenixTest-style flow: static and live routes are handled automatically behind one API.
+> `session(conn)` reuses an existing `Plug.Conn` (including carried session/cookie state) instead of starting from a fresh conn.
 > For browser mode, `session(:browser)` defaults to Chrome; use `session(:chrome)` or `session(:firefox)` for explicit targets. Chrome and Firefox are both first-class supported targets.
 
 Set the endpoint once globally (same style as PhoenixTest), then use plain `session()` in tests:
@@ -111,7 +112,7 @@ Element-targeting actions also support position filters:
 Example:
 
 ```elixir
-session()
+session() # or session(conn)
 |> visit("/live/selector-edge")
 |> fill_in("Name", "primary", first: true, count: 2)
 |> fill_in("Name", "secondary", last: true, count: 2)

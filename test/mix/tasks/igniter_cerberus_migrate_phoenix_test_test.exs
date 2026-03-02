@@ -63,10 +63,48 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     rewritten = File.read!(file)
 
     assert rewritten =~ "import Cerberus"
-    assert rewritten =~ "Cerberus.visit(session(), \"/articles\")"
+    assert rewritten =~ "Cerberus.visit(session(conn), \"/articles\")"
     refute rewritten =~ "import PhoenixTest"
     assert output =~ "updated #{file}"
     assert output =~ "Mode: write"
+  end
+
+  test "write mode preserves comments in rewritten files", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_comments_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleCommentsTest do
+        # import comment
+        import PhoenixTest
+
+        test "example", %{conn: conn} do
+          # pipeline comment
+          conn
+          # visit comment
+          |> visit("/articles")
+          |> assert_has("#main", text: "Articles") # trailing comment
+        end
+      end
+      """
+    )
+
+    _output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ "# import comment"
+    assert rewritten =~ "# pipeline comment"
+    assert rewritten =~ "# visit comment"
+    assert rewritten =~ "# trailing comment"
+    assert rewritten =~ "import Cerberus"
+    assert rewritten =~ ~r/session\(conn\)|\|> session\(\)/
+    refute rewritten =~ "import PhoenixTest"
   end
 
   test "write mode rewrites safe direct PhoenixTest calls", %{tmp_dir: tmp_dir} do
@@ -97,7 +135,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
     rewritten = File.read!(file)
 
-    assert rewritten =~ "Cerberus.visit(session(), \"/articles\")"
+    assert rewritten =~ "Cerberus.visit(session(conn), \"/articles\")"
     assert rewritten =~ ~s{Cerberus.assert_has(session, "#main", "Articles")}
     assert rewritten =~ ~s{Cerberus.refute_has(session, "#missing", "Nope")}
     assert rewritten =~ ~s{Cerberus.fill_in(session, "Search term", "phoenix")}
@@ -135,6 +173,37 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     refute rewritten =~ "PhoenixTest.visit(session, \"/articles\")"
     refute output =~ "visit(conn, ...)"
     refute output =~ "Direct PhoenixTest.<function> call detected"
+  end
+
+  test "write mode inserts import Cerberus when local rewritten calls remain", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_local_calls_no_import_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleLocalCallsNoImportTest do
+        use MyCase
+
+        test "example", %{conn: conn} do
+          conn
+          |> visit("/articles")
+          |> assert_has("#main", text: "Articles")
+        end
+      end
+      """
+    )
+
+    _output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ "import Cerberus"
+    assert rewritten =~ "|> session()"
+    refute rewritten =~ "import PhoenixTest"
   end
 
   test "write mode rewrites import PhoenixTest.Assertions", %{tmp_dir: tmp_dir} do
@@ -373,24 +442,33 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
   test "can run against committed nested Phoenix fixture project tests", %{tmp_dir: tmp_dir} do
     fixture_dir = "fixtures/migration_project"
     project_copy = Path.join(tmp_dir, "migration_project")
+    test_root = Path.join(project_copy, "test")
     test_dir = Path.join(project_copy, "test/features")
     static_copy = Path.join(test_dir, "phoenix_test_baseline_test.exs")
+    feature_case_copy = Path.join(test_dir, "pt_feature_case_import_test.exs")
     form_fill_copy = Path.join(test_dir, "pt_form_fill_test.exs")
+    support_feature_case_copy = Path.join(project_copy, "test/support/feature_case.ex")
 
     File.cp_r!(fixture_dir, project_copy)
 
     _output =
       capture_io(fn ->
         Mix.Task.reenable(@task)
-        Mix.Task.run(@task, ["--write", test_dir])
+        Mix.Task.run(@task, ["--write", test_root])
       end)
 
     rewritten_static = File.read!(static_copy)
+    rewritten_feature_case = File.read!(feature_case_copy)
     rewritten_form_fill = File.read!(form_fill_copy)
+    rewritten_support_feature_case = File.read!(support_feature_case_copy)
 
     assert rewritten_static =~ "import Cerberus"
+    assert rewritten_feature_case =~ "|> session()"
+    assert rewritten_feature_case =~ "|> assert_has(\"h1\", expected)"
     assert rewritten_form_fill =~ ~s{Cerberus.fill_in(session, "Search term", value)}
     assert rewritten_form_fill =~ ~s{Cerberus.assert_has(session, "body", expected)}
+    assert rewritten_support_feature_case =~ "import Cerberus"
+    refute rewritten_support_feature_case =~ "import PhoenixTest"
   end
 
   @tag timeout: 180_000

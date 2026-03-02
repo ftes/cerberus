@@ -16,6 +16,16 @@ defmodule CerberusTest do
     assert %StaticSession{} = session(:phoenix)
   end
 
+  test "session(conn) reuses existing conn state" do
+    %StaticSession{conn: seeded_conn} = visit(session(), "/session/user/alice")
+
+    assert %StaticSession{} =
+             seeded_conn
+             |> session()
+             |> visit("/session/user")
+             |> assert_has(text("Session user: alice", exact: true))
+  end
+
   test "session constructor rejects explicit auto/static/live driver selection" do
     assert_raise ArgumentError, ~r/unsupported public driver :auto/, fn ->
       session(:auto)

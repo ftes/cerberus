@@ -53,6 +53,9 @@ defmodule Cerberus do
     |> StaticSession.new_session()
   end
 
+  @spec session(Plug.Conn.t()) :: Session.t()
+  def session(%Plug.Conn{} = conn), do: session(conn: conn)
+
   @spec session(:phoenix) :: Session.t()
   def session(:phoenix), do: session([])
 

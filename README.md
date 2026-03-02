@@ -36,6 +36,7 @@ session()
 > #### Tip
 >
 > Start with `session()` for most scenarios. Move to `session(:browser)` when validating real browser behavior, keyboard/mouse APIs, or browser-only assertions.
+> Use `session(conn)` when you need to continue from an existing `Plug.Conn` state.
 > Use `session(:chrome)` / `session(:firefox)` when you want an explicit browser target.
 
 ## Progressive Examples

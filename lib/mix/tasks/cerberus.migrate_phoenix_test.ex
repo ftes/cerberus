@@ -73,6 +73,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   @rewritable_assertions_calls [:assert_has, :refute_has, :assert_path, :refute_path]
   @canonical_text_assertions [:assert_has, :refute_has]
   @canonical_labeled_value_keys %{fill_in: :with, select: :option}
+  @local_import_trigger_calls Enum.uniq([:session | @rewritable_direct_calls ++ @rewritable_assertions_calls])
 
   defmodule RewriteState do
     @moduledoc false
@@ -272,9 +273,10 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
       {:ok, ast} ->
         {rewritten_ast, state} = Macro.prewalk(ast, %RewriteState{}, &rewrite_node/2)
         {canonical_ast, canonical_changed?} = canonicalize_calls(rewritten_ast)
-        changed? = state.changed? or canonical_changed?
+        {imported_ast, import_changed?} = ensure_cerberus_imports(canonical_ast)
+        changed? = state.changed? or canonical_changed? or import_changed?
 
-        rewritten = render_rewritten_content(content, canonical_ast, changed?)
+        rewritten = render_rewritten_content(content, imported_ast, changed?)
         {rewritten, Enum.reverse(state.warnings)}
 
       {:error, {_line, error, _token}} ->
@@ -411,6 +413,87 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   end
 
   defp canonicalize_node(node, changed), do: {node, changed}
+
+  @spec ensure_cerberus_imports(Macro.t()) :: {Macro.t(), boolean()}
+  defp ensure_cerberus_imports(ast) do
+    Macro.prewalk(ast, false, &ensure_cerberus_import_node/2)
+  end
+
+  @spec ensure_cerberus_import_node(Macro.t(), boolean()) :: {Macro.t(), boolean()}
+  defp ensure_cerberus_import_node({:defmodule, meta, [module_name, body_kw]} = node, changed) when is_list(body_kw) do
+    {updated_body_kw, inserted?} =
+      Enum.map_reduce(body_kw, false, fn
+        {key, body} = entry, inserted_acc ->
+          cond do
+            inserted_acc ->
+              {entry, true}
+
+            do_block_key?(key) and module_needs_cerberus_import?(body) and not module_imports_cerberus?(body) ->
+              {{key, prepend_cerberus_import(body)}, true}
+
+            true ->
+              {entry, inserted_acc}
+          end
+
+        entry, inserted_acc ->
+          {entry, inserted_acc}
+      end)
+
+    if inserted? do
+      {{:defmodule, meta, [module_name, updated_body_kw]}, true}
+    else
+      {node, changed}
+    end
+  end
+
+  defp ensure_cerberus_import_node(node, changed), do: {node, changed}
+
+  @spec do_block_key?(term()) :: boolean()
+  defp do_block_key?(:do), do: true
+  defp do_block_key?({:__block__, _meta, [:do]}), do: true
+  defp do_block_key?(_), do: false
+
+  @spec module_needs_cerberus_import?(Macro.t()) :: boolean()
+  defp module_needs_cerberus_import?(body) do
+    {_body, needed?} =
+      Macro.prewalk(body, false, fn
+        {fun, _meta, args} = node, needed when is_atom(fun) and is_list(args) ->
+          {node, needed or fun in @local_import_trigger_calls}
+
+        node, needed ->
+          {node, needed}
+      end)
+
+    needed?
+  end
+
+  @spec module_imports_cerberus?(Macro.t()) :: boolean()
+  defp module_imports_cerberus?(body) do
+    {_body, imported?} =
+      Macro.prewalk(body, false, fn
+        {:import, _meta, [module_ast | _rest]} = node, imported ->
+          {node, imported or alias_parts(module_ast) == [:Cerberus]}
+
+        node, imported ->
+          {node, imported}
+      end)
+
+    imported?
+  end
+
+  @spec prepend_cerberus_import(Macro.t()) :: Macro.t()
+  defp prepend_cerberus_import({:__block__, meta, nodes}) when is_list(nodes) do
+    {:__block__, meta, [cerberus_import_ast() | nodes]}
+  end
+
+  defp prepend_cerberus_import(node) do
+    {:__block__, [], [cerberus_import_ast(), node]}
+  end
+
+  @spec cerberus_import_ast() :: Macro.t()
+  defp cerberus_import_ast do
+    {:import, [], [{:__aliases__, [], [:Cerberus]}]}
+  end
 
   @spec canonicalize_call_args(atom(), [Macro.t()]) :: canonicalize_result()
   defp canonicalize_call_args(fun, args) do
