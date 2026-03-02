@@ -91,7 +91,7 @@ defmodule Cerberus.LocatorTest do
     assert locator.opts[:selector] == "#primary-actions button"
   end
 
-  test "normalizes has locator option for supported nested locators" do
+  test "normalizes has locator option for nested locator kinds" do
     locator = Locator.normalize(button: "Apply", has: testid("apply-secondary"))
     has_locator = locator.opts[:has]
 
@@ -101,15 +101,30 @@ defmodule Cerberus.LocatorTest do
 
     text_has_locator = Locator.normalize(text: "Apply", has: text("secondary", exact: true)).opts[:has]
     assert %Locator{kind: :text, value: "secondary", opts: [exact: true]} = text_has_locator
+
+    label_has_locator = Locator.normalize(css: ".fieldset", has: label("Email")).opts[:has]
+    assert %Locator{kind: :label, value: "Email"} = label_has_locator
+
+    role_has_locator = Locator.normalize(text: "Save", has: role(:button, name: "Submit")).opts[:has]
+    assert %Locator{kind: :button, value: "Submit"} = role_has_locator
   end
 
-  test "rejects unsupported has locator kinds and nested has locators" do
-    assert_raise InvalidLocatorError, ~r/:has only supports nested css\(...\), text\(...\), or testid\(...\)/, fn ->
-      Locator.normalize(button: "Apply", has: button("Nested"))
-    end
-
+  test "rejects nested has locators" do
     assert_raise InvalidLocatorError, ~r/nested :has locators are not supported/, fn ->
       Locator.normalize(text: "Apply", has: text("secondary", has: css(".badge")))
+    end
+  end
+
+  test "closest helper composes base locator with from locator" do
+    locator = closest(css(".fieldset"), from: label("Email"))
+
+    assert %Locator{kind: :css, value: ".fieldset"} = locator
+    assert %Locator{kind: :label, value: "Email"} = locator.opts[:from]
+  end
+
+  test "closest rejects nested from locators" do
+    assert_raise ArgumentError, ~r/nested :from/, fn ->
+      closest(css(".outer"), from: closest(css(".inner"), from: label("Email")))
     end
   end
 

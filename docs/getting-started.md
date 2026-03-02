@@ -88,13 +88,24 @@ session()
 
 ## Locator Composition With has
 
-You can require nested descendants while resolving a locator by passing `has:` with a nested `css(...)`, `text(...)`, or `testid(...)` locator.
+You can require nested descendants while resolving a locator by passing `has:` with a nested locator (`label(...)`, `css(...)`, `text(...)`, `testid(...)`, and other helper kinds).
 
 ```elixir
 session()
 |> visit("/live/selector-edge")
 |> click(button("Apply", has: testid("apply-secondary-marker")))
 |> assert_has(text("Selected: secondary", exact: true))
+```
+
+Use `closest/2` when the scope should resolve to the nearest matching ancestor around a nested locator (for example, a field wrapper around a label):
+
+```elixir
+session()
+|> visit("/field-wrapper-errors")
+|> within(closest(css(".fieldset"), from: label("Email", exact: true)), fn scoped ->
+  scoped
+  |> assert_has(text("Email can't be blank", exact: true))
+end)
 ```
 
 ## Step 5: Multi-User + Multi-Tab

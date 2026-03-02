@@ -303,7 +303,9 @@ defmodule Cerberus.Html do
 
   defp find_scope_target_in_doc(lazy_html, %Locator{} = locator, scope) do
     opts = locator.opts
-    selector = selector_opt(opts)
+    from_locator = Keyword.get(opts, :from)
+    locator = locator_without_from(locator)
+    selector = selector_opt(locator.opts)
     query_selector = within_query_selector(locator)
 
     matches =
@@ -312,7 +314,9 @@ defmodule Cerberus.Html do
       |> Enum.flat_map(fn root_node ->
         root_node
         |> safe_query(query_selector)
-        |> Enum.flat_map(&maybe_scope_target_match_list(root_node, &1, lazy_html, locator, selector))
+        |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, locator, selector))
+        |> maybe_filter_scope_target_closest_candidates(root_node, from_locator)
+        |> Enum.map(&scope_target_candidate_map(&1, lazy_html))
       end)
 
     case Query.pick_match(matches, opts) do
@@ -328,34 +332,71 @@ defmodule Cerberus.Html do
     end
   end
 
-  defp maybe_scope_target_match_list(root_node, node, lazy_html, locator, selector) do
-    case maybe_scope_target_match(root_node, node, lazy_html, locator, selector) do
-      nil -> []
-      match -> [match]
-    end
-  end
-
-  defp maybe_scope_target_match(root_node, node, lazy_html, %Locator{} = locator, selector) do
+  defp scope_target_candidate_matches?(root_node, node, %Locator{} = locator, selector) do
     opts = locator.opts
 
-    if node_matches_within_locator?(root_node, node, locator) and node_matches_selector?(root_node, node, selector) and
-         node_matches_locator_filters?(node, opts) do
-      mapped =
-        maybe_put_unique_selector(
-          %{
-            tag: node_tag(node),
-            iframe?: node_tag(node) == "iframe",
-            checked: checked?(node),
-            disabled: disabled?(node),
-            readonly: readonly?(node),
-            selected: selected?(node, input_type(node))
-          },
-          lazy_html,
-          node
-        )
+    node_matches_within_locator?(root_node, node, locator) and
+      node_matches_selector?(root_node, node, selector) and
+      node_matches_locator_filters?(node, opts) and
+      Query.matches_state_filters?(scope_target_state(node), opts)
+  end
 
-      if Query.matches_state_filters?(mapped, opts), do: mapped
-    end
+  defp maybe_filter_scope_target_closest_candidates(candidates, _root_node, nil), do: candidates
+
+  defp maybe_filter_scope_target_closest_candidates(candidates, root_node, %Locator{} = from_locator) do
+    from_selector = selector_opt(from_locator.opts) || within_query_selector(from_locator)
+
+    from_candidates =
+      root_node
+      |> safe_query(from_selector)
+      |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, from_locator, selector_opt(from_locator.opts)))
+
+    Enum.filter(candidates, fn candidate ->
+      closest_scope_candidate_for_any_from?(candidate, candidates, from_candidates)
+    end)
+  end
+
+  defp closest_scope_candidate_for_any_from?(candidate, candidates, from_candidates) do
+    Enum.any?(from_candidates, fn from_node ->
+      contains_node_or_same?(candidate, from_node) and
+        scope_candidate_is_closest_for_from?(candidate, candidates, from_node)
+    end)
+  end
+
+  defp scope_candidate_is_closest_for_from?(candidate, candidates, from_node) do
+    Enum.all?(candidates, fn other_candidate ->
+      same_node?(other_candidate, candidate) or
+        not contains_node_or_same?(other_candidate, from_node) or
+        not contains_node_or_same?(candidate, other_candidate)
+    end)
+  end
+
+  defp contains_node_or_same?(container, node) do
+    same_node?(container, node) or
+      Enum.any?(safe_query(container, "*"), &same_node?(&1, node))
+  end
+
+  defp scope_target_candidate_map(node, lazy_html) do
+    node
+    |> scope_target_state()
+    |> Map.merge(%{
+      tag: node_tag(node),
+      iframe?: node_tag(node) == "iframe"
+    })
+    |> maybe_put_unique_selector(lazy_html, node)
+  end
+
+  defp scope_target_state(node) do
+    %{
+      checked: checked?(node),
+      disabled: disabled?(node),
+      readonly: readonly?(node),
+      selected: selected?(node, input_type(node))
+    }
+  end
+
+  defp locator_without_from(%Locator{} = locator) do
+    %{locator | opts: Keyword.delete(locator.opts, :from)}
   end
 
   defp node_matches_within_locator?(root_node, node, %Locator{kind: :css, value: value}) do
@@ -1058,31 +1099,20 @@ defmodule Cerberus.Html do
     |> Enum.any?()
   end
 
-  defp node_has_locator?(node, %Locator{kind: :text, value: expected, opts: has_opts}) do
-    selector = selector_opt(has_opts) || "*"
+  defp node_has_locator?(node, %Locator{} = has_locator) do
+    selector = selector_opt(has_locator.opts) || within_query_selector(has_locator)
+    has_locator = locator_without_from(has_locator)
 
     selector
     |> safe_query_in_node(node)
     |> Enum.any?(fn candidate_node ->
-      Query.match_text?(node_text(candidate_node), expected, has_opts) and
-        node_matches_locator_filters?(candidate_node, has_opts)
+      value = within_locator_match_value(node, candidate_node, has_locator)
+
+      is_binary(value) and Query.match_text?(value, has_locator.value, has_locator.opts) and
+        node_matches_locator_filters?(candidate_node, has_locator.opts) and
+        Query.matches_state_filters?(scope_target_state(candidate_node), has_locator.opts)
     end)
   end
-
-  defp node_has_locator?(node, %Locator{kind: :testid, value: expected, opts: has_opts}) do
-    selector = selector_opt(has_opts) || "[data-testid]"
-
-    selector
-    |> safe_query_in_node(node)
-    |> Enum.any?(fn candidate_node ->
-      value = attr(candidate_node, "data-testid") || ""
-
-      value != "" and Query.match_text?(value, expected, has_opts) and
-        node_matches_locator_filters?(candidate_node, has_opts)
-    end)
-  end
-
-  defp node_has_locator?(_node, _locator), do: false
 
   defp safe_query_in_node(selector, node) when is_binary(selector) do
     safe_query(node, selector)

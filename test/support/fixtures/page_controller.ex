@@ -110,6 +110,60 @@ defmodule Cerberus.Fixtures.PageController do
     """)
   end
 
+  def field_wrapper_errors(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Field Wrapper Errors</title>
+      </head>
+      <body>
+        <main>
+          <h1>Field wrapper fixture</h1>
+
+          <div id="email-outer-wrapper" class="fieldset mb-2">
+            <label for="profile_email_group">
+              <span class="label mb-1">Contact</span>
+              <input id="profile_email_group" name="profile[email_group]" type="text" value="" />
+            </label>
+
+            <div id="email-inner-wrapper" class="fieldset mb-2">
+              <label for="profile_email">
+                <span class="label mb-1">Email</span>
+                <input
+                  id="profile_email"
+                  name="profile[email]"
+                  type="email"
+                  value=""
+                  class="w-full input input-error"
+                />
+              </label>
+              <p class="mt-1.5 flex gap-2 items-center text-sm text-error">Email can't be blank</p>
+            </div>
+
+            <p class="mt-1.5 flex gap-2 items-center text-sm text-error">Outer wrapper error</p>
+          </div>
+
+          <div id="name-wrapper" class="fieldset mb-2">
+            <label for="profile_name">
+              <span class="label mb-1">Name</span>
+              <input
+                id="profile_name"
+                name="profile[name]"
+                type="text"
+                value=""
+                class="w-full input input-error"
+              />
+            </label>
+            <p class="mt-1.5 flex gap-2 items-center text-sm text-error">Name can't be blank</p>
+          </div>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
   def search_form(conn, _params) do
     html(conn, """
     <!doctype html>

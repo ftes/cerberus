@@ -243,6 +243,45 @@ defmodule Cerberus do
     |> maybe_put_locator_opt(opts, :has)
   end
 
+  @doc """
+  Composes a locator that matches the closest ancestor of a nested `from` locator.
+
+  Example:
+
+      within(session, closest(css(".fieldset"), from: label("Email")), fn scoped ->
+        assert_has(scoped, text("can't be blank"))
+      end)
+  """
+  @spec closest(term(), keyword()) :: Locator.t()
+  def closest(locator, opts) when is_list(opts) do
+    from_locator_input =
+      case Keyword.fetch(opts, :from) do
+        {:ok, value} -> value
+        :error -> raise ArgumentError, "closest/2 expects :from locator option"
+      end
+
+    case Keyword.keys(opts) -- [:from] do
+      [] ->
+        :ok
+
+      extra ->
+        raise ArgumentError, "closest/2 supports only :from option, got: #{inspect(extra)}"
+    end
+
+    base_locator = Locator.normalize(locator)
+    from_locator = Locator.normalize(from_locator_input)
+
+    if Keyword.has_key?(from_locator.opts, :from) do
+      raise ArgumentError, "closest/2 does not support nested :from locators"
+    end
+
+    %{base_locator | opts: Keyword.put(base_locator.opts, :from, from_locator)}
+  end
+
+  def closest(_locator, _opts) do
+    raise ArgumentError, "closest/2 expects keyword options"
+  end
+
   @spec sigil_l(String.t(), charlist()) :: Locator.t()
   def sigil_l(value, modifiers) when is_list(modifiers), do: Locator.sigil(value, modifiers)
 
@@ -267,6 +306,8 @@ defmodule Cerberus do
   Executes `callback` within a narrowed scope.
 
   `scope` must be a locator input (for example, `css("#secondary-panel")`).
+  Use `closest/2` when scope should resolve to the nearest matching ancestor
+  around a nested element (for example, a field wrapper around a label).
 
   Browser note: when locator-based `within/3` matches an `<iframe>`, Cerberus switches
   the query root to that iframe document. Only same-origin iframes are supported.

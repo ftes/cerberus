@@ -85,6 +85,17 @@ end)
 `within/3` expects locator input (for example, `within(css("#secondary-panel"), fn s -> ... end)`).
 In browser sessions, locator-based `within/3` can switch root into same-origin iframes.
 
+Field-wrapper assertion pattern (Phoenix `core_components`-style wrappers):
+
+```elixir
+session()
+|> visit("/field-wrapper-errors")
+|> within(closest(css(".fieldset"), from: label("Email", exact: true)), fn scoped ->
+  scoped
+  |> assert_has(text("Email can't be blank", exact: true))
+end)
+```
+
 ### 5. Multi-User + Multi-Tab
 
 ```elixir
@@ -144,7 +155,8 @@ main =
 - Helper constructors:
   - `text("...")`, `link("...")`, `button("...")`, `label("...")`, `testid("...")`, `css("...")`, `role(:button, name: "...")`
 - Locator composition:
-  - `has:` filters matched elements by requiring a descendant locator (`css(...)`, `text(...)`, or `testid(...)`)
+  - `has:` filters matched elements by requiring a descendant locator (`label(...)`, `css(...)`, `text(...)`, `button(...)`, etc.)
+  - `closest(base_locator, from: nested_locator)` resolves the nearest matching ancestor scope (for example nearest field wrapper for a label)
   - Example: `click(button("Apply", has: testid("apply-secondary-marker")))`
 - Sigil:
   - `~l"text"` (text locator)

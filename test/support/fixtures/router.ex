@@ -34,6 +34,7 @@ defmodule Cerberus.Fixtures.Router do
     get("/main", PageController, :main)
     get("/sandbox/messages", PageController, :sandbox_messages)
     get("/scoped", PageController, :scoped)
+    get("/field-wrapper-errors", PageController, :field_wrapper_errors)
     get("/search", PageController, :search_form)
     get("/search/results", PageController, :search_results)
     get("/search/nested/results", PageController, :search_nested_results)

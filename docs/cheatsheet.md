@@ -48,6 +48,7 @@
 - `css("...")`
 - `role(:button, name: "...")`
 - Composition: `button("Apply", has: testid("apply-secondary-marker"))`
+- Closest ancestor composition: `closest(css(".fieldset"), from: label("Email", exact: true))`
 
 ### Supported role aliases
 - Click/assert roles: `button`, `menuitem`, `tab`, `link`, `heading`, `img`
