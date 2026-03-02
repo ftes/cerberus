@@ -85,7 +85,7 @@ defmodule Cerberus.RemoteWebdriverBehaviorTest do
   end
 
   defp start_selenium_container! do
-    image = System.get_env("CERBERUS_REMOTE_SELENIUM_IMAGE", "selenium/standalone-chromium:126.0")
+    image = System.get_env("CERBERUS_REMOTE_SELENIUM_IMAGE", "selenium/standalone-chrome:145.0-20260222")
     {container_id, 0} = System.cmd("docker", ["run", "--rm", "-d", "-p", "127.0.0.1::4444", image])
     container_id = String.trim(container_id)
     port = mapped_port!(container_id)

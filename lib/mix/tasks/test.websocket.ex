@@ -33,8 +33,8 @@ defmodule Mix.Tasks.Test.Websocket do
   use Mix.Task
 
   @default_selenium_images %{
-    chrome: "selenium/standalone-chromium:126.0",
-    firefox: "selenium/standalone-firefox:126.0"
+    chrome: "selenium/standalone-chrome:145.0-20260222",
+    firefox: "selenium/standalone-firefox:148.0-20260222"
   }
 
   @impl Mix.Task
