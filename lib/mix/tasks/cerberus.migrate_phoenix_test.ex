@@ -209,17 +209,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   defp rewrite_node({:alias, meta, args} = node, state) do
     case args do
       [module_ast | rest] ->
-        case alias_parts(module_ast) do
-          [:PhoenixTest] ->
-            updated = {:alias, meta, [alias_ast(module_ast, [:Cerberus]) | rest]}
-            {updated, mark_changed(state)}
-
-          [:PhoenixTest | _] ->
-            {node, add_warning(state, @warning_submodule_alias)}
-
-          _ ->
-            {node, state}
-        end
+        rewrite_alias_node(node, meta, module_ast, rest, state)
 
       _ ->
         {node, state}
@@ -305,6 +295,48 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
       {rewrite_remote_module(node, module_ast, [:Cerberus]), mark_changed(state)}
     else
       {node, add_warning(state, @warning_submodule_alias)}
+    end
+  end
+
+  defp rewrite_assertions_alias_opts([], module_ast) do
+    {:ok, [[as: alias_ast(module_ast, [:Assertions])]]}
+  end
+
+  defp rewrite_assertions_alias_opts([opts], module_ast) when is_list(opts) do
+    if Keyword.keyword?(opts) do
+      {:ok, [Keyword.put_new(opts, :as, alias_ast(module_ast, [:Assertions]))]}
+    else
+      :error
+    end
+  end
+
+  defp rewrite_assertions_alias_opts(_rest, _module_ast), do: :error
+
+  defp rewrite_alias_node(node, meta, module_ast, rest, state) do
+    case alias_parts(module_ast) do
+      [:PhoenixTest] ->
+        updated = {:alias, meta, [alias_ast(module_ast, [:Cerberus]) | rest]}
+        {updated, mark_changed(state)}
+
+      [:PhoenixTest, :Assertions] ->
+        rewrite_assertions_alias_node(node, meta, module_ast, rest, state)
+
+      [:PhoenixTest | _] ->
+        {node, add_warning(state, @warning_submodule_alias)}
+
+      _ ->
+        {node, state}
+    end
+  end
+
+  defp rewrite_assertions_alias_node(node, meta, module_ast, rest, state) do
+    case rewrite_assertions_alias_opts(rest, module_ast) do
+      {:ok, alias_opts} ->
+        updated = {:alias, meta, [alias_ast(module_ast, [:Cerberus]) | alias_opts]}
+        {updated, mark_changed(state)}
+
+      :error ->
+        {node, add_warning(state, @warning_submodule_alias)}
     end
   end
 

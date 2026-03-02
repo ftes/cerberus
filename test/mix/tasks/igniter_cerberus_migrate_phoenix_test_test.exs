@@ -33,7 +33,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
     assert output =~ "diff --git"
     assert output =~ "import Cerberus"
-    assert output =~ "alias PhoenixTest.Assertions"
+    assert output =~ "alias Cerberus, as: Assertions"
     assert output =~ "Mode: dry-run"
     assert File.read!(file) == original
   end
@@ -124,6 +124,64 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
     assert rewritten =~ "import Cerberus"
     refute rewritten =~ "import PhoenixTest.Assertions"
+    assert output =~ "updated #{file}"
+  end
+
+  test "write mode rewrites alias PhoenixTest.Assertions with preserved alias name", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_alias_assertions_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleAliasAssertionsTest do
+        alias PhoenixTest.Assertions
+
+        test "example", %{conn: conn} do
+          Assertions.assert_has(conn, "#main", text: "Articles")
+        end
+      end
+      """
+    )
+
+    output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ "alias Cerberus, as: Assertions"
+    refute rewritten =~ "alias PhoenixTest.Assertions"
+    assert output =~ "updated #{file}"
+  end
+
+  test "write mode preserves explicit assertions alias name", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_alias_assertions_explicit_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleAliasAssertionsExplicitTest do
+        alias PhoenixTest.Assertions, as: PTA
+
+        test "example", %{conn: conn} do
+          PTA.refute_has(conn, "#missing", text: "Nope")
+        end
+      end
+      """
+    )
+
+    output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ "alias Cerberus, as: PTA"
+    refute rewritten =~ "alias PhoenixTest.Assertions, as: PTA"
     assert output =~ "updated #{file}"
   end
 
