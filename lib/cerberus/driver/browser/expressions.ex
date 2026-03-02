@@ -410,8 +410,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
         transfer.items.add(file);
         field.files = transfer.files;
 
-        #{dispatch_input_change_events("field")}
-        #{ok_path_payload()}
+        #{field_dispatch_and_ok_payload()}
       } catch (error) {
         return JSON.stringify({
           ok: false,
@@ -435,8 +434,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
       const value = #{encoded_value};
       field.value = value;
-      #{dispatch_input_change_events("field")}
-      #{ok_path_payload()}
+      #{field_dispatch_and_ok_payload()}
     })()
     """
   end
@@ -541,8 +539,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
       #{typed_enabled_field_guards_snippet("checkbox", "field_not_checkbox")}
 
       field.checked = shouldCheck;
-      #{dispatch_input_change_events("field")}
-      #{ok_path_payload()}
+      #{field_dispatch_and_ok_payload()}
     })()
     """
   end
@@ -559,8 +556,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
       #{typed_enabled_field_guards_snippet("radio", "field_not_radio")}
 
       field.checked = true;
-      #{dispatch_input_change_events("field")}
-      #{ok_path_payload([~s(value: field.value || "on")])}
+      #{field_dispatch_and_ok_payload([~s(value: field.value || "on")])}
     })()
     """
   end
@@ -682,6 +678,13 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
     #{target_name}.dispatchEvent(new Event("input", { bubbles: true }));
     #{target_name}.dispatchEvent(new Event("change", { bubbles: true }));
+    """
+  end
+
+  defp field_dispatch_and_ok_payload(extra_fields \\ []) when is_list(extra_fields) do
+    """
+    #{dispatch_input_change_events("field")}
+    #{ok_path_payload(extra_fields)}
     """
   end
 
