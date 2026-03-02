@@ -75,6 +75,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
     :ok = subscribe_dialog_events!(session)
     flush_stale_dialog_events(session.tab_id)
     action_task = Task.async(fn -> action.(session) end)
+    Process.unlink(action_task.pid)
 
     try do
       {opened, action_outcome} =

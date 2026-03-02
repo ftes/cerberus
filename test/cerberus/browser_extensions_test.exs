@@ -142,4 +142,83 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert error.message =~
              "with_dialog/3 callback completed before browsingContext.userPromptOpened was observed"
   end
+
+  test "with_dialog raises when observed dialog message does not match expected message" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+
+    error =
+      assert_raise AssertionError, fn ->
+        with_dialog(
+          session,
+          fn dialog_session ->
+            click(dialog_session, button("Open Confirm Dialog"))
+          end,
+          message: "Different message"
+        )
+      end
+
+    assert error.message =~ ~s(expected message "Different message")
+    assert error.message =~ ~s(observed "Delete item?")
+  end
+
+  test "with_dialog timeout reports waiting for prompt open when callback stays pending" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+
+    error =
+      assert_raise AssertionError, fn ->
+        with_dialog(
+          session,
+          fn dialog_session ->
+            _ = dialog_session
+            Process.sleep(100)
+            dialog_session
+          end,
+          timeout: 25
+        )
+      end
+
+    assert error.message =~ "with_dialog/3 timed out waiting for browsingContext.userPromptOpened"
+  end
+
+  test "with_dialog validates callback return type after dialog handling" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+
+    error =
+      assert_raise ArgumentError, fn ->
+        with_dialog(session, fn dialog_session ->
+          click(dialog_session, button("Open Confirm Dialog"))
+          :invalid
+        end)
+      end
+
+    assert error.message =~ "with_dialog/3 callback must return a browser session"
+  end
+
+  test "with_dialog surfaces callback failures after dialog handling" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+
+    error =
+      assert_raise AssertionError, fn ->
+        with_dialog(session, fn dialog_session ->
+          click(dialog_session, button("Open Confirm Dialog"))
+          Process.sleep(10)
+          raise "dialog callback exploded"
+        end)
+      end
+
+    assert error.message =~ "with_dialog/3 callback failed:"
+    assert error.message =~ "dialog callback exploded"
+  end
 end
