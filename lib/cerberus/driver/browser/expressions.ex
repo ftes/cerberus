@@ -431,8 +431,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
     """
     (() => {
-      #{scoped_query_setup(encoded_scope, encoded_selector)}
-      #{indexed_form_field_snippet(index)}
+      #{scoped_form_field_lookup_snippet(encoded_scope, encoded_selector, index)}
 
       const value = #{encoded_value};
       field.value = value;
@@ -458,12 +457,11 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
     """
     (() => {
-      #{scoped_query_setup(encoded_scope, encoded_selector)}
       const requestedOptions = #{encoded_options};
       const exactOption = #{encoded_exact_option};
 
       #{normalize_collapsed_snippet()}
-      #{indexed_form_field_snippet(index)}
+      #{scoped_form_field_lookup_snippet(encoded_scope, encoded_selector, index)}
 
       #{guard_condition_snippet(~s/(field.tagName || "").toLowerCase() !== "select"/, "field_not_select")}
       #{guard_condition_snippet("field.disabled", "field_disabled")}
@@ -537,9 +535,8 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
     """
     (() => {
-      #{scoped_query_setup(encoded_scope, encoded_selector)}
       const shouldCheck = #{encoded_checked};
-      #{indexed_form_field_snippet(index)}
+      #{scoped_form_field_lookup_snippet(encoded_scope, encoded_selector, index)}
 
       #{typed_enabled_field_guards_snippet("checkbox", "field_not_checkbox")}
 
@@ -557,8 +554,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
     """
     (() => {
-      #{scoped_query_setup(encoded_scope, encoded_selector)}
-      #{indexed_form_field_snippet(index)}
+      #{scoped_form_field_lookup_snippet(encoded_scope, encoded_selector, index)}
 
       #{typed_enabled_field_guards_snippet("radio", "field_not_radio")}
 
@@ -728,6 +724,14 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
     #{form_field_candidates_snippet()}
     #{indexed_lookup_snippet("fields", "field", index, reason)}
+    """
+  end
+
+  defp scoped_form_field_lookup_snippet(encoded_scope, encoded_selector, index)
+       when is_binary(encoded_scope) and is_binary(encoded_selector) and is_integer(index) do
+    """
+    #{scoped_query_setup(encoded_scope, encoded_selector)}
+    #{indexed_form_field_snippet(index)}
     """
   end
 
