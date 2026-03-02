@@ -22,15 +22,16 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       |> assert_has(text("Articles", exact: true))
     end
 
-    test "sigil modifiers are consistent across static and browser for role/css/exact flows (#{driver})" do
+    test "sigil modifiers are consistent across static and browser for role/css/testid/exact flows (#{driver})" do
       unquote(driver)
       |> session()
       |> visit("/articles")
+      |> assert_has(~l"articles-title"t)
       |> click(~l"link:Counter"r)
       |> assert_has(~l"button:Increment"re)
       |> visit("/search")
-      |> fill_in(~l"#search_q"c, "elixir")
-      |> submit(~l"button[type='submit']"c)
+      |> fill_in(~l"search-input"t, "elixir")
+      |> submit(~l"search-submit"t)
       |> assert_has(~l"Search query: elixir"e)
     end
 

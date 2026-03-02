@@ -123,15 +123,16 @@ defmodule CerberusTest do
            )
   end
 
-  test "sigil modifiers support role and css locator flows" do
+  test "sigil modifiers support role, css, and testid locator flows" do
     session =
       session()
       |> visit("/articles")
+      |> assert_has(~l"articles-title"t)
       |> click(~l"link:Counter"r)
       |> assert_has(~l"button:Increment"re)
       |> visit("/search")
-      |> fill_in(~l"#search_q"c, "phoenix")
-      |> submit(~l"button[type='submit']"c)
+      |> fill_in(~l"search-input"t, "phoenix")
+      |> submit(~l"search-submit"t)
       |> assert_has(~l"Search query: phoenix"e)
 
     assert session.current_path == "/search/results?q=phoenix"

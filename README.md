@@ -29,8 +29,8 @@ import Cerberus
 
 session()
 |> visit("/live/counter")
-|> click(button("Increment"))
-|> assert_has(text("Count: 1"))
+|> click(~l"button:Increment"r)
+|> assert_has(~l"Count: 1")
 ```
 
 > #### Tip
@@ -45,8 +45,8 @@ session()
 ```elixir
 session()
 |> visit("/articles")
-|> assert_has(text("Articles"))
-|> refute_has(text("500 Internal Server Error"))
+|> assert_has(~l"Articles")
+|> refute_has(~l"500 Internal Server Error")
 ```
 
 ### 2. LiveView Interaction
@@ -54,8 +54,8 @@ session()
 ```elixir
 session()
 |> visit("/live/counter")
-|> click(role(:button, name: "Increment"))
-|> assert_has(text("Count: 1"))
+|> click(~l"button:Increment"r)
+|> assert_has(~l"Count: 1")
 ```
 
 ### 3. Form + Path Assertions
@@ -64,9 +64,9 @@ session()
 session()
 |> visit("/search")
 |> fill_in("Search term", "Aragorn")
-|> submit(button("Run Search"))
+|> submit(~l"button:Run Search"r)
 |> assert_path("/search/results", query: %{q: "Aragorn"})
-|> assert_has(text("Search query: Aragorn"))
+|> assert_has(~l"Search query: Aragorn")
 ```
 
 ### 4. Scope + Navigation
@@ -74,15 +74,15 @@ session()
 ```elixir
 session()
 |> visit("/scoped")
-|> within(css("#secondary-panel"), fn scoped ->
+|> within(~l"#secondary-panel"c, fn scoped ->
   scoped
-  |> assert_has(text("Status: secondary"))
-  |> click(link("Open"))
+  |> assert_has(~l"Status: secondary")
+  |> click(~l"link:Open"r)
 end)
 |> assert_path("/search")
 ```
 
-`within/3` expects locator input (for example, `within(css("#secondary-panel"), fn s -> ... end)`).
+`within/3` expects locator input (for example, `within(~l"#secondary-panel"c, fn s -> ... end)`).
 In browser sessions, locator-based `within/3` can switch root into same-origin iframes.
 
 Scoped text assertions also support plain-string shorthand:
@@ -90,8 +90,8 @@ Scoped text assertions also support plain-string shorthand:
 ```elixir
 session()
 |> visit("/scoped")
-|> assert_has(css("#secondary-panel"), "Status: secondary")
-|> refute_has(css("#secondary-panel"), "Status: primary")
+|> assert_has(~l"#secondary-panel"c, "Status: secondary")
+|> refute_has(~l"#secondary-panel"c, "Status: primary")
 ```
 
 Field-wrapper assertion pattern (Phoenix `core_components`-style wrappers):
@@ -99,7 +99,7 @@ Field-wrapper assertion pattern (Phoenix `core_components`-style wrappers):
 ```elixir
 session()
 |> visit("/field-wrapper-errors")
-|> assert_has(closest(css(".fieldset"), from: label("Email")), text("can't be blank"))
+|> assert_has(closest(~l".fieldset"c, from: ~l"textbox:Email"r), ~l"can't be blank")
 ```
 
 ### 5. Multi-User + Multi-Tab
@@ -130,19 +130,19 @@ session =
   |> type("hello", selector: "#keyboard-input")
   |> press("Enter", selector: "#press-input")
   |> with_dialog(fn dialog_session ->
-    click(dialog_session, button("Open Confirm Dialog"))
+    click(dialog_session, ~l"button:Open Confirm Dialog"r)
   end)
 
 session
-|> assert_has(text("Press result: submitted"))
-|> assert_has(text("Dialog result: cancelled"))
+|> assert_has(~l"Press result: submitted")
+|> assert_has(~l"Dialog result: cancelled")
 
 main =
   session(:browser)
   |> visit("/browser/popup/click")
   |> with_popup(
     fn source ->
-      click(source, button("Open Popup"))
+      click(source, ~l"button:Open Popup"r)
     end,
     fn source, popup ->
       assert_path(source, "/browser/popup/click")
@@ -165,11 +165,16 @@ main =
   - `closest(base_locator, from: nested_locator)` resolves the nearest matching ancestor scope (for example nearest field wrapper for a label)
   - Example: `click(button("Apply", has: testid("apply-secondary-marker")))`
 - Sigil:
-  - `~l"text"` (text locator)
-  - modifiers:
-    - `e` / `i` exact/inexact default
-    - `r` role form (`~l"button:Save"r`)
-    - `c` CSS form (`~l"button[type='submit']"c`)
+  - `~l"Save"` text
+  - `~l"Save"e` exact text
+  - `~l"Save"i` inexact text
+  - `~l"button:Save"r` role form (`ROLE:NAME`)
+  - `~l"button[type='submit']"c` css form
+  - `~l"save-button"t` testid form (defaults to exact matching)
+  - rules:
+    - at most one kind modifier (`r`, `c`, or `t`)
+    - `e` and `i` are mutually exclusive
+    - `r` requires `ROLE:NAME`
 
 Role helpers currently support practical aliases used by actions/assertions:
 - click/assert roles: `button`, `menuitem`, `tab`, `link`, `heading`, `img`
@@ -181,10 +186,11 @@ Most tests switch modes by changing only the first session line:
 
 ```diff
 -session()
+-session()
 +session(:browser)
  |> visit("/live/counter")
- |> click(button("Increment"))
-|> assert_has(text("Count: 1"))
+ |> click(~l"button:Increment"r)
+|> assert_has(~l"Count: 1")
 ```
 
 ## Per-Test Browser Overrides
@@ -218,7 +224,7 @@ Same-tab workaround (OAuth-style redirect/result flow):
 session(:browser, browser: [popup_mode: :same_tab])
 |> visit("/browser/popup/auto")
 |> assert_path("/browser/popup/destination", query: %{source: "auto-load"}, timeout: 1_500)
-|> assert_has(text("popup source: auto-load", exact: true))
+|> assert_has(~l"popup source: auto-load"e)
 ```
 
 When workaround is brittle:

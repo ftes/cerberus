@@ -41,29 +41,44 @@ defmodule Cerberus.Locator do
   @spec sigil(String.t(), charlist()) :: t()
   def sigil(value, modifiers) when is_binary(value) and is_list(modifiers) do
     sigil_opts = parse_sigil_modifiers!(value, modifiers)
+    base_locator = sigil_base_locator!(sigil_opts, value, modifiers)
+    opts = sigil_locator_opts(base_locator.kind, sigil_opts.exact)
 
-    base_locator =
-      case sigil_opts.kind do
-        :text ->
-          %__MODULE__{kind: :text, value: value}
+    %{base_locator | opts: opts}
+  end
 
-        :css ->
-          ensure_css_selector_value!(:css, value, {:l, value, modifiers})
-          %__MODULE__{kind: :css, value: value}
+  defp sigil_base_locator!(%{kind: :text}, value, _modifiers), do: %__MODULE__{kind: :text, value: value}
 
-        :role ->
-          role_name = sigil_opts.role
-          role_kind = role_to_kind!(role_name, {:l, value, modifiers})
-          %__MODULE__{kind: role_kind, value: parse_role_name!(value, {:l, value, modifiers})}
-      end
+  defp sigil_base_locator!(%{kind: :css}, value, modifiers) do
+    ensure_css_selector_value!(:css, value, {:l, value, modifiers})
+    %__MODULE__{kind: :css, value: value}
+  end
 
+  defp sigil_base_locator!(%{kind: :testid}, value, modifiers) do
+    ensure_testid_sigil_value!(value, {:l, value, modifiers})
+    %__MODULE__{kind: :testid, value: value}
+  end
+
+  defp sigil_base_locator!(%{kind: :role, role: role_name}, value, modifiers) do
+    role_kind = role_to_kind!(role_name, {:l, value, modifiers})
+    %__MODULE__{kind: role_kind, value: parse_role_name!(value, {:l, value, modifiers})}
+  end
+
+  defp sigil_locator_opts(:testid, exact) do
     exact_opt =
-      case sigil_opts.exact do
+      case exact do
         :unset -> []
-        exact -> [exact: exact]
+        exact_value -> [exact: exact_value]
       end
 
-    %{base_locator | opts: exact_opt}
+    ensure_exact_opt(exact_opt, true)
+  end
+
+  defp sigil_locator_opts(_kind, exact) do
+    case exact do
+      :unset -> []
+      exact_value -> [exact: exact_value]
+    end
   end
 
   defp normalize_map(locator_map, original) do
@@ -301,11 +316,7 @@ defmodule Cerberus.Locator do
 
   defp normalize_nested_testid_exact(%__MODULE__{kind: :testid, opts: opts} = locator) do
     normalized_opts =
-      if Keyword.has_key?(opts, :exact) do
-        opts
-      else
-        Keyword.put(opts, :exact, true)
-      end
+      ensure_exact_opt(opts, true)
 
     %{locator | opts: normalized_opts}
   end
@@ -375,6 +386,9 @@ defmodule Cerberus.Locator do
         ?c ->
           put_sigil_kind!(acc, :css, nil, {:l, value, modifiers})
 
+        ?t ->
+          put_sigil_kind!(acc, :testid, nil, {:l, value, modifiers})
+
         ?e ->
           put_sigil_exact!(acc, true, {:l, value, modifiers})
 
@@ -396,7 +410,7 @@ defmodule Cerberus.Locator do
   defp put_sigil_kind!(_acc, _kind, _role, original) do
     raise InvalidLocatorError,
       locator: original,
-      message: "invalid locator sigil ~l: use at most one locator-kind modifier (r or c)"
+      message: "invalid locator sigil ~l: use at most one locator-kind modifier (r, c, or t)"
   end
 
   defp put_sigil_exact!(%{exact: :unset} = acc, exact, _original), do: %{acc | exact: exact}
@@ -438,6 +452,24 @@ defmodule Cerberus.Locator do
         raise InvalidLocatorError,
           locator: original,
           message: "invalid locator sigil ~l: role modifier expects ROLE:NAME text, e.g. ~l\"button:Save\"r"
+    end
+  end
+
+  defp ensure_testid_sigil_value!(value, original) do
+    if value == "" do
+      raise InvalidLocatorError,
+        locator: original,
+        message: "invalid locator sigil ~l: testid modifier expects non-empty text, e.g. ~l\"search-input\"t"
+    else
+      :ok
+    end
+  end
+
+  defp ensure_exact_opt(opts, default) when is_list(opts) do
+    if Keyword.has_key?(opts, :exact) do
+      opts
+    else
+      Keyword.put(opts, :exact, default)
     end
   end
 end

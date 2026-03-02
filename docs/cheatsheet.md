@@ -18,20 +18,20 @@
 | Task | Example |
 | --- | --- |
 | Visit page | `visit(session, "/articles")` |
-| Click link/button | `click(session, link("Counter"))` |
+| Click link/button | `click(session, ~l"link:Counter"r)` |
 | Fill input | `fill_in(session, "Search term", "Aragorn")` |
 | Select option | `select(session, "Race", option: "Elf")` |
 | Choose radio | `choose(session, "Email Choice")` |
 | Check checkbox | `check(session, "Accept Terms")` |
 | Uncheck checkbox | `uncheck(session, "Receive updates")` |
 | Upload file | `upload(session, "Avatar", "/tmp/avatar.jpg")` |
-| Submit form | `submit(session, button("Run Search"))` |
-| Assert text present | `assert_has(session, text("Articles", exact: true))` |
-| Assert text absent | `refute_has(session, text("Error", exact: true))` |
-| Assert scoped text | `assert_has(session, css("#secondary-panel"), "Status: secondary")` |
-| Refute scoped text | `refute_has(session, css("#secondary-panel"), "Status: primary")` |
+| Submit form | `submit(session, ~l"button:Run Search"r)` |
+| Assert text present | `assert_has(session, ~l"Articles"e)` |
+| Assert text absent | `refute_has(session, ~l"Error"e)` |
+| Assert scoped text | `assert_has(session, ~l"#secondary-panel"c, "Status: secondary")` |
+| Refute scoped text | `refute_has(session, ~l"#secondary-panel"c, "Status: primary")` |
 | Assert path/query | `assert_path(session, "/search/results", query: %{q: "Aragorn"}, timeout: 500)` |
-| Scope to subtree | `within(session, css("#secondary-panel"), fn s -> ... end)` |
+| Scope to subtree | `within(session, ~l"#secondary-panel"c, fn s -> ... end)` |
 
 ## Multi-Session Operations
 
@@ -65,9 +65,16 @@
 | --- | --- |
 | `~l"Save"` | text locator |
 | `~l"Save"e` | exact text |
+| `~l"Save"i` | inexact text |
 | `~l"button:Save"r` | role-style locator |
 | `~l"button[type='submit']"c` | css locator |
+| `~l"save-button"t` | testid locator (`exact: true` default) |
 | `~l"button:Save"re` | role + exact |
+
+Rules:
+- at most one kind modifier (`r`, `c`, or `t`)
+- `e` and `i` are mutually exclusive
+- `r` requires `ROLE:NAME`
 
 ## Browser-Only Extensions
 
@@ -79,8 +86,8 @@ Use `Cerberus.Browser` only with `session(:browser)`.
 | Type keys | `Browser.type(session, "hello", selector: "#input")` |
 | Press key | `Browser.press(session, "Enter", selector: "#input")` |
 | Drag and drop | `Browser.drag(session, "#drag-source", "#drop-target")` |
-| Dialog capture | `Browser.with_dialog(session, fn s -> click(s, button("Open Confirm Dialog")) end)` |
-| Popup capture | `Browser.with_popup(session, fn main -> click(main, button("Open Popup")) end, fn main, popup -> assert_path(popup, "/browser/popup/destination") end)` |
+| Dialog capture | `Browser.with_dialog(session, fn s -> click(s, ~l"button:Open Confirm Dialog"r) end)` |
+| Popup capture | `Browser.with_popup(session, fn main -> click(main, ~l"button:Open Popup"r) end, fn main, popup -> assert_path(popup, "/browser/popup/destination") end)` |
 | Popup same-tab fallback | `session(:browser, browser: [popup_mode: :same_tab]) |> visit("/browser/popup/auto") |> assert_path("/browser/popup/destination", timeout: 1500)` |
 | Evaluate JS | `Browser.evaluate_js(session, "(() => 42)()")` |
 | Evaluate JS with assertion callback | `Browser.evaluate_js(session, "(() => 42)()", fn value -> assert value == 42 end)` |
@@ -96,5 +103,5 @@ Use `Cerberus.Browser` only with `session(:browser)`.
 -session()
 +session(:browser)
  |> visit("/articles")
- |> assert_has(text("Articles", exact: true))
+ |> assert_has(~l"Articles"e)
 ```

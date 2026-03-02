@@ -10,6 +10,15 @@ defmodule Cerberus do
   - v0 does not expose a public located-element pipeline type.
 
   Slice 1 provides one-shot operations over deterministic adapters.
+
+  Locator sigil quick look:
+
+      ~l"Save"          # text
+      ~l"Save"e         # exact text
+      ~l"Save"i         # inexact text
+      ~l"button:Save"r  # role form (ROLE:NAME)
+      ~l"#save"c        # css
+      ~l"save-btn"t     # testid (defaults exact: true)
   """
 
   alias Cerberus.Assertions
@@ -250,7 +259,7 @@ defmodule Cerberus do
 
   Example:
 
-      within(session, closest(css(".fieldset"), from: label("Email")), &assert_has(&1, text("can't be blank")))
+      within(session, closest(~l".fieldset"c, from: ~l"textbox:Email"r), &assert_has(&1, ~l"can't be blank"))
   """
   @spec closest(term(), keyword()) :: Locator.t()
   def closest(locator, opts) when is_list(opts) do
@@ -282,6 +291,22 @@ defmodule Cerberus do
     raise ArgumentError, "closest/2 expects keyword options"
   end
 
+  @doc """
+  Builds a locator using `~l`.
+
+  Supported forms:
+  - `~l"text"` text locator
+  - `~l"text"e` exact text
+  - `~l"text"i` inexact text
+  - `~l"ROLE:NAME"r` role locator form
+  - `~l"selector"c` CSS locator form
+  - `~l"test-id"t` testid locator form (defaults to exact matching)
+
+  Rules:
+  - use at most one locator-kind modifier (`r`, `c`, or `t`)
+  - `e` and `i` are mutually exclusive
+  - `r` requires `ROLE:NAME` input
+  """
   @spec sigil_l(String.t(), charlist()) :: Locator.t()
   def sigil_l(value, modifiers) when is_list(modifiers), do: Locator.sigil(value, modifiers)
 
@@ -305,21 +330,21 @@ defmodule Cerberus do
   @doc """
   Executes `callback` within a narrowed scope.
 
-  `scope` must be a locator input (for example, `css("#secondary-panel")`).
+  `scope` must be a locator input (for example, `~l"#secondary-panel"c`).
   Use `closest/2` when scope should resolve to the nearest matching ancestor
   around a nested element (for example, a field wrapper around a label).
 
   For one-shot assertions, you can also use scoped assertion overloads:
 
       session
-      |> assert_has(closest(css(".fieldset"), from: label("Email")), text("can't be blank"))
+      |> assert_has(closest(~l".fieldset"c, from: ~l"textbox:Email"r), ~l"can't be blank")
 
   Browser note: when locator-based `within/3` matches an `<iframe>`, Cerberus switches
   the query root to that iframe document. Only same-origin iframes are supported.
   """
   @spec within(arg, term(), (arg -> arg)) :: arg when arg: var
   def within(_session, scope, _callback) when is_binary(scope) do
-    raise ArgumentError, "within/3 no longer accepts CSS selector strings; use css(\"...\")"
+    raise ArgumentError, ~s{within/3 no longer accepts CSS selector strings; use ~l"..."c or css("...")}
   end
 
   def within(%LiveSession{} = session, locator, callback) when not is_binary(locator) and is_function(callback, 1) do
@@ -433,6 +458,8 @@ defmodule Cerberus do
 
   Helper locators like `label(...)`, `role(...)`, `placeholder(...)`, `title(...)`,
   `testid(...)`, and `css(...)` are also supported.
+  Sigil examples: `fill_in(session, ~l"#search_q"c, "Aragorn")`,
+  `fill_in(session, ~l"search-input"t, "Aragorn")`.
   """
   @spec fill_in(arg, term(), Options.fill_in_value(), Options.fill_in_opts()) :: arg when arg: var
   def fill_in(session, locator, value, opts \\ []) when is_list(opts) do
@@ -446,6 +473,8 @@ defmodule Cerberus do
   `upload(session, "Avatar", "/tmp/avatar.jpg")`.
 
   Helper locators like `label(...)`, `testid(...)`, and `css(...)` are also supported.
+  Sigil examples: `upload(session, ~l"#avatar"c, "/tmp/avatar.jpg")`,
+  `upload(session, ~l"avatar-upload"t, "/tmp/avatar.jpg")`.
   """
   @spec upload(arg, term(), String.t(), Options.upload_opts()) :: arg when arg: var
   def upload(session, locator, path, opts \\ [])
@@ -472,6 +501,8 @@ defmodule Cerberus do
   For multi-select fields, pass the full desired selection on every call
   (`option: ["Elf", "Dwarf"]`). Each `select/3` call replaces the selection
   with the provided option value(s).
+  Sigil examples: `select(session, ~l"#race_select"c, option: "Elf")`,
+  `select(session, ~l"race-select"t, option: "Elf")`.
   """
   @spec select(arg, term()) :: arg when arg: var
   def select(session, locator), do: select(session, locator, [])
@@ -488,6 +519,8 @@ defmodule Cerberus do
   `choose(session, "Email Choice")`.
 
   Helper locators like `label(...)`, `testid(...)`, and `css(...)` are also supported.
+  Sigil examples: `choose(session, ~l"#contact_email"c)`,
+  `choose(session, ~l"contact-email"t)`.
   """
   @spec choose(arg, term()) :: arg when arg: var
   def choose(session, locator), do: choose(session, locator, [])
@@ -504,6 +537,8 @@ defmodule Cerberus do
   `check(session, "Subscribe to newsletter")`.
 
   Helper locators like `label(...)`, `testid(...)`, and `css(...)` are also supported.
+  Sigil examples: `check(session, ~l"#subscribe"c)`,
+  `check(session, ~l"subscribe-checkbox"t)`.
   """
   @spec check(arg, term()) :: arg when arg: var
   def check(session, locator), do: check(session, locator, [])
@@ -520,6 +555,8 @@ defmodule Cerberus do
   `uncheck(session, "Subscribe to newsletter")`.
 
   Helper locators like `label(...)`, `testid(...)`, and `css(...)` are also supported.
+  Sigil examples: `uncheck(session, ~l"#subscribe"c)`,
+  `uncheck(session, ~l"subscribe-checkbox"t)`.
   """
   @spec uncheck(arg, term()) :: arg when arg: var
   def uncheck(session, locator), do: uncheck(session, locator, [])
@@ -533,10 +570,10 @@ defmodule Cerberus do
   Asserts that content matched by `locator` exists.
 
   Unscoped:
-  `assert_has(session, text("Articles"))`
+  `assert_has(session, ~l"Articles")`
 
   Scoped:
-  `assert_has(session, css("#secondary-panel"), "Status: secondary")`
+  `assert_has(session, ~l"#secondary-panel"c, "Status: secondary")`
 
   In the scoped form, the third argument is a locator input; passing a binary/regex
   uses text-locator shorthand.
@@ -564,10 +601,10 @@ defmodule Cerberus do
   Refutes that content matched by `locator` exists.
 
   Unscoped:
-  `refute_has(session, text("500 Internal Server Error"))`
+  `refute_has(session, ~l"500 Internal Server Error")`
 
   Scoped:
-  `refute_has(session, css("#secondary-panel"), "Status: primary")`
+  `refute_has(session, ~l"#secondary-panel"c, "Status: primary")`
 
   In the scoped form, the third argument is a locator input; passing a binary/regex
   uses text-locator shorthand.

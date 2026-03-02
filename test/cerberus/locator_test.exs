@@ -58,6 +58,12 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :css, value: "#search_q"} = ~l"#search_q"c
   end
 
+  test "~l supports testid modifier with default exact matching" do
+    assert %Locator{kind: :testid, value: "search-input", opts: [exact: true]} = ~l"search-input"t
+    assert %Locator{kind: :testid, value: "search-input", opts: [exact: true]} = ~l"search-input"te
+    assert %Locator{kind: :testid, value: "search-input", opts: [exact: false]} = ~l"search-input"ti
+  end
+
   test "~l rejects invalid modifier combinations and role syntax" do
     assert_raise InvalidLocatorError, ~r/at most one locator-kind modifier/, fn ->
       ~l"button:Save"rc
@@ -69,6 +75,10 @@ defmodule Cerberus.LocatorTest do
 
     assert_raise InvalidLocatorError, ~r/ROLE:NAME/, fn ->
       ~l"button"r
+    end
+
+    assert_raise InvalidLocatorError, ~r/testid modifier expects non-empty text/, fn ->
+      ~l""t
     end
   end
 

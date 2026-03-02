@@ -564,6 +564,7 @@ defmodule Cerberus.LocatorParityTest do
       },
       # sigil-rich cases
       %{name: "sigil css locator for fill_in", expect: :ok, run: &fill_in(&1, ~l"#search_q"c, "sigil css")},
+      %{name: "sigil testid locator for fill_in", expect: :ok, run: &fill_in(&1, ~l"search-input"t, "sigil testid")},
       %{name: "sigil role locator for select", expect: :ok, run: &select(&1, ~l"combobox:Language"r, option: "Elixir")},
       %{name: "sigil role locator for listbox", expect: :ok, run: &select(&1, ~l"listbox:Language"r, option: "Erlang")},
       %{name: "sigil role exact assertion", expect: :ok, run: &assert_has(&1, ~l"button:Increment"re)},
