@@ -155,7 +155,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
     """
     (() => {
-      const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
+      #{normalize_trim_snippet()}
       #{scoped_roots_setup(encoded_scope)}
 
       const isElementHidden = (element) => {
@@ -215,7 +215,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
     """
     (() => {
-      const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
+      #{normalize_trim_snippet()}
       #{scoped_query_setup(encoded_scope, encoded_selector)}
 
       const links = queryWithinRoots("a[href]")
@@ -279,7 +279,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
     """
     (() => {
-      const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
+      #{normalize_trim_snippet()}
       #{scoped_query_setup(encoded_scope, encoded_selector)}
       #{labels_by_for_snippet()}
 
@@ -342,7 +342,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
     """
     (() => {
-      const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
+      #{normalize_trim_snippet()}
       #{scoped_query_setup(encoded_scope, encoded_selector)}
       #{labels_by_for_snippet()}
 
@@ -464,7 +464,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
       const requestedOptions = #{encoded_options};
       const exactOption = #{encoded_exact_option};
 
-      const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").replace(/\\s+/g, " ").trim();
+      #{normalize_collapsed_snippet()}
       #{form_field_candidates_snippet()}
       #{indexed_lookup_snippet("fields", "field", index, "field_not_found")}
 
@@ -695,6 +695,18 @@ defmodule Cerberus.Driver.Browser.Expressions do
       const id = label.getAttribute("for");
       if (id) labels.set(id, normalize(label.textContent));
     });
+    """
+  end
+
+  defp normalize_trim_snippet do
+    """
+    const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").trim();
+    """
+  end
+
+  defp normalize_collapsed_snippet do
+    """
+    const normalize = (value) => (value || "").replace(/\\u00A0/g, " ").replace(/\\s+/g, " ").trim();
     """
   end
 
