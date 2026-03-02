@@ -9,6 +9,7 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   alias Cerberus.Driver.Browser.BrowsingContextSupervisor
   alias Cerberus.Driver.Browser.PopupHelpers
   alias Cerberus.Driver.Browser.Runtime
+  alias Cerberus.Driver.Browser.Types
 
   @spec child_spec(keyword()) :: Supervisor.child_spec()
   def child_spec(opts) do
@@ -31,65 +32,67 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(pid, :base_url)
   end
 
-  @spec navigate(pid(), String.t()) :: {:ok, map()} | {:error, String.t(), map()}
+  @spec navigate(pid(), String.t()) :: Types.bidi_response()
   def navigate(pid, url) when is_pid(pid) and is_binary(url) do
     GenServer.call(pid, {:navigate, url}, 10_000)
   end
 
-  @spec navigate(pid(), String.t(), String.t() | nil) :: {:ok, map()} | {:error, String.t(), map()}
+  @spec navigate(pid(), String.t(), String.t() | nil) :: Types.bidi_response()
   def navigate(pid, url, tab_id) when is_pid(pid) and is_binary(url) do
     GenServer.call(pid, {:navigate_tab, tab_id, url}, 10_000)
   end
 
-  @spec evaluate(pid(), String.t()) :: {:ok, map()} | {:error, String.t(), map()}
+  @spec evaluate(pid(), String.t()) :: Types.bidi_response()
   def evaluate(pid, expression) when is_pid(pid) and is_binary(expression) do
     evaluate_with_timeout(pid, expression, 10_000)
   end
 
-  @spec evaluate(pid(), String.t(), String.t() | nil) :: {:ok, map()} | {:error, String.t(), map()}
+  @spec evaluate(pid(), String.t(), String.t() | nil) :: Types.bidi_response()
   def evaluate(pid, expression, tab_id) when is_pid(pid) and is_binary(expression) do
     evaluate_with_timeout(pid, expression, 10_000, tab_id)
   end
 
-  @spec evaluate_with_timeout(pid(), String.t(), pos_integer()) :: {:ok, map()} | {:error, String.t(), map()}
+  @spec evaluate_with_timeout(pid(), String.t(), pos_integer()) :: Types.bidi_response()
   def evaluate_with_timeout(pid, expression, timeout_ms)
       when is_pid(pid) and is_binary(expression) and is_integer(timeout_ms) and timeout_ms > 0 do
     GenServer.call(pid, {:evaluate, expression, timeout_ms}, timeout_ms + 5_000)
   end
 
   @spec evaluate_with_timeout(pid(), String.t(), pos_integer(), String.t() | nil) ::
-          {:ok, map()} | {:error, String.t(), map()}
+          Types.bidi_response()
   def evaluate_with_timeout(pid, expression, timeout_ms, tab_id)
       when is_pid(pid) and is_binary(expression) and is_integer(timeout_ms) and timeout_ms > 0 do
     GenServer.call(pid, {:evaluate_tab, tab_id, expression, timeout_ms}, timeout_ms + 5_000)
   end
 
-  @spec await_ready(pid(), keyword()) :: {:ok, map()} | {:error, String.t(), map()}
+  @spec await_ready(pid(), keyword()) ::
+          {:ok, Types.readiness_payload()} | {:error, String.t(), Types.readiness_payload()}
   def await_ready(pid, opts \\ []) when is_pid(pid) and is_list(opts) do
     GenServer.call(pid, {:await_ready, opts}, 10_000)
   end
 
-  @spec await_ready(pid(), keyword(), String.t() | nil) :: {:ok, map()} | {:error, String.t(), map()}
+  @spec await_ready(pid(), keyword(), String.t() | nil) ::
+          {:ok, Types.readiness_payload()} | {:error, String.t(), Types.readiness_payload()}
   def await_ready(pid, opts, tab_id) when is_pid(pid) and is_list(opts) do
     GenServer.call(pid, {:await_ready_tab, tab_id, opts}, 10_000)
   end
 
-  @spec open_tab(pid()) :: {:ok, String.t()} | {:error, String.t(), map()}
+  @spec open_tab(pid()) :: {:ok, String.t()} | {:error, String.t(), Types.bidi_error_details()}
   def open_tab(pid) when is_pid(pid) do
     GenServer.call(pid, :open_tab, 10_000)
   end
 
-  @spec switch_tab(pid(), String.t()) :: :ok | {:error, String.t(), map()}
+  @spec switch_tab(pid(), String.t()) :: :ok | {:error, String.t(), Types.bidi_error_details()}
   def switch_tab(pid, tab_id) when is_pid(pid) and is_binary(tab_id) do
     GenServer.call(pid, {:switch_tab, tab_id}, 10_000)
   end
 
-  @spec close_tab(pid(), String.t()) :: :ok | {:error, String.t(), map()}
+  @spec close_tab(pid(), String.t()) :: :ok | {:error, String.t(), Types.bidi_error_details()}
   def close_tab(pid, tab_id) when is_pid(pid) and is_binary(tab_id) do
     GenServer.call(pid, {:close_tab, tab_id}, 10_000)
   end
 
-  @spec attach_tab(pid(), String.t()) :: :ok | {:error, String.t(), map()}
+  @spec attach_tab(pid(), String.t()) :: :ok | {:error, String.t(), Types.bidi_error_details()}
   def attach_tab(pid, tab_id) when is_pid(pid) and is_binary(tab_id) do
     GenServer.call(pid, {:attach_tab, tab_id}, 10_000)
   end
@@ -104,17 +107,17 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(pid, :active_tab)
   end
 
-  @spec set_user_agent(pid(), String.t()) :: :ok | {:error, String.t(), map()}
+  @spec set_user_agent(pid(), String.t()) :: :ok | {:error, String.t(), Types.bidi_error_details()}
   def set_user_agent(pid, user_agent) when is_pid(pid) and is_binary(user_agent) do
     GenServer.call(pid, {:set_user_agent, user_agent}, 10_000)
   end
 
-  @spec last_readiness(pid()) :: map()
+  @spec last_readiness(pid()) :: Types.readiness_payload()
   def last_readiness(pid) when is_pid(pid) do
     GenServer.call(pid, :last_readiness)
   end
 
-  @spec last_readiness(pid(), String.t() | nil) :: map()
+  @spec last_readiness(pid(), String.t() | nil) :: Types.readiness_payload()
   def last_readiness(pid, tab_id) when is_pid(pid) do
     GenServer.call(pid, {:last_readiness_tab, tab_id})
   end

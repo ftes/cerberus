@@ -67,8 +67,28 @@ defmodule Cerberus.TimeoutDefaultsTest do
   end
 
   test "session constructor rejects invalid assert_timeout_ms override" do
-    assert_raise ArgumentError, ~r/:assert_timeout_ms must be a non-negative integer/, fn ->
+    assert_raise ArgumentError, ~r/session\/1 invalid options:.*assert_timeout_ms/, fn ->
       session(assert_timeout_ms: -1)
+    end
+  end
+
+  test "browser session constructor rejects invalid ready timeout options before driver startup" do
+    assert_raise ArgumentError, ~r/session\(:browser, opts\) invalid options:.*ready_timeout_ms/, fn ->
+      session(:browser, ready_timeout_ms: 0)
+    end
+
+    assert_raise ArgumentError, ~r/session\(:browser, opts\) invalid options:.*ready_quiet_ms/, fn ->
+      session(:browser, ready_quiet_ms: -1)
+    end
+  end
+
+  test "browser session constructor rejects invalid nested browser option shapes before driver startup" do
+    assert_raise ArgumentError, ~r/session\(:browser, opts\) invalid options:.*popup_mode/, fn ->
+      session(:browser, browser: [popup_mode: :new_tab])
+    end
+
+    assert_raise ArgumentError, ~r/session\(:browser, opts\) invalid options:.*chrome_args/, fn ->
+      session(:browser, chrome_args: [123])
     end
   end
 

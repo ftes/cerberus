@@ -46,9 +46,11 @@ defmodule Cerberus do
   @spec session() :: Session.t()
   def session, do: session([])
 
-  @spec session(keyword()) :: Session.t()
+  @spec session(Options.session_common_opts()) :: Session.t()
   def session(opts) when is_list(opts) do
-    StaticSession.new_session(opts)
+    opts
+    |> Options.validate_session_common!()
+    |> StaticSession.new_session()
   end
 
   @spec session(:phoenix) :: Session.t()
@@ -68,7 +70,7 @@ defmodule Cerberus do
           "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser|:chrome|:firefox) for browser"
   end
 
-  @spec session(:phoenix, keyword()) :: Session.t()
+  @spec session(:phoenix, Options.session_common_opts()) :: Session.t()
   def session(:phoenix, opts) when is_list(opts), do: session(opts)
 
   @doc """
@@ -85,21 +87,25 @@ defmodule Cerberus do
   - `webdriver_url: "http://remote-webdriver:4444"` to use a remote WebDriver endpoint
     without local browser/chromedriver launch.
   """
-  @spec session(:browser, keyword()) :: Session.t()
+  @spec session(:browser, Options.session_browser_opts()) :: Session.t()
   def session(:browser, opts) when is_list(opts) do
-    BrowserSession.new_session(opts)
+    opts
+    |> Options.validate_session_browser!()
+    |> BrowserSession.new_session()
   end
 
-  @spec session(:chrome, keyword()) :: Session.t()
+  @spec session(:chrome, Options.session_browser_opts()) :: Session.t()
   def session(:chrome, opts) when is_list(opts) do
     opts
+    |> Options.validate_session_browser!()
     |> Keyword.put(:browser_name, :chrome)
     |> BrowserSession.new_session()
   end
 
-  @spec session(:firefox, keyword()) :: Session.t()
+  @spec session(:firefox, Options.session_browser_opts()) :: Session.t()
   def session(:firefox, opts) when is_list(opts) do
     opts
+    |> Options.validate_session_browser!()
     |> Keyword.put(:browser_name, :firefox)
     |> BrowserSession.new_session()
   end

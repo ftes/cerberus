@@ -19,7 +19,7 @@ defmodule Cerberus.Driver.Static do
           assert_timeout_ms: non_neg_integer(),
           html: String.t(),
           form_data: map(),
-          scope: String.t() | nil,
+          scope: Session.scope_value(),
           current_path: String.t() | nil,
           last_result: Session.last_result()
         }

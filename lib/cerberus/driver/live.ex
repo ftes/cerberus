@@ -24,7 +24,7 @@ defmodule Cerberus.Driver.Live do
           view: term() | nil,
           html: String.t(),
           form_data: map(),
-          scope: String.t() | nil,
+          scope: Session.scope_value(),
           current_path: String.t() | nil,
           last_result: Session.last_result()
         }

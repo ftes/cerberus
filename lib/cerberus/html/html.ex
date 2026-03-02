@@ -2,6 +2,7 @@ defmodule Cerberus.Html do
   @moduledoc false
 
   alias Cerberus.Locator
+  alias Cerberus.Options
   alias Cerberus.Query
 
   @spec texts(String.t(), true | false | :any, String.t() | nil) :: [String.t()]
@@ -45,7 +46,7 @@ defmodule Cerberus.Html do
     end
   end
 
-  @spec node_matches_locator_filters?(term(), keyword()) :: boolean()
+  @spec node_matches_locator_filters?(term(), Options.locator_filter_opts()) :: boolean()
   def node_matches_locator_filters?(node, opts) when is_list(opts) do
     case Keyword.get(opts, :has) do
       nil ->
@@ -59,7 +60,7 @@ defmodule Cerberus.Html do
     end
   end
 
-  @spec fragment_matches_locator_filters?(String.t(), keyword()) :: boolean()
+  @spec fragment_matches_locator_filters?(String.t(), Options.locator_filter_opts()) :: boolean()
   def fragment_matches_locator_filters?(fragment_html, opts) when is_binary(fragment_html) and is_list(opts) do
     if Keyword.has_key?(opts, :has) do
       fragment_matches_locator_filters_in_doc?(fragment_html, opts)
@@ -77,7 +78,7 @@ defmodule Cerberus.Html do
     end
   end
 
-  @spec find_link(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
+  @spec find_link(String.t(), String.t() | Regex.t(), Options.locator_filter_opts(), String.t() | nil) ::
           {:ok,
            %{
              required(:text) => String.t(),
@@ -95,7 +96,7 @@ defmodule Cerberus.Html do
     end
   end
 
-  @spec find_button(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
+  @spec find_button(String.t(), String.t() | Regex.t(), Options.locator_filter_opts(), String.t() | nil) ::
           {:ok, %{text: String.t(), selector: String.t() | nil}} | :error
   def find_button(html, expected, opts, scope \\ nil) when is_binary(html) do
     case parse_document(html) do
@@ -107,7 +108,7 @@ defmodule Cerberus.Html do
     end
   end
 
-  @spec find_form_field(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
+  @spec find_form_field(String.t(), String.t() | Regex.t(), Options.locator_filter_opts(), String.t() | nil) ::
           {:ok, map()} | :error
   def find_form_field(html, expected, opts, scope \\ nil) when is_binary(html) do
     case parse_document(html) do
@@ -119,7 +120,7 @@ defmodule Cerberus.Html do
     end
   end
 
-  @spec select_values(String.t(), map(), String.t() | [String.t()], keyword(), String.t() | nil) ::
+  @spec select_values(String.t(), map(), String.t() | [String.t()], Options.locator_filter_opts(), String.t() | nil) ::
           {:ok, %{values: [String.t()], multiple?: boolean()}} | {:error, String.t()}
   def select_values(html, field, option, opts, scope \\ nil) when is_binary(html) and is_map(field) do
     case parse_document(html) do
@@ -155,7 +156,7 @@ defmodule Cerberus.Html do
     end
   end
 
-  @spec find_submit_button(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
+  @spec find_submit_button(String.t(), String.t() | Regex.t(), Options.locator_filter_opts(), String.t() | nil) ::
           {:ok,
            %{
              text: String.t(),

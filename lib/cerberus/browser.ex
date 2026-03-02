@@ -9,19 +9,11 @@ defmodule Cerberus.Browser do
   alias Cerberus.Assertions
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Browser.Extensions
+  alias Cerberus.Driver.Browser.Types
   alias Cerberus.Options
   alias Cerberus.Session
 
-  @type cookie :: %{
-          name: String.t() | nil,
-          value: term(),
-          domain: String.t() | nil,
-          path: String.t() | nil,
-          http_only: boolean(),
-          secure: boolean(),
-          same_site: String.t() | nil,
-          session: boolean()
-        }
+  @type cookie :: Types.cookie()
 
   @spec screenshot(session, String.t() | keyword()) :: session when session: var
   def screenshot(session, opts \\ [])

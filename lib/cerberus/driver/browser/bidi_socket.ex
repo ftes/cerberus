@@ -4,11 +4,12 @@ defmodule Cerberus.Driver.Browser.BiDiSocket do
   use GenServer
 
   alias Cerberus.Driver.Browser.Runtime
+  alias Cerberus.Driver.Browser.Types
   alias Cerberus.Driver.Browser.WS
 
   @type state :: %{
           owner: pid() | atom(),
-          sockets: %{optional(:chrome | :firefox) => %{socket: pid(), url: String.t(), monitor_ref: reference()}}
+          sockets: %{optional(Types.browser_name()) => %{socket: pid(), url: String.t(), monitor_ref: reference()}}
         }
 
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -16,12 +17,12 @@ defmodule Cerberus.Driver.Browser.BiDiSocket do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @spec ensure_connected(:chrome | :firefox, String.t()) :: {:ok, pid()} | {:error, term()}
+  @spec ensure_connected(Types.browser_name(), String.t()) :: {:ok, pid()} | {:error, term()}
   def ensure_connected(browser_name, url) when browser_name in [:chrome, :firefox] and is_binary(url) do
     GenServer.call(__MODULE__, {:ensure_connected, browser_name, url}, 5_000)
   end
 
-  @spec send_text(:chrome | :firefox, binary()) :: :ok | {:error, term()}
+  @spec send_text(Types.browser_name(), binary()) :: :ok | {:error, term()}
   def send_text(browser_name, payload) when browser_name in [:chrome, :firefox] and is_binary(payload) do
     GenServer.call(__MODULE__, {:send_text, browser_name, payload})
   end
@@ -31,7 +32,7 @@ defmodule Cerberus.Driver.Browser.BiDiSocket do
     GenServer.call(__MODULE__, :close)
   end
 
-  @spec clear(:chrome | :firefox, pid()) :: :ok
+  @spec clear(Types.browser_name(), pid()) :: :ok
   def clear(browser_name, socket) when browser_name in [:chrome, :firefox] and is_pid(socket) do
     GenServer.cast(__MODULE__, {:clear, browser_name, socket})
   end

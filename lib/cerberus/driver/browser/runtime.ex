@@ -3,6 +3,8 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   use GenServer
 
+  alias Cerberus.Driver.Browser.Types
+
   @default_browser_name :chrome
   @default_runtime_http_timeout_ms 5_000
   @default_chrome_startup_retries 1
@@ -13,7 +15,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   @type service :: %{
           url: String.t(),
-          browser_name: :chrome | :firefox,
+          browser_name: Types.browser_name(),
           managed?: boolean(),
           process: port() | nil,
           startup_log_path: String.t() | nil,
@@ -22,17 +24,17 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   @type runtime_session :: %{
           service: service(),
-          browser_name: :chrome | :firefox,
+          browser_name: Types.browser_name(),
           session_id: String.t(),
           web_socket_url: String.t(),
           owners: MapSet.t(pid())
         }
 
   @type state :: %{
-          runtime_sessions: %{optional(:chrome | :firefox) => runtime_session()},
+          runtime_sessions: %{optional(Types.browser_name()) => runtime_session()},
           base_url: String.t() | nil,
           opts: keyword(),
-          owner_refs: %{optional(reference()) => {:chrome | :firefox, pid()}}
+          owner_refs: %{optional(reference()) => {Types.browser_name(), pid()}}
         }
 
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -831,7 +833,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
   end
 
   @doc false
-  @spec webdriver_session_payload(keyword(), boolean(), :chrome | :firefox) :: map()
+  @spec webdriver_session_payload(keyword(), boolean(), Types.browser_name()) :: Types.webdriver_session_payload()
   def webdriver_session_payload(opts, managed?, browser_name) when is_list(opts) and is_boolean(managed?) do
     capabilities =
       maybe_put_browser_options(

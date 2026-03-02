@@ -5,10 +5,11 @@ defmodule Cerberus.Driver.Browser.BiDi do
 
   alias Cerberus.Driver.Browser.BiDiSocket
   alias Cerberus.Driver.Browser.Runtime
+  alias Cerberus.Driver.Browser.Types
 
   @default_command_timeout_ms 10_000
 
-  @type browser_name :: :chrome | :firefox
+  @type browser_name :: Types.browser_name()
 
   @type state :: %{
           next_id: pos_integer(),
@@ -24,13 +25,13 @@ defmodule Cerberus.Driver.Browser.BiDi do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  @spec command(String.t(), map(), keyword()) :: {:ok, map()} | {:error, String.t(), map()}
+  @spec command(String.t(), Types.bidi_params(), keyword()) :: Types.bidi_response()
   def command(method, params \\ %{}, opts \\ []) when is_binary(method) and is_map(params) and is_list(opts) do
     command(__MODULE__, method, params, opts)
   end
 
-  @spec command(GenServer.server(), String.t(), map(), keyword()) ::
-          {:ok, map()} | {:error, String.t(), map()}
+  @spec command(GenServer.server(), String.t(), Types.bidi_params(), keyword()) ::
+          Types.bidi_response()
   def command(pid, method, params, opts) when is_binary(method) and is_map(params) do
     timeout =
       case Keyword.fetch(opts, :timeout) do

@@ -205,6 +205,14 @@ defmodule Cerberus.Assertions do
     end
   end
 
+  @spec run_assertion!(
+          Session.t(),
+          :assert_has | :refute_has,
+          Locator.t(),
+          Driver.locator_input(),
+          keyword(),
+          keyword()
+        ) :: Session.t()
   defp run_assertion!(session, op, locator, locator_input, driver_opts, message_opts) do
     driver = driver_module_for_session!(session)
 
@@ -226,6 +234,14 @@ defmodule Cerberus.Assertions do
     end
   end
 
+  @spec format_error(
+          String.t(),
+          Driver.locator_input() | :none,
+          keyword(),
+          String.t(),
+          Session.observed(),
+          Session.t()
+        ) :: String.t()
   defp format_error(op, locator, opts, reason, observed, session) do
     transition = observed_transition(observed) || Session.transition(session)
     scope = Session.scope(session)
@@ -242,6 +258,7 @@ defmodule Cerberus.Assertions do
     """
   end
 
+  @spec observed_transition(Session.observed()) :: Session.transition() | nil
   defp observed_transition(observed) when is_map(observed) do
     observed[:transition] || observed["transition"]
   end

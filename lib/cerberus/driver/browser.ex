@@ -41,8 +41,9 @@ defmodule Cerberus.Driver.Browser do
           ready_quiet_ms: pos_integer(),
           browser_context_defaults: browser_context_defaults(),
           sandbox_metadata: String.t() | nil,
-          scope: String.t() | map() | nil,
-          current_path: String.t() | nil
+          scope: Session.scope_value(),
+          current_path: String.t() | nil,
+          last_result: Session.last_result()
         }
 
   defstruct user_context_pid: nil,
@@ -55,7 +56,8 @@ defmodule Cerberus.Driver.Browser do
             browser_context_defaults: @empty_browser_context_defaults,
             sandbox_metadata: nil,
             scope: nil,
-            current_path: nil
+            current_path: nil,
+            last_result: nil
 
   @impl true
   def new_session(opts \\ []) do
@@ -205,8 +207,8 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @doc false
-  @spec resolve_within_scope(t(), Locator.t(), String.t() | map() | nil) ::
-          {:ok, String.t() | map()} | {:error, String.t()}
+  @spec resolve_within_scope(t(), Locator.t(), Session.scope_value()) ::
+          {:ok, Session.scope_value()} | {:error, String.t()}
   def resolve_within_scope(%__MODULE__{} = session, %Locator{} = locator, scope \\ nil) do
     state = state!(session)
 
@@ -1599,7 +1601,7 @@ defmodule Cerberus.Driver.Browser do
   defp scope_from_parts([], selector), do: selector
   defp scope_from_parts(frame_chain, selector), do: %{frame_chain: frame_chain, selector: selector}
 
-  defp update_session(%__MODULE__{} = session, %{} = state, _op, _observed) do
+  defp update_session(%__MODULE__{} = session, %{} = state, op, observed) do
     %{
       session
       | user_context_pid: state.user_context_pid,
@@ -1612,7 +1614,8 @@ defmodule Cerberus.Driver.Browser do
         browser_context_defaults: state.browser_context_defaults,
         sandbox_metadata: state.sandbox_metadata,
         scope: session.scope,
-        current_path: state.current_path
+        current_path: state.current_path,
+        last_result: %{op: op, observed: observed}
     }
   end
 

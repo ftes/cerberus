@@ -3,6 +3,7 @@ defmodule Cerberus.Driver.Browser.Config do
 
   alias Cerberus.Driver.Browser.AssertionHelpers
   alias Cerberus.Driver.Browser.PopupHelpers
+  alias Cerberus.Driver.Browser.Types
 
   @default_ready_timeout_ms 1_500
   @default_ready_quiet_ms 40
@@ -110,7 +111,7 @@ defmodule Cerberus.Driver.Browser.Config do
     max(timeout_ms, 1_000) + 5_000
   end
 
-  @spec text_expectation_payload(String.t() | Regex.t()) :: map()
+  @spec text_expectation_payload(String.t() | Regex.t()) :: Types.bidi_params()
   def text_expectation_payload(%Regex{source: source, opts: opts}) do
     %{"type" => "regex", "source" => source, "opts" => opts}
   end
@@ -119,7 +120,7 @@ defmodule Cerberus.Driver.Browser.Config do
     %{"type" => "string", "value" => expected}
   end
 
-  @spec path_expectation_payload(String.t() | Regex.t()) :: map()
+  @spec path_expectation_payload(String.t() | Regex.t()) :: Types.bidi_params()
   def path_expectation_payload(%Regex{source: source, opts: opts}) do
     %{"type" => "regex", "source" => source, "opts" => opts}
   end

@@ -1,9 +1,11 @@
 defmodule Cerberus.Query do
   @moduledoc false
 
+  alias Cerberus.Options
+
   @state_keys [:checked, :disabled, :selected, :readonly]
 
-  @spec match_text?(String.t(), String.t() | Regex.t(), keyword()) :: boolean()
+  @spec match_text?(String.t(), String.t() | Regex.t(), Options.text_match_opts()) :: boolean()
   def match_text?(actual, expected, opts \\ []) when is_binary(actual) do
     actual = maybe_normalize_ws(actual, opts)
 
@@ -32,7 +34,7 @@ defmodule Cerberus.Query do
     end
   end
 
-  @spec apply_count_constraints(non_neg_integer(), keyword()) :: :ok | {:error, String.t()}
+  @spec apply_count_constraints(non_neg_integer(), Options.count_filter_opts()) :: :ok | {:error, String.t()}
   def apply_count_constraints(match_count, opts) when is_integer(match_count) and match_count >= 0 do
     with :ok <- check_count_opt(match_count, Keyword.get(opts, :count)),
          :ok <- check_min_opt(match_count, Keyword.get(opts, :min)),
@@ -41,7 +43,7 @@ defmodule Cerberus.Query do
     end
   end
 
-  @spec has_count_constraints?(keyword()) :: boolean()
+  @spec has_count_constraints?(Options.count_filter_opts()) :: boolean()
   def has_count_constraints?(opts) when is_list(opts) do
     not is_nil(Keyword.get(opts, :count)) or
       not is_nil(Keyword.get(opts, :min)) or
@@ -49,7 +51,7 @@ defmodule Cerberus.Query do
       not is_nil(Keyword.get(opts, :between))
   end
 
-  @spec assertion_count_outcome(non_neg_integer(), keyword(), :assert | :refute) ::
+  @spec assertion_count_outcome(non_neg_integer(), Options.count_filter_opts(), :assert | :refute) ::
           :ok | {:error, String.t()}
   def assertion_count_outcome(match_count, opts, :assert) when is_integer(match_count) and match_count >= 0 do
     if has_count_constraints?(opts) do
@@ -82,7 +84,8 @@ defmodule Cerberus.Query do
     end
   end
 
-  @spec pick_match([term()], keyword()) :: {:ok, term()} | {:error, String.t()}
+  @spec pick_match([match], Options.count_filter_opts()) :: {:ok, match} | {:error, String.t()}
+        when match: var
   def pick_match(matches, opts) when is_list(matches) do
     match_count = length(matches)
 
@@ -184,7 +187,7 @@ defmodule Cerberus.Query do
     end
   end
 
-  @spec matches_state_filters?(map(), keyword()) :: boolean()
+  @spec matches_state_filters?(map(), Options.state_filter_opts()) :: boolean()
   def matches_state_filters?(candidate, opts) when is_map(candidate) and is_list(opts) do
     Enum.all?(@state_keys, fn key ->
       case Keyword.get(opts, key) do

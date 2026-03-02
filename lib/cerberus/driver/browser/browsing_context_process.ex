@@ -5,6 +5,7 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   alias Cerberus.Driver.Browser.BiDi
   alias Cerberus.Driver.Browser.Runtime
+  alias Cerberus.Driver.Browser.Types
 
   @default_ready_timeout_ms 1_500
   @default_ready_quiet_ms 40
@@ -37,29 +38,30 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     GenServer.call(pid, :id)
   end
 
-  @spec navigate(pid(), String.t()) :: {:ok, map()} | {:error, String.t(), map()}
+  @spec navigate(pid(), String.t()) :: Types.bidi_response()
   def navigate(pid, url) when is_pid(pid) and is_binary(url) do
     GenServer.call(pid, {:navigate, url}, 10_000)
   end
 
-  @spec evaluate(pid(), String.t()) :: {:ok, map()} | {:error, String.t(), map()}
+  @spec evaluate(pid(), String.t()) :: Types.bidi_response()
   def evaluate(pid, expression) when is_pid(pid) and is_binary(expression) do
     evaluate(pid, expression, 10_000)
   end
 
-  @spec evaluate(pid(), String.t(), pos_integer()) :: {:ok, map()} | {:error, String.t(), map()}
+  @spec evaluate(pid(), String.t(), pos_integer()) :: Types.bidi_response()
   def evaluate(pid, expression, timeout_ms)
       when is_pid(pid) and is_binary(expression) and is_integer(timeout_ms) and timeout_ms > 0 do
     GenServer.call(pid, {:evaluate, expression, timeout_ms}, command_call_timeout_ms(timeout_ms))
   end
 
-  @spec await_ready(pid(), keyword()) :: {:ok, map()} | {:error, String.t(), map()}
+  @spec await_ready(pid(), keyword()) ::
+          {:ok, Types.readiness_payload()} | {:error, String.t(), Types.readiness_payload()}
   def await_ready(pid, opts \\ []) when is_pid(pid) and is_list(opts) do
     timeout_ms = normalize_positive_integer(Keyword.get(opts, :timeout_ms), @default_ready_timeout_ms)
     GenServer.call(pid, {:await_ready, opts}, timeout_ms + 5_000)
   end
 
-  @spec last_readiness(pid()) :: map()
+  @spec last_readiness(pid()) :: Types.readiness_payload()
   def last_readiness(pid) when is_pid(pid) do
     GenServer.call(pid, :last_readiness)
   end

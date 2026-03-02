@@ -9,7 +9,25 @@ defmodule Cerberus.Session do
   @default_live_browser_assert_timeout_ms 500
 
   @type driver_kind :: :auto | :static | :live | :browser | :chrome | :firefox
-  @type last_result :: %{op: atom(), observed: map()} | nil
+  @type observed :: %{optional(String.t() | atom()) => term()}
+  @type scope_value :: String.t() | observed() | nil
+  @type transition :: observed()
+  @type operation ::
+          :visit
+          | :click
+          | :fill_in
+          | :select
+          | :choose
+          | :check
+          | :uncheck
+          | :upload
+          | :submit
+          | :assert_has
+          | :refute_has
+          | :assert_path
+          | :refute_path
+  @type result :: %{op: operation(), observed: observed()}
+  @type last_result :: result() | nil
   @type t :: struct()
 
   @spec driver_kind(t()) :: :static | :live | :browser
@@ -20,18 +38,19 @@ defmodule Cerberus.Session do
   @spec current_path(t()) :: String.t() | nil
   def current_path(%{current_path: current_path}), do: current_path
 
-  @spec scope(t()) :: String.t() | map() | nil
+  @spec scope(t()) :: scope_value()
   def scope(%{scope: scope}), do: scope
   def scope(_session), do: nil
 
-  @spec with_scope(t(), String.t() | map() | nil) :: t()
+  @spec with_scope(t(), scope_value()) :: t()
   def with_scope(session, scope) when is_binary(scope) or is_map(scope) or is_nil(scope),
     do: Map.put(session, :scope, scope)
 
   @spec last_result(t()) :: last_result()
   def last_result(%{last_result: last_result}), do: last_result
+  def last_result(_session), do: nil
 
-  @spec transition(t()) :: map() | nil
+  @spec transition(t()) :: transition() | nil
   def transition(%{last_result: %{observed: observed}}) when is_map(observed) do
     observed[:transition] || observed["transition"]
   end

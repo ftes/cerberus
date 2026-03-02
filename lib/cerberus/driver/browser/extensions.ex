@@ -3,6 +3,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Browser.BiDi
+  alias Cerberus.Driver.Browser.Types
   alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.Options
   alias ExUnit.AssertionError
@@ -171,7 +172,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  @spec cookies(BrowserSession.t()) :: [map()]
+  @spec cookies(BrowserSession.t()) :: [Types.cookie()]
   def cookies(%BrowserSession{} = session) do
     params = %{"partition" => %{"type" => "context", "context" => session.tab_id}}
 
@@ -187,12 +188,12 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  @spec cookie(BrowserSession.t(), String.t()) :: map() | nil
+  @spec cookie(BrowserSession.t(), String.t()) :: Types.cookie() | nil
   def cookie(%BrowserSession{} = session, name) when is_binary(name) do
     Enum.find(cookies(session), fn cookie -> cookie.name == name end)
   end
 
-  @spec session_cookie(BrowserSession.t()) :: map() | nil
+  @spec session_cookie(BrowserSession.t()) :: Types.cookie() | nil
   def session_cookie(%BrowserSession{} = session) do
     cookies = cookies(session)
 
@@ -289,6 +290,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   defp exception_details_message(_details, payload), do: inspect(payload)
 
+  @spec normalize_cookie(Types.payload()) :: Types.cookie()
   defp normalize_cookie(cookie) when is_map(cookie) do
     session_cookie? =
       cookie["goog:session"] ||

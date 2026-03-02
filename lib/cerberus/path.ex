@@ -1,6 +1,7 @@
 defmodule Cerberus.Path do
   @moduledoc false
 
+  alias Cerberus.Options
   alias Cerberus.Query
 
   @spec normalize(String.t() | nil) :: String.t() | nil
@@ -42,7 +43,7 @@ defmodule Cerberus.Path do
     |> decode_query()
   end
 
-  @spec match_path?(String.t() | nil, String.t() | Regex.t(), keyword()) :: boolean()
+  @spec match_path?(String.t() | nil, String.t() | Regex.t(), Options.path_match_opts()) :: boolean()
   def match_path?(actual, expected, opts \\ []) when is_binary(expected) or is_struct(expected, Regex) do
     exact = Keyword.get(opts, :exact, true)
     normalized_actual = normalize(actual) || ""
@@ -65,7 +66,7 @@ defmodule Cerberus.Path do
     end
   end
 
-  @spec query_matches?(String.t() | nil, map() | keyword() | nil) :: boolean()
+  @spec query_matches?(String.t() | nil, Options.path_query()) :: boolean()
   def query_matches?(_actual, nil), do: true
 
   def query_matches?(actual_path, expected_query) when is_map(expected_query) or is_list(expected_query) do
@@ -77,7 +78,7 @@ defmodule Cerberus.Path do
     end)
   end
 
-  @spec normalize_expected_query(map() | keyword() | nil) :: map() | nil
+  @spec normalize_expected_query(Options.path_query()) :: map() | nil
   def normalize_expected_query(nil), do: nil
 
   def normalize_expected_query(expected) when is_list(expected) do
