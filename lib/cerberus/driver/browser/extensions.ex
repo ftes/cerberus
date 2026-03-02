@@ -167,6 +167,9 @@ defmodule Cerberus.Driver.Browser.Extensions do
       {:ok, %{"result" => result}} ->
         decode_remote_value(result)
 
+      {:ok, %{"type" => "exception", "exceptionDetails" => details} = payload} ->
+        raise ArgumentError, "browser evaluate_js failed: #{exception_details_message(details, payload)}"
+
       {:ok, payload} ->
         raise ArgumentError, "unexpected browser evaluate result: #{inspect(payload)}"
 
@@ -285,6 +288,12 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   defp decode_remote_value(%{"type" => _type} = value), do: value
   defp decode_remote_value(value), do: value
+
+  defp exception_details_message(%{"text" => text}, _payload) when is_binary(text) and text != "" do
+    text
+  end
+
+  defp exception_details_message(_details, payload), do: inspect(payload)
 
   defp normalize_cookie(cookie) when is_map(cookie) do
     session_cookie? =

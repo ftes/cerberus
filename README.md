@@ -134,6 +134,7 @@ main =
 > #### Warning
 >
 > `Cerberus.Browser.*` helpers are intentionally browser-only. Calling them on non-browser sessions raises explicit unsupported-operation assertions.
+> Cross-origin iframe DOM access is still blocked by browser same-origin policy; use provider-level or parent-page assertions for those flows.
 
 ## Locator Quick Look
 

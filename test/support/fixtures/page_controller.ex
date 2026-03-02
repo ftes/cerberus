@@ -562,6 +562,49 @@ defmodule Cerberus.Fixtures.PageController do
     """)
   end
 
+  def iframe_cross_origin(conn, _params) do
+    cross_origin_url = cross_origin_fixture_url(conn, "/browser/iframe/target")
+
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Cross-Origin Iframe Source</title>
+      </head>
+      <body>
+        <main>
+          <h1>Cross-Origin Iframe Source</h1>
+          <iframe
+            id="cross-origin-frame"
+            src="#{cross_origin_url}"
+            title="Cross Origin Fixture Frame"
+            width="640"
+            height="240"
+          ></iframe>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def iframe_target(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Iframe Target</title>
+      </head>
+      <body>
+        <main>
+          <p id="iframe-target-marker">Cross-origin iframe body marker</p>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
   def session_user(conn, _params) do
     value = Plug.Conn.get_session(conn, :session_user) || "unset"
 
@@ -767,4 +810,13 @@ defmodule Cerberus.Fixtures.PageController do
     </html>
     """)
   end
+
+  defp cross_origin_fixture_url(conn, path) when is_binary(path) do
+    alt_host = alternate_host(conn.host)
+    "#{conn.scheme}://#{alt_host}:#{conn.port}#{path}"
+  end
+
+  defp alternate_host("localhost"), do: "127.0.0.1"
+  defp alternate_host("127.0.0.1"), do: "localhost"
+  defp alternate_host(_host), do: "localhost"
 end

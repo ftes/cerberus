@@ -46,6 +46,8 @@ defmodule Cerberus.Fixtures.Router do
     get("/browser/popup/auto", PageController, :popup_auto)
     get("/browser/popup/click", PageController, :popup_click)
     get("/browser/popup/destination", PageController, :popup_destination)
+    get("/browser/iframe/cross-origin", PageController, :iframe_cross_origin)
+    get("/browser/iframe/target", PageController, :iframe_target)
     get("/session/user", PageController, :session_user)
     get("/session/user/:value", PageController, :set_session_user)
     get("/owner-form", PageController, :owner_form)

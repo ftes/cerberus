@@ -34,6 +34,17 @@ CI keeps chrome as the baseline lane and includes targeted firefox-tagged confor
 - Use it when the test only needs final navigation/result behavior.
 - Avoid it when the flow requires validating opener+popup interaction, browser popup semantics, or exact multi-window behavior.
 
+## Cross-Origin Iframe Limitations
+
+- Direct DOM interaction inside cross-origin iframes is blocked by the browser same-origin policy.
+- This applies even when using `Browser.evaluate_js/2` in browser mode.
+- Cerberus treats this as an explicit browser limitation, not a driver bug.
+
+Recommended alternatives:
+- Assert iframe wiring on the parent page (`src`, visibility, container state).
+- Assert end-user outcomes outside iframe internals (redirects, server-side state, callback UI).
+- For provider-hosted flows, validate provider integration with dedicated provider tests instead of cross-origin DOM traversal in Cerberus.
+
 ## Local Managed Runtime
 
 Configure local browser and WebDriver binaries via `:cerberus, :browser`:
