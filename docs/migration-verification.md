@@ -41,6 +41,11 @@ The CI job runs this suite:
 
 This keeps migration verification in the non-browser phase by default and avoids coupling parity checks to browser-runtime setup.
 
+Optional browser lane knobs for Playwright migration rows:
+
+- `CERBERUS_INSTALL_PLAYWRIGHT_ASSETS=true` to run `npm --prefix assets install playwright` in the copied fixture before Playwright row execution.
+- `CERBERUS_REQUIRE_PLAYWRIGHT_EXECUTION=true` to fail if the Playwright row is skipped.
+
 ## Intentional Boundaries
 
 Current loop scope is intentionally narrow:

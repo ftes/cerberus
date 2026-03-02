@@ -221,6 +221,32 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     assert post_status == 0, "post-migration suite failed:\n#{post_output}"
   end
 
+  @tag :browser
+  @tag timeout: 240_000
+  test "runs playwright screenshot row before and after migration", %{tmp_dir: tmp_dir} do
+    fixture_dir = "fixtures/migration_project"
+    work_dir = Path.join(tmp_dir, "work_playwright")
+    test_path = "test/features/ptpw_screenshot_test.exs"
+
+    File.cp_r!(fixture_dir, work_dir)
+
+    assert {_output, 0} = run_mix(work_dir, ["deps.get"])
+    maybe_install_playwright_assets!(work_dir)
+
+    {pre_output, pre_status} = run_mix(work_dir, ["test", test_path], mode: "phoenix_test")
+    assert pre_status == 0, "pre-migration Playwright row failed:\n#{pre_output}"
+    assert_required_playwright_execution!(pre_output, "pre-migration")
+
+    {migrate_output, migrate_status} =
+      run_mix(work_dir, ["cerberus.migrate_phoenix_test", "--write", test_path])
+
+    assert migrate_status == 0, "migration failed:\n#{migrate_output}"
+
+    {post_output, post_status} = run_mix(work_dir, ["test", test_path], mode: "cerberus")
+    assert post_status == 0, "post-migration Playwright row failed:\n#{post_output}"
+    assert_required_playwright_execution!(post_output, "post-migration")
+  end
+
   defp run_mix(work_dir, args, opts \\ []) do
     base_env = [{"MIX_ENV", "test"}, {"CERBERUS_PATH", Path.expand(".")}]
 
@@ -239,5 +265,23 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     |> Path.wildcard()
     |> Enum.map(&Path.relative_to(&1, work_dir))
     |> Enum.sort()
+  end
+
+  defp maybe_install_playwright_assets!(work_dir) do
+    if System.get_env("CERBERUS_INSTALL_PLAYWRIGHT_ASSETS", "false") == "true" do
+      {output, status} =
+        System.cmd("npm", ["--prefix", "assets", "install", "playwright"], cd: work_dir, stderr_to_stdout: true)
+
+      if status != 0 do
+        raise "failed to install Playwright assets:\n#{output}"
+      end
+    end
+  end
+
+  defp assert_required_playwright_execution!(output, phase) do
+    if System.get_env("CERBERUS_REQUIRE_PLAYWRIGHT_EXECUTION", "false") == "true" do
+      refute output =~ ~r/\b\d+\s+skipped\b/i,
+             "#{phase} Playwright row was skipped while CERBERUS_REQUIRE_PLAYWRIGHT_EXECUTION=true:\n#{output}"
+    end
   end
 end

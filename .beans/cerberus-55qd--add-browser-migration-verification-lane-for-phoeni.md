@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-02-28T18:02:12Z
-updated_at: 2026-03-02T06:46:28Z
+updated_at: 2026-03-02T06:48:48Z
 parent: cerberus-it5x
 ---
 
@@ -23,3 +23,11 @@ MigrationVerification currently runs only phoenix_test -> cerberus non-browser m
 
 - The ptpw screenshot row will skip unless Playwright node assets are installed in the fixture app.
 - This lays the compile and execution foundation, but a dedicated browser lane is still needed to guarantee non-skipped ptpw execution in CI.
+
+## Progress Update 2
+
+- Added a dedicated browser-tagged migration test that runs the ptpw_screenshot row pre and post migration.
+- Added environment knobs for dedicated browser jobs:
+  - CERBERUS_INSTALL_PLAYWRIGHT_ASSETS=true installs Playwright node assets in the copied fixture.
+  - CERBERUS_REQUIRE_PLAYWRIGHT_EXECUTION=true fails the test when the Playwright row is skipped.
+- Updated migration verification docs to describe these browser-lane controls.
