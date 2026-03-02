@@ -74,7 +74,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
     protocol_subscription_id = subscribe_dialog_protocol_events!(session)
     :ok = subscribe_dialog_events!(session)
     flush_stale_dialog_events(session.tab_id)
-    action_task = Task.async(fn -> action.(session) end)
+    action_task = Task.async(fn -> run_dialog_action(action, session) end)
     Process.unlink(action_task.pid)
 
     try do
@@ -395,9 +395,14 @@ defmodule Cerberus.Driver.Browser.Extensions do
     raise AssertionError, message: "with_dialog/3 timed out waiting for browsingContext.userPromptOpened"
   end
 
-  defp raise_dialog_open_timeout!({:ok, _result}) do
+  defp raise_dialog_open_timeout!({:ok, {:action_result, _result}}) do
     raise AssertionError,
       message: "with_dialog/3 callback completed before browsingContext.userPromptOpened was observed"
+  end
+
+  defp raise_dialog_open_timeout!({:ok, {:action_failure, formatted_error}}) do
+    raise AssertionError,
+      message: "with_dialog/3 callback failed before dialog was observed: #{formatted_error}"
   end
 
   defp await_dialog_event!(method, context_id, timeout_ms) do
@@ -437,14 +442,16 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  defp await_dialog_action_result!(_action_task, {:ok, result}, _timeout_ms), do: result
+  defp await_dialog_action_result!(_action_task, {:ok, action_outcome}, _timeout_ms) do
+    unwrap_dialog_action_outcome!(action_outcome)
+  end
 
   defp await_dialog_action_result!(action_task, :pending, timeout_ms) do
     wait_ms = timeout_ms + 1_000
 
     case Task.yield(action_task, wait_ms) || Task.shutdown(action_task, :brutal_kill) do
-      {:ok, result} ->
-        result
+      {:ok, action_outcome} ->
+        unwrap_dialog_action_outcome!(action_outcome)
 
       {:exit, reason} ->
         raise AssertionError, message: "with_dialog/3 callback failed: #{Exception.format_exit(reason)}"
@@ -452,6 +459,22 @@ defmodule Cerberus.Driver.Browser.Extensions do
       nil ->
         raise AssertionError, message: "with_dialog/3 timed out waiting for action callback completion"
     end
+  end
+
+  defp run_dialog_action(action, session) do
+    {:action_result, action.(session)}
+  rescue
+    error ->
+      {:action_failure, Exception.format(:error, error, __STACKTRACE__)}
+  catch
+    kind, reason ->
+      {:action_failure, Exception.format(kind, reason, __STACKTRACE__)}
+  end
+
+  defp unwrap_dialog_action_outcome!({:action_result, result}), do: result
+
+  defp unwrap_dialog_action_outcome!({:action_failure, formatted_error}) do
+    raise AssertionError, message: "with_dialog/3 callback failed: #{formatted_error}"
   end
 
   defp assert_dialog_message!(_observed, nil), do: :ok
