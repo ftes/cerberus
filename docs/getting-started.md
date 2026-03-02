@@ -61,6 +61,15 @@ end)
 
 `within/3` expects locator input (`css(...)`, `role(...)`, `testid(...)`, etc.). Browser locator scopes can switch into same-origin iframes.
 
+Scoped text assertions also support plain-string shorthand:
+
+```elixir
+session()
+|> visit("/scoped")
+|> assert_has(css("#secondary-panel"), "Status: secondary")
+|> refute_has(css("#secondary-panel"), "Status: primary")
+```
+
 ## Match Count And Position Filters
 
 Locator operations support shared count filters:

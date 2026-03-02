@@ -529,15 +529,27 @@ defmodule Cerberus do
     Assertions.uncheck(session, locator, opts)
   end
 
+  @doc """
+  Asserts that content matched by `locator` exists.
+
+  Unscoped:
+  `assert_has(session, text("Articles"))`
+
+  Scoped:
+  `assert_has(session, css("#secondary-panel"), "Status: secondary")`
+
+  In the scoped form, the third argument is a locator input; passing a binary/regex
+  uses text-locator shorthand.
+  """
   @spec assert_has(arg, term()) :: arg when arg: var
   def assert_has(session, locator), do: assert_has(session, locator, [])
 
   @spec assert_has(arg, term(), term() | Options.assert_opts()) :: arg when arg: var
-  def assert_has(session, scope_or_locator, locator_or_opts) do
+  def assert_has(session, locator_or_scope_locator, locator_or_opts) do
     if locator_input_term?(locator_or_opts) do
-      assert_has(session, scope_or_locator, locator_or_opts, [])
+      assert_has(session, locator_or_scope_locator, locator_or_opts, [])
     else
-      Assertions.assert_has(session, scope_or_locator, locator_or_opts)
+      Assertions.assert_has(session, locator_or_scope_locator, locator_or_opts)
     end
   end
 
@@ -548,15 +560,27 @@ defmodule Cerberus do
     end)
   end
 
+  @doc """
+  Refutes that content matched by `locator` exists.
+
+  Unscoped:
+  `refute_has(session, text("500 Internal Server Error"))`
+
+  Scoped:
+  `refute_has(session, css("#secondary-panel"), "Status: primary")`
+
+  In the scoped form, the third argument is a locator input; passing a binary/regex
+  uses text-locator shorthand.
+  """
   @spec refute_has(arg, term()) :: arg when arg: var
   def refute_has(session, locator), do: refute_has(session, locator, [])
 
   @spec refute_has(arg, term(), term() | Options.assert_opts()) :: arg when arg: var
-  def refute_has(session, scope_or_locator, locator_or_opts) do
+  def refute_has(session, locator_or_scope_locator, locator_or_opts) do
     if locator_input_term?(locator_or_opts) do
-      refute_has(session, scope_or_locator, locator_or_opts, [])
+      refute_has(session, locator_or_scope_locator, locator_or_opts, [])
     else
-      Assertions.refute_has(session, scope_or_locator, locator_or_opts)
+      Assertions.refute_has(session, locator_or_scope_locator, locator_or_opts)
     end
   end
 

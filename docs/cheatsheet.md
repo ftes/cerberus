@@ -28,6 +28,8 @@
 | Submit form | `submit(session, button("Run Search"))` |
 | Assert text present | `assert_has(session, text("Articles", exact: true))` |
 | Assert text absent | `refute_has(session, text("Error", exact: true))` |
+| Assert scoped text | `assert_has(session, css("#secondary-panel"), "Status: secondary")` |
+| Refute scoped text | `refute_has(session, css("#secondary-panel"), "Status: primary")` |
 | Assert path/query | `assert_path(session, "/search/results", query: %{q: "Aragorn"}, timeout: 500)` |
 | Scope to subtree | `within(session, css("#secondary-panel"), fn s -> ... end)` |
 

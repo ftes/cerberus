@@ -85,6 +85,15 @@ end)
 `within/3` expects locator input (for example, `within(css("#secondary-panel"), fn s -> ... end)`).
 In browser sessions, locator-based `within/3` can switch root into same-origin iframes.
 
+Scoped text assertions also support plain-string shorthand:
+
+```elixir
+session()
+|> visit("/scoped")
+|> assert_has(css("#secondary-panel"), "Status: secondary")
+|> refute_has(css("#secondary-panel"), "Status: primary")
+```
+
 Field-wrapper assertion pattern (Phoenix `core_components`-style wrappers):
 
 ```elixir
