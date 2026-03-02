@@ -44,6 +44,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     :refute_path,
     :within,
     :unwrap,
+    :visit,
     :open_browser
   ]
   @rewritable_assertions_calls [:assert_has, :refute_has, :assert_path, :refute_path]

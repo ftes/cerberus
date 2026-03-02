@@ -102,6 +102,37 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     refute output =~ "Direct PhoenixTest.<function> call detected"
   end
 
+  test "write mode rewrites PhoenixTest.visit when first arg is not conn", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_direct_visit_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleDirectVisitTest do
+        import PhoenixTest
+
+        test "example" do
+          session = build_session()
+          PhoenixTest.visit(session, "/articles")
+        end
+      end
+      """
+    )
+
+    output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ "Cerberus.visit(session, \"/articles\")"
+    refute rewritten =~ "PhoenixTest.visit(session, \"/articles\")"
+    refute output =~ "visit(conn, ...)"
+    refute output =~ "Direct PhoenixTest.<function> call detected"
+  end
+
   test "write mode rewrites import PhoenixTest.Assertions", %{tmp_dir: tmp_dir} do
     file = Path.join(tmp_dir, "sample_import_assertions_test.exs")
 
