@@ -125,7 +125,7 @@ defmodule Cerberus.Browser do
 
   @spec evaluate_js(Session.t(), String.t()) :: term()
   def evaluate_js(%BrowserSession{} = session, expression) when is_binary(expression) do
-    Extensions.evaluate_js(session, expression)
+    tap(session, &Extensions.evaluate_js(&1, expression))
   end
 
   def evaluate_js(session, _expression), do: Assertions.unsupported(session, :evaluate_js)
@@ -133,11 +133,7 @@ defmodule Cerberus.Browser do
   @spec evaluate_js(Session.t(), String.t(), (term() -> term())) :: Session.t()
   def evaluate_js(%BrowserSession{} = session, expression, callback)
       when is_binary(expression) and is_function(callback, 1) do
-    session
-    |> Extensions.evaluate_js(expression)
-    |> callback.()
-
-    session
+    tap(session, &(&1 |> Extensions.evaluate_js(expression) |> callback.()))
   end
 
   def evaluate_js(session, _expression, callback) when is_function(callback, 1) do

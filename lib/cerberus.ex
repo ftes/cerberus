@@ -134,10 +134,8 @@ defmodule Cerberus do
       |> Plug.Conn.put_req_header("user-agent", metadata)
   """
   @spec sql_sandbox_user_agent(module(), pid()) :: String.t()
-  def sql_sandbox_user_agent(repo, owner_pid) when is_atom(repo) and is_pid(owner_pid) do
-    sandbox_module = ensure_phoenix_sql_sandbox_module!()
-    metadata = sandbox_module.metadata_for(repo, owner_pid)
-    sandbox_module.encode_metadata(metadata)
+  def sql_sandbox_user_agent(repo, context) when is_atom(repo) and is_map(context) do
+    checkout_ecto_repos(repo, context)
   end
 
   @doc """
@@ -1056,15 +1054,49 @@ defmodule Cerberus do
   defp locator_kind_key?(key) when is_binary(key), do: key in @locator_kind_string_keys
   defp locator_kind_key?(_key), do: false
 
-  defp ensure_phoenix_sql_sandbox_module! do
-    module = Module.concat([Phoenix, Ecto, SQL, Sandbox])
+  @includes_ecto Code.ensure_loaded?(EctoSandbox) && Code.ensure_loaded?(PhoenixSandbox)
 
-    if Code.ensure_loaded?(module) and function_exported?(module, :metadata_for, 2) and
-         function_exported?(module, :encode_metadata, 1) do
-      module
-    else
-      raise ArgumentError,
-            "Phoenix.Ecto.SQL.Sandbox is unavailable; add :phoenix_ecto to dependencies to use sql_sandbox_user_agent/1-2"
+  if @includes_ecto do
+    defp checkout_ecto_repos(repo, context) do
+      repo
+      |> List.wrap()
+      |> Enum.map(&maybe_start_sandbox_owner(&1, repo, context))
+      |> PhoenixSandbox.metadata_for(self())
+      |> PhoenixSandbox.encode_metadata()
+    end
+
+    defp maybe_start_sandbox_owner(repo, context) do
+      pid = EctoSandbox.start_owner!(repo, shared: not context.async)
+      on_exit(fn -> stop_sandbox_owner(pid, context) end)
+      repo
+    rescue
+      e in MatchError ->
+        case e do
+          %MatchError{term: {:error, {{:badmatch, {:already, :allowed}}, _}}} ->
+            # Already checked out (e.g. second new_session call in same test)
+            repo
+
+          _ ->
+            reraise e, __STACKTRACE__
+        end
+    end
+
+    defp stop_sandbox_owner(checkout_pid, context) do
+      if context.async do
+        spawn(fn -> do_stop_sandbox_owner(checkout_pid) end)
+      else
+        do_stop_sandbox_owner(checkout_pid)
+      end
+    end
+
+    defp do_stop_sandbox_owner(checkout_pid) do
+      # delay = Keyword.fetch!(config, :ecto_sandbox_stop_owner_delay)
+      # if delay > 0, do: Process.sleep(delay)
+      EctoSandbox.stop_owner(checkout_pid)
+    end
+  else
+    defp checkout_ecto_repos(_, _) do
+      "Ecto not loaded"
     end
   end
 
