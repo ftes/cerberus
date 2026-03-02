@@ -68,12 +68,13 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   def init(opts) do
     user_context_id = Keyword.fetch!(opts, :user_context_id)
     viewport = Keyword.get(opts, :viewport)
+    context_id = Keyword.get(opts, :context_id)
     bidi_opts = Keyword.get(opts, :bidi_opts, opts)
     browser_name = Runtime.browser_name(bidi_opts)
     bidi_opts = Keyword.put_new(bidi_opts, :browser_name, browser_name)
 
-    with {:ok, browsing_context_id} <- create_browsing_context(user_context_id, bidi_opts),
-         :ok <- maybe_set_viewport(browsing_context_id, viewport, bidi_opts),
+    with {:ok, browsing_context_id} <- resolve_browsing_context_id(user_context_id, context_id, bidi_opts),
+         :ok <- maybe_set_viewport_for_context(context_id, browsing_context_id, viewport, bidi_opts),
          :ok <- BiDi.subscribe(self(), bidi_opts),
          {:ok, _} <-
            BiDi.command("session.subscribe", %{"events" => @bidi_events, "contexts" => [browsing_context_id]}, bidi_opts) do
@@ -180,6 +181,23 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   defp create_browsing_context(user_context_id, bidi_opts) do
     create_browsing_context(user_context_id, bidi_opts, 2)
   end
+
+  defp resolve_browsing_context_id(_user_context_id, context_id, _bidi_opts)
+       when is_binary(context_id) and context_id != "" do
+    {:ok, context_id}
+  end
+
+  defp resolve_browsing_context_id(user_context_id, nil, bidi_opts),
+    do: create_browsing_context(user_context_id, bidi_opts)
+
+  defp resolve_browsing_context_id(_user_context_id, context_id, _bidi_opts) do
+    {:error, "invalid browsing context", %{"context_id" => inspect(context_id)}}
+  end
+
+  defp maybe_set_viewport_for_context(nil, context_id, viewport, bidi_opts),
+    do: maybe_set_viewport(context_id, viewport, bidi_opts)
+
+  defp maybe_set_viewport_for_context(_context_id, _resolved_context_id, _viewport, _bidi_opts), do: :ok
 
   defp create_browsing_context(user_context_id, bidi_opts, retries_left)
        when is_integer(retries_left) and retries_left >= 0 do

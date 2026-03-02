@@ -116,6 +116,19 @@ session =
 session
 |> assert_has(text("Press result: submitted"))
 |> assert_has(text("Dialog result: cancelled"))
+
+main =
+  session(:browser)
+  |> visit("/browser/popup/click")
+  |> with_popup(
+    fn source ->
+      click(source, button("Open Popup"))
+    end,
+    fn source, popup ->
+      assert_path(source, "/browser/popup/click")
+      assert_path(popup, "/browser/popup/destination", query: %{source: "click-trigger"})
+    end
+  )
 ```
 
 > #### Warning

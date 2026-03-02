@@ -12,7 +12,9 @@ defmodule Cerberus.Driver.Browser.Extensions do
   ]
 
   @default_dialog_timeout_ms 1_500
+  @default_popup_timeout_ms 1_500
   @dialog_poll_ms 25
+  @popup_poll_ms 25
 
   @spec type(BrowserSession.t(), String.t(), keyword()) :: BrowserSession.t()
   def type(%BrowserSession{} = session, text, opts \\ []) when is_binary(text) and is_list(opts) do
@@ -20,8 +22,8 @@ defmodule Cerberus.Driver.Browser.Extensions do
     clear? = Keyword.get(opts, :clear, false)
 
     case evaluate_json(session, type_expression(selector, text, clear?)) do
-      {:ok, %{"ok" => true} = payload} ->
-        update_last_result(session, :type, payload)
+      {:ok, %{"ok" => true}} ->
+        session
 
       {:ok, payload} ->
         raise ArgumentError, "browser type failed: #{inspect(payload)}"
@@ -36,8 +38,8 @@ defmodule Cerberus.Driver.Browser.Extensions do
     selector = selector_opt!(opts)
 
     case evaluate_json(session, press_expression(selector, key)) do
-      {:ok, %{"ok" => true} = payload} ->
-        update_last_result(session, :press, payload)
+      {:ok, %{"ok" => true}} ->
+        session
 
       {:ok, payload} ->
         raise ArgumentError, "browser press failed: #{inspect(payload)}"
@@ -54,8 +56,8 @@ defmodule Cerberus.Driver.Browser.Extensions do
     target_selector = non_empty_selector!(target_selector, "drag/3 target selector")
 
     case evaluate_json(session, drag_expression(source_selector, target_selector)) do
-      {:ok, %{"ok" => true} = payload} ->
-        update_last_result(session, :drag, payload)
+      {:ok, %{"ok" => true}} ->
+        session
 
       {:ok, payload} ->
         raise ArgumentError, "browser drag failed: #{inspect(payload)}"
@@ -65,11 +67,12 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  @spec with_dialog(BrowserSession.t(), (BrowserSession.t() -> BrowserSession.t()), keyword()) ::
+  @spec with_dialog(BrowserSession.t(), (BrowserSession.t() -> term()), keyword()) ::
           BrowserSession.t()
   def with_dialog(%BrowserSession{} = session, action, opts \\ []) when is_function(action, 1) and is_list(opts) do
     timeout_ms = dialog_timeout_ms(opts)
     expected_message = Keyword.get(opts, :message)
+    main_tab_id = session.tab_id
 
     protocol_subscription_id = subscribe_dialog_protocol_events!(session)
     :ok = subscribe_dialog_events!(session)
@@ -83,11 +86,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
       handle_dialog_prompt!(session, timeout_ms)
       closed = await_dialog_event!("browsingContext.userPromptClosed", session.tab_id, timeout_ms)
-      next_session = await_dialog_action_result!(action_task, action_outcome, timeout_ms)
-
-      if !match?(%BrowserSession{}, next_session) do
-        raise ArgumentError, "with_dialog/3 callback must return a browser session"
-      end
+      _ = await_dialog_action_result!(action_task, action_outcome, timeout_ms)
 
       observed = %{
         type: opened["type"],
@@ -97,11 +96,68 @@ defmodule Cerberus.Driver.Browser.Extensions do
       }
 
       assert_dialog_message!(observed, expected_message)
-      update_last_result(next_session, :with_dialog, observed)
+      restore_main_tab!(session, main_tab_id, "with_dialog/3")
+
+      BrowserSession.refresh_path(session)
+    rescue
+      error ->
+        _ = restore_main_tab_safe(session, main_tab_id)
+        reraise error, __STACKTRACE__
+    catch
+      kind, reason ->
+        _ = restore_main_tab_safe(session, main_tab_id)
+        :erlang.raise(kind, reason, __STACKTRACE__)
     after
       _ = Task.shutdown(action_task, :brutal_kill)
       unsubscribe_dialog_events(session)
       unsubscribe_dialog_protocol_events(protocol_subscription_id, session)
+    end
+  end
+
+  @spec with_popup(
+          BrowserSession.t(),
+          (BrowserSession.t() -> term()),
+          (BrowserSession.t(), BrowserSession.t() -> term()),
+          keyword()
+        ) :: BrowserSession.t()
+  def with_popup(%BrowserSession{} = session, trigger_fun, callback_fun, opts \\ [])
+      when is_function(trigger_fun, 1) and is_function(callback_fun, 2) and is_list(opts) do
+    timeout_ms = popup_timeout_ms(opts)
+    main_tab_id = session.tab_id
+    baseline_tabs = MapSet.new(UserContextProcess.tabs(session.user_context_pid))
+
+    trigger_task = Task.async(fn -> run_popup_callback(trigger_fun, [session]) end)
+    Process.unlink(trigger_task.pid)
+
+    try do
+      {popup_tab_id, trigger_outcome} =
+        await_popup_tab!(session, baseline_tabs, trigger_task, timeout_ms)
+
+      _ = await_popup_callback_result!(trigger_task, trigger_outcome, timeout_ms, "trigger callback")
+      ensure_popup_tab_attached!(session, popup_tab_id)
+
+      popup_session = %{
+        session
+        | tab_id: popup_tab_id,
+          scope: nil,
+          current_path: nil
+      }
+
+      run_popup_callback!(callback_fun, [session, popup_session], "callback")
+
+      restore_main_tab!(session, main_tab_id, "with_popup/4")
+
+      BrowserSession.refresh_path(session)
+    rescue
+      error ->
+        _ = restore_main_tab_safe(session, main_tab_id)
+        reraise error, __STACKTRACE__
+    catch
+      kind, reason ->
+        _ = restore_main_tab_safe(session, main_tab_id)
+        :erlang.raise(kind, reason, __STACKTRACE__)
+    after
+      _ = Task.shutdown(trigger_task, :brutal_kill)
     end
   end
 
@@ -175,15 +231,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
     case BiDi.command("storage.setCookie", params, bidi_opts(session)) do
       {:ok, _} ->
-        update_last_result(session, :add_cookie, %{
-          name: name,
-          value: value,
-          domain: domain,
-          path: path,
-          http_only: http_only,
-          secure: secure,
-          same_site: same_site
-        })
+        session
 
       {:error, reason, details} ->
         raise ArgumentError, "browser add_cookie failed: #{reason} (#{inspect(details)})"
@@ -296,6 +344,18 @@ defmodule Cerberus.Driver.Browser.Extensions do
         |> merged_browser_opts()
         |> Keyword.get(:dialog_timeout_ms)
         |> normalize_positive_integer(@default_dialog_timeout_ms)
+    end
+  end
+
+  @doc false
+  @spec popup_timeout_ms(keyword()) :: pos_integer()
+  def popup_timeout_ms(opts) when is_list(opts) do
+    case Keyword.get(opts, :timeout, @default_popup_timeout_ms) do
+      timeout when is_integer(timeout) and timeout > 0 ->
+        timeout
+
+      timeout ->
+        raise ArgumentError, "with_popup/4 :timeout must be a positive integer, got: #{inspect(timeout)}"
     end
   end
 
@@ -477,6 +537,173 @@ defmodule Cerberus.Driver.Browser.Extensions do
     raise AssertionError, message: "with_dialog/3 callback failed: #{formatted_error}"
   end
 
+  defp await_popup_tab!(session, baseline_tabs, trigger_task, timeout_ms) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    await_popup_tab_loop(session, baseline_tabs, trigger_task, deadline, :pending)
+  end
+
+  defp await_popup_tab_loop(session, baseline_tabs, trigger_task, deadline, trigger_outcome) do
+    trigger_outcome = poll_action_task(trigger_task, trigger_outcome)
+
+    case trigger_outcome do
+      {:ok, {:action_failure, formatted_error}} ->
+        raise AssertionError, message: "with_popup/4 trigger callback failed before popup capture: #{formatted_error}"
+
+      _ ->
+        :ok
+    end
+
+    current_tabs = MapSet.new(popup_capture_tabs(session, baseline_tabs))
+    new_tabs = current_tabs |> MapSet.difference(baseline_tabs) |> MapSet.to_list()
+
+    case new_tabs do
+      [popup_tab_id] ->
+        {popup_tab_id, trigger_outcome}
+
+      [] ->
+        now = System.monotonic_time(:millisecond)
+        remaining = max(deadline - now, 0)
+
+        if remaining == 0 do
+          raise AssertionError, message: "with_popup/4 timed out waiting for popup tab"
+        else
+          Process.sleep(min(remaining, @popup_poll_ms))
+          await_popup_tab_loop(session, baseline_tabs, trigger_task, deadline, trigger_outcome)
+        end
+
+      multiple_tabs ->
+        sorted_tabs = Enum.sort(multiple_tabs)
+
+        raise AssertionError,
+          message: "with_popup/4 observed multiple new tabs while capturing popup: #{inspect(sorted_tabs)}"
+    end
+  end
+
+  defp popup_capture_tabs(session, baseline_tabs) do
+    case popup_capture_tabs_from_tree(session, baseline_tabs) do
+      {:ok, tabs} ->
+        tabs
+
+      {:error, _reason} ->
+        UserContextProcess.tabs(session.user_context_pid)
+    end
+  end
+
+  defp popup_capture_tabs_from_tree(session, baseline_tabs) do
+    with {:ok, %{"contexts" => contexts}} when is_list(contexts) <-
+           BiDi.command("browsingContext.getTree", %{"maxDepth" => 0}, bidi_opts(session)),
+         entries when is_list(entries) <- flatten_tree_context_entries(contexts),
+         user_context when is_binary(user_context) and user_context != "" <-
+           infer_user_context(entries, baseline_tabs) do
+      tabs =
+        entries
+        |> Enum.filter(&(&1.user_context == user_context))
+        |> Enum.map(& &1.context_id)
+        |> Enum.uniq()
+
+      {:ok, tabs}
+    else
+      {:error, reason, details} ->
+        {:error, "browsingContext.getTree failed: #{reason} (#{inspect(details)})"}
+
+      _ ->
+        {:error, "unable to resolve user context for popup capture"}
+    end
+  end
+
+  defp flatten_tree_context_entries(contexts) when is_list(contexts) do
+    Enum.flat_map(contexts, &flatten_tree_context_entry/1)
+  end
+
+  defp flatten_tree_context_entries(nil), do: []
+
+  defp flatten_tree_context_entry(%{"context" => context_id} = entry) when is_binary(context_id) do
+    children = flatten_tree_context_entries(Map.get(entry, "children", []))
+    [%{context_id: context_id, user_context: entry["userContext"]} | children]
+  end
+
+  defp flatten_tree_context_entry(_entry), do: []
+
+  defp infer_user_context(entries, baseline_tabs) do
+    Enum.find_value(entries, fn %{context_id: context_id, user_context: user_context} ->
+      if MapSet.member?(baseline_tabs, context_id) and is_binary(user_context) and user_context != "" do
+        user_context
+      end
+    end)
+  end
+
+  defp ensure_popup_tab_attached!(session, popup_tab_id) do
+    case UserContextProcess.attach_tab(session.user_context_pid, popup_tab_id) do
+      :ok ->
+        :ok
+
+      {:error, reason, details} ->
+        raise AssertionError,
+          message: "with_popup/4 failed to attach popup tab #{inspect(popup_tab_id)}: #{reason} (#{inspect(details)})"
+    end
+  end
+
+  defp await_popup_callback_result!(_task, {:ok, action_outcome}, _timeout_ms, _label) do
+    unwrap_popup_callback_outcome!(action_outcome, "trigger callback")
+  end
+
+  defp await_popup_callback_result!(task, :pending, timeout_ms, label) do
+    wait_ms = timeout_ms + 1_000
+
+    case Task.yield(task, wait_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, action_outcome} ->
+        unwrap_popup_callback_outcome!(action_outcome, label)
+
+      {:exit, reason} ->
+        raise AssertionError, message: "with_popup/4 #{label} failed: #{Exception.format_exit(reason)}"
+
+      nil ->
+        raise AssertionError, message: "with_popup/4 timed out waiting for #{label} completion"
+    end
+  end
+
+  defp run_popup_callback(fun, args) when is_function(fun) and is_list(args) do
+    {:action_result, apply(fun, args)}
+  rescue
+    error ->
+      {:action_failure, Exception.format(:error, error, __STACKTRACE__)}
+  catch
+    kind, reason ->
+      {:action_failure, Exception.format(kind, reason, __STACKTRACE__)}
+  end
+
+  defp run_popup_callback!(fun, args, label) when is_function(fun) and is_list(args) do
+    case run_popup_callback(fun, args) do
+      {:action_result, _result} ->
+        :ok
+
+      {:action_failure, formatted_error} ->
+        raise AssertionError, message: "with_popup/4 #{label} failed: #{formatted_error}"
+    end
+  end
+
+  defp unwrap_popup_callback_outcome!({:action_result, _result}, _label), do: :ok
+
+  defp unwrap_popup_callback_outcome!({:action_failure, formatted_error}, label) do
+    raise AssertionError, message: "with_popup/4 #{label} failed: #{formatted_error}"
+  end
+
+  defp restore_main_tab!(session, main_tab_id, operation_name) do
+    case UserContextProcess.switch_tab(session.user_context_pid, main_tab_id) do
+      :ok ->
+        :ok
+
+      {:error, reason, details} ->
+        raise ArgumentError,
+              "#{operation_name} failed to restore main tab: #{reason} (#{inspect(details)})"
+    end
+  end
+
+  defp restore_main_tab_safe(session, main_tab_id) do
+    _ = UserContextProcess.switch_tab(session.user_context_pid, main_tab_id)
+    :ok
+  end
+
   defp assert_dialog_message!(_observed, nil), do: :ok
 
   defp assert_dialog_message!(%{message: actual}, expected) when is_binary(expected) do
@@ -503,8 +730,6 @@ defmodule Cerberus.Driver.Browser.Extensions do
     raise ArgumentError,
           "add_cookie/4 :same_site must be :lax, :strict, :none (or lowercase strings), got: #{inspect(value)}"
   end
-
-  defp update_last_result(session, _op, _observed), do: session
 
   defp bidi_opts(%BrowserSession{browser_name: browser_name}), do: [browser_name: browser_name]
 

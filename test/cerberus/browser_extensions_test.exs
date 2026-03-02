@@ -4,6 +4,7 @@ defmodule Cerberus.BrowserExtensionsTest do
   import Cerberus
   import Cerberus.Browser
 
+  alias Cerberus.Driver.Browser.UserContextProcess
   alias ExUnit.AssertionError
 
   test "browser-only APIs are explicit unsupported on static and live sessions" do
@@ -31,6 +32,20 @@ defmodule Cerberus.BrowserExtensionsTest do
       end
 
     assert live_callback_error.message =~ "evaluate_js is not implemented for :live driver"
+
+    static_popup_error =
+      assert_raise AssertionError, fn ->
+        with_popup(static, fn s -> s end, fn _main, _popup -> :ok end)
+      end
+
+    assert static_popup_error.message =~ "with_popup is not implemented for :static driver"
+
+    live_popup_error =
+      assert_raise AssertionError, fn ->
+        with_popup(live, fn s -> s end, fn _main, _popup -> :ok end)
+      end
+
+    assert live_popup_error.message =~ "with_popup is not implemented for :live driver"
   end
 
   @tag :tmp_dir
@@ -121,6 +136,85 @@ defmodule Cerberus.BrowserExtensionsTest do
     end
   end
 
+  test "with_popup captures popup tab, yields main+popup sessions, and returns canonical main session" do
+    main =
+      :browser
+      |> session()
+      |> visit("/browser/popup/click")
+
+    returned_main =
+      with_popup(
+        main,
+        fn trigger_session ->
+          click(trigger_session, button("Open Popup"))
+        end,
+        fn callback_main, popup ->
+          assert callback_main.tab_id == main.tab_id
+          assert popup.tab_id != callback_main.tab_id
+
+          assert_path(callback_main, "/browser/popup/click")
+
+          popup
+          |> assert_path("/browser/popup/destination", query: %{source: "click-trigger"})
+          |> assert_has(text("Popup Destination", exact: true))
+          |> assert_has(text("popup source: click-trigger", exact: true))
+        end
+      )
+
+    assert returned_main.tab_id == main.tab_id
+    assert UserContextProcess.active_tab(returned_main.user_context_pid) == returned_main.tab_id
+    assert_path(returned_main, "/browser/popup/click")
+    assert_has(returned_main, text("Popup opened", exact: true))
+  end
+
+  test "with_popup times out when trigger does not open popup" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/popup/click")
+
+    error =
+      assert_raise AssertionError, fn ->
+        with_popup(
+          session,
+          fn trigger_session ->
+            trigger_session
+          end,
+          fn _main, _popup ->
+            :ok
+          end,
+          timeout: 25
+        )
+      end
+
+    assert error.message == "with_popup/4 timed out waiting for popup tab"
+  end
+
+  test "with_popup surfaces callback failure and restores main tab" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/popup/click")
+
+    error =
+      assert_raise AssertionError, fn ->
+        with_popup(
+          session,
+          fn trigger_session ->
+            click(trigger_session, button("Open Popup"))
+          end,
+          fn _main, popup ->
+            assert_path(popup, "/browser/popup/destination", query: %{source: "click-trigger"})
+            raise "popup callback exploded"
+          end
+        )
+      end
+
+    assert error.message =~ "with_popup/4 callback failed:"
+    assert error.message =~ "popup callback exploded"
+    assert UserContextProcess.active_tab(session.user_context_pid) == session.tab_id
+  end
+
   test "with_dialog reports callback completion when no dialog opens" do
     session =
       :browser
@@ -181,21 +275,26 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert error.message =~ "with_dialog/3 timed out waiting for browsingContext.userPromptOpened"
   end
 
-  test "with_dialog validates callback return type after dialog handling" do
+  test "with_dialog ignores callback return value and returns refreshed main session" do
     session =
       :browser
       |> session()
       |> visit("/browser/extensions")
+      |> visit("/browser/popup/click")
 
-    error =
-      assert_raise ArgumentError, fn ->
-        with_dialog(session, fn dialog_session ->
-          click(dialog_session, button("Open Confirm Dialog"))
-          :invalid
-        end)
-      end
+    returned_session =
+      with_dialog(session, fn dialog_session ->
+        dialog_session
+        |> visit("/browser/extensions")
+        |> click(button("Open Confirm Dialog"))
 
-    assert error.message =~ "with_dialog/3 callback must return a browser session"
+        :ignored
+      end)
+
+    assert returned_session.tab_id == session.tab_id
+    assert UserContextProcess.active_tab(returned_session.user_context_pid) == returned_session.tab_id
+    assert_path(returned_session, "/browser/extensions")
+    assert_has(returned_session, text("Dialog result: cancelled", exact: true))
   end
 
   test "with_dialog surfaces callback failures after dialog handling" do

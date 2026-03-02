@@ -510,6 +510,37 @@ defmodule Cerberus.Fixtures.PageController do
     """)
   end
 
+  def popup_click(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Popup Click</title>
+      </head>
+      <body>
+        <main>
+          <h1>Popup Click Source</h1>
+          <button id="open-popup" type="button">Open Popup</button>
+          <p id="popup-click-status">Waiting for click</p>
+        </main>
+
+        <script>
+          (() => {
+            const trigger = document.getElementById("open-popup");
+            const status = document.getElementById("popup-click-status");
+
+            trigger.addEventListener("click", () => {
+              window.open("/browser/popup/destination?source=click-trigger", "fixture-popup-click");
+              status.textContent = "Popup opened";
+            });
+          })();
+        </script>
+      </body>
+    </html>
+    """)
+  end
+
   def popup_destination(conn, params) do
     params = merged_request_params(conn, params)
     source = Map.get(params, "source", "unknown")

@@ -27,7 +27,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   @warning_conn_pipe "conn |> visit(...) PhoenixTest flow needs manual session bootstrap in Cerberus."
   @warning_visit_conn "visit(conn, ...) PhoenixTest flow needs manual session bootstrap in Cerberus."
   @warning_browser_helper "Browser helper call likely needs manual migration to Cerberus browser extensions."
-  @browser_helpers [:with_dialog, :screenshot, :press, :type, :drag, :cookie, :session_cookie]
+  @browser_helpers [:with_dialog, :with_popup, :screenshot, :press, :type, :drag, :cookie, :session_cookie]
   @rewritable_direct_calls [
     :assert_has,
     :refute_has,

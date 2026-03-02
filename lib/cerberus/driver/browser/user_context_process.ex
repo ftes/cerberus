@@ -89,6 +89,11 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(pid, {:close_tab, tab_id}, 10_000)
   end
 
+  @spec attach_tab(pid(), String.t()) :: :ok | {:error, String.t(), map()}
+  def attach_tab(pid, tab_id) when is_pid(pid) and is_binary(tab_id) do
+    GenServer.call(pid, {:attach_tab, tab_id}, 10_000)
+  end
+
   @spec tabs(pid()) :: [String.t()]
   def tabs(pid) when is_pid(pid) do
     GenServer.call(pid, :tabs)
@@ -212,6 +217,28 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     else
       {:error, reason} ->
         {:reply, {:error, inspect(reason), %{}}, state}
+    end
+  end
+
+  def handle_call({:attach_tab, tab_id}, _from, state) do
+    if Map.has_key?(state.browsing_contexts, tab_id) do
+      {:reply, :ok, state}
+    else
+      with {:ok, browsing_context_pid} <-
+             start_browsing_context(
+               state.browsing_context_supervisor,
+               state.user_context_id,
+               state.browser_context_defaults,
+               state.bidi_opts,
+               context_id: tab_id
+             ),
+           {:ok, _attached_tab_id, browsing_contexts} <-
+             add_browsing_context(state.browsing_contexts, browsing_context_pid) do
+        {:reply, :ok, %{state | browsing_contexts: browsing_contexts}}
+      else
+        {:error, reason} ->
+          {:reply, {:error, inspect(reason), %{tab_id: tab_id}}, state}
+      end
     end
   end
 
@@ -339,10 +366,11 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
   defp maybe_remove_user_context(_state), do: :ok
 
-  defp start_browsing_context(browsing_context_supervisor, user_context_id, defaults, bidi_opts) do
+  defp start_browsing_context(browsing_context_supervisor, user_context_id, defaults, bidi_opts, extra_opts \\ []) do
     DynamicSupervisor.start_child(
       browsing_context_supervisor,
-      {BrowsingContextProcess, user_context_id: user_context_id, viewport: defaults.viewport, bidi_opts: bidi_opts}
+      {BrowsingContextProcess,
+       [user_context_id: user_context_id, viewport: defaults.viewport, bidi_opts: bidi_opts] ++ extra_opts}
     )
   end
 

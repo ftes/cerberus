@@ -74,6 +74,7 @@ Use `Cerberus.Browser` only with `session(:browser)`.
 | Press key | `Browser.press(session, "Enter", selector: "#input")` |
 | Drag and drop | `Browser.drag(session, "#drag-source", "#drop-target")` |
 | Dialog capture | `Browser.with_dialog(session, fn s -> click(s, button("Open Confirm Dialog")) end)` |
+| Popup capture | `Browser.with_popup(session, fn main -> click(main, button("Open Popup")) end, fn main, popup -> assert_path(popup, "/browser/popup/destination") end)` |
 | Evaluate JS | `Browser.evaluate_js(session, "(() => 42)()")` |
 | Evaluate JS with assertion callback | `Browser.evaluate_js(session, "(() => 42)()", fn value -> assert value == 42 end)` |
 | Cookie lookup | `Browser.cookie(session, "_my_cookie")` |

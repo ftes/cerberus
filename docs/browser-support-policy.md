@@ -20,6 +20,13 @@ CI keeps chrome as the baseline lane and includes targeted firefox-tagged confor
 - Runtime launch settings are invocation-level, including browser selection, headed/headless mode, WebDriver endpoint, binary paths, and driver args.
 - If you need different runtime launch settings, run separate test invocations.
 
+## Popup Lifecycle Support
+
+- `Cerberus.Browser.with_popup/4` is browser-only.
+- Popup capture is deterministic: the popup must be opened by the provided trigger callback.
+- The interaction callback receives both sessions (`main`, `popup`), callback return is ignored, and Cerberus restores the main tab/session before returning.
+- Static/live drivers do not emulate popup lifecycle APIs.
+
 ## Local Managed Runtime
 
 Configure local browser and WebDriver binaries via `:cerberus, :browser`:
