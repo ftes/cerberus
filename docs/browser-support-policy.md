@@ -47,6 +47,13 @@ Recommended alternatives:
 
 ## Local Managed Runtime
 
+Install runtimes:
+
+```bash
+mix cerberus.install.chrome --format shell
+mix cerberus.install.firefox --format shell
+```
+
 Configure local browser and WebDriver binaries via `:cerberus, :browser`:
 
 ```elixir

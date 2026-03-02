@@ -358,17 +358,43 @@ Explicit browser-lane override coverage:
 mix test --only explicit_browser
 ```
 
-Project browser runtime helpers:
+Install local browser runtimes with public Mix tasks:
 
 ```bash
-bin/chrome.sh --version 146.0.7680.31
-bin/firefox.sh --firefox-version 136.0.2 --geckodriver-version 0.36.0
+mix cerberus.install.chrome --version 146.0.7680.31
+mix cerberus.install.firefox --firefox-version 148.0 --geckodriver-version 0.36.0
 ```
 
-These scripts always provision runtime binaries when missing and reuse existing binaries when present.
-Versions are controlled with input arguments (`--version`, `--firefox-version`, `--geckodriver-version`)
-or matching env vars (`CERBERUS_CHROME_VERSION`, `CERBERUS_FIREFOX_VERSION`, `CERBERUS_GECKODRIVER_VERSION`).
-Arguments take precedence; if neither is set, defaults are latest Stable Chrome, latest stable Firefox, and GeckoDriver 0.36.0.
+Both tasks install missing binaries and reuse existing per-version installations.
+Version precedence is flags first, then matching env vars (`CERBERUS_CHROME_VERSION`, `CERBERUS_FIREFOX_VERSION`, `CERBERUS_GECKODRIVER_VERSION`), then defaults (latest stable Chrome/Firefox and GeckoDriver 0.36.0).
+
+Stable output contracts:
+- `--format json` for machine-readable payloads (paths, versions, env handoff keys)
+- `--format env` for `KEY=VALUE` lines (for CI env files)
+- `--format shell` for `export KEY='VALUE'` lines
+
+Recommended runtime handoff:
+
+```bash
+eval "$(mix cerberus.install.chrome --format shell)"
+eval "$(mix cerberus.install.firefox --format shell)"
+```
+
+```elixir
+config :cerberus, :browser,
+  chrome_binary: System.fetch_env!("CHROME"),
+  chromedriver_binary: System.fetch_env!("CHROMEDRIVER"),
+  firefox_binary: System.fetch_env!("FIREFOX"),
+  geckodriver_binary: System.fetch_env!("GECKODRIVER")
+```
+
+CI-friendly form:
+
+```bash
+mix cerberus.install.chrome --format env >> "$GITHUB_ENV"
+mix cerberus.install.firefox --format env >> "$GITHUB_ENV"
+```
+
 Installed paths are stable per version, for example:
 - `tmp/chrome-<version>`
 - `tmp/chromedriver-<version>`

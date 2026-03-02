@@ -98,7 +98,7 @@ defmodule Cerberus.MixProject do
       links: %{
         "GitHub" => "https://github.com/ftes/cerberus"
       },
-      files: ~w(lib priv mix.exs README* LICENSE* docs)
+      files: ~w(lib priv bin mix.exs README* LICENSE* docs)
     ]
   end
 

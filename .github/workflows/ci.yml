@@ -44,10 +44,6 @@ jobs:
             echo "CERBERUS_CHROME_VERSION=${CERBERUS_CHROME_VERSION}"
             echo "CERBERUS_FIREFOX_VERSION=${CERBERUS_FIREFOX_VERSION}"
             echo "CERBERUS_GECKODRIVER_VERSION=${CERBERUS_GECKODRIVER_VERSION}"
-            echo "CHROME=${CHROME}"
-            echo "CHROMEDRIVER=${CHROMEDRIVER}"
-            echo "FIREFOX=${FIREFOX}"
-            echo "GECKODRIVER=${GECKODRIVER}"
           } >> "$GITHUB_ENV"
 
       - name: Setup BEAM
@@ -93,10 +89,10 @@ jobs:
           key: ${{ runner.os }}-browser-runtime-${{ env.CERBERUS_CHROME_VERSION }}-${{ env.CERBERUS_FIREFOX_VERSION }}-${{ env.CERBERUS_GECKODRIVER_VERSION }}
 
       - name: Install Chrome
-        run: bin/chrome.sh
+        run: mix cerberus.install.chrome --format env >> "$GITHUB_ENV"
 
       - name: Install Firefox
-        run: bin/firefox.sh
+        run: mix cerberus.install.firefox --format env >> "$GITHUB_ENV"
 
       - name: Run tests with Chrome
         run: mix test --warnings-as-errors --max-failures 1

@@ -202,7 +202,45 @@ session(:browser,
 
 Use this when one test needs different browser characteristics (for example mobile viewport) without changing global config.
 
-## Step 9: Remote WebDriver Mode
+## Step 9: Install Local Browser Runtimes
+
+Install browser binaries with Cerberus Mix tasks:
+
+```bash
+mix cerberus.install.chrome
+mix cerberus.install.firefox
+```
+
+For explicit versions:
+
+```bash
+mix cerberus.install.chrome --version 146.0.7680.31
+mix cerberus.install.firefox --firefox-version 148.0 --geckodriver-version 0.36.0
+```
+
+The tasks expose stable output formats:
+- `--format json` for machine-readable payloads
+- `--format env` for CI (`KEY=VALUE`)
+- `--format shell` for local shell exports
+
+Recommended shell handoff:
+
+```bash
+eval "$(mix cerberus.install.chrome --format shell)"
+eval "$(mix cerberus.install.firefox --format shell)"
+```
+
+Then configure Cerberus browser binaries once:
+
+```elixir
+config :cerberus, :browser,
+  chrome_binary: System.fetch_env!("CHROME"),
+  chromedriver_binary: System.fetch_env!("CHROMEDRIVER"),
+  firefox_binary: System.fetch_env!("FIREFOX"),
+  geckodriver_binary: System.fetch_env!("GECKODRIVER")
+```
+
+## Step 10: Remote WebDriver Mode
 
 ```elixir
 config :cerberus, :browser,
@@ -228,7 +266,7 @@ mix test.websocket --browsers chrome,firefox
 
 `mix test.websocket` defaults to `--browsers all`.
 
-## Step 10: Headed Browser and Runtime Launch Options
+## Step 11: Headed Browser and Runtime Launch Options
 
 ```elixir
 config :cerberus, :browser,
