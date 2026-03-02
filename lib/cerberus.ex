@@ -6,12 +6,14 @@ defmodule Cerberus do
   - The public API is driver-agnostic and session-first.
   - All public operations take a `Cerberus.Session` and return a `Cerberus.Session`.
   - `locator` is the first argument after `session` for locator-based operations.
+  - Browser unwrap payloads are exposed as `Cerberus.Browser.Native` handles, not raw internals.
   - v0 does not expose a public located-element pipeline type.
 
   Slice 1 provides one-shot operations over deterministic adapters.
   """
 
   alias Cerberus.Assertions
+  alias Cerberus.Browser.Native, as: BrowserNative
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.Static, as: StaticSession
@@ -137,6 +139,12 @@ defmodule Cerberus do
   def close_tab(%StaticSession{} = session), do: StaticSession.close_tab(session)
   def close_tab(%LiveSession{} = session), do: LiveSession.close_tab(session)
 
+  @doc """
+  Executes a callback with driver-native escape-hatch data.
+
+  Browser sessions receive a constrained `Cerberus.Browser.Native` handle.
+  Prefer public Cerberus operations and `Cerberus.Browser.*` helpers for stable flows.
+  """
   @spec unwrap(arg, (term() -> term())) :: arg when arg: var
   def unwrap(_session, fun) when not is_function(fun, 1) do
     raise ArgumentError, "unwrap/2 expects a callback with arity 1"
@@ -161,7 +169,7 @@ defmodule Cerberus do
 
   def unwrap(%BrowserSession{} = session, fun) do
     _ =
-      fun.(%{
+      fun.(%BrowserNative{
         user_context_pid: session.user_context_pid,
         tab_id: session.tab_id
       })

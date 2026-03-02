@@ -4,6 +4,7 @@ defmodule CerberusTest do
   import Cerberus
   import Phoenix.LiveViewTest, only: [element: 3, render_click: 1]
 
+  alias Cerberus.Browser.Native, as: BrowserNative
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.Static, as: StaticSession
@@ -465,7 +466,7 @@ defmodule CerberusTest do
     assert session.current_path == "/live/counter"
   end
 
-  test "unwrap in browser mode exposes native tab handles" do
+  test "unwrap in browser mode exposes constrained native browser handles" do
     session =
       :browser
       |> session()
@@ -476,7 +477,11 @@ defmodule CerberusTest do
 
     assert session.current_path == "/articles"
 
-    assert_receive {:unwrap_native, %{user_context_pid: user_context_pid, tab_id: tab_id}}
+    assert_receive {:unwrap_native, %BrowserNative{} = native}
+
+    user_context_pid = BrowserNative.user_context_pid(native)
+    tab_id = BrowserNative.tab_id(native)
+
     assert is_pid(user_context_pid)
     assert is_binary(tab_id)
     assert tab_id != ""

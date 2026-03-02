@@ -84,8 +84,14 @@ end
 ## Escape Hatches
 
 - `unwrap/2`: direct access to underlying driver primitives when needed.
+  Browser unwrap callbacks receive `Cerberus.Browser.Native` (opaque handle), not a raw internals map.
 - `Cerberus.Browser.*`: browser-only low-level APIs for keyboard, drag, dialogs, JS evaluation, and cookies.
 
 > #### Warning
 >
 > Keep escape hatches localized. Prefer shared Cerberus operations in conformance scenarios so switching between browser and non-browser modes stays cheap.
+
+Guardrails for `unwrap/2`:
+- Treat browser native handles as unstable implementation details; avoid asserting on raw process-state internals.
+- Prefer `Cerberus.Browser.*` for browser behavior that already has a public API.
+- Keep unwrap usage isolated to one helper per test module where possible.
