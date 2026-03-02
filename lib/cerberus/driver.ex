@@ -6,10 +6,12 @@ defmodule Cerberus.Driver do
   alias Cerberus.Session
 
   @type session_t :: Session.t()
+  @type locator_input :: Locator.input()
   @type observed :: map()
   @type op_ok :: {:ok, session_t(), observed()}
   @type op_error :: {:error, session_t(), observed(), String.t()}
   @type click_opts :: Options.click_opts()
+  @type fill_in_input_value :: Options.fill_in_value()
   @type fill_in_value :: String.t()
   @type fill_in_opts :: Options.fill_in_opts()
   @type check_opts :: Options.check_opts()

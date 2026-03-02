@@ -81,6 +81,10 @@ session()
 |> refute_has(~l"#secondary-panel"c, "Status: primary")
 ```
 
+Scoped assertion overloads use explicit scope and locator arguments:
+- `assert_has(session, scope_locator, locator, opts \\ [])`
+- `refute_has(session, scope_locator, locator, opts \\ [])`
+
 ## Match Count And Position Filters
 
 Locator operations support shared count filters:

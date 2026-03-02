@@ -148,6 +148,35 @@ defmodule Cerberus.Options do
           timeout: non_neg_integer()
         ]
 
+  @type browser_selector_opts :: [selector: String.t() | nil]
+
+  @type browser_type_opts :: [
+          selector: String.t() | nil,
+          clear: boolean()
+        ]
+
+  @type browser_press_opts :: browser_selector_opts()
+
+  @type browser_with_dialog_opts :: [
+          timeout: pos_integer(),
+          message: String.t() | nil,
+          browser: keyword()
+        ]
+
+  @type browser_with_popup_opts :: [
+          timeout: pos_integer()
+        ]
+
+  @type cookie_same_site_opt :: :strict | :lax | :none | String.t()
+
+  @type browser_add_cookie_opts :: [
+          domain: String.t(),
+          path: String.t(),
+          http_only: boolean(),
+          secure: boolean(),
+          same_site: cookie_same_site_opt()
+        ]
+
   @click_opts_schema [
     kind: [
       type: {:in, [:any, :link, :button]},
@@ -279,6 +308,33 @@ defmodule Cerberus.Options do
     full_page: [type: :boolean, doc: "Captures the full document instead of only the viewport."]
   ]
 
+  @browser_type_opts_schema [
+    selector: [type: :any, default: nil, doc: "Limits typing target to elements that satisfy the CSS selector."],
+    clear: [type: :boolean, default: false, doc: "Clears the field before typing."]
+  ]
+
+  @browser_press_opts_schema [
+    selector: [type: :any, default: nil, doc: "Limits keypress target to elements that satisfy the CSS selector."]
+  ]
+
+  @browser_with_dialog_opts_schema [
+    timeout: [type: :pos_integer, doc: "Wait timeout in milliseconds for dialog lifecycle events."],
+    message: [type: :any, default: nil, doc: "Expected dialog message text."],
+    browser: [type: :keyword_list, default: [], doc: "Per-call browser config overrides used for timeout defaults."]
+  ]
+
+  @browser_with_popup_opts_schema [
+    timeout: [type: :pos_integer, default: 1_500, doc: "Wait timeout in milliseconds for popup capture."]
+  ]
+
+  @browser_add_cookie_opts_schema [
+    domain: [type: :any, default: nil, doc: "Cookie domain override."],
+    path: [type: :any, default: "/", doc: "Cookie path override."],
+    http_only: [type: :boolean, default: false, doc: "Marks cookie as HttpOnly."],
+    secure: [type: :boolean, default: false, doc: "Marks cookie as Secure."],
+    same_site: [type: :any, default: :lax, doc: "Cookie sameSite policy (:strict, :lax, :none)."]
+  ]
+
   @spec click_schema() :: keyword()
   def click_schema, do: @click_opts_schema
 
@@ -302,6 +358,21 @@ defmodule Cerberus.Options do
 
   @spec screenshot_schema() :: keyword()
   def screenshot_schema, do: @screenshot_opts_schema
+
+  @spec browser_type_schema() :: keyword()
+  def browser_type_schema, do: @browser_type_opts_schema
+
+  @spec browser_press_schema() :: keyword()
+  def browser_press_schema, do: @browser_press_opts_schema
+
+  @spec browser_with_dialog_schema() :: keyword()
+  def browser_with_dialog_schema, do: @browser_with_dialog_opts_schema
+
+  @spec browser_with_popup_schema() :: keyword()
+  def browser_with_popup_schema, do: @browser_with_popup_opts_schema
+
+  @spec browser_add_cookie_schema() :: keyword()
+  def browser_add_cookie_schema, do: @browser_add_cookie_opts_schema
 
   @spec validate_click!(keyword()) :: click_opts()
   def validate_click!(opts) do
@@ -402,6 +473,41 @@ defmodule Cerberus.Options do
     |> validate_path_string!("screenshot/2", :path)
   end
 
+  @spec validate_browser_type!(keyword()) :: browser_type_opts()
+  def validate_browser_type!(opts) do
+    opts
+    |> validate!(@browser_type_opts_schema, "Browser.type/3")
+    |> validate_selector!("Browser.type/3")
+  end
+
+  @spec validate_browser_press!(keyword()) :: browser_press_opts()
+  def validate_browser_press!(opts) do
+    opts
+    |> validate!(@browser_press_opts_schema, "Browser.press/3")
+    |> validate_selector!("Browser.press/3")
+  end
+
+  @spec validate_browser_with_dialog!(keyword()) :: browser_with_dialog_opts()
+  def validate_browser_with_dialog!(opts) do
+    opts
+    |> validate!(@browser_with_dialog_opts_schema, "Browser.with_dialog/3")
+    |> validate_optional_string!("Browser.with_dialog/3", :message)
+  end
+
+  @spec validate_browser_with_popup!(keyword()) :: browser_with_popup_opts()
+  def validate_browser_with_popup!(opts) do
+    validate!(opts, @browser_with_popup_opts_schema, "Browser.with_popup/4")
+  end
+
+  @spec validate_browser_add_cookie!(keyword()) :: browser_add_cookie_opts()
+  def validate_browser_add_cookie!(opts) do
+    opts
+    |> validate!(@browser_add_cookie_opts_schema, "Browser.add_cookie/4")
+    |> validate_optional_string!("Browser.add_cookie/4", :domain)
+    |> validate_optional_string!("Browser.add_cookie/4", :path)
+    |> validate_cookie_same_site!("Browser.add_cookie/4")
+  end
+
   defp validate!(opts, schema, op_name) do
     case NimbleOptions.validate(opts, schema) do
       {:ok, validated} ->
@@ -443,6 +549,34 @@ defmodule Cerberus.Options do
 
       _other ->
         raise ArgumentError, "#{op_name} invalid options: :#{key} must be a non-empty string path"
+    end
+  end
+
+  defp validate_optional_string!(opts, op_name, key) do
+    case Keyword.get(opts, key) do
+      nil ->
+        opts
+
+      value when is_binary(value) ->
+        if String.trim(value) == "" do
+          raise ArgumentError, "#{op_name} invalid options: :#{key} must be a non-empty string"
+        else
+          opts
+        end
+
+      _other ->
+        raise ArgumentError, "#{op_name} invalid options: :#{key} must be a non-empty string or nil"
+    end
+  end
+
+  defp validate_cookie_same_site!(opts, op_name) do
+    case Keyword.get(opts, :same_site) do
+      same_site when same_site in [:strict, :lax, :none, "strict", "lax", "none"] ->
+        opts
+
+      other ->
+        raise ArgumentError,
+              "#{op_name} invalid options: :same_site must be one of :strict, :lax, :none, \"strict\", \"lax\", or \"none\" (got #{inspect(other)})"
     end
   end
 

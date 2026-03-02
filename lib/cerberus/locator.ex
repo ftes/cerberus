@@ -13,6 +13,7 @@ defmodule Cerberus.Locator do
           value: String.t() | Regex.t(),
           opts: keyword()
         }
+  @type input :: t() | String.t() | Regex.t() | keyword() | map()
 
   @spec normalize(term()) :: t()
   def normalize(%__MODULE__{} = locator), do: locator

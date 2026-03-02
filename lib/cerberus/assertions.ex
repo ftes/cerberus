@@ -1,6 +1,7 @@
 defmodule Cerberus.Assertions do
   @moduledoc false
 
+  alias Cerberus.Driver
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.Static, as: StaticSession
@@ -12,7 +13,7 @@ defmodule Cerberus.Assertions do
   alias Cerberus.Session
   alias ExUnit.AssertionError
 
-  @spec click(arg, term(), Options.click_opts()) :: arg when arg: var
+  @spec click(arg, Driver.locator_input(), Driver.click_opts()) :: arg when arg: var
   def click(session, locator_input, opts \\ []) do
     {locator, opts} = normalize_click_locator(locator_input, opts)
     opts = Options.validate_click!(opts)
@@ -28,7 +29,7 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  @spec fill_in(arg, term(), Options.fill_in_value(), Options.fill_in_opts()) :: arg when arg: var
+  @spec fill_in(arg, Driver.locator_input(), Driver.fill_in_input_value(), Driver.fill_in_opts()) :: arg when arg: var
   def fill_in(session, locator_input, value, opts \\ []) when is_list(opts) do
     {locator, opts} = normalize_fill_in_locator(locator_input, opts)
     opts = Options.validate_fill_in!(opts)
@@ -44,7 +45,7 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  @spec select(arg, term(), Options.select_opts()) :: arg when arg: var
+  @spec select(arg, Driver.locator_input(), Driver.select_opts()) :: arg when arg: var
   def select(session, locator_input, opts \\ []) when is_list(opts) do
     {locator, opts} = normalize_select_locator(locator_input, opts)
     opts = Options.validate_select!(opts)
@@ -60,7 +61,7 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  @spec choose(arg, term(), Options.choose_opts()) :: arg when arg: var
+  @spec choose(arg, Driver.locator_input(), Driver.choose_opts()) :: arg when arg: var
   def choose(session, locator_input, opts \\ []) when is_list(opts) do
     {locator, opts} = normalize_choose_locator(locator_input, opts)
     opts = Options.validate_choose!(opts, "choose/3")
@@ -76,7 +77,7 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  @spec check(arg, term(), Options.check_opts()) :: arg when arg: var
+  @spec check(arg, Driver.locator_input(), Driver.check_opts()) :: arg when arg: var
   def check(session, locator_input, opts \\ []) when is_list(opts) do
     {locator, opts} = normalize_check_locator(locator_input, opts, "check/3")
     opts = Options.validate_check!(opts, "check/3")
@@ -92,7 +93,7 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  @spec uncheck(arg, term(), Options.check_opts()) :: arg when arg: var
+  @spec uncheck(arg, Driver.locator_input(), Driver.check_opts()) :: arg when arg: var
   def uncheck(session, locator_input, opts \\ []) when is_list(opts) do
     {locator, opts} = normalize_check_locator(locator_input, opts, "uncheck/3")
     opts = Options.validate_check!(opts, "uncheck/3")
@@ -108,7 +109,7 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  @spec upload(arg, term(), String.t(), Options.upload_opts()) :: arg when arg: var
+  @spec upload(arg, Driver.locator_input(), String.t(), Driver.upload_opts()) :: arg when arg: var
   def upload(session, locator_input, path, opts \\ [])
 
   def upload(session, locator_input, path, opts) when is_binary(path) and is_list(opts) do
@@ -131,7 +132,7 @@ defmodule Cerberus.Assertions do
     raise ArgumentError, "upload/4 expects a non-empty path string and keyword options"
   end
 
-  @spec submit(arg, term(), Options.submit_opts()) :: arg when arg: var
+  @spec submit(arg, Driver.locator_input(), Driver.submit_opts()) :: arg when arg: var
   def submit(session, locator_input, opts \\ []) do
     {locator, opts} = normalize_submit_locator(locator_input, opts)
     opts = Options.validate_submit!(opts)
@@ -166,7 +167,7 @@ defmodule Cerberus.Assertions do
         )
   end
 
-  @spec assert_has(arg, term(), Options.assert_opts()) :: arg when arg: var
+  @spec assert_has(arg, Driver.locator_input(), Driver.assert_opts()) :: arg when arg: var
   def assert_has(session, locator_input, call_opts \\ []) do
     call_has_timeout = Keyword.has_key?(call_opts, :timeout)
     {locator, call_opts} = normalize_assert_locator(locator_input, call_opts)
@@ -185,7 +186,7 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  @spec refute_has(arg, term(), Options.assert_opts()) :: arg when arg: var
+  @spec refute_has(arg, Driver.locator_input(), Driver.assert_opts()) :: arg when arg: var
   def refute_has(session, locator_input, call_opts \\ []) do
     call_has_timeout = Keyword.has_key?(call_opts, :timeout)
     {locator, call_opts} = normalize_assert_locator(locator_input, call_opts)

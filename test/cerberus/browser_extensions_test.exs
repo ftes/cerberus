@@ -116,6 +116,29 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert fixture_session_cookie.session
   end
 
+  test "browser keyword options are validated with NimbleOptions" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+
+    assert_raise ArgumentError, ~r/Browser.type\/3 invalid options/, fn ->
+      type(session, "hello", unknown: true)
+    end
+
+    assert_raise ArgumentError, ~r/Browser.with_dialog\/3 invalid options/, fn ->
+      with_dialog(session, fn scoped -> scoped end, message: 123)
+    end
+
+    assert_raise ArgumentError, ~r/Browser.with_popup\/4 invalid options/, fn ->
+      with_popup(session, fn scoped -> scoped end, fn _main, _popup -> :ok end, timeout: 0)
+    end
+
+    assert_raise ArgumentError, ~r/Browser.add_cookie\/4 invalid options/, fn ->
+      add_cookie(session, "cerberus-browser-cookie", "cookie-value", path: "")
+    end
+  end
+
   test "evaluate_js supports optional callback assertions and returns session for chaining" do
     session =
       :browser

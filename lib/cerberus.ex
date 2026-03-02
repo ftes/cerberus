@@ -38,6 +38,8 @@ defmodule Cerberus do
   alias Phoenix.LiveViewTest.View
 
   @type driver_kind :: Session.driver_kind()
+  @type locator_input :: Locator.input()
+  @type scope_locator_input :: Locator.input()
   @locator_kind_keys [:text, :label, :link, :button, :placeholder, :title, :alt, :role, :css, :testid]
   @locator_kind_string_keys Enum.map(@locator_kind_keys, &Atom.to_string/1)
 
@@ -261,7 +263,7 @@ defmodule Cerberus do
 
       within(session, closest(~l".fieldset"c, from: ~l"textbox:Email"r), &assert_has(&1, ~l"can't be blank"))
   """
-  @spec closest(term(), keyword()) :: Locator.t()
+  @spec closest(locator_input(), keyword()) :: Locator.t()
   def closest(locator, opts) when is_list(opts) do
     from_locator_input =
       case Keyword.fetch(opts, :from) do
@@ -342,7 +344,7 @@ defmodule Cerberus do
   Browser note: when locator-based `within/3` matches an `<iframe>`, Cerberus switches
   the query root to that iframe document. Only same-origin iframes are supported.
   """
-  @spec within(arg, term(), (arg -> arg)) :: arg when arg: var
+  @spec within(arg, scope_locator_input(), (arg -> arg)) :: arg when arg: var
   def within(_session, scope, _callback) when is_binary(scope) do
     raise ArgumentError, ~s{within/3 no longer accepts CSS selector strings; use ~l"..."c or css("...")}
   end
@@ -421,31 +423,31 @@ defmodule Cerberus do
     end
   end
 
-  @spec click(arg, term()) :: arg when arg: var
+  @spec click(arg, locator_input()) :: arg when arg: var
   def click(session, locator), do: click(session, locator, [])
 
-  @spec click(arg, term(), term() | Options.click_opts()) :: arg when arg: var
-  def click(session, scope_or_locator, locator_or_opts) do
+  @spec click(arg, scope_locator_input(), locator_input() | Options.click_opts()) :: arg when arg: var
+  def click(session, scope_locator_or_locator, locator_or_opts) do
     if locator_input_term?(locator_or_opts) do
-      click(session, scope_or_locator, locator_or_opts, [])
+      click(session, scope_locator_or_locator, locator_or_opts, [])
     else
-      Assertions.click(session, scope_or_locator, locator_or_opts)
+      Assertions.click(session, scope_locator_or_locator, locator_or_opts)
     end
   end
 
-  @spec click(arg, term(), term(), Options.click_opts()) :: arg when arg: var
+  @spec click(arg, scope_locator_input(), locator_input(), Options.click_opts()) :: arg when arg: var
   def click(session, scope_locator, locator, opts) when is_list(opts) do
     within(session, scope_locator, fn scoped ->
       Assertions.click(scoped, locator, opts)
     end)
   end
 
-  @spec click_link(arg, term(), Options.click_opts()) :: arg when arg: var
+  @spec click_link(arg, locator_input(), Options.click_opts()) :: arg when arg: var
   def click_link(session, locator, opts \\ []) do
     click(session, locator, Keyword.put(opts, :kind, :link))
   end
 
-  @spec click_button(arg, term(), Options.click_opts()) :: arg when arg: var
+  @spec click_button(arg, locator_input(), Options.click_opts()) :: arg when arg: var
   def click_button(session, locator, opts \\ []) do
     click(session, locator, Keyword.put(opts, :kind, :button))
   end
@@ -461,7 +463,7 @@ defmodule Cerberus do
   Sigil examples: `fill_in(session, ~l"#search_q"c, "Aragorn")`,
   `fill_in(session, ~l"search-input"t, "Aragorn")`.
   """
-  @spec fill_in(arg, term(), Options.fill_in_value(), Options.fill_in_opts()) :: arg when arg: var
+  @spec fill_in(arg, locator_input(), Options.fill_in_value(), Options.fill_in_opts()) :: arg when arg: var
   def fill_in(session, locator, value, opts \\ []) when is_list(opts) do
     Assertions.fill_in(session, locator, value, opts)
   end
@@ -476,7 +478,7 @@ defmodule Cerberus do
   Sigil examples: `upload(session, ~l"#avatar"c, "/tmp/avatar.jpg")`,
   `upload(session, ~l"avatar-upload"t, "/tmp/avatar.jpg")`.
   """
-  @spec upload(arg, term(), String.t(), Options.upload_opts()) :: arg when arg: var
+  @spec upload(arg, locator_input(), String.t(), Options.upload_opts()) :: arg when arg: var
   def upload(session, locator, path, opts \\ [])
 
   def upload(session, locator, path, opts) when is_binary(path) and is_list(opts) do
@@ -487,7 +489,7 @@ defmodule Cerberus do
     raise ArgumentError, "upload/4 expects a non-empty path string and keyword options"
   end
 
-  @spec submit(arg, term(), Options.submit_opts()) :: arg when arg: var
+  @spec submit(arg, locator_input(), Options.submit_opts()) :: arg when arg: var
   def submit(session, locator, opts \\ []) do
     Assertions.submit(session, locator, opts)
   end
@@ -504,10 +506,10 @@ defmodule Cerberus do
   Sigil examples: `select(session, ~l"#race_select"c, option: "Elf")`,
   `select(session, ~l"race-select"t, option: "Elf")`.
   """
-  @spec select(arg, term()) :: arg when arg: var
+  @spec select(arg, locator_input()) :: arg when arg: var
   def select(session, locator), do: select(session, locator, [])
 
-  @spec select(arg, term(), Options.select_opts()) :: arg when arg: var
+  @spec select(arg, locator_input(), Options.select_opts()) :: arg when arg: var
   def select(session, locator, opts) when is_list(opts) do
     Assertions.select(session, locator, opts)
   end
@@ -522,10 +524,10 @@ defmodule Cerberus do
   Sigil examples: `choose(session, ~l"#contact_email"c)`,
   `choose(session, ~l"contact-email"t)`.
   """
-  @spec choose(arg, term()) :: arg when arg: var
+  @spec choose(arg, locator_input()) :: arg when arg: var
   def choose(session, locator), do: choose(session, locator, [])
 
-  @spec choose(arg, term(), Options.choose_opts()) :: arg when arg: var
+  @spec choose(arg, locator_input(), Options.choose_opts()) :: arg when arg: var
   def choose(session, locator, opts) when is_list(opts) do
     Assertions.choose(session, locator, opts)
   end
@@ -540,10 +542,10 @@ defmodule Cerberus do
   Sigil examples: `check(session, ~l"#subscribe"c)`,
   `check(session, ~l"subscribe-checkbox"t)`.
   """
-  @spec check(arg, term()) :: arg when arg: var
+  @spec check(arg, locator_input()) :: arg when arg: var
   def check(session, locator), do: check(session, locator, [])
 
-  @spec check(arg, term(), Options.check_opts()) :: arg when arg: var
+  @spec check(arg, locator_input(), Options.check_opts()) :: arg when arg: var
   def check(session, locator, opts) when is_list(opts) do
     Assertions.check(session, locator, opts)
   end
@@ -558,10 +560,10 @@ defmodule Cerberus do
   Sigil examples: `uncheck(session, ~l"#subscribe"c)`,
   `uncheck(session, ~l"subscribe-checkbox"t)`.
   """
-  @spec uncheck(arg, term()) :: arg when arg: var
+  @spec uncheck(arg, locator_input()) :: arg when arg: var
   def uncheck(session, locator), do: uncheck(session, locator, [])
 
-  @spec uncheck(arg, term(), Options.check_opts()) :: arg when arg: var
+  @spec uncheck(arg, locator_input(), Options.check_opts()) :: arg when arg: var
   def uncheck(session, locator, opts) when is_list(opts) do
     Assertions.uncheck(session, locator, opts)
   end
@@ -575,22 +577,22 @@ defmodule Cerberus do
   Scoped:
   `assert_has(session, ~l"#secondary-panel"c, "Status: secondary")`
 
-  In the scoped form, the third argument is a locator input; passing a binary/regex
-  uses text-locator shorthand.
+  In the scoped form, the second argument is a `scope_locator` and the third
+  argument is a `locator`. Passing a binary/regex `locator` uses text-locator shorthand.
   """
-  @spec assert_has(arg, term()) :: arg when arg: var
+  @spec assert_has(arg, locator_input()) :: arg when arg: var
   def assert_has(session, locator), do: assert_has(session, locator, [])
 
-  @spec assert_has(arg, term(), term() | Options.assert_opts()) :: arg when arg: var
-  def assert_has(session, locator_or_scope_locator, locator_or_opts) do
+  @spec assert_has(arg, scope_locator_input(), locator_input() | Options.assert_opts()) :: arg when arg: var
+  def assert_has(session, scope_locator_or_locator, locator_or_opts) do
     if locator_input_term?(locator_or_opts) do
-      assert_has(session, locator_or_scope_locator, locator_or_opts, [])
+      assert_has(session, scope_locator_or_locator, locator_or_opts, [])
     else
-      Assertions.assert_has(session, locator_or_scope_locator, locator_or_opts)
+      Assertions.assert_has(session, scope_locator_or_locator, locator_or_opts)
     end
   end
 
-  @spec assert_has(arg, term(), term(), Options.assert_opts()) :: arg when arg: var
+  @spec assert_has(arg, scope_locator_input(), locator_input(), Options.assert_opts()) :: arg when arg: var
   def assert_has(session, scope_locator, locator, opts) when is_list(opts) do
     within(session, scope_locator, fn scoped ->
       Assertions.assert_has(scoped, locator, opts)
@@ -606,22 +608,22 @@ defmodule Cerberus do
   Scoped:
   `refute_has(session, ~l"#secondary-panel"c, "Status: primary")`
 
-  In the scoped form, the third argument is a locator input; passing a binary/regex
-  uses text-locator shorthand.
+  In the scoped form, the second argument is a `scope_locator` and the third
+  argument is a `locator`. Passing a binary/regex `locator` uses text-locator shorthand.
   """
-  @spec refute_has(arg, term()) :: arg when arg: var
+  @spec refute_has(arg, locator_input()) :: arg when arg: var
   def refute_has(session, locator), do: refute_has(session, locator, [])
 
-  @spec refute_has(arg, term(), term() | Options.assert_opts()) :: arg when arg: var
-  def refute_has(session, locator_or_scope_locator, locator_or_opts) do
+  @spec refute_has(arg, scope_locator_input(), locator_input() | Options.assert_opts()) :: arg when arg: var
+  def refute_has(session, scope_locator_or_locator, locator_or_opts) do
     if locator_input_term?(locator_or_opts) do
-      refute_has(session, locator_or_scope_locator, locator_or_opts, [])
+      refute_has(session, scope_locator_or_locator, locator_or_opts, [])
     else
-      Assertions.refute_has(session, locator_or_scope_locator, locator_or_opts)
+      Assertions.refute_has(session, scope_locator_or_locator, locator_or_opts)
     end
   end
 
-  @spec refute_has(arg, term(), term(), Options.assert_opts()) :: arg when arg: var
+  @spec refute_has(arg, scope_locator_input(), locator_input(), Options.assert_opts()) :: arg when arg: var
   def refute_has(session, scope_locator, locator, opts) when is_list(opts) do
     within(session, scope_locator, fn scoped ->
       Assertions.refute_has(scoped, locator, opts)

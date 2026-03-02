@@ -41,11 +41,13 @@ defmodule Cerberus.Browser do
     raise ArgumentError, "Browser.screenshot/2 expects a path string or keyword options"
   end
 
-  @spec type(session, String.t(), keyword()) :: session when session: var
+  @spec type(session, String.t(), Options.browser_type_opts()) :: session when session: var
   def type(session, text, opts \\ [])
 
-  def type(%BrowserSession{} = session, text, opts) when is_binary(text) and is_list(opts),
-    do: Extensions.type(session, text, opts)
+  def type(%BrowserSession{} = session, text, opts) when is_binary(text) and is_list(opts) do
+    opts = Options.validate_browser_type!(opts)
+    Extensions.type(session, text, opts)
+  end
 
   def type(session, _text, opts) when is_list(opts), do: Assertions.unsupported(session, :type, opts)
 
@@ -53,11 +55,13 @@ defmodule Cerberus.Browser do
     raise ArgumentError, "Browser.type/3 expects text as a string and options as a keyword list"
   end
 
-  @spec press(session, String.t(), keyword()) :: session when session: var
+  @spec press(session, String.t(), Options.browser_press_opts()) :: session when session: var
   def press(session, key, opts \\ [])
 
-  def press(%BrowserSession{} = session, key, opts) when is_binary(key) and is_list(opts),
-    do: Extensions.press(session, key, opts)
+  def press(%BrowserSession{} = session, key, opts) when is_binary(key) and is_list(opts) do
+    opts = Options.validate_browser_press!(opts)
+    Extensions.press(session, key, opts)
+  end
 
   def press(session, _key, opts) when is_list(opts), do: Assertions.unsupported(session, :press, opts)
 
@@ -73,10 +77,11 @@ defmodule Cerberus.Browser do
 
   def drag(session, _source_selector, _target_selector), do: Assertions.unsupported(session, :drag)
 
-  @spec with_dialog(session, (session -> term()), keyword()) :: session when session: var
+  @spec with_dialog(session, (session -> term()), Options.browser_with_dialog_opts()) :: session when session: var
   def with_dialog(session, action, opts \\ [])
 
   def with_dialog(%BrowserSession{} = session, action, opts) when is_function(action, 1) and is_list(opts) do
+    opts = Options.validate_browser_with_dialog!(opts)
     Extensions.with_dialog(session, action, opts)
   end
 
@@ -90,11 +95,18 @@ defmodule Cerberus.Browser do
     raise ArgumentError, "Browser.with_dialog/3 expects a callback with arity 1 and options as a keyword list"
   end
 
-  @spec with_popup(session, (session -> term()), (session, session -> term()), keyword()) :: session when session: var
+  @spec with_popup(
+          session,
+          (session -> term()),
+          (session, session -> term()),
+          Options.browser_with_popup_opts()
+        ) :: session
+        when session: var
   def with_popup(session, trigger_fun, callback_fun, opts \\ [])
 
   def with_popup(%BrowserSession{} = session, trigger_fun, callback_fun, opts)
       when is_function(trigger_fun, 1) and is_function(callback_fun, 2) and is_list(opts) do
+    opts = Options.validate_browser_with_popup!(opts)
     Extensions.with_popup(session, trigger_fun, callback_fun, opts)
   end
 
@@ -148,11 +160,12 @@ defmodule Cerberus.Browser do
   def session_cookie(%BrowserSession{} = session), do: Extensions.session_cookie(session)
   def session_cookie(session), do: Assertions.unsupported(session, :session_cookie)
 
-  @spec add_cookie(session, String.t(), String.t(), keyword()) :: session when session: var
+  @spec add_cookie(session, String.t(), String.t(), Options.browser_add_cookie_opts()) :: session when session: var
   def add_cookie(session, name, value, opts \\ [])
 
   def add_cookie(%BrowserSession{} = session, name, value, opts)
       when is_binary(name) and is_binary(value) and is_list(opts) do
+    opts = Options.validate_browser_add_cookie!(opts)
     Extensions.add_cookie(session, name, value, opts)
   end
 

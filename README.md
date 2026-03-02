@@ -94,6 +94,10 @@ session()
 |> refute_has(~l"#secondary-panel"c, "Status: primary")
 ```
 
+Scoped assertion overloads use explicit scope and locator arguments:
+- `assert_has(session, scope_locator, locator, opts \\ [])`
+- `refute_has(session, scope_locator, locator, opts \\ [])`
+
 Field-wrapper assertion pattern (Phoenix `core_components`-style wrappers):
 
 ```elixir
