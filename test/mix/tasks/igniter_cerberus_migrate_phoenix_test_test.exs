@@ -306,7 +306,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
         test "example", %{conn: conn} do
           conn
           |> visit("/upload")
-          |> within("#upload-form", fn scoped ->
+          |> within(css("#upload-form"), fn scoped ->
             scoped
             |> upload("Avatar", "/tmp/avatar.jpg")
             |> submit()

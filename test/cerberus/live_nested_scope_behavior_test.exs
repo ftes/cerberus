@@ -8,9 +8,9 @@ defmodule Cerberus.LiveNestedScopeBehaviorTest do
       unquote(driver)
       |> session()
       |> visit("/live/nested")
-      |> within("#child-live-view", fn scoped ->
+      |> within(css("#child-live-view"), fn scoped ->
         scoped
-        |> within(".actions", fn nested ->
+        |> within(css(".actions"), fn nested ->
           click(nested, button("Save"))
         end)
         |> assert_has(text("Child saved: 1", exact: true))
@@ -26,15 +26,15 @@ defmodule Cerberus.LiveNestedScopeBehaviorTest do
           unquote(driver)
           |> session()
           |> visit("/live/nested")
-          |> within("#child-live-view", fn scoped ->
-            within(scoped, ".child-actions", fn nested ->
+          |> within(css("#child-live-view"), fn scoped ->
+            within(scoped, css(".child-actions"), fn nested ->
               click(nested, button("Missing Action"))
             end)
           end)
         end
 
       assert error.message =~ "scope:"
-      assert error.message =~ ".child-actions"
+      assert error.message =~ "child-actions"
     end
   end
 end

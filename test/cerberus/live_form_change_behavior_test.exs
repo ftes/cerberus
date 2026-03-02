@@ -17,7 +17,7 @@ defmodule Cerberus.LiveFormChangeBehaviorTest do
       unquote(driver)
       |> session()
       |> visit("/live/form-change")
-      |> within("#no-phx-change-form", fn scoped ->
+      |> within(css("#no-phx-change-form"), fn scoped ->
         fill_in(scoped, "Name (no phx-change)", "Aragorn")
       end)
       |> assert_has(text("No change value: unchanged", exact: true))
@@ -27,7 +27,7 @@ defmodule Cerberus.LiveFormChangeBehaviorTest do
       unquote(driver)
       |> session()
       |> visit("/live/form-change")
-      |> within("#changes-hidden-input-form", fn scoped ->
+      |> within(css("#changes-hidden-input-form"), fn scoped ->
         scoped
         |> fill_in("Name for hidden", "Frodo")
         |> fill_in("Email for hidden", "frodo@example.com")

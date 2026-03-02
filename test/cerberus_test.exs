@@ -235,7 +235,7 @@ defmodule CerberusTest do
     assert is_struct(
              session()
              |> visit("/live/uploads")
-             |> within("#upload-change-form", fn scoped ->
+             |> within(css("#upload-change-form"), fn scoped ->
                upload(scoped, "Avatar", jpg)
              end)
            )
@@ -243,7 +243,7 @@ defmodule CerberusTest do
     assert_raise InvalidLocatorError, ~r/text locators are not supported for upload\/4/, fn ->
       session()
       |> visit("/live/uploads")
-      |> within("#upload-change-form", fn scoped ->
+      |> within(css("#upload-change-form"), fn scoped ->
         upload(scoped, text("Avatar"), jpg)
       end)
     end
@@ -378,7 +378,7 @@ defmodule CerberusTest do
     session =
       session()
       |> visit("/scoped")
-      |> within("#secondary-panel", fn scoped ->
+      |> within(css("#secondary-panel"), fn scoped ->
         scoped
         |> assert_has(text("Secondary Panel", exact: true))
         |> click(link("Open"))
@@ -388,19 +388,27 @@ defmodule CerberusTest do
     assert session.scope == nil
   end
 
+  test "within rejects CSS selector strings and requires locator input" do
+    assert_raise ArgumentError, ~r/within\/3 no longer accepts CSS selector strings/, fn ->
+      session()
+      |> visit("/scoped")
+      |> within("#secondary-panel", fn scoped -> scoped end)
+    end
+  end
+
   test "assert_path failures include normalized path and scope details" do
     error =
       assert_raise AssertionError, fn ->
         session()
         |> visit("/scoped")
-        |> within("#secondary-panel", fn scoped ->
+        |> within(css("#secondary-panel"), fn scoped ->
           assert_path(scoped, "/articles")
         end)
       end
 
     assert error.message =~ "assert_path failed"
     assert error.message =~ ~s(actual_path: "/scoped")
-    assert error.message =~ ~s(scope: "#secondary-panel")
+    assert error.message =~ "secondary-panel"
   end
 
   test "invalid assert_path query option is rejected" do

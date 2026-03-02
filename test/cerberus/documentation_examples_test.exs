@@ -28,7 +28,7 @@ defmodule Cerberus.DocumentationExamplesTest do
       unquote(driver)
       |> session()
       |> visit("/scoped")
-      |> within("#secondary-panel", fn scoped ->
+      |> within(css("#secondary-panel"), fn scoped ->
         scoped
         |> assert_has(text("Status: secondary", exact: true))
         |> click(link("Open"))

@@ -59,7 +59,7 @@ end)
 |> assert_path("/search")
 ```
 
-`within/3` supports CSS selectors and full locators. Browser locator scopes can switch into same-origin iframes.
+`within/3` expects locator input (`css(...)`, `role(...)`, `testid(...)`, etc.). Browser locator scopes can switch into same-origin iframes.
 
 ## Match Count And Position Filters
 

@@ -8,7 +8,7 @@ defmodule Cerberus.PathScopeBehaviorTest do
       unquote(driver)
       |> session()
       |> visit("/scoped")
-      |> within("#secondary-panel", fn scoped ->
+      |> within(css("#secondary-panel"), fn scoped ->
         scoped
         |> assert_has(text("Secondary Panel", exact: true))
         |> assert_has(text("Status: secondary", exact: true))
@@ -33,10 +33,10 @@ defmodule Cerberus.PathScopeBehaviorTest do
       unquote(driver)
       |> session()
       |> visit("/live/selector-edge")
-      |> within("#secondary-actions", fn scoped ->
+      |> within(css("#secondary-actions"), fn scoped ->
         click(scoped, button("Apply"))
       end)
-      |> within("#selected-result", fn scoped ->
+      |> within(css("#selected-result"), fn scoped ->
         scoped
         |> assert_has(text("Selected: secondary", exact: true))
         |> refute_has(text("Selected: primary", exact: true))

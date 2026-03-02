@@ -11,7 +11,7 @@ defmodule Cerberus.LiveUploadBehaviorTest do
       :phoenix
       |> session()
       |> visit("/live/uploads")
-      |> within("#upload-change-form", fn scoped ->
+      |> within(css("#upload-change-form"), fn scoped ->
         upload(scoped, "Avatar", jpg)
       end)
 
@@ -20,7 +20,7 @@ defmodule Cerberus.LiveUploadBehaviorTest do
     assert_raise ExUnit.AssertionError, ~r/Unsupported file type/, fn ->
       session
       |> visit("/live/uploads")
-      |> within("#full-form", fn scoped ->
+      |> within(css("#full-form"), fn scoped ->
         upload(scoped, "Avatar", png)
       end)
     end
@@ -28,7 +28,7 @@ defmodule Cerberus.LiveUploadBehaviorTest do
     assert_raise ExUnit.AssertionError, ~r/Too many files uploaded/, fn ->
       session
       |> visit("/live/uploads")
-      |> within("#full-form", fn scoped ->
+      |> within(css("#full-form"), fn scoped ->
         scoped
         |> upload("Avatar", jpg)
         |> upload("Avatar", jpg)
@@ -38,7 +38,7 @@ defmodule Cerberus.LiveUploadBehaviorTest do
     assert_raise ExUnit.AssertionError, ~r/File too large/, fn ->
       session
       |> visit("/live/uploads")
-      |> within("#tiny-upload-form", fn scoped ->
+      |> within(css("#tiny-upload-form"), fn scoped ->
         upload(scoped, "Tiny", jpg)
       end)
     end
@@ -51,7 +51,7 @@ defmodule Cerberus.LiveUploadBehaviorTest do
       unquote(driver)
       |> session()
       |> visit("/live/uploads")
-      |> within("#upload-change-form", fn scoped ->
+      |> within(css("#upload-change-form"), fn scoped ->
         upload(scoped, "Avatar", jpg)
       end)
       |> assert_has(text("phx-change triggered on file selection", exact: true))
@@ -63,7 +63,7 @@ defmodule Cerberus.LiveUploadBehaviorTest do
       unquote(driver)
       |> session()
       |> visit("/live/uploads")
-      |> within("#upload-change-form", fn scoped ->
+      |> within(css("#upload-change-form"), fn scoped ->
         upload(scoped, testid("live-upload-change-avatar"), jpg)
       end)
       |> assert_has(text("phx-change triggered on file selection", exact: true))
@@ -75,7 +75,7 @@ defmodule Cerberus.LiveUploadBehaviorTest do
       unquote(driver)
       |> session()
       |> visit("/live/uploads")
-      |> within("#upload-redirect-form", fn scoped ->
+      |> within(css("#upload-redirect-form"), fn scoped ->
         upload(scoped, "Redirect Avatar", jpg)
       end)
       |> assert_path("/live/async_page_2")

@@ -9,7 +9,7 @@ defmodule Cerberus.StaticUploadBehaviorTest do
     :phoenix
     |> session()
     |> visit("/upload/static")
-    |> within("#static-upload-form", fn scoped ->
+    |> within(css("#static-upload-form"), fn scoped ->
       scoped
       |> upload(testid("static-avatar-upload"), jpg)
       |> submit(testid("static-upload-submit"))

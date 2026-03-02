@@ -266,54 +266,23 @@ defmodule Cerberus do
   @doc """
   Executes `callback` within a narrowed scope.
 
-  `scope` may be a CSS selector string (existing behavior) or a full locator input.
+  `scope` must be a locator input (for example, `css("#secondary-panel")`).
 
   Browser note: when locator-based `within/3` matches an `<iframe>`, Cerberus switches
   the query root to that iframe document. Only same-origin iframes are supported.
   """
   @spec within(arg, term(), (arg -> arg)) :: arg when arg: var
-  def within(%LiveSession{} = session, scope, callback) when is_binary(scope) and is_function(callback, 1) do
-    if String.trim(scope) == "" do
-      raise ArgumentError, "within/3 expects a non-empty CSS selector"
-    end
-
-    previous_scope = Session.scope(session)
-
-    case live_child_view_for_scope(session, scope) do
-      {:ok, child_view} ->
-        child_session =
-          session
-          |> Map.put(:view, child_view)
-          |> Map.put(:html, Phoenix.LiveViewTest.render(child_view))
-          |> Session.with_scope(nil)
-
-        callback_result = callback.(child_session)
-        restore_live_child_scope(callback_result, session, previous_scope)
-
-      :error ->
-        scoped_session = Session.with_scope(session, compose_scope(previous_scope, scope))
-        callback_result = callback.(scoped_session)
-        restore_scope(callback_result, previous_scope)
-    end
-  end
-
-  def within(session, scope, callback) when is_binary(scope) and is_function(callback, 1) do
-    if String.trim(scope) == "" do
-      raise ArgumentError, "within/3 expects a non-empty CSS selector"
-    end
-
-    previous_scope = Session.scope(session)
-    scoped_session = Session.with_scope(session, compose_scope(previous_scope, scope))
-    callback_result = callback.(scoped_session)
-
-    restore_scope(callback_result, previous_scope)
+  def within(_session, scope, _callback) when is_binary(scope) do
+    raise ArgumentError, "within/3 no longer accepts CSS selector strings; use css(\"...\")"
   end
 
   def within(%LiveSession{} = session, locator, callback) when not is_binary(locator) and is_function(callback, 1) do
+    normalized_locator = Locator.normalize(locator)
     previous_scope = Session.scope(session)
-    resolved_scope = resolve_within_scope!(session, locator, previous_scope)
+    resolved_scope = resolve_within_scope!(session, normalized_locator, previous_scope)
+    live_child_scope = live_child_scope_candidate(normalized_locator, previous_scope, resolved_scope)
 
-    case live_child_view_for_scope(session, resolved_scope) do
+    case live_child_view_for_scope(session, live_child_scope) do
       {:ok, child_view} ->
         child_session =
           session
@@ -483,10 +452,6 @@ defmodule Cerberus do
     raise ArgumentError, "within/3 callback must return a Cerberus session"
   end
 
-  defp compose_scope(nil, scope), do: scope
-  defp compose_scope("", scope), do: scope
-  defp compose_scope(previous_scope, scope), do: previous_scope <> " " <> scope
-
   defp resolve_within_scope!(%BrowserSession{} = session, locator, previous_scope) do
     normalized_locator = Locator.normalize(locator)
 
@@ -514,6 +479,13 @@ defmodule Cerberus do
 
   defp session_html!(%{html: html}) when is_binary(html), do: html
   defp session_html!(_session), do: raise(ArgumentError, "within/3 requires a session with rendered html")
+
+  defp live_child_scope_candidate(%Locator{kind: :css, value: scope}, previous_scope, resolved_scope)
+       when previous_scope in [nil, ""] and is_binary(scope) and scope != "" do
+    if simple_id_selector?(scope), do: scope, else: resolved_scope
+  end
+
+  defp live_child_scope_candidate(_locator, _previous_scope, resolved_scope), do: resolved_scope
 
   defp restore_live_child_scope(%{__struct__: _} = callback_result, parent_session, previous_scope) do
     case callback_result do
