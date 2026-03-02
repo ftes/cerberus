@@ -36,7 +36,9 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
       assert Runtime.remote_webdriver_url(webdriver_url: "http://session-override:5555") == "http://session-override:5555"
     end
 
-    test "supports legacy chromedriver_url as fallback" do
+    test "supports legacy chromedriver_url as fallback when webdriver_url is not configured" do
+      Application.put_env(:cerberus, :browser, [])
+
       assert Runtime.remote_webdriver_url(chromedriver_url: "http://legacy:9515") == "http://legacy:9515"
     end
 
