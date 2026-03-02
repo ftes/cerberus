@@ -53,9 +53,6 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     assert File.exists?(path)
     assert evaluate_js(session, "document.querySelector('#keyboard-input').value") == "hello browser"
-    assert session.last_result.op == :with_dialog
-    assert session.last_result.observed.message == "Delete item?"
-    assert session.last_result.observed.accepted == false
 
     session = drag(session, "#drag-source", "#drop-target")
 
@@ -82,8 +79,6 @@ defmodule Cerberus.BrowserExtensionsTest do
            }
 
     session = add_cookie(session, "cerberus-browser-cookie", "cookie-value")
-
-    assert session.last_result.op == :add_cookie
 
     cookie = cookie(session, "cerberus-browser-cookie")
     assert cookie

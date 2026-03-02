@@ -42,9 +42,7 @@ defmodule Cerberus.Driver.Browser do
           browser_context_defaults: browser_context_defaults(),
           sandbox_metadata: String.t() | nil,
           scope: String.t() | nil,
-          current_path: String.t() | nil,
-          multi_select_memory: %{optional(String.t()) => [String.t()]},
-          last_result: Session.last_result()
+          current_path: String.t() | nil
         }
 
   defstruct user_context_pid: nil,
@@ -57,9 +55,7 @@ defmodule Cerberus.Driver.Browser do
             browser_context_defaults: @empty_browser_context_defaults,
             sandbox_metadata: nil,
             scope: nil,
-            current_path: nil,
-            multi_select_memory: %{},
-            last_result: nil
+            current_path: nil
 
   @impl true
   def new_session(opts \\ []) do
@@ -134,8 +130,7 @@ defmodule Cerberus.Driver.Browser do
           session
           | tab_id: tab_id,
             scope: nil,
-            current_path: nil,
-            last_result: nil
+            current_path: nil
         }
 
       {:error, reason, details} ->
@@ -169,8 +164,7 @@ defmodule Cerberus.Driver.Browser do
             session
             | tab_id: next_tab_id,
               scope: nil,
-              current_path: nil,
-              last_result: nil
+              current_path: nil
           }
         else
           raise ArgumentError, "failed to close browser tab: no active tab selected"
@@ -207,7 +201,7 @@ defmodule Cerberus.Driver.Browser do
     case capture_screenshot(state.tab_id, full_page, bidi_opts(state)) do
       {:ok, %{"data" => data}} when is_binary(data) ->
         write_screenshot!(path, data)
-        update_last_result(session, :screenshot, %{path: path, full_page: full_page})
+        session
 
       {:ok, payload} ->
         raise ArgumentError, "failed to capture browser screenshot: unexpected payload #{inspect(payload)}"
@@ -525,9 +519,8 @@ defmodule Cerberus.Driver.Browser do
             {:error, session, observed, "matched select field is disabled"}
 
           true ->
-            preserve_existing = select_field_multiple?(field) and not is_list(option)
             exact_option = Keyword.get(opts, :exact_option, true)
-            select_field_option(session, state, field, option, exact_option, preserve_existing, selector)
+            select_field_option(session, state, field, option, exact_option, selector)
         end
     end
   end
@@ -760,18 +753,15 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp select_field_option(session, state, field, option, exact_option, preserve_existing, selector) do
+  defp select_field_option(session, state, field, option, exact_option, selector) do
     index = field["index"] || 0
     options = List.wrap(option)
-    remembered_values = remembered_multi_select_values(session, field)
 
     expression =
       Expressions.select_set(
         index,
         options,
         exact_option,
-        preserve_existing,
-        remembered_values,
         Session.scope(state),
         selector
       )
@@ -867,8 +857,6 @@ defmodule Cerberus.Driver.Browser do
   defp select_field_result(session, state, field, option, %{"ok" => true} = result) do
     case await_driver_ready(state) do
       {:ok, readiness} ->
-        session = remember_multi_select_value(session, field, Map.get(result, "value"))
-
         observed = %{
           action: :select,
           path: Map.get(result, "path", state.current_path),
@@ -1035,10 +1023,6 @@ defmodule Cerberus.Driver.Browser do
 
   defp select_field?(field) do
     (field["tag"] || "") |> to_string() |> String.downcase() == "select"
-  end
-
-  defp select_field_multiple?(field) do
-    field["multiple"] == true
   end
 
   defp field_disabled?(field) do
@@ -1549,7 +1533,7 @@ defmodule Cerberus.Driver.Browser do
 
   defp state!(_), do: raise(ArgumentError, "browser driver state is not initialized")
 
-  defp update_session(%__MODULE__{} = session, %{} = state, op, observed) do
+  defp update_session(%__MODULE__{} = session, %{} = state, _op, _observed) do
     %{
       session
       | user_context_pid: state.user_context_pid,
@@ -1562,50 +1546,11 @@ defmodule Cerberus.Driver.Browser do
         browser_context_defaults: state.browser_context_defaults,
         sandbox_metadata: state.sandbox_metadata,
         scope: session.scope,
-        current_path: state.current_path,
-        multi_select_memory: session.multi_select_memory,
-        last_result: %{op: op, observed: observed}
+        current_path: state.current_path
     }
   end
 
-  defp update_last_result(%__MODULE__{} = session, op, observed) do
-    %{session | last_result: %{op: op, observed: observed}}
-  end
-
-  defp remembered_multi_select_values(%__MODULE__{} = session, field) do
-    case select_field_memory_key(session, field) do
-      nil -> []
-      key -> Map.get(session.multi_select_memory, key, [])
-    end
-  end
-
-  defp remember_multi_select_value(%__MODULE__{} = session, field, value) do
-    if select_field_multiple?(field) do
-      case select_field_memory_key(session, field) do
-        nil ->
-          session
-
-        key ->
-          values =
-            value
-            |> List.wrap()
-            |> Enum.map(&to_string/1)
-
-          %{session | multi_select_memory: Map.put(session.multi_select_memory, key, values)}
-      end
-    else
-      session
-    end
-  end
-
-  defp select_field_memory_key(%__MODULE__{} = session, field) when is_map(field) do
-    path = session.current_path || ""
-    key = field["id"] || field["name"]
-
-    if is_binary(key) and key != "" do
-      "#{path}::#{key}"
-    end
-  end
+  defp update_last_result(%__MODULE__{} = session, _op, _observed), do: session
 
   defp no_clickable_error(:link), do: "no link matched locator"
   defp no_clickable_error(:button), do: "no button matched locator"

@@ -35,12 +35,21 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       |> assert_has(text("contact: email", exact: true))
     end
 
-    test "select preserves prior multi-select values across repeated calls (#{driver})" do
+    test "select replaces multi-select values across repeated calls (#{driver})" do
       unquote(driver)
       |> session()
       |> visit("/controls")
       |> select("Race 2", option: "Elf")
       |> select("Race 2", option: "Dwarf")
+      |> submit(text("Save Controls"))
+      |> assert_has(text("race_2: [dwarf]", exact: true))
+    end
+
+    test "select accepts full multi-select values list (#{driver})" do
+      unquote(driver)
+      |> session()
+      |> visit("/controls")
+      |> select("Race 2", option: ["Elf", "Dwarf"])
       |> submit(text("Save Controls"))
       |> assert_has(text("race_2: [elf,dwarf]", exact: true))
     end
@@ -127,13 +136,21 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       |> assert_has(text("contact: phone", exact: true))
     end
 
-    test "LiveView select preserves multi-select values across repeated calls (#{driver})" do
+    test "LiveView select replaces multi-select values across repeated calls (#{driver})" do
       unquote(driver)
       |> session()
       |> visit("/live/controls")
       |> select("Race 2", option: "Elf")
       |> assert_has(text("race_2: [elf]", exact: true))
       |> select("Race 2", option: "Dwarf")
+      |> assert_has(text("race_2: [dwarf]", exact: true))
+    end
+
+    test "LiveView select accepts full multi-select values list (#{driver})" do
+      unquote(driver)
+      |> session()
+      |> visit("/live/controls")
+      |> select("Race 2", option: ["Elf", "Dwarf"])
       |> assert_has(text("race_2: [elf,dwarf]", exact: true))
     end
 

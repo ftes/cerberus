@@ -69,19 +69,8 @@ defmodule Cerberus.Driver.Static.FormData do
     List.first(values)
   end
 
-  def select_value_for_update(_session, _field, option, values, true) when is_list(option) do
+  def select_value_for_update(_session, _field, _option, values, true) do
     values
-  end
-
-  def select_value_for_update(session, field, _option, values, true) do
-    defaults = submit_defaults_for_field(session, field)
-    active = pruned_params_for_form(session, field.form, field[:form_selector])
-    current = Map.get(active, field.name, Map.get(defaults, field.name))
-
-    current
-    |> checkbox_value_list()
-    |> Enum.concat(values)
-    |> Enum.uniq()
   end
 
   @spec upload_value_for_update(struct(), map(), map(), String.t()) :: term()

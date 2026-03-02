@@ -99,19 +99,8 @@ defmodule Cerberus.Driver.Live.FormData do
     List.first(values)
   end
 
-  def select_value_for_update(_session, _field, option, values, true, _route_kind) when is_list(option) do
+  def select_value_for_update(_session, _field, _option, values, true, _route_kind) do
     values
-  end
-
-  def select_value_for_update(session, field, _option, values, true, _route_kind) do
-    defaults = form_defaults_for_change(session, field)
-    active = pruned_active_form_values(session, field)
-    current = Map.get(active, field.name, Map.get(defaults, field.name))
-
-    current
-    |> checkbox_value_list()
-    |> Enum.concat(values)
-    |> Enum.uniq()
   end
 
   @spec upload_value_for_update(struct(), map(), map(), String.t(), atom()) :: term()

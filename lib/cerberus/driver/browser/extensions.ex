@@ -504,9 +504,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
           "add_cookie/4 :same_site must be :lax, :strict, :none (or lowercase strings), got: #{inspect(value)}"
   end
 
-  defp update_last_result(session, op, observed) do
-    %{session | last_result: %{op: op, observed: observed}}
-  end
+  defp update_last_result(session, _op, _observed), do: session
 
   defp bidi_opts(%BrowserSession{browser_name: browser_name}), do: [browser_name: browser_name]
 

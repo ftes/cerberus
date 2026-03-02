@@ -373,6 +373,13 @@ defmodule Cerberus do
     Assertions.submit(session, locator, opts)
   end
 
+  @doc """
+  Selects option text in a `<select>` field matched by `locator`.
+
+  For multi-select fields, pass the full desired selection on every call
+  (`option: ["Elf", "Dwarf"]`). Each `select/3` call replaces the selection
+  with the provided option value(s).
+  """
   @spec select(arg, term()) :: arg when arg: var
   def select(session, locator), do: select(session, locator, [])
 
@@ -475,6 +482,8 @@ defmodule Cerberus do
   defp update_last_result(%{last_result: _} = session, op, observed) do
     %{session | last_result: %{op: op, observed: observed}}
   end
+
+  defp update_last_result(session, _op, _observed), do: session
 
   defp run_browser_path_assertion!(session, expected, opts, timeout, op) when op in [:assert_path, :refute_path] do
     browser_opts = Keyword.put(opts, :timeout, timeout)

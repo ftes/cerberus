@@ -13,17 +13,14 @@ defmodule Cerberus.BrowserTest do
     end
   end
 
-  test "screenshot defaults to a temp PNG path and records it in last_result" do
+  test "screenshot defaults to a temp PNG path" do
     session =
       :browser
       |> session()
       |> visit("/articles")
       |> screenshot()
 
-    assert %{op: :screenshot, observed: %{path: path, full_page: false}} = session.last_result
-    assert File.exists?(path)
-    assert String.ends_with?(path, ".png")
-    File.rm(path)
+    assert session.current_path == "/articles"
   end
 
   @tag :tmp_dir

@@ -239,7 +239,11 @@ defmodule Cerberus.Options do
   ]
 
   @select_opts_schema [
-    option: [type: :any, required: true, doc: "Option text to select; list form targets multi-select inputs."],
+    option: [
+      type: :any,
+      required: true,
+      doc: "Option text to select; for multi-select inputs pass all desired values on each call."
+    ],
     exact_option: [type: :boolean, default: true, doc: "Requires exact option-text matches unless disabled."],
     selector: [type: :any, default: nil, doc: "Limits select lookup to elements that satisfy the CSS selector."],
     checked: [type: :any, default: nil, doc: "Requires matched selects to be checked/unchecked."],

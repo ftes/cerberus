@@ -83,14 +83,66 @@ defmodule Cerberus.Driver.Browser.Expressions do
         return helper.pathCheck(#{encoded_payload});
       }
 
+      const payload = #{encoded_payload};
+      const expected = payload.expected;
+      const expectedQuery = payload.expectedQuery;
+      const exact = payload.exact === true;
+      const op = payload.op || "assert_path";
       const path = window.location.pathname + window.location.search;
+      const pathOnly = (() => {
+        try {
+          const idx = path.indexOf("?");
+          return idx >= 0 ? path.slice(0, idx) : path;
+        } catch (_error) {
+          return path || "/";
+        }
+      })();
+
+      const expectedRegex = (() => {
+        if (!expected || expected.type !== "regex") return null;
+
+        try {
+          const supported = new Set(["i", "m", "s", "u"]);
+          const flags = (expected.opts || "")
+            .split("")
+            .filter((flag) => supported.has(flag))
+            .join("");
+
+          return new RegExp(expected.source || "", flags);
+        } catch (_error) {
+          return null;
+        }
+      })();
+
+      const pathMatch = (() => {
+        if (expectedRegex) return expectedRegex.test(path);
+
+        const expectedValue = expected && expected.value ? expected.value : "";
+        const actualTarget = expectedValue.includes("?") ? path : pathOnly;
+        return exact ? actualTarget === expectedValue : actualTarget.includes(expectedValue);
+      })();
+
+      const queryMatch = (() => {
+        if (!expectedQuery) return true;
+
+        const idx = path.indexOf("?");
+        const query = idx >= 0 ? path.slice(idx + 1) : "";
+        const params = new URLSearchParams(query);
+
+        return Object.entries(expectedQuery).every(([key, value]) => {
+          return (params.get(key) || null) === String(value);
+        });
+      })();
+
+      const combinedMatch = pathMatch && queryMatch;
+      const ok = op === "assert_path" ? combinedMatch : !combinedMatch;
 
       return JSON.stringify({
-        ok: false,
-        reason: "helper-missing",
+        ok,
+        reason: ok ? "matched" : "mismatch",
         path,
-        "path_match?": false,
-        "query_match?": false,
+        "path_match?": pathMatch,
+        "query_match?": queryMatch,
         helperMissing: true
       });
     })()
