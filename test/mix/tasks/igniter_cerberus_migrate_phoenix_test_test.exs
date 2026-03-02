@@ -69,6 +69,64 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     assert output =~ "Mode: write"
   end
 
+  test "write mode rewrites safe direct PhoenixTest calls", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_direct_calls_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleDirectCallsTest do
+        import PhoenixTest
+
+        test "example", %{conn: conn} do
+          session = PhoenixTest.visit(conn, "/articles")
+          session = PhoenixTest.assert_has(session, "#main", text: "Articles")
+          PhoenixTest.Assertions.refute_has(session, "#missing", text: "Nope")
+        end
+      end
+      """
+    )
+
+    output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ "PhoenixTest.visit(conn, \"/articles\")"
+    assert rewritten =~ ~s{Cerberus.assert_has(session, "#main", text: "Articles")}
+    assert rewritten =~ ~s{Cerberus.refute_has(session, "#missing", text: "Nope")}
+    assert output =~ "WARNING #{file}: visit(conn, ...) PhoenixTest flow needs manual session bootstrap in Cerberus."
+    refute output =~ "Direct PhoenixTest.<function> call detected"
+  end
+
+  test "write mode rewrites import PhoenixTest.Assertions", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_import_assertions_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleImportAssertionsTest do
+        import PhoenixTest.Assertions
+      end
+      """
+    )
+
+    output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ "import Cerberus"
+    refute rewritten =~ "import PhoenixTest.Assertions"
+    assert output =~ "updated #{file}"
+  end
+
   test "reports warnings for unsupported migration patterns", %{tmp_dir: tmp_dir} do
     file = Path.join(tmp_dir, "sample_warning_test.exs")
 
@@ -96,6 +154,32 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
     assert output =~
              "WARNING #{file}: Browser helper call likely needs manual migration to Cerberus browser extensions."
+  end
+
+  test "reports warning for unsupported direct PhoenixTest call", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_direct_warning_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleDirectWarningTest do
+        import PhoenixTest
+
+        test "example", %{conn: conn} do
+          PhoenixTest.custom_helper(conn)
+        end
+      end
+      """
+    )
+
+    output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, [file])
+      end)
+
+    assert output =~
+             "WARNING #{file}: Direct PhoenixTest.<function> call detected; migrate to Cerberus session-first flow manually."
   end
 
   test "write mode preserves upload pipelines and makes them Cerberus-callable", %{tmp_dir: tmp_dir} do

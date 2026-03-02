@@ -27,6 +27,26 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   @warning_visit_conn "visit(conn, ...) PhoenixTest flow needs manual session bootstrap in Cerberus."
   @warning_browser_helper "Browser helper call likely needs manual migration to Cerberus browser extensions."
   @browser_helpers [:with_dialog, :screenshot, :press, :type, :drag, :cookie, :session_cookie]
+  @rewritable_direct_calls [
+    :assert_has,
+    :refute_has,
+    :click,
+    :click_link,
+    :click_button,
+    :fill_in,
+    :select,
+    :choose,
+    :check,
+    :uncheck,
+    :submit,
+    :upload,
+    :assert_path,
+    :refute_path,
+    :within,
+    :unwrap,
+    :open_browser
+  ]
+  @rewritable_assertions_calls [:assert_has, :refute_has, :assert_path, :refute_path]
 
   defmodule RewriteState do
     @moduledoc false
@@ -147,6 +167,10 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
             updated = {:import, meta, [alias_ast(module_ast, [:Cerberus]) | rest]}
             {updated, mark_changed(state)}
 
+          [:PhoenixTest, :Assertions] ->
+            updated = {:import, meta, [alias_ast(module_ast, [:Cerberus]) | rest]}
+            {updated, mark_changed(state)}
+
           [:PhoenixTest, :TestHelpers] ->
             {node, add_warning(state, @warning_test_helpers)}
 
@@ -215,13 +239,12 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
 
   defp rewrite_node({{:., _dot_meta, [module_ast, fun]}, _call_meta, args} = node, state)
        when is_atom(fun) and is_list(args) do
-    next_state =
+    state_with_warnings =
       state
       |> maybe_warn_browser_helper(fun)
       |> maybe_warn_visit_conn(fun, args)
-      |> maybe_warn_direct_phoenix_test_call(module_ast)
 
-    {node, next_state}
+    rewrite_remote_call(node, module_ast, fun, args, state_with_warnings)
   end
 
   defp rewrite_node({fun, _meta, args} = node, state) when is_atom(fun) and is_list(args) do
@@ -241,10 +264,47 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   defp alias_ast({:__aliases__, meta, _parts}, parts), do: {:__aliases__, meta, parts}
   defp alias_ast(_module_ast, parts), do: {:__aliases__, [], parts}
 
-  defp maybe_warn_direct_phoenix_test_call(state, module_ast) do
+  defp rewrite_remote_call(node, module_ast, fun, args, state) do
     case alias_parts(module_ast) do
-      [:PhoenixTest] -> add_warning(state, @warning_direct_call)
-      _ -> state
+      [:PhoenixTest] ->
+        rewrite_phoenix_test_remote_call(node, module_ast, fun, args, state)
+
+      [:PhoenixTest, :Assertions] ->
+        rewrite_assertions_remote_call(node, module_ast, fun, state)
+
+      [:PhoenixTest | _] ->
+        {node, add_warning(state, @warning_submodule_alias)}
+
+      _ ->
+        {node, state}
+    end
+  end
+
+  defp rewrite_remote_module({{:., dot_meta, [module_ast, fun]}, call_meta, args}, module_ast, parts) do
+    {{:., dot_meta, [alias_ast(module_ast, parts), fun]}, call_meta, args}
+  end
+
+  defp rewrite_phoenix_test_remote_call(node, module_ast, fun, args, state) do
+    cond do
+      fun in @browser_helpers ->
+        {node, state}
+
+      fun == :visit and conn_first_arg?(args) ->
+        {node, state}
+
+      fun in @rewritable_direct_calls ->
+        {rewrite_remote_module(node, module_ast, [:Cerberus]), mark_changed(state)}
+
+      true ->
+        {node, add_warning(state, @warning_direct_call)}
+    end
+  end
+
+  defp rewrite_assertions_remote_call(node, module_ast, fun, state) do
+    if fun in @rewritable_assertions_calls do
+      {rewrite_remote_module(node, module_ast, [:Cerberus]), mark_changed(state)}
+    else
+      {node, add_warning(state, @warning_submodule_alias)}
     end
   end
 
@@ -256,6 +316,9 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   end
 
   defp maybe_warn_visit_conn(state, _fun, _args), do: state
+
+  defp conn_first_arg?([first | _rest]), do: conn_arg?(first)
+  defp conn_first_arg?(_args), do: false
 
   defp visit_call?({:visit, _meta, args}) when is_list(args), do: true
   defp visit_call?({{:., _meta, [_module_ast, :visit]}, _call_meta, args}) when is_list(args), do: true
