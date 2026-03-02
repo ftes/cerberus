@@ -107,6 +107,9 @@ jobs:
       - name: Run tests with Firefox
         run: CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors --max-failures 1
 
+      - name: Run tests with Firefox via Websocket (remote)
+        run: CERBERUS_BROWSER_NAME=firefox mix test.websocket --warnings-as-errors --max-failures 1
+
       # - name: Run browser-driver tests in websocket Firefox lane
       #   run: |
       #     mix test.websocket --warnings-as-errors --max-failures 1 --browsers firefox $BROWSER_DRIVER_FILES
