@@ -82,6 +82,7 @@ defmodule Cerberus do
   Browser context defaults can be configured globally via `config :cerberus, :browser`
   and overridden per session with:
 
+  - `user_agent: "..."`
   - `browser: [viewport: [width: ..., height: ...] | {w, h}]`
   - `browser: [user_agent: "..."]`
   - `browser: [popup_mode: :allow | :same_tab]` to control `window.open` behavior
@@ -116,6 +117,42 @@ defmodule Cerberus do
   def session(driver, opts) when is_atom(driver) and is_list(opts) do
     raise ArgumentError,
           "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser|:chrome|:firefox) for browser"
+  end
+
+  @doc """
+  Returns the encoded SQL sandbox user-agent marker for a repo owner process.
+
+  This helper is intended for browser-session sandbox wiring:
+
+      metadata = Cerberus.sql_sandbox_user_agent(MyApp.Repo, owner_pid)
+      session(:browser, user_agent: metadata)
+
+  The returned value can also be used for raw conn headers:
+
+      conn
+      |> Plug.Conn.delete_req_header("user-agent")
+      |> Plug.Conn.put_req_header("user-agent", metadata)
+  """
+  @spec sql_sandbox_user_agent(module(), pid()) :: String.t()
+  def sql_sandbox_user_agent(repo, owner_pid) when is_atom(repo) and is_pid(owner_pid) do
+    sandbox_module = ensure_phoenix_sql_sandbox_module!()
+    metadata = sandbox_module.metadata_for(repo, owner_pid)
+    sandbox_module.encode_metadata(metadata)
+  end
+
+  @doc """
+  Returns the encoded SQL sandbox user-agent marker for the first configured Ecto repo.
+  """
+  @spec sql_sandbox_user_agent(pid()) :: String.t()
+  def sql_sandbox_user_agent(owner_pid) when is_pid(owner_pid) do
+    case Application.get_env(:cerberus, :ecto_repos, []) do
+      [repo | _] when is_atom(repo) ->
+        sql_sandbox_user_agent(repo, owner_pid)
+
+      _ ->
+        raise ArgumentError,
+              "sql_sandbox_user_agent/1 requires :cerberus, :ecto_repos to include at least one repo; use sql_sandbox_user_agent/2 to pass an explicit repo"
+    end
   end
 
   @spec open_tab(arg) :: arg when arg: var
@@ -1018,6 +1055,18 @@ defmodule Cerberus do
   defp locator_kind_key?(key) when is_atom(key), do: key in @locator_kind_keys
   defp locator_kind_key?(key) when is_binary(key), do: key in @locator_kind_string_keys
   defp locator_kind_key?(_key), do: false
+
+  defp ensure_phoenix_sql_sandbox_module! do
+    module = Module.concat([Phoenix, Ecto, SQL, Sandbox])
+
+    if Code.ensure_loaded?(module) and function_exported?(module, :metadata_for, 2) and
+         function_exported?(module, :encode_metadata, 1) do
+      module
+    else
+      raise ArgumentError,
+            "Phoenix.Ecto.SQL.Sandbox is unavailable; add :phoenix_ecto to dependencies to use sql_sandbox_user_agent/1-2"
+    end
+  end
 
   defp format_path_error(op, observed) do
     """

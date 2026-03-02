@@ -205,7 +205,8 @@ You can override browser defaults in one test by passing session opts:
 ```elixir
 session(:browser,
   ready_timeout_ms: 2_500,
-  browser: [viewport: {390, 844}, user_agent: "Cerberus Mobile Spec"]
+  user_agent: "Cerberus Mobile Spec",
+  browser: [viewport: {390, 844}]
 )
 |> visit("/live/counter")
 ```
@@ -214,6 +215,15 @@ Isolation strategy:
 - runtime process + BiDi transport stay shared,
 - each `session(:browser, ...)` creates an isolated browser user context,
 - context-level overrides (viewport/user-agent/popup mode/init scripts) are isolated per session and do not require a dedicated browser process.
+
+SQL sandbox helper:
+
+```elixir
+owner_pid = Ecto.Adapters.SQL.Sandbox.start_owner!(MyApp.Repo, shared: false)
+metadata = Cerberus.sql_sandbox_user_agent(MyApp.Repo, owner_pid)
+
+session(:browser, user_agent: metadata)
+```
 
 Popup behavior:
 - Preferred: use `Browser.with_popup/4` for deterministic popup capture and two-session assertions.
@@ -268,7 +278,7 @@ Assertion-timeout fallback:
 - Static assertions remain immediate unless you pass explicit call/session/app timeout overrides.
 
 Option scopes:
-- Per-session context options: `ready_timeout_ms`, `ready_quiet_ms`, `browser: [viewport: ..., user_agent: ..., popup_mode: :allow | :same_tab, init_script: ... | init_scripts: [...]]`.
+- Per-session context options: `ready_timeout_ms`, `ready_quiet_ms`, `user_agent`, `browser: [viewport: ..., user_agent: ..., popup_mode: :allow | :same_tab, init_script: ... | init_scripts: [...]]`.
 - Global runtime launch options: `browser_name`, `webdriver_url`, `chrome_webdriver_url`, `firefox_webdriver_url`, `show_browser`, `headless`, `chrome_args`, `firefox_args`, `chrome_binary`, `firefox_binary`, `chromedriver_binary`, `geckodriver_binary` (`webdriver_urls` is still accepted for compatibility).
 - Global browser defaults: `bidi_command_timeout_ms`, `runtime_http_timeout_ms`, `dialog_timeout_ms`, `screenshot_full_page`, `screenshot_artifact_dir`, `screenshot_path`.
 

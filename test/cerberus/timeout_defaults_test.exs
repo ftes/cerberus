@@ -90,6 +90,10 @@ defmodule Cerberus.TimeoutDefaultsTest do
     assert_raise ArgumentError, ~r/session\(:browser, opts\) invalid options:.*chrome_args/, fn ->
       session(:browser, chrome_args: [123])
     end
+
+    assert_raise ArgumentError, ~r/session\(:browser, opts\) invalid options:.*user_agent/, fn ->
+      session(:browser, user_agent: "   ")
+    end
   end
 
   test "browser ready timeout falls back to global browser config and allows session override" do

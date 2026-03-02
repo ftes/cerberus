@@ -6,16 +6,12 @@ defmodule Cerberus.SQLSandboxBehaviorTest do
   alias Cerberus.Fixtures.SandboxMessages
   alias Cerberus.Session
   alias Ecto.Adapters.SQL.Sandbox
-  alias Phoenix.Ecto.SQL.Sandbox, as: PhoenixSandbox
 
   setup context do
     [repo] = Application.get_env(:cerberus, :ecto_repos, [])
     owner_pid = Sandbox.start_owner!(repo, shared: !context.async)
 
-    metadata_header =
-      repo
-      |> PhoenixSandbox.metadata_for(owner_pid)
-      |> PhoenixSandbox.encode_metadata()
+    metadata_header = sql_sandbox_user_agent(repo, owner_pid)
 
     conn =
       Phoenix.ConnTest.build_conn()
@@ -58,6 +54,11 @@ defmodule Cerberus.SQLSandboxBehaviorTest do
   end
 
   defp sandbox_session(driver, context) when driver in [:phoenix, :browser] do
-    session(driver, conn: context.sandbox_conn, sandbox_metadata: context.sandbox_metadata)
+    opts = [conn: context.sandbox_conn, sandbox_metadata: context.sandbox_metadata]
+
+    case driver do
+      :browser -> session(:browser, Keyword.put(opts, :user_agent, context.sandbox_metadata))
+      :phoenix -> session(:phoenix, opts)
+    end
   end
 end

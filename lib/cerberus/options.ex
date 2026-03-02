@@ -91,6 +91,7 @@ defmodule Cerberus.Options do
           assert_timeout_ms: non_neg_integer(),
           ready_timeout_ms: pos_integer(),
           ready_quiet_ms: pos_integer(),
+          user_agent: String.t() | nil,
           sandbox_metadata: String.t() | nil,
           browser: browser_override_opts(),
           browser_name: :chrome | :firefox,
@@ -423,6 +424,7 @@ defmodule Cerberus.Options do
     assert_timeout_ms: [type: :non_neg_integer, doc: "Default assertion timeout in milliseconds."],
     ready_timeout_ms: [type: :pos_integer, doc: "Browser readiness timeout in milliseconds."],
     ready_quiet_ms: [type: :pos_integer, doc: "Browser readiness quiet window in milliseconds."],
+    user_agent: [type: :any, doc: "Top-level user-agent override for browser session context."],
     sandbox_metadata: [type: :any, doc: "Optional sandbox metadata user-agent marker."],
     browser: [type: :keyword_list, doc: "Per-session browser overrides."],
     browser_name: [type: {:in, [:chrome, :firefox]}, doc: "Browser lane selector."],
@@ -703,6 +705,7 @@ defmodule Cerberus.Options do
     |> validate_known!(@session_browser_opts_schema, "session(:browser, opts)")
     |> validate_optional_module_atom!("session(:browser, opts)", :endpoint)
     |> validate_optional_conn!("session(:browser, opts)", :conn)
+    |> validate_optional_non_empty_string!("session(:browser, opts)", :user_agent)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :sandbox_metadata)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :webdriver_url)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :chrome_webdriver_url)

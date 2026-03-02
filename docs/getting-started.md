@@ -194,13 +194,23 @@ session
 ```elixir
 session(:browser,
   ready_timeout_ms: 2_500,
-  browser: [viewport: {390, 844}, user_agent: "Cerberus Mobile Spec"]
+  user_agent: "Cerberus Mobile Spec",
+  browser: [viewport: {390, 844}]
 )
 |> visit("/live/counter")
 |> assert_has(~l"Count: 1")
 ```
 
 Use this when one test needs different browser characteristics (for example mobile viewport) without changing global config.
+
+SQL sandbox user-agent helper:
+
+```elixir
+owner_pid = Ecto.Adapters.SQL.Sandbox.start_owner!(MyApp.Repo, shared: false)
+metadata = Cerberus.sql_sandbox_user_agent(MyApp.Repo, owner_pid)
+
+session(:browser, user_agent: metadata)
+```
 
 ## Step 9: Install Local Browser Runtimes
 

@@ -58,6 +58,16 @@ defmodule Cerberus.Driver.Browser.ConfigTest do
       assert init_scripts == [AssertionHelpers.preload_script(), "window.fromSession = true;"]
     end
 
+    test "top-level user_agent option overrides nested browser user_agent" do
+      assert %{
+               user_agent: "top-level-agent"
+             } =
+               Config.browser_context_defaults(
+                 user_agent: "top-level-agent",
+                 browser: [user_agent: "nested-agent"]
+               )
+    end
+
     test "adds same-tab popup preload script when popup_mode is :same_tab" do
       assert %{
                popup_mode: :same_tab,
