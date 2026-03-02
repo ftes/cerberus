@@ -183,11 +183,28 @@ Isolation strategy:
 - context-level overrides (viewport/user-agent/popup mode/init scripts) are isolated per session and do not require a dedicated browser process.
 
 Popup behavior:
+- Preferred: use `Browser.with_popup/4` for deterministic popup capture and two-session assertions.
 - `popup_mode: :allow` keeps browser default popup/new-window behavior (default).
 - `popup_mode: :same_tab` injects an early preload script that rewrites `window.open(...)` to same-tab navigation.
 - Firefox limitation: `popup_mode: :same_tab` is currently unsupported and raises explicitly.
 - Known bug: Firefox BiDi preload registration may emit `chrome://remote/content/shared/Realm.sys.mjs` TypeError logs.
-- `:same_tab` is a pragmatic workaround for autonomous popup flows until first-class multi-window lifecycle APIs land.
+- `:same_tab` is a pragmatic fallback for autonomous flows that you cannot reliably trigger from test callbacks.
+
+Same-tab workaround (OAuth-style redirect/result flow):
+
+```elixir
+session(:browser, browser: [popup_mode: :same_tab])
+|> visit("/browser/popup/auto")
+|> assert_path("/browser/popup/destination", query: %{source: "auto-load"}, timeout: 1_500)
+|> assert_has(text("popup source: auto-load", exact: true))
+```
+
+When workaround is brittle:
+- popup behavior depends on browser security/user gesture requirements,
+- popup source script changes frequently or is third-party hosted,
+- flow needs asserting both opener and popup side effects.
+
+In those cases, prefer `Browser.with_popup/4` and assert both `main` and `popup` sessions directly.
 
 ## Browser Defaults and Runtime Options
 

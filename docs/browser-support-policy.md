@@ -27,6 +27,13 @@ CI keeps chrome as the baseline lane and includes targeted firefox-tagged confor
 - The interaction callback receives both sessions (`main`, `popup`), callback return is ignored, and Cerberus restores the main tab/session before returning.
 - Static/live drivers do not emulate popup lifecycle APIs.
 
+### Workaround Mode (`popup_mode: :same_tab`)
+
+- `popup_mode: :same_tab` is a fallback for autonomous `window.open(...)` flows that are not practical to trigger from `with_popup/4`.
+- This mode rewrites `window.open(...)` into same-tab navigation, which makes OAuth-like redirect/result assertions straightforward.
+- Use it when the test only needs final navigation/result behavior.
+- Avoid it when the flow requires validating opener+popup interaction, browser popup semantics, or exact multi-window behavior.
+
 ## Local Managed Runtime
 
 Configure local browser and WebDriver binaries via `:cerberus, :browser`:
