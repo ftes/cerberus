@@ -49,8 +49,8 @@ defmodule Cerberus.DocumentationExamplesTest do
         |> visit("/session/user")
         |> assert_has(text("Session user: alice", exact: true))
 
-      primary
-      |> open_user()
+      unquote(driver)
+      |> session()
       |> visit("/session/user")
       |> assert_has(text("Session user: unset", exact: true))
       |> refute_has(text("Session user: alice", exact: true))

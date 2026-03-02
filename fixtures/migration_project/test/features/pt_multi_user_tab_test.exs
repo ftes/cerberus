@@ -25,8 +25,7 @@ defmodule MigrationFixtureWeb.PtMultiUserTabTest do
         _same_user_tab_closed = Cerberus.close_tab(same_user_tab)
 
         isolated_user =
-          primary
-          |> Cerberus.open_user()
+          Cerberus.session(endpoint: MigrationFixtureWeb.Endpoint)
           |> Cerberus.visit("/session-counter")
           |> assert_session_count("0")
 

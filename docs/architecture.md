@@ -52,10 +52,10 @@ Cross-driver concern modules remain separate:
 
 ## Multi-User / Multi-Tab Semantics
 
-- `open_user/1` creates isolated user state in all drivers.
 - `open_tab/1` creates another tab in the same user state in all drivers.
+- Start a new isolated user by creating a new session (`session()` or `session(:browser)`).
 - Browser maps this to separate browsing contexts inside one user context.
-- Static/live map this to separate `Plug.Conn` sessions with shared cookie semantics for tabs.
+- Static/live map tabs to separate `Plug.Conn` sessions with shared cookie semantics.
 
 ## Browser Overrides and Isolation
 

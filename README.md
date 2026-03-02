@@ -95,8 +95,7 @@ tab2 =
   |> visit("/session/user")
 
 user2 =
-  primary
-  |> open_user()
+  session()
   |> visit("/session/user")
 ```
 

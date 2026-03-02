@@ -48,15 +48,6 @@ defmodule Cerberus.Driver.Live do
     }
   end
 
-  @spec open_user(t()) :: t()
-  def open_user(%__MODULE__{} = session) do
-    new_session(
-      endpoint: session.endpoint,
-      conn: Conn.fork_user_conn(session.conn),
-      assert_timeout_ms: session.assert_timeout_ms
-    )
-  end
-
   @spec open_tab(t()) :: t()
   def open_tab(%__MODULE__{} = session) do
     new_session(

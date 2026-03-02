@@ -32,7 +32,7 @@
 
 | Task | Example |
 | --- | --- |
-| New user (isolated state) | `open_user(session)` |
+| New user (isolated state) | `session()` / `session(:browser)` |
 | New tab (shared user state) | `open_tab(session)` |
 | Switch active tab/session | `switch_tab(session, other_session)` |
 | Close current tab | `close_tab(session)` |

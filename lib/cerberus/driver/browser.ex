@@ -100,28 +100,6 @@ defmodule Cerberus.Driver.Browser do
     }
   end
 
-  @spec open_user(t()) :: t()
-  def open_user(%__MODULE__{} = session) do
-    opts = [
-      browser_name: session.browser_name,
-      assert_timeout_ms: session.assert_timeout_ms,
-      ready_timeout_ms: session.ready_timeout_ms,
-      ready_quiet_ms: session.ready_quiet_ms,
-      browser_context_defaults: session.browser_context_defaults
-    ]
-
-    opts =
-      case session.sandbox_metadata do
-        metadata when is_binary(metadata) and metadata != "" ->
-          Keyword.put(opts, :sandbox_metadata, metadata)
-
-        _ ->
-          opts
-      end
-
-    new_session(opts)
-  end
-
   @spec open_tab(t()) :: t()
   def open_tab(%__MODULE__{} = session) do
     case UserContextProcess.open_tab(session.user_context_pid) do
@@ -141,7 +119,8 @@ defmodule Cerberus.Driver.Browser do
   @spec switch_tab(t(), t()) :: t()
   def switch_tab(%__MODULE__{} = session, %__MODULE__{} = target_session) do
     if session.user_context_pid != target_session.user_context_pid do
-      raise ArgumentError, "cannot switch tab across different browser users; use open_user/1 for isolation"
+      raise ArgumentError,
+            "cannot switch tab across different browser users; start a new browser session for user isolation"
     end
 
     case UserContextProcess.switch_tab(session.user_context_pid, target_session.tab_id) do

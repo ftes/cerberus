@@ -95,11 +95,6 @@ defmodule Cerberus do
           "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser|:chrome|:firefox) for browser"
   end
 
-  @spec open_user(arg) :: arg when arg: var
-  def open_user(%BrowserSession{} = session), do: BrowserSession.open_user(session)
-  def open_user(%StaticSession{} = session), do: StaticSession.open_user(session)
-  def open_user(%LiveSession{} = session), do: LiveSession.open_user(session)
-
   @spec open_tab(arg) :: arg when arg: var
   def open_tab(%BrowserSession{} = session), do: BrowserSession.open_tab(session)
   def open_tab(%StaticSession{} = session), do: StaticSession.open_tab(session)

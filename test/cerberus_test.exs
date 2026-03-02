@@ -35,7 +35,7 @@ defmodule CerberusTest do
     assert %BrowserSession{} = session(:firefox)
   end
 
-  test "open_user/open_tab/switch_tab API works for non-browser sessions" do
+  test "new-session isolation plus open_tab/switch_tab API works for non-browser sessions" do
     primary =
       session()
       |> visit("/session/user/alice")
@@ -48,8 +48,7 @@ defmodule CerberusTest do
       |> assert_has(text("Session user: alice", exact: true))
 
     isolated_user =
-      primary
-      |> open_user()
+      session()
       |> visit("/session/user")
       |> assert_has(text("Session user: unset", exact: true))
 

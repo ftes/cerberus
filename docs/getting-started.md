@@ -109,8 +109,7 @@ _tab2 =
   |> visit("/session/user")
   |> assert_has(text("Session user: alice", exact: true))
 
-primary
-|> open_user()
+session()
 |> visit("/session/user")
 |> assert_has(text("Session user: unset", exact: true))
 |> refute_has(text("Session user: alice", exact: true))

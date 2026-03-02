@@ -26,8 +26,8 @@ defmodule Cerberus.CrossDriverMultiTabUserTest do
         |> assert_has(text("Session user: alice", exact: true))
 
       isolated_user =
-        primary
-        |> open_user()
+        unquote(driver)
+        |> session()
         |> visit("/session/user")
         |> assert_has(text("Session user: unset", exact: true))
         |> visit("/session/user/bob")
