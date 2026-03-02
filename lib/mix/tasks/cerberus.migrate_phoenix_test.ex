@@ -20,6 +20,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   ]
 
   @warning_test_helpers "PhoenixTest.TestHelpers import has no direct Cerberus equivalent and needs manual migration."
+  @warning_use_phoenix_test "use PhoenixTest has no direct Cerberus equivalent and needs manual migration."
 
   @warning_submodule_alias "PhoenixTest submodule alias detected; verify Cerberus module equivalents manually."
   @warning_direct_call "Direct PhoenixTest.<function> call detected; migrate to Cerberus session-first flow manually."
@@ -187,13 +188,12 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     end
   end
 
-  defp rewrite_node({:use, meta, args} = node, state) do
+  defp rewrite_node({:use, _meta, args} = node, state) do
     case args do
-      [module_ast | rest] ->
+      [module_ast | _rest] ->
         case alias_parts(module_ast) do
           [:PhoenixTest] ->
-            updated = {:use, meta, [alias_ast(module_ast, [:Cerberus]) | rest]}
-            {updated, mark_changed(state)}
+            {node, add_warning(state, @warning_use_phoenix_test)}
 
           [:PhoenixTest | _] ->
             {node, add_warning(state, @warning_submodule_alias)}

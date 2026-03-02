@@ -271,6 +271,31 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
              "WARNING #{file}: Direct PhoenixTest.<function> call detected; migrate to Cerberus session-first flow manually."
   end
 
+  test "reports warning for use PhoenixTest and leaves code unchanged", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_use_phoenix_test.exs")
+
+    original = """
+    defmodule SampleUsePhoenixTest do
+      use PhoenixTest
+    end
+    """
+
+    File.write!(file, original)
+
+    output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    assert File.read!(file) == original
+
+    assert output =~
+             "WARNING #{file}: use PhoenixTest has no direct Cerberus equivalent and needs manual migration."
+
+    refute output =~ "updated #{file}"
+  end
+
   test "write mode preserves upload pipelines and makes them Cerberus-callable", %{tmp_dir: tmp_dir} do
     file = Path.join(tmp_dir, "sample_upload_test.exs")
 
