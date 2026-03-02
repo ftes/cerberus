@@ -1,13 +1,20 @@
 defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
-  @moduledoc """
-  Migrates PhoenixTest test files to Cerberus in a preview-first workflow.
+  @shortdoc "Migrates PhoenixTest test files to Cerberus"
+  @example "mix cerberus.migrate_phoenix_test --write test/my_app_web/features"
 
-  By default this task runs in dry-run mode and prints a diff for each changed file.
+  @moduledoc """
+  #{@shortdoc} in a preview-first workflow.
+
+  By default this task runs in dry-run mode.
   Use `--write` to apply changes.
 
       mix cerberus.migrate_phoenix_test
-      mix cerberus.migrate_phoenix_test --write test/my_app_web/features
+      #{@example}
   """
+
+  use Igniter.Mix.Task
+
+  alias Rewrite.Source
 
   @switches [
     write: :boolean,
@@ -47,12 +54,26 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     :open_browser
   ]
   @rewritable_assertions_calls [:assert_has, :refute_has, :assert_path, :refute_path]
+  @canonical_text_assertions [:assert_has, :refute_has]
+  @canonical_labeled_value_keys %{fill_in: :with, select: :option}
 
   defmodule RewriteState do
     @moduledoc false
     defstruct changed?: false, warnings: [], seen: MapSet.new()
   end
 
+  @impl Igniter.Mix.Task
+  def info(_argv, _source) do
+    %Igniter.Mix.Task.Info{
+      group: :cerberus,
+      example: @example,
+      schema: @switches,
+      defaults: [write: false],
+      extra_args?: true
+    }
+  end
+
+  @impl Mix.Task
   def run(args) do
     {opts, positional, invalid} = OptionParser.parse(args, strict: @switches)
 
@@ -63,19 +84,51 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     dry_run = resolve_dry_run(opts)
     files = migration_targets(positional)
 
+    Mix.Task.run("compile")
+    Application.ensure_all_started(:rewrite)
+
+    igniter =
+      Igniter.new()
+      |> Map.put(:task, Mix.Task.task_name(__MODULE__))
+      |> Igniter.assign(:cerberus_migration_files, files)
+      |> Igniter.assign(:cerberus_migration_dry_run, dry_run)
+      |> Igniter.Mix.Task.configure_and_run(__MODULE__, args)
+
+    if !dry_run do
+      _ =
+        Igniter.do_or_dry_run(
+          igniter,
+          dry_run: false,
+          yes: true,
+          quiet_on_no_changes?: true,
+          title: "Cerberus migration"
+        )
+    end
+
+    summary = igniter.assigns[:cerberus_migration_summary]
+    print_summary(summary.files_scanned, summary.files_changed, summary.warnings, dry_run)
+  end
+
+  @impl Igniter.Mix.Task
+  def igniter(igniter) do
+    files = igniter.assigns[:cerberus_migration_files] || []
+    dry_run = Map.get(igniter.assigns, :cerberus_migration_dry_run, true)
+
     if files == [] do
       IO.puts("No candidate test files found.")
+      Igniter.assign(igniter, :cerberus_migration_summary, %{files_scanned: 0, files_changed: 0, warnings: 0})
     else
-      {changed_count, warning_count} =
-        Enum.reduce(files, {0, 0}, fn file, {changed_acc, warning_acc} ->
-          migrate_file(file, dry_run, changed_acc, warning_acc)
+      {igniter, changed_count, warning_count} =
+        Enum.reduce(files, {igniter, 0, 0}, fn file, {acc_igniter, changed_acc, warning_acc} ->
+          {next_igniter, changed?, file_warning_count} = migrate_file(acc_igniter, file, dry_run)
+          {next_igniter, changed_acc + if(changed?, do: 1, else: 0), warning_acc + file_warning_count}
         end)
 
-      IO.puts("\nMigration summary:")
-      IO.puts("  Files scanned: #{length(files)}")
-      IO.puts("  Files changed: #{changed_count}")
-      IO.puts("  Warnings: #{warning_count}")
-      IO.puts("  Mode: #{if dry_run, do: "dry-run", else: "write"}")
+      Igniter.assign(igniter, :cerberus_migration_summary, %{
+        files_scanned: length(files),
+        files_changed: changed_count,
+        warnings: warning_count
+      })
     end
   end
 
@@ -116,35 +169,52 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     end
   end
 
-  defp migrate_file(file, dry_run, changed_acc, warning_acc) do
+  defp migrate_file(igniter, file, dry_run) do
     original = File.read!(file)
     {rewritten, warnings} = rewrite_with_ast(original)
-
-    warning_count = warning_acc + length(warnings)
     print_warnings(file, warnings)
 
     if rewritten == original do
-      {changed_acc, warning_count}
+      {igniter, false, length(warnings)}
     else
       if dry_run do
         print_diff(file, original, rewritten)
+        {igniter, true, length(warnings)}
       else
-        File.write!(file, rewritten)
-        IO.puts("updated #{file}")
-      end
+        igniter =
+          Igniter.update_file(
+            igniter,
+            file,
+            fn source ->
+              Source.update(source, :content, rewritten, by: :cerberus_migrate_phoenix_test)
+            end,
+            source_handler: Rewrite.Source.Ex
+          )
 
-      {changed_acc + 1, warning_count}
+        IO.puts("updated #{file}")
+        {igniter, true, length(warnings)}
+      end
     end
+  end
+
+  defp print_summary(files_scanned, changed_count, warning_count, dry_run) do
+    IO.puts("\nMigration summary:")
+    IO.puts("  Files scanned: #{files_scanned}")
+    IO.puts("  Files changed: #{changed_count}")
+    IO.puts("  Warnings: #{warning_count}")
+    IO.puts("  Mode: #{if dry_run, do: "dry-run", else: "write"}")
   end
 
   defp rewrite_with_ast(content) do
     case Code.string_to_quoted(content, token_metadata: true, columns: true) do
       {:ok, ast} ->
         {rewritten_ast, state} = Macro.prewalk(ast, %RewriteState{}, &rewrite_node/2)
+        {canonical_ast, canonical_changed?} = canonicalize_calls(rewritten_ast)
+        changed? = state.changed? or canonical_changed?
 
         rewritten =
-          if state.changed? do
-            rewritten_ast
+          if changed? do
+            canonical_ast
             |> Macro.to_string()
             |> Code.format_string!()
             |> IO.iodata_to_binary()
@@ -245,6 +315,131 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   end
 
   defp rewrite_node(node, state), do: {node, state}
+
+  defp canonicalize_calls(ast) do
+    Macro.prewalk(ast, false, &canonicalize_node/2)
+  end
+
+  defp canonicalize_node({{:., dot_meta, [module_ast, fun]}, call_meta, args} = node, changed)
+       when is_atom(fun) and is_list(args) do
+    case canonicalize_call_args(fun, args) do
+      {:ok, updated_args} ->
+        {{{:., dot_meta, [module_ast, fun]}, call_meta, updated_args}, true}
+
+      :no_change ->
+        {node, changed}
+    end
+  end
+
+  defp canonicalize_node({fun, meta, args} = node, changed) when is_atom(fun) and is_list(args) do
+    case canonicalize_call_args(fun, args) do
+      {:ok, updated_args} ->
+        {{fun, meta, updated_args}, true}
+
+      :no_change ->
+        {node, changed}
+    end
+  end
+
+  defp canonicalize_node(node, changed), do: {node, changed}
+
+  defp canonicalize_call_args(fun, args) do
+    with :no_change <- canonicalize_text_assertion_args(fun, args) do
+      canonicalize_labeled_value_call_args(fun, args)
+    end
+  end
+
+  defp canonicalize_text_assertion_args(fun, args) when fun in @canonical_text_assertions do
+    case args do
+      [session, maybe_opts] ->
+        case pop_keyword_ast(maybe_opts, :text) do
+          {:ok, text_value, []} -> {:ok, [session, text_value]}
+          {:ok, text_value, remaining_opts} -> {:ok, [session, text_value, remaining_opts]}
+          :no_change -> :no_change
+        end
+
+      [session, scope, maybe_opts] ->
+        case pop_keyword_ast(maybe_opts, :text) do
+          {:ok, text_value, []} -> {:ok, [session, scope, text_value]}
+          {:ok, text_value, remaining_opts} -> {:ok, [session, scope, text_value, remaining_opts]}
+          :no_change -> :no_change
+        end
+
+      _ ->
+        :no_change
+    end
+  end
+
+  defp canonicalize_text_assertion_args(_fun, _args), do: :no_change
+
+  defp canonicalize_labeled_value_call_args(fun, args) do
+    case Map.fetch(@canonical_labeled_value_keys, fun) do
+      {:ok, key} ->
+        canonicalize_labeled_value_call_args_by_key(args, key)
+
+      :error ->
+        :no_change
+    end
+  end
+
+  defp canonicalize_labeled_value_call_args_by_key(args, key) do
+    case args do
+      [locator, maybe_opts] ->
+        case pop_keyword_ast(maybe_opts, key) do
+          {:ok, value, []} -> {:ok, [locator, value]}
+          {:ok, value, remaining_opts} -> {:ok, [locator, value, remaining_opts]}
+          :no_change -> :no_change
+        end
+
+      [session, locator, maybe_opts] ->
+        case pop_keyword_ast(maybe_opts, key) do
+          {:ok, value, []} -> {:ok, [session, locator, value]}
+          {:ok, value, remaining_opts} -> {:ok, [session, locator, value, remaining_opts]}
+          :no_change -> :no_change
+        end
+
+      [session, locator, maybe_opts, trailing_opts] ->
+        with {:ok, value, remaining_opts} <- pop_keyword_ast(maybe_opts, key),
+             true <- keyword_ast?(trailing_opts) do
+          merged_opts =
+            if remaining_opts == [] do
+              trailing_opts
+            else
+              Keyword.merge(remaining_opts, trailing_opts)
+            end
+
+          {:ok, [session, locator, value, merged_opts]}
+        else
+          _ -> :no_change
+        end
+
+      _ ->
+        :no_change
+    end
+  end
+
+  defp pop_keyword_ast(maybe_keyword, key) when is_atom(key) do
+    if keyword_ast?(maybe_keyword) do
+      case Keyword.pop(maybe_keyword, key, :__not_found__) do
+        {:__not_found__, _rest} ->
+          :no_change
+
+        {value, rest} ->
+          {:ok, value, rest}
+      end
+    else
+      :no_change
+    end
+  end
+
+  defp keyword_ast?(value) when is_list(value) do
+    Enum.all?(value, fn
+      {key, _val} when is_atom(key) -> true
+      _other -> false
+    end)
+  end
+
+  defp keyword_ast?(_value), do: false
 
   defp alias_parts({:__aliases__, _meta, parts}) when is_list(parts), do: parts
   defp alias_parts(_module_ast), do: :unknown

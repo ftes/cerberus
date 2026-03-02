@@ -36,6 +36,7 @@ defmodule Cerberus.MixProject do
       {:postgrex, "~> 0.19", only: :test},
       {:lazy_html, ">= 0.1.0"},
       {:nimble_options, "~> 1.1"},
+      {:igniter, "~> 0.7.2", runtime: false},
       {:styler, "~> 1.10", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
