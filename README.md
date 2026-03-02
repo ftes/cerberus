@@ -90,10 +90,7 @@ Field-wrapper assertion pattern (Phoenix `core_components`-style wrappers):
 ```elixir
 session()
 |> visit("/field-wrapper-errors")
-|> within(closest(css(".fieldset"), from: label("Email", exact: true)), fn scoped ->
-  scoped
-  |> assert_has(text("Email can't be blank", exact: true))
-end)
+|> assert_has(closest(css(".fieldset"), from: label("Email")), text("can't be blank"))
 ```
 
 ### 5. Multi-User + Multi-Tab

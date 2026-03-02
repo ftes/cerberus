@@ -29,6 +29,8 @@ defmodule Cerberus do
   alias Phoenix.LiveViewTest.View
 
   @type driver_kind :: Session.driver_kind()
+  @locator_kind_keys [:text, :label, :link, :button, :placeholder, :title, :alt, :role, :css, :testid]
+  @locator_kind_string_keys Enum.map(@locator_kind_keys, &Atom.to_string/1)
 
   @spec session() :: Session.t()
   def session, do: session([])
@@ -248,9 +250,7 @@ defmodule Cerberus do
 
   Example:
 
-      within(session, closest(css(".fieldset"), from: label("Email")), fn scoped ->
-        assert_has(scoped, text("can't be blank"))
-      end)
+      within(session, closest(css(".fieldset"), from: label("Email")), &assert_has(&1, text("can't be blank")))
   """
   @spec closest(term(), keyword()) :: Locator.t()
   def closest(locator, opts) when is_list(opts) do
@@ -308,6 +308,11 @@ defmodule Cerberus do
   `scope` must be a locator input (for example, `css("#secondary-panel")`).
   Use `closest/2` when scope should resolve to the nearest matching ancestor
   around a nested element (for example, a field wrapper around a label).
+
+  For one-shot assertions, you can also use scoped assertion overloads:
+
+      session
+      |> assert_has(closest(css(".fieldset"), from: label("Email")), text("can't be blank"))
 
   Browser note: when locator-based `within/3` matches an `<iframe>`, Cerberus switches
   the query root to that iframe document. Only same-origin iframes are supported.
@@ -391,9 +396,23 @@ defmodule Cerberus do
     end
   end
 
-  @spec click(arg, term(), Options.click_opts()) :: arg when arg: var
-  def click(session, locator, opts \\ []) do
-    Assertions.click(session, locator, opts)
+  @spec click(arg, term()) :: arg when arg: var
+  def click(session, locator), do: click(session, locator, [])
+
+  @spec click(arg, term(), term() | Options.click_opts()) :: arg when arg: var
+  def click(session, scope_or_locator, locator_or_opts) do
+    if locator_input_term?(locator_or_opts) do
+      click(session, scope_or_locator, locator_or_opts, [])
+    else
+      Assertions.click(session, scope_or_locator, locator_or_opts)
+    end
+  end
+
+  @spec click(arg, term(), term(), Options.click_opts()) :: arg when arg: var
+  def click(session, scope_locator, locator, opts) when is_list(opts) do
+    within(session, scope_locator, fn scoped ->
+      Assertions.click(scoped, locator, opts)
+    end)
   end
 
   @spec click_link(arg, term(), Options.click_opts()) :: arg when arg: var
@@ -466,14 +485,42 @@ defmodule Cerberus do
     Assertions.uncheck(session, locator, opts)
   end
 
-  @spec assert_has(arg, term(), Options.assert_opts()) :: arg when arg: var
-  def assert_has(session, locator, opts \\ []) do
-    Assertions.assert_has(session, locator, opts)
+  @spec assert_has(arg, term()) :: arg when arg: var
+  def assert_has(session, locator), do: assert_has(session, locator, [])
+
+  @spec assert_has(arg, term(), term() | Options.assert_opts()) :: arg when arg: var
+  def assert_has(session, scope_or_locator, locator_or_opts) do
+    if locator_input_term?(locator_or_opts) do
+      assert_has(session, scope_or_locator, locator_or_opts, [])
+    else
+      Assertions.assert_has(session, scope_or_locator, locator_or_opts)
+    end
   end
 
-  @spec refute_has(arg, term(), Options.assert_opts()) :: arg when arg: var
-  def refute_has(session, locator, opts \\ []) do
-    Assertions.refute_has(session, locator, opts)
+  @spec assert_has(arg, term(), term(), Options.assert_opts()) :: arg when arg: var
+  def assert_has(session, scope_locator, locator, opts) when is_list(opts) do
+    within(session, scope_locator, fn scoped ->
+      Assertions.assert_has(scoped, locator, opts)
+    end)
+  end
+
+  @spec refute_has(arg, term()) :: arg when arg: var
+  def refute_has(session, locator), do: refute_has(session, locator, [])
+
+  @spec refute_has(arg, term(), term() | Options.assert_opts()) :: arg when arg: var
+  def refute_has(session, scope_or_locator, locator_or_opts) do
+    if locator_input_term?(locator_or_opts) do
+      refute_has(session, scope_or_locator, locator_or_opts, [])
+    else
+      Assertions.refute_has(session, scope_or_locator, locator_or_opts)
+    end
+  end
+
+  @spec refute_has(arg, term(), term(), Options.assert_opts()) :: arg when arg: var
+  def refute_has(session, scope_locator, locator, opts) when is_list(opts) do
+    within(session, scope_locator, fn scoped ->
+      Assertions.refute_has(scoped, locator, opts)
+    end)
   end
 
   defp driver_module_for_session!(%StaticSession{}), do: StaticSession
@@ -837,6 +884,24 @@ defmodule Cerberus do
       :error -> locator
     end
   end
+
+  defp locator_input_term?(value) when is_binary(value) or is_struct(value, Regex), do: true
+  defp locator_input_term?(%Locator{}), do: true
+  defp locator_input_term?(value) when is_map(value), do: true
+
+  defp locator_input_term?(value) when is_list(value) do
+    if Keyword.keyword?(value) do
+      Enum.any?(Keyword.keys(value), &locator_kind_key?/1)
+    else
+      false
+    end
+  end
+
+  defp locator_input_term?(_value), do: false
+
+  defp locator_kind_key?(key) when is_atom(key), do: key in @locator_kind_keys
+  defp locator_kind_key?(key) when is_binary(key), do: key in @locator_kind_string_keys
+  defp locator_kind_key?(_key), do: false
 
   defp format_path_error(op, observed) do
     """
