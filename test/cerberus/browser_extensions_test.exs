@@ -296,14 +296,8 @@ defmodule Cerberus.BrowserExtensionsTest do
       |> session()
       |> visit("/browser/extensions")
 
-    trigger_task =
-      Task.async(fn ->
-        Process.sleep(30)
-        click(session, link("Download Report"))
-      end)
-
+    evaluate_js(session, "setTimeout(() => document.getElementById('download-report')?.click(), 30)")
     assert_download(session, "report.txt", timeout: 500)
-    _ = Task.await(trigger_task, 1_000)
   end
 
   test "assert_download supports static sessions from controller download responses" do

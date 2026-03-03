@@ -666,21 +666,37 @@ defmodule Cerberus.Driver.Browser.Extensions do
         remaining = max(deadline - now, 0)
 
         if remaining == 0 do
-          observed_filenames =
-            download_events
-            |> Enum.map(&Map.get(&1, "suggestedFilename"))
-            |> Enum.filter(&is_binary/1)
-            |> Enum.uniq()
-            |> Enum.sort()
-
-          raise AssertionError,
-            message:
-              "assert_download/3 timed out waiting for #{inspect(expected_filename)}; observed downloads: #{inspect(observed_filenames)}"
+          await_download_match_on_deadline!(session, expected_filename)
         else
           Process.sleep(min(remaining, @download_poll_ms))
           await_download_match_loop(session, expected_filename, deadline)
         end
     end
+  end
+
+  defp await_download_match_on_deadline!(session, expected_filename) do
+    final_events = UserContextProcess.download_events(session.user_context_pid, session.tab_id)
+
+    case Enum.find(final_events, &download_event_match?(&1, expected_filename)) do
+      event when is_map(event) ->
+        event
+
+      nil ->
+        raise_download_timeout!(expected_filename, final_events)
+    end
+  end
+
+  defp raise_download_timeout!(expected_filename, events) when is_binary(expected_filename) and is_list(events) do
+    observed_filenames =
+      events
+      |> Enum.map(&Map.get(&1, "suggestedFilename"))
+      |> Enum.filter(&is_binary/1)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    raise AssertionError,
+      message:
+        "assert_download/3 timed out waiting for #{inspect(expected_filename)}; observed downloads: #{inspect(observed_filenames)}"
   end
 
   defp download_event_match?(
