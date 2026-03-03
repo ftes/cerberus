@@ -24,7 +24,7 @@ defmodule Cerberus.WithinClosestBehaviorTest do
       unquote(driver)
       |> session()
       |> visit("/field-wrapper-errors")
-      |> within(css(".fieldset", has: label("Name", exact: true)), fn scoped ->
+      |> within(".fieldset" |> css() |> has(label("Name", exact: true)), fn scoped ->
         scoped
         |> assert_has(text("Name can't be blank", exact: true))
         |> refute_has(text("Email can't be blank", exact: true))

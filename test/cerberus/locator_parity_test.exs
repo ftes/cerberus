@@ -238,11 +238,11 @@ defmodule Cerberus.LocatorParityTest do
                           """
                             <main>
                             <section id="chained-clickables">
-                              <button id="apply-primary">
+                              <button id="apply-primary" data-testid="apply-primary-button">
                                 <span data-testid="apply-primary-marker" aria-hidden="true">primary</span>
                                 Apply
                               </button>
-                              <button id="apply-secondary">
+                              <button id="apply-secondary" data-testid="apply-secondary-button">
                                 <span data-testid="apply-secondary-marker" aria-hidden="true">secondary</span>
                                 Apply
                               </button>
@@ -252,12 +252,12 @@ defmodule Cerberus.LocatorParityTest do
                               <label for="chained_q">Search term</label>
                               <input id="chained_q" name="q" type="text" />
 
-                              <button id="submit-primary" type="submit">
+                              <button id="submit-primary" type="submit" data-testid="submit-primary-button">
                                 <span class="kind-primary" data-testid="submit-primary-marker" aria-hidden="true">primary</span>
                                 Run Search
                               </button>
 
-                              <button id="submit-secondary" type="submit">
+                              <button id="submit-secondary" type="submit" data-testid="submit-secondary-button">
                                 <span class="kind-secondary" data-testid="submit-secondary-marker" aria-hidden="true">secondary</span>
                                 Run Search
                               </button>
@@ -507,36 +507,72 @@ defmodule Cerberus.LocatorParityTest do
       },
       # locator composition / chaining
       %{
+        name: "submit supports same-element and composition with testid",
+        html: @chained_locator_html,
+        expect: :ok,
+        run: &submit(&1, "Run Search" |> button() |> testid("submit-secondary-button"))
+      },
+      %{
+        name: "submit and composition does not treat descendant marker as same element",
+        html: @chained_locator_html,
+        expect: :error,
+        error_module: AssertionError,
+        run: &submit(&1, "Run Search" |> button() |> testid("submit-secondary-marker"))
+      },
+      %{
         name: "submit supports has testid nested locator filter",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, button("Run Search", has: testid("submit-secondary-marker")))
+        run: &submit(&1, "Run Search" |> button() |> has(testid("submit-secondary-marker")))
       },
       %{
         name: "submit supports has text nested locator filter",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, button("Run Search", has: text("secondary", exact: true)))
+        run: &submit(&1, "Run Search" |> button() |> has(text("secondary", exact: true)))
       },
       %{
         name: "submit has filter errors when nested locator does not match",
         html: @chained_locator_html,
         expect: :error,
         error_module: AssertionError,
-        run: &submit(&1, button("Run Search", has: testid("missing-marker")))
+        run: &submit(&1, "Run Search" |> button() |> has(testid("missing-marker")))
       },
       %{
         name: "submit supports has css nested locator filter",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, button("Run Search", has: css(".kind-secondary")))
+        run: &submit(&1, "Run Search" |> button() |> has(css(".kind-secondary")))
+      },
+      %{
+        name: "submit or composition enforces strict uniqueness for actions",
+        html: @chained_locator_html,
+        expect: :error,
+        error_module: AssertionError,
+        run: &submit(&1, or_(css("#submit-primary"), css("#submit-secondary")))
       },
       %{
         name: "assert_has rejects has locator option in this slice",
         html: @chained_locator_html,
         expect: :error,
         error_module: InvalidLocatorError,
-        run: &assert_has(&1, text("Apply", has: text("secondary")))
+        run: &assert_has(&1, has(text("Apply"), text("secondary")))
+      },
+      %{
+        name: "fill_in supports same-element and composition with css",
+        expect: :ok,
+        run: &fill_in(&1, "Email Address" |> label() |> css("#secondary_email"), "secondary@example.com")
+      },
+      %{
+        name: "fill_in or composition resolves when exactly one branch matches",
+        expect: :ok,
+        run: &fill_in(&1, or_(css("#search_q"), css("#missing-field")), "or-value")
+      },
+      %{
+        name: "fill_in or composition enforces strict uniqueness for actions",
+        expect: :error,
+        error_module: AssertionError,
+        run: &fill_in(&1, or_(css("#email_input"), css("#secondary_email")), "ambiguous")
       },
       # upload
       %{name: "upload file input by label", expect: :ok, run: &upload(&1, label("Avatar"), upload_path)},

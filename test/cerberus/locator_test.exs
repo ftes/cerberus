@@ -119,10 +119,14 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :button, value: "Submit"} = role_has_locator
   end
 
-  test "rejects nested has locators" do
-    assert_raise InvalidLocatorError, ~r/nested :has locators are not supported/, fn ->
-      Locator.normalize(text: "Apply", has: text("secondary", has: css(".badge")))
-    end
+  test "supports nested has locators" do
+    locator = Locator.normalize(text: "Apply", has: text("secondary", has: css(".badge")))
+    has_locator = locator.opts[:has]
+    nested_has = has_locator.opts[:has]
+
+    assert %Locator{kind: :text, value: "Apply"} = locator
+    assert %Locator{kind: :text, value: "secondary"} = has_locator
+    assert %Locator{kind: :css, value: ".badge"} = nested_has
   end
 
   test "closest helper composes base locator with from locator" do
@@ -136,6 +140,31 @@ defmodule Cerberus.LocatorTest do
     assert_raise ArgumentError, ~r/nested :from/, fn ->
       closest(css(".outer"), from: closest(css(".inner"), from: label("Email")))
     end
+  end
+
+  test "composes and/or locators and flattens nested members" do
+    locator =
+      "Run Search"
+      |> text()
+      |> and_(button("Run Search"))
+      |> and_(testid("submit-secondary"))
+
+    assert %Locator{kind: :and, value: members} = locator
+    assert Enum.map(members, & &1.kind) == [:text, :button, :testid]
+
+    disjunction =
+      or_(
+        css("#primary"),
+        or_(css("#secondary"), css("#tertiary"))
+      )
+
+    assert %Locator{kind: :or, value: disj_members} = disjunction
+    assert Enum.map(disj_members, & &1.value) == ["#primary", "#secondary", "#tertiary"]
+  end
+
+  test "pipe composition overloads create same-element and semantics" do
+    locator = "Run Search" |> button() |> testid("submit-secondary-marker")
+    assert %Locator{kind: :and, value: [%Locator{kind: :button}, %Locator{kind: :testid}]} = locator
   end
 
   test "normalizes role locator to operation-specific kind" do

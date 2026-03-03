@@ -275,41 +275,64 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       return matches;
     };
 
+    helper.attachElement = (candidate, element) => {
+      if (candidate && element) {
+        Object.defineProperty(candidate, "__el", {
+          value: element,
+          enumerable: false,
+          configurable: false,
+          writable: false
+        });
+      }
+
+      return candidate;
+    };
+
     helper.clickCandidates = (roots, selector, kind) => {
       const links =
         kind === "button"
           ? []
-          : helper.queryWithinRoots(roots, "a[href]", selector).map((element, index) => ({
-              kind: "link",
-              index,
-              text: helper.normalize(element.textContent, true),
-              title: element.getAttribute("title") || "",
-              alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt],[role='img'][alt]"),
-              testid: element.getAttribute("data-testid") || "",
-              href: element.getAttribute("href") || "",
-              resolvedHref: element.href || "",
-              checked: false,
-              disabled: false,
-              readonly: false,
-              selected: false
-            }));
+          : helper.queryWithinRoots(roots, "a[href]", selector).map((element, index) =>
+              helper.attachElement(
+                {
+                  kind: "link",
+                  index,
+                  text: helper.normalize(element.textContent, true),
+                  title: element.getAttribute("title") || "",
+                  alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt],[role='img'][alt]"),
+                  testid: element.getAttribute("data-testid") || "",
+                  href: element.getAttribute("href") || "",
+                  resolvedHref: element.href || "",
+                  checked: false,
+                  disabled: false,
+                  readonly: false,
+                  selected: false
+                },
+                element
+              )
+            );
 
       const buttons =
         kind === "link"
           ? []
-          : helper.queryWithinRoots(roots, "button", selector).map((element, index) => ({
-              kind: "button",
-              index,
-              text: helper.normalize(element.textContent, true),
-              title: element.getAttribute("title") || "",
-              alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt]"),
-              testid: element.getAttribute("data-testid") || "",
-              type: (element.getAttribute("type") || "submit").toLowerCase(),
-              checked: false,
-              disabled: element.disabled === true,
-              readonly: element.readOnly === true || element.hasAttribute("readonly"),
-              selected: false
-            }));
+          : helper.queryWithinRoots(roots, "button", selector).map((element, index) =>
+              helper.attachElement(
+                {
+                  kind: "button",
+                  index,
+                  text: helper.normalize(element.textContent, true),
+                  title: element.getAttribute("title") || "",
+                  alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt]"),
+                  testid: element.getAttribute("data-testid") || "",
+                  type: (element.getAttribute("type") || "submit").toLowerCase(),
+                  checked: false,
+                  disabled: element.disabled === true,
+                  readonly: element.readOnly === true || element.hasAttribute("readonly"),
+                  selected: false
+                },
+                element
+              )
+            );
 
       return links.concat(buttons);
     };
@@ -324,19 +347,22 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         .map((element, index) => {
           const type = (element.getAttribute("type") || "submit").toLowerCase();
 
-          return {
-            kind: "button",
-            index,
-            text: helper.normalize(element.textContent, true),
-            title: element.getAttribute("title") || "",
-            alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt]"),
-            testid: element.getAttribute("data-testid") || "",
-            type,
-            checked: false,
-            disabled: element.disabled === true,
-            readonly: element.readOnly === true || element.hasAttribute("readonly"),
-            selected: false
-          };
+          return helper.attachElement(
+            {
+              kind: "button",
+              index,
+              text: helper.normalize(element.textContent, true),
+              title: element.getAttribute("title") || "",
+              alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt]"),
+              testid: element.getAttribute("data-testid") || "",
+              type,
+              checked: false,
+              disabled: element.disabled === true,
+              readonly: element.readOnly === true || element.hasAttribute("readonly"),
+              selected: false
+            },
+            element
+          );
         });
     };
 
@@ -380,43 +406,51 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           const rawType = (element.getAttribute("type") || "").toLowerCase();
           const type = tag === "select" ? (element.multiple ? "select-multiple" : "select-one") : rawType;
 
-          return {
-            kind: "field",
-            index,
-            tag,
-            type,
-            label: helper.labelForControl(labels, element),
-            placeholder: element.getAttribute("placeholder") || "",
-            title: element.getAttribute("title") || "",
-            testid: element.getAttribute("data-testid") || "",
-            checked: element.checked === true,
-            selected:
-              tag === "select"
-                ? Array.from(element.options || []).some((option) => option.hasAttribute("selected"))
-                : element.checked === true,
-            disabled: element.disabled === true,
-            readonly: element.readOnly === true || element.hasAttribute("readonly")
-          };
+          return helper.attachElement(
+            {
+              kind: "field",
+              index,
+              tag,
+              type,
+              label: helper.labelForControl(labels, element),
+              placeholder: element.getAttribute("placeholder") || "",
+              title: element.getAttribute("title") || "",
+              testid: element.getAttribute("data-testid") || "",
+              checked: element.checked === true,
+              selected:
+                tag === "select"
+                  ? Array.from(element.options || []).some((option) => option.hasAttribute("selected"))
+                  : element.checked === true,
+              disabled: element.disabled === true,
+              readonly: element.readOnly === true || element.hasAttribute("readonly")
+            },
+            element
+          );
         });
     };
 
     helper.fileCandidates = (roots, selector) => {
       const labels = helper.labelsByFor(roots);
 
-      return helper.queryWithinRoots(roots, "input[type='file']", selector).map((element, index) => ({
-        kind: "field",
-        index,
-        tag: "input",
-        type: "file",
-        label: labels.get(element.id || "") || "",
-        placeholder: element.getAttribute("placeholder") || "",
-        title: element.getAttribute("title") || "",
-        testid: element.getAttribute("data-testid") || "",
-        checked: element.checked === true,
-        selected: element.checked === true,
-        disabled: element.disabled === true,
-        readonly: element.readOnly === true || element.hasAttribute("readonly")
-      }));
+      return helper.queryWithinRoots(roots, "input[type='file']", selector).map((element, index) =>
+        helper.attachElement(
+          {
+            kind: "field",
+            index,
+            tag: "input",
+            type: "file",
+            label: labels.get(element.id || "") || "",
+            placeholder: element.getAttribute("placeholder") || "",
+            title: element.getAttribute("title") || "",
+            testid: element.getAttribute("data-testid") || "",
+            checked: element.checked === true,
+            selected: element.checked === true,
+            disabled: element.disabled === true,
+            readonly: element.readOnly === true || element.hasAttribute("readonly")
+          },
+          element
+        )
+      );
     };
 
     helper.matchValue = (candidate, op, matchBy) => {
@@ -443,6 +477,198 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         default:
           return candidate.label || "";
       }
+    };
+
+    helper.querySelectorForLocator = (locator) => {
+      if (!locator || typeof locator !== "object") return "*";
+
+      const opts = locator.opts && typeof locator.opts === "object" ? locator.opts : null;
+      if (opts && typeof opts.selector === "string" && opts.selector.trim() !== "") {
+        return opts.selector;
+      }
+
+      switch ((locator.kind || "").toLowerCase()) {
+        case "css":
+          return typeof locator.value === "string" && locator.value.trim() !== "" ? locator.value : "*";
+        case "text":
+          return "*";
+        case "link":
+          return "a[href]";
+        case "button":
+          return "button";
+        case "label":
+          return "label,input,textarea,select";
+        case "placeholder":
+          return "input[placeholder],textarea[placeholder],select[placeholder]";
+        case "title":
+          return "[title]";
+        case "alt":
+          return "[alt],img[alt],input[type='image'][alt],[role='img'][alt],button,a[href]";
+        case "testid":
+          return "[data-testid]";
+        case "and":
+        case "or":
+          return "*";
+        default:
+          return "*";
+      }
+    };
+
+    helper.candidateValueForKind = (candidate, kind, op) => {
+      if (op === "click" || op === "submit") {
+        switch (kind) {
+          case "text":
+            return candidate.text || "";
+          case "link":
+            return candidate.kind === "link" ? candidate.text || "" : null;
+          case "button":
+            return candidate.kind === "button" ? candidate.text || "" : null;
+          case "title":
+            return candidate.title || "";
+          case "alt":
+            return candidate.alt || "";
+          case "testid":
+            return candidate.testid || "";
+          default:
+            return null;
+        }
+      }
+
+      switch (kind) {
+        case "text":
+        case "label":
+          return candidate.label || "";
+        case "placeholder":
+          return candidate.placeholder || "";
+        case "title":
+          return candidate.title || "";
+        case "testid":
+          return candidate.testid || "";
+        default:
+          return null;
+      }
+    };
+
+    helper.labelForElement = (element) => {
+      if (!element) return "";
+
+      try {
+        if (element.labels && element.labels.length > 0) {
+          const labelText = Array.from(element.labels)
+            .map((label) => helper.normalize(label.textContent, true))
+            .filter((value) => value !== "")
+            .join(" ");
+
+          if (labelText !== "") return labelText;
+        }
+      } catch (_error) {
+        // ignored
+      }
+
+      if (typeof element.closest === "function") {
+        const wrappingLabel = element.closest("label");
+        if (wrappingLabel) return helper.normalize(wrappingLabel.textContent, true);
+      }
+
+      return "";
+    };
+
+    helper.candidateFromElement = (element) => {
+      const tag = (element && element.tagName ? element.tagName : "").toLowerCase();
+      const rawType = (element && typeof element.getAttribute === "function" ? element.getAttribute("type") : "") || "";
+      const type = tag === "select" ? (element.multiple ? "select-multiple" : "select-one") : rawType.toLowerCase();
+
+      return helper.attachElement(
+        {
+          kind: tag === "a" ? "link" : (tag === "button" ? "button" : "field"),
+          index: -1,
+          tag,
+          type,
+          text: helper.normalize(element.textContent, true),
+          label: helper.labelForElement(element),
+          placeholder: (element.getAttribute("placeholder") || ""),
+          title: (element.getAttribute("title") || ""),
+          alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt],[role='img'][alt]"),
+          testid: (element.getAttribute("data-testid") || ""),
+          checked: element.checked === true,
+          selected:
+            tag === "select"
+              ? Array.from(element.options || []).some((option) => option.hasAttribute("selected"))
+              : element.checked === true,
+          disabled: element.disabled === true,
+          readonly: element.readOnly === true || element.hasAttribute("readonly")
+        },
+        element
+      );
+    };
+
+    helper.matchesLocatorCommonOpts = (candidate, opts, op) => {
+      if (!opts || typeof opts !== "object") return true;
+
+      if (!helper.matchesStateFilters(candidate, opts)) return false;
+
+      if (typeof opts.selector === "string" && opts.selector.trim() !== "") {
+        if (!helper.matchesSelector(candidate.__el, opts.selector)) return false;
+      }
+
+      if (opts.has) {
+        if (!helper.elementHasLocator(candidate.__el, opts.has, op)) return false;
+      }
+
+      return true;
+    };
+
+    helper.matchesLocator = (candidate, locator, op) => {
+      if (!locator || typeof locator !== "object") return false;
+
+      const kind = (locator.kind || "").toLowerCase();
+
+      if (kind === "and" || kind === "or") {
+        const members = Array.isArray(locator.members) ? locator.members : [];
+        if (members.length === 0) return false;
+
+        const memberMatch =
+          kind === "and"
+            ? members.every((member) => helper.matchesLocator(candidate, member, op))
+            : members.some((member) => helper.matchesLocator(candidate, member, op));
+
+        return memberMatch && helper.matchesLocatorCommonOpts(candidate, locator.opts, op);
+      }
+
+      if (kind === "css") {
+        if (!candidate.__el || typeof locator.value !== "string") return false;
+        if (!helper.matchesSelector(candidate.__el, locator.value)) return false;
+        return helper.matchesLocatorCommonOpts(candidate, locator.opts, op);
+      }
+
+      const value = helper.candidateValueForKind(candidate, kind, op);
+      if (typeof value !== "string") return false;
+
+      const locatorOpts = locator.opts && typeof locator.opts === "object" ? locator.opts : {};
+      const exact = locatorOpts.exact === true;
+      const normalizeWs = locatorOpts.normalizeWs !== false;
+      const matchText = helper.buildTextMatcher(locator.expected, exact, normalizeWs);
+
+      if (!matchText(value)) return false;
+      return helper.matchesLocatorCommonOpts(candidate, locator.opts, op);
+    };
+
+    helper.elementHasLocator = (element, locator, op) => {
+      if (!element || !locator) return false;
+
+      const selector = helper.querySelectorForLocator(locator);
+      let nodes = [];
+
+      try {
+        nodes = Array.from(element.querySelectorAll(selector));
+      } catch (_error) {
+        return false;
+      }
+
+      return nodes.some((node) => {
+        const nestedCandidate = helper.candidateFromElement(node);
+        return helper.matchesLocator(nestedCandidate, locator, op);
+      });
     };
 
     helper.resolveCandidates = (options, roots) => {
@@ -473,10 +699,16 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       const filters = helper.matchFilters(options);
       const roots = helper.resolveRoots(options.scopeSelector || null);
       const candidates = helper.resolveCandidates(options, roots);
+      const locator = options.locator && typeof options.locator === "object" ? options.locator : null;
       const matchText = helper.buildTextMatcher(options.expected, exact, normalizeWs);
 
       const matched = candidates.filter((candidate) => {
         if (!helper.matchesStateFilters(candidate, options)) return false;
+
+        if (locator) {
+          return helper.matchesLocator(candidate, locator, op);
+        }
+
         const value = helper.matchValue(candidate, op, matchBy);
         return matchText(value);
       });

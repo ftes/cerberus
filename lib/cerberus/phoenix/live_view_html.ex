@@ -2,6 +2,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   @moduledoc false
 
   alias Cerberus.Html
+  alias Cerberus.Locator
   alias Cerberus.Phoenix.LiveViewBindings
   alias Cerberus.Query
 
@@ -93,11 +94,18 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   end
 
   defp maybe_live_clickable_match(root_node, node, lazy_html, expected, opts) do
+    locator = locator_opt(opts)
     text = node_text(node)
-    value = live_clickable_match_value(root_node, node, opts)
 
-    if live_clickable_button_node?(root_node, node) and Query.match_text?(value, expected, opts) and
-         Html.node_matches_locator_filters?(node, opts) do
+    matches? =
+      if is_struct(locator, Locator) do
+        live_clickable_locator_match?(root_node, node, locator)
+      else
+        value = live_clickable_match_value(root_node, node, opts)
+        Query.match_text?(value, expected, opts) and Html.node_matches_locator_filters?(node, opts)
+      end
+
+    if live_clickable_button_node?(root_node, node) and matches? do
       mapped =
         node
         |> build_live_clickable_button(root_node, text)
@@ -113,6 +121,51 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
       nil -> []
       mapped -> [mapped]
     end
+  end
+
+  defp live_clickable_locator_match?(root_node, node, %Locator{kind: :and, value: members}) when is_list(members) do
+    Enum.all?(members, &live_clickable_locator_match?(root_node, node, &1))
+  end
+
+  defp live_clickable_locator_match?(root_node, node, %Locator{kind: :or, value: members}) when is_list(members) do
+    Enum.any?(members, &live_clickable_locator_match?(root_node, node, &1))
+  end
+
+  defp live_clickable_locator_match?(root_node, node, %Locator{kind: :css, value: selector, opts: opts}) do
+    node_matches_selector?(root_node, node, selector) and
+      node_matches_selector?(root_node, node, selector_opt(opts)) and
+      Html.node_matches_locator_filters?(node, opts) and
+      Query.matches_state_filters?(live_clickable_state(node), opts)
+  end
+
+  defp live_clickable_locator_match?(root_node, node, %Locator{kind: kind, value: expected, opts: opts}) do
+    with true <- node_matches_selector?(root_node, node, selector_opt(opts)),
+         true <- Html.node_matches_locator_filters?(node, opts),
+         true <- Query.matches_state_filters?(live_clickable_state(node), opts),
+         value when is_binary(value) <- live_clickable_locator_value(root_node, node, kind),
+         true <- Query.match_text?(value, expected, opts) do
+      true
+    else
+      _ -> false
+    end
+  end
+
+  defp live_clickable_locator_value(_root_node, node, :text), do: node_text(node)
+  defp live_clickable_locator_value(_root_node, node, :button), do: node_text(node)
+  defp live_clickable_locator_value(_root_node, node, :title), do: attr(node, "title") || ""
+  defp live_clickable_locator_value(_root_node, node, :testid), do: attr(node, "data-testid") || ""
+  defp live_clickable_locator_value(root_node, node, :alt), do: button_alt_text(node, root_node)
+  defp live_clickable_locator_value(_root_node, _node, :link), do: nil
+  defp live_clickable_locator_value(_root_node, _node, :label), do: nil
+  defp live_clickable_locator_value(_root_node, _node, :placeholder), do: nil
+
+  defp live_clickable_state(node) do
+    %{
+      checked: false,
+      disabled: phx_boolean_attr?(attr(node, "disabled")),
+      readonly: phx_boolean_attr?(attr(node, "readonly")),
+      selected: false
+    }
   end
 
   defp live_clickable_match_value(root_node, node, opts) do
@@ -505,6 +558,21 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
       selector when is_binary(selector) and selector != "" -> selector
       _ -> nil
     end
+  end
+
+  defp locator_opt(opts) do
+    case Keyword.get(opts, :locator) do
+      %Locator{} = locator -> locator
+      _ -> nil
+    end
+  end
+
+  defp node_matches_selector?(_root_node, _node, nil), do: true
+
+  defp node_matches_selector?(root_node, node, selector) do
+    root_node
+    |> safe_query(selector)
+    |> Enum.any?(&same_node?(&1, node))
   end
 
   defp match_by_opt(opts) do

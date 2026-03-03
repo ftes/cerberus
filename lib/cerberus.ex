@@ -19,6 +19,12 @@ defmodule Cerberus do
       ~l"button:Save"r  # role form (ROLE:NAME)
       ~l"#save"c        # css
       ~l"save-btn"t     # testid (defaults exact: true)
+
+  Locator composition quick look:
+
+      button("Run Search") |> testid("submit-secondary-button")     # AND (same element)
+      or_(css("#primary"), css("#secondary"))                       # OR (union)
+      button("Run Search") |> has(testid("submit-secondary-marker")) # nesting (descendant)
   """
 
   alias Cerberus.Assertions
@@ -42,7 +48,7 @@ defmodule Cerberus do
   @type driver_kind :: Session.driver_kind()
   @type locator_input :: Locator.input()
   @type scope_locator_input :: Locator.input()
-  @locator_kind_keys [:text, :label, :link, :button, :placeholder, :title, :alt, :role, :css, :testid]
+  @locator_kind_keys [:text, :label, :link, :button, :placeholder, :title, :alt, :role, :css, :testid, :and, :or]
   @locator_kind_string_keys Enum.map(@locator_kind_keys, &Atom.to_string/1)
 
   @spec session() :: Session.t()
@@ -243,62 +249,215 @@ defmodule Cerberus do
     raise ArgumentError, "open_browser/2 expects a callback with arity 1"
   end
 
-  @spec text(String.t() | Regex.t(), keyword()) :: keyword()
-  def text(value, opts \\ []) when is_list(opts) do
-    build_text_locator(:text, value, opts)
+  @spec text(String.t() | Regex.t()) :: Locator.t()
+  def text(value) when is_binary(value) or is_struct(value, Regex), do: text(value, [])
+
+  @spec text(String.t() | Regex.t(), keyword()) :: Locator.t()
+  def text(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
+    Locator.leaf(:text, value, opts)
   end
 
-  @spec link(String.t() | Regex.t(), keyword()) :: keyword()
-  def link(value, opts \\ []) when is_list(opts) do
-    build_text_locator(:link, value, opts)
+  @spec text(locator_input(), String.t() | Regex.t()) :: Locator.t()
+  def text(locator, value) when is_binary(value) or is_struct(value, Regex) do
+    and_(locator, text(value))
   end
 
-  @spec button(String.t() | Regex.t(), keyword()) :: keyword()
-  def button(value, opts \\ []) when is_list(opts) do
-    build_text_locator(:button, value, opts)
+  @spec text(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
+  def text(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
+    and_(locator, text(value, opts))
   end
 
-  @spec label(String.t() | Regex.t(), keyword()) :: keyword()
-  def label(value, opts \\ []) when is_list(opts) do
-    build_text_locator(:label, value, opts)
+  @spec link(String.t() | Regex.t()) :: Locator.t()
+  def link(value) when is_binary(value) or is_struct(value, Regex), do: link(value, [])
+
+  @spec link(String.t() | Regex.t(), keyword()) :: Locator.t()
+  def link(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
+    Locator.leaf(:link, value, opts)
   end
 
-  @spec placeholder(String.t() | Regex.t(), keyword()) :: keyword()
-  def placeholder(value, opts \\ []) when is_list(opts) do
-    build_text_locator(:placeholder, value, opts)
+  @spec link(locator_input(), String.t() | Regex.t()) :: Locator.t()
+  def link(locator, value) when is_binary(value) or is_struct(value, Regex) do
+    and_(locator, link(value))
   end
 
-  @spec title(String.t() | Regex.t(), keyword()) :: keyword()
-  def title(value, opts \\ []) when is_list(opts) do
-    build_text_locator(:title, value, opts)
+  @spec link(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
+  def link(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
+    and_(locator, link(value, opts))
   end
 
-  @spec alt(String.t() | Regex.t(), keyword()) :: keyword()
-  def alt(value, opts \\ []) when is_list(opts) do
-    build_text_locator(:alt, value, opts)
+  @spec button(String.t() | Regex.t()) :: Locator.t()
+  def button(value) when is_binary(value) or is_struct(value, Regex), do: button(value, [])
+
+  @spec button(String.t() | Regex.t(), keyword()) :: Locator.t()
+  def button(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
+    Locator.leaf(:button, value, opts)
   end
 
-  @spec css(String.t(), keyword()) :: keyword()
-  def css(value, opts \\ []) when is_binary(value) and is_list(opts) do
-    [css: value]
-    |> maybe_put_locator_opt(opts, :exact)
-    |> maybe_put_locator_opt(opts, :has)
+  @spec button(locator_input(), String.t() | Regex.t()) :: Locator.t()
+  def button(locator, value) when is_binary(value) or is_struct(value, Regex) do
+    and_(locator, button(value))
   end
 
-  @spec role(String.t() | atom(), keyword()) :: keyword()
-  def role(role, opts \\ []) when is_list(opts) do
+  @spec button(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
+  def button(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
+    and_(locator, button(value, opts))
+  end
+
+  @spec label(String.t() | Regex.t()) :: Locator.t()
+  def label(value) when is_binary(value) or is_struct(value, Regex), do: label(value, [])
+
+  @spec label(String.t() | Regex.t(), keyword()) :: Locator.t()
+  def label(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
+    Locator.leaf(:label, value, opts)
+  end
+
+  @spec label(locator_input(), String.t() | Regex.t()) :: Locator.t()
+  def label(locator, value) when is_binary(value) or is_struct(value, Regex) do
+    and_(locator, label(value))
+  end
+
+  @spec label(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
+  def label(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
+    and_(locator, label(value, opts))
+  end
+
+  @spec placeholder(String.t() | Regex.t()) :: Locator.t()
+  def placeholder(value) when is_binary(value) or is_struct(value, Regex), do: placeholder(value, [])
+
+  @spec placeholder(String.t() | Regex.t(), keyword()) :: Locator.t()
+  def placeholder(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
+    Locator.leaf(:placeholder, value, opts)
+  end
+
+  @spec placeholder(locator_input(), String.t() | Regex.t()) :: Locator.t()
+  def placeholder(locator, value) when is_binary(value) or is_struct(value, Regex) do
+    and_(locator, placeholder(value))
+  end
+
+  @spec placeholder(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
+  def placeholder(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
+    and_(locator, placeholder(value, opts))
+  end
+
+  @spec title(String.t() | Regex.t()) :: Locator.t()
+  def title(value) when is_binary(value) or is_struct(value, Regex), do: title(value, [])
+
+  @spec title(String.t() | Regex.t(), keyword()) :: Locator.t()
+  def title(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
+    Locator.leaf(:title, value, opts)
+  end
+
+  @spec title(locator_input(), String.t() | Regex.t()) :: Locator.t()
+  def title(locator, value) when is_binary(value) or is_struct(value, Regex) do
+    and_(locator, title(value))
+  end
+
+  @spec title(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
+  def title(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
+    and_(locator, title(value, opts))
+  end
+
+  @spec alt(String.t() | Regex.t()) :: Locator.t()
+  def alt(value) when is_binary(value) or is_struct(value, Regex), do: alt(value, [])
+
+  @spec alt(String.t() | Regex.t(), keyword()) :: Locator.t()
+  def alt(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
+    Locator.leaf(:alt, value, opts)
+  end
+
+  @spec alt(locator_input(), String.t() | Regex.t()) :: Locator.t()
+  def alt(locator, value) when is_binary(value) or is_struct(value, Regex) do
+    and_(locator, alt(value))
+  end
+
+  @spec alt(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
+  def alt(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
+    and_(locator, alt(value, opts))
+  end
+
+  @spec css(String.t()) :: Locator.t()
+  def css(value) when is_binary(value), do: css(value, [])
+
+  @spec css(String.t(), keyword()) :: Locator.t()
+  def css(value, opts) when is_binary(value) and is_list(opts) do
+    Locator.leaf(:css, value, opts)
+  end
+
+  @spec css(locator_input(), String.t()) :: Locator.t()
+  def css(locator, value) when is_binary(value) do
+    and_(locator, css(value))
+  end
+
+  @spec css(locator_input(), String.t(), keyword()) :: Locator.t()
+  def css(locator, value, opts) when is_binary(value) and is_list(opts) do
+    and_(locator, css(value, opts))
+  end
+
+  @spec role(String.t() | atom()) :: Locator.t()
+  def role(role_name) when is_binary(role_name) or is_atom(role_name), do: role(role_name, [])
+
+  @spec role(String.t() | atom(), keyword()) :: Locator.t()
+  def role(role, opts) when (is_binary(role) or is_atom(role)) and is_list(opts) do
     [role: role, name: Keyword.get(opts, :name)]
     |> maybe_put_locator_opt(opts, :exact)
     |> maybe_put_locator_opt(opts, :selector)
     |> maybe_put_locator_opt(opts, :has)
+    |> Locator.normalize()
   end
 
-  @spec testid(String.t(), keyword()) :: keyword()
-  def testid(value, opts \\ []) when is_binary(value) and is_list(opts) do
-    [testid: value]
-    |> maybe_put_locator_opt(opts, :exact)
-    |> maybe_put_locator_opt(opts, :has)
+  @spec role(locator_input(), String.t() | atom()) :: Locator.t()
+  def role(locator, role_name) when is_binary(role_name) or is_atom(role_name) do
+    and_(locator, role(role_name))
   end
+
+  @spec role(locator_input(), String.t() | atom(), keyword()) :: Locator.t()
+  def role(locator, role_name, opts) when (is_binary(role_name) or is_atom(role_name)) and is_list(opts) do
+    and_(locator, role(role_name, opts))
+  end
+
+  @spec testid(String.t()) :: Locator.t()
+  def testid(value) when is_binary(value), do: testid(value, [])
+
+  @spec testid(String.t(), keyword()) :: Locator.t()
+  def testid(value, opts) when is_binary(value) and is_list(opts) do
+    Locator.leaf(:testid, value, opts)
+  end
+
+  @spec testid(locator_input(), String.t()) :: Locator.t()
+  def testid(locator, value) when is_binary(value) do
+    and_(locator, testid(value))
+  end
+
+  @spec testid(locator_input(), String.t(), keyword()) :: Locator.t()
+  def testid(locator, value, opts) when is_binary(value) and is_list(opts) do
+    and_(locator, testid(value, opts))
+  end
+
+  @spec and_(locator_input(), locator_input()) :: Locator.t()
+  @doc """
+  Composes two locators with logical AND (same-element intersection).
+
+  Both sides must match the same DOM node.
+  """
+  def and_(left, right), do: Locator.compose_and(left, right)
+
+  @spec or_(locator_input(), locator_input()) :: Locator.t()
+  @doc """
+  Composes two locators with logical OR (union).
+
+  Action operations still require a unique final target at execution time.
+  """
+  def or_(left, right), do: Locator.compose_or(left, right)
+
+  @spec has(locator_input(), locator_input()) :: Locator.t()
+  @doc """
+  Adds a descendant locator constraint (`:has`) to a locator.
+
+  Example:
+
+      button("Apply") |> has(testid("apply-secondary-marker"))
+  """
+  def has(locator, nested_locator), do: Locator.put_has(locator, nested_locator)
 
   @doc """
   Composes a locator that matches the closest ancestor of a nested `from` locator.
@@ -323,14 +482,13 @@ defmodule Cerberus do
         raise ArgumentError, "closest/2 supports only :from option, got: #{inspect(extra)}"
     end
 
-    base_locator = Locator.normalize(locator)
     from_locator = Locator.normalize(from_locator_input)
 
     if Keyword.has_key?(from_locator.opts, :from) do
       raise ArgumentError, "closest/2 does not support nested :from locators"
     end
 
-    %{base_locator | opts: Keyword.put(base_locator.opts, :from, from_locator)}
+    Locator.put_from(locator, from_locator)
   end
 
   def closest(_locator, _opts) do
@@ -1020,13 +1178,6 @@ defmodule Cerberus do
 
   defp ensure_same_endpoint!(_session, _target_session) do
     raise ArgumentError, "cannot switch tab across sessions with different endpoints"
-  end
-
-  defp build_text_locator(kind, value, opts) do
-    [{kind, value}]
-    |> maybe_put_locator_opt(opts, :exact)
-    |> maybe_put_locator_opt(opts, :selector)
-    |> maybe_put_locator_opt(opts, :has)
   end
 
   defp maybe_put_locator_opt(locator, opts, key) do

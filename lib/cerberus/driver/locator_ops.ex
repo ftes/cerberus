@@ -24,8 +24,21 @@ defmodule Cerberus.Driver.LocatorOps do
     |> form_shape(locator)
   end
 
-  defp merged_opts(%Locator{opts: locator_opts}, opts) do
-    Keyword.merge(locator_opts, opts)
+  defp merged_opts(%Locator{opts: locator_opts} = locator, opts) do
+    runtime_opts =
+      if Locator.contains_kind?(locator, :or) do
+        Keyword.put(opts, :count, 1)
+      else
+        opts
+      end
+
+    locator_opts
+    |> Keyword.merge(runtime_opts)
+    |> Keyword.put(:locator, locator)
+  end
+
+  defp clickable_shape(opts, %Locator{kind: kind}) when kind in [:and, :or] do
+    {"", opts}
   end
 
   defp clickable_shape(opts, %Locator{kind: :css, value: selector}) do
@@ -63,6 +76,10 @@ defmodule Cerberus.Driver.LocatorOps do
 
   defp form_shape(opts, %Locator{kind: :css, value: selector}) do
     {"", ensure_selector_opt(opts, selector)}
+  end
+
+  defp form_shape(opts, %Locator{kind: kind}) when kind in [:and, :or] do
+    {"", opts}
   end
 
   defp form_shape(opts, %Locator{kind: :placeholder, value: expected}) do

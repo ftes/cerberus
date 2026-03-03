@@ -166,9 +166,13 @@ main =
 - Helper constructors:
   - `text("...")`, `link("...")`, `button("...")`, `label("...")`, `testid("...")`, `css("...")`, `role(:button, name: "...")`
 - Locator composition:
-  - `has:` filters matched elements by requiring a descendant locator (`label(...)`, `css(...)`, `text(...)`, `button(...)`, etc.)
+  - `left |> right(...)` composes same-element AND constraints
+  - `or_(left, right)` composes OR alternatives
+  - `has(locator, nested)` filters matched elements by requiring a descendant locator
   - `closest(base_locator, from: nested_locator)` resolves the nearest matching ancestor scope (for example nearest field wrapper for a label)
-  - Example: `click(button("Apply", has: testid("apply-secondary-marker")))`
+  - Examples:
+    - `click(button("Apply") |> testid("apply-secondary-button"))`
+    - `click(button("Apply") |> has(testid("apply-secondary-marker")))`
 - Sigil:
   - `~l"Save"` text
   - `~l"Save"e` exact text

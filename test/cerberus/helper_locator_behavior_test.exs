@@ -111,8 +111,34 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       unquote(driver)
       |> session()
       |> visit("/live/selector-edge")
-      |> click(button("Apply", has: testid("apply-secondary-marker")))
+      |> click("Apply" |> button() |> has(testid("apply-secondary-marker")))
       |> assert_has(text("Selected: secondary", exact: true))
+    end
+
+    test "pipe-composed and vs nesting semantics are consistent across static and browser (#{driver})" do
+      assert_raise ExUnit.AssertionError, ~r/no (elements|clickable)/, fn ->
+        unquote(driver)
+        |> session()
+        |> visit("/live/selector-edge")
+        |> click("Apply" |> button() |> testid("apply-secondary-marker"))
+      end
+
+      unquote(driver)
+      |> session()
+      |> visit("/live/selector-edge")
+      |> click("Apply" |> button() |> has(testid("apply-secondary-marker")))
+      |> assert_has(text("Selected: secondary", exact: true))
+    end
+
+    test "or composition enforces strict uniqueness for actions (#{driver})" do
+      assert_raise ExUnit.AssertionError,
+                   ~r/(expected exactly 1 matched element|no clickable element matched locator)/,
+                   fn ->
+                     unquote(driver)
+                     |> session()
+                     |> visit("/live/selector-edge")
+                     |> click(or_(css("#primary-actions button"), css("#secondary-actions button")))
+                   end
     end
 
     test "placeholder/title/alt helpers behave consistently in static and browser (#{driver})" do

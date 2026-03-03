@@ -1,22 +1,33 @@
 defmodule Cerberus.Locator do
-  @moduledoc "Normalize user input into a single internal locator representation."
+  @moduledoc """
+  Normalize user input into a canonical locator AST.
+
+  The AST supports:
+  - leaf locators (`:text`, `:button`, `:css`, `:testid`, ...)
+  - composition (`:and`, `:or`)
+  - descendant filters via `:has`
+  - closest-scope input via `:from`
+  """
 
   alias Cerberus.InvalidLocatorError
 
   @enforce_keys [:kind, :value]
   defstruct [:kind, :value, opts: []]
 
-  @type locator_kind ::
+  @type leaf_kind ::
           :text | :label | :link | :button | :placeholder | :title | :alt | :testid | :css
+  @type composite_kind :: :and | :or
+  @type locator_kind :: leaf_kind() | composite_kind()
+  @type composite_value :: [t()]
   @type t :: %__MODULE__{
           kind: locator_kind(),
-          value: String.t() | Regex.t(),
+          value: String.t() | Regex.t() | composite_value(),
           opts: keyword()
         }
-  @type input :: t() | String.t() | Regex.t() | keyword() | map()
+  @type input :: t() | String.t() | Regex.t() | keyword() | map() | [input()]
 
   @spec normalize(term()) :: t()
-  def normalize(%__MODULE__{} = locator), do: locator
+  def normalize(%__MODULE__{} = locator), do: normalize_locator(locator, locator)
   def normalize(locator) when is_binary(locator), do: %__MODULE__{kind: :text, value: locator}
   def normalize(%Regex{} = locator), do: %__MODULE__{kind: :text, value: locator}
 
@@ -35,6 +46,70 @@ defmodule Cerberus.Locator do
   end
 
   def normalize(locator), do: raise(InvalidLocatorError, locator: locator)
+
+  @spec leaf(leaf_kind(), String.t() | Regex.t(), keyword()) :: t()
+  def leaf(kind, value, opts \\ [])
+
+  def leaf(kind, value, opts) when kind in [:text, :label, :link, :button, :placeholder, :title, :alt] do
+    ensure_text_value!(kind, value, {kind, value, opts})
+    %__MODULE__{kind: kind, value: value, opts: normalize_leaf_opts(opts, {kind, value, opts})}
+  end
+
+  def leaf(:css, value, opts) do
+    ensure_css_selector_value!(:css, value, {:css, value, opts})
+    %__MODULE__{kind: :css, value: value, opts: normalize_leaf_opts(opts, {:css, value, opts})}
+  end
+
+  def leaf(:testid, value, opts) do
+    ensure_testid_sigil_value!(value, {:testid, value, opts})
+
+    normalized_opts =
+      opts
+      |> normalize_leaf_opts({:testid, value, opts})
+      |> ensure_exact_opt(true)
+
+    %__MODULE__{kind: :testid, value: value, opts: normalized_opts}
+  end
+
+  @spec compose_and(input(), input()) :: t()
+  def compose_and(left, right) do
+    compose(:and, left, right)
+  end
+
+  @spec compose_or(input(), input()) :: t()
+  def compose_or(left, right) do
+    compose(:or, left, right)
+  end
+
+  @spec put_has(input(), input()) :: t()
+  def put_has(locator, has_locator) do
+    locator = normalize(locator)
+    has_locator = normalize(has_locator)
+    %{locator | opts: Keyword.put(locator.opts, :has, normalize_nested_testid_exact(has_locator))}
+  end
+
+  @spec put_from(input(), input()) :: t()
+  def put_from(locator, from_locator) do
+    locator = normalize(locator)
+    from_locator = normalize(from_locator)
+    ensure_no_nested_from!(from_locator, {locator, from_locator}, ":from")
+    %{locator | opts: Keyword.put(locator.opts, :from, normalize_nested_testid_exact(from_locator))}
+  end
+
+  @spec contains_kind?(input(), locator_kind()) :: boolean()
+  def contains_kind?(locator, kind)
+      when kind in [:text, :label, :link, :button, :placeholder, :title, :alt, :testid, :css, :and, :or] do
+    locator
+    |> normalize()
+    |> contains_kind_recursive?(kind)
+  end
+
+  @spec contains_has_filter?(input()) :: boolean()
+  def contains_has_filter?(locator) do
+    locator
+    |> normalize()
+    |> contains_has_filter_recursive?()
+  end
 
   @spec text_sigil(String.t()) :: t()
   def text_sigil(value) when is_binary(value), do: %__MODULE__{kind: :text, value: value}
@@ -93,7 +168,9 @@ defmodule Cerberus.Locator do
       {:alt, key_value(locator_map, :alt)},
       {:role, key_value(locator_map, :role)},
       {:css, key_value(locator_map, :css)},
-      {:testid, key_value(locator_map, :testid)}
+      {:testid, key_value(locator_map, :testid)},
+      {:and, key_value(locator_map, :and)},
+      {:or, key_value(locator_map, :or)}
     ]
 
     present =
@@ -106,7 +183,7 @@ defmodule Cerberus.Locator do
         raise InvalidLocatorError,
           locator: original,
           message:
-            "invalid locator #{inspect(original)}; expected one of :text, :label, :link, :button, :placeholder, :title, :alt, :role, :css, or :testid"
+            "invalid locator #{inspect(original)}; expected one of :text, :label, :link, :button, :placeholder, :title, :alt, :role, :css, :testid, :and, or :or"
 
       [kind] ->
         normalize_kind(kind, locator_map, original)
@@ -123,6 +200,18 @@ defmodule Cerberus.Locator do
     ensure_text_value!(:text, text, original)
     ensure_only_keys!(locator_map, original, [:text, :exact, :selector, :has, :from])
     %__MODULE__{kind: :text, value: text, opts: locator_opts(locator_map, original)}
+  end
+
+  defp normalize_kind(:and, locator_map, original) do
+    and_value = key_value(locator_map, :and)
+    ensure_only_keys!(locator_map, original, [:and])
+    normalize_composite(:and, and_value, original)
+  end
+
+  defp normalize_kind(:or, locator_map, original) do
+    or_value = key_value(locator_map, :or)
+    ensure_only_keys!(locator_map, original, [:or])
+    normalize_composite(:or, or_value, original)
   end
 
   defp normalize_kind(:label, locator_map, original) do
@@ -278,17 +367,8 @@ defmodule Cerberus.Locator do
 
   defp normalize_has_locator!(value, original) do
     has_locator = normalize(value)
-    ensure_no_nested_has!(has_locator, original)
     ensure_no_nested_from!(has_locator, original, ":has")
     normalize_nested_testid_exact(has_locator)
-  end
-
-  defp ensure_no_nested_has!(has_locator, original) do
-    if Keyword.has_key?(has_locator.opts, :has) do
-      raise InvalidLocatorError,
-        locator: original,
-        message: "invalid locator #{inspect(original)}; nested :has locators are not supported"
-    end
   end
 
   defp maybe_put_from(opts, locator_map, original) do
@@ -323,6 +403,35 @@ defmodule Cerberus.Locator do
   end
 
   defp normalize_nested_testid_exact(locator), do: locator
+
+  defp normalize_composite(kind, value, original) when kind in [:and, :or] do
+    members =
+      value
+      |> compose_members!(kind, original)
+      |> Enum.map(&normalize/1)
+      |> Enum.flat_map(&flatten_composite_members(kind, &1))
+
+    if length(members) < 2 do
+      raise InvalidLocatorError,
+        locator: original,
+        message: "invalid locator #{inspect(original)}; :#{kind} expects at least two locator entries"
+    end
+
+    %__MODULE__{kind: kind, value: members, opts: []}
+  end
+
+  defp compose_members!(value, _kind, _original) when is_list(value), do: value
+
+  defp compose_members!(_value, kind, original) do
+    raise InvalidLocatorError,
+      locator: original,
+      message: "invalid locator #{inspect(original)}; :#{kind} expects a list of locator entries"
+  end
+
+  defp flatten_composite_members(kind, %__MODULE__{kind: member_kind, value: value})
+       when is_list(value) and member_kind == kind, do: value
+
+  defp flatten_composite_members(_kind, locator), do: [locator]
 
   defp ensure_only_keys!(locator_map, original, allowed_atom_keys) do
     allowed =
@@ -471,6 +580,108 @@ defmodule Cerberus.Locator do
       opts
     else
       Keyword.put(opts, :exact, default)
+    end
+  end
+
+  defp compose(kind, left, right) when kind in [:and, :or] do
+    left = normalize(left)
+    right = normalize(right)
+
+    members = Enum.flat_map([left, right], &flatten_composite_members(kind, &1))
+
+    %__MODULE__{kind: kind, value: members, opts: []}
+  end
+
+  defp normalize_locator(%__MODULE__{kind: kind, value: members, opts: opts} = locator, original)
+       when kind in [:and, :or] do
+    members =
+      members
+      |> compose_members!(kind, original)
+      |> Enum.map(&normalize_locator(normalize(&1), original))
+      |> Enum.flat_map(&flatten_composite_members(kind, &1))
+
+    if length(members) < 2 do
+      raise InvalidLocatorError,
+        locator: original,
+        message: "invalid locator #{inspect(original)}; composed locators require at least two members"
+    end
+
+    %{locator | value: members, opts: normalize_composite_opts(opts, original)}
+  end
+
+  defp normalize_locator(%__MODULE__{kind: kind, value: value, opts: opts} = locator, original)
+       when kind in [:text, :label, :link, :button, :placeholder, :title, :alt] do
+    ensure_text_value!(kind, value, original)
+    %{locator | opts: normalize_leaf_opts(opts, original)}
+  end
+
+  defp normalize_locator(%__MODULE__{kind: :css, value: value, opts: opts} = locator, original) do
+    ensure_css_selector_value!(:css, value, original)
+    %{locator | opts: normalize_leaf_opts(opts, original)}
+  end
+
+  defp normalize_locator(%__MODULE__{kind: :testid, value: value, opts: opts} = locator, original) do
+    ensure_testid_sigil_value!(value, original)
+
+    normalized_opts =
+      opts
+      |> normalize_leaf_opts(original)
+      |> ensure_exact_opt(true)
+
+    %{locator | opts: normalized_opts}
+  end
+
+  defp normalize_locator(%__MODULE__{kind: kind}, original) do
+    raise InvalidLocatorError,
+      locator: original,
+      message: "invalid locator #{inspect(original)}; unsupported locator kind #{inspect(kind)}"
+  end
+
+  defp normalize_leaf_opts(opts, original) when is_list(opts) do
+    opts_map = Map.new(opts)
+    ensure_only_keys!(opts_map, original, [:exact, :selector, :has, :from])
+    locator_opts(opts_map, original)
+  end
+
+  defp normalize_leaf_opts(_opts, original) do
+    raise InvalidLocatorError,
+      locator: original,
+      message: "invalid locator #{inspect(original)}; :opts must be a keyword list"
+  end
+
+  defp normalize_composite_opts(opts, original) when is_list(opts) do
+    opts_map = Map.new(opts)
+    ensure_only_keys!(opts_map, original, [:has, :from])
+
+    []
+    |> maybe_put_has(opts_map, original)
+    |> maybe_put_from(opts_map, original)
+  end
+
+  defp normalize_composite_opts(_opts, original) do
+    raise InvalidLocatorError,
+      locator: original,
+      message: "invalid locator #{inspect(original)}; composed locator opts must be a keyword list"
+  end
+
+  defp contains_kind_recursive?(%__MODULE__{kind: kind}, kind), do: true
+
+  defp contains_kind_recursive?(%__MODULE__{kind: composite_kind, value: members}, kind)
+       when composite_kind in [:and, :or] and is_list(members) do
+    Enum.any?(members, &contains_kind_recursive?(&1, kind))
+  end
+
+  defp contains_kind_recursive?(_locator, _kind), do: false
+
+  defp contains_has_filter_recursive?(%__MODULE__{kind: composite_kind, value: members, opts: opts})
+       when composite_kind in [:and, :or] and is_list(members) do
+    Keyword.has_key?(opts, :has) or Enum.any?(members, &contains_has_filter_recursive?/1)
+  end
+
+  defp contains_has_filter_recursive?(%__MODULE__{opts: opts}) when is_list(opts) do
+    case Keyword.get(opts, :has) do
+      %__MODULE__{} -> true
+      _ -> false
     end
   end
 end

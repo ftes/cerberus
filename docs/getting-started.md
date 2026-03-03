@@ -118,14 +118,17 @@ session() # or session(conn)
 |> fill_in("Name", "secondary", last: true, count: 2)
 ```
 
-## Locator Composition With has
+## Locator Composition
 
-You can require nested descendants while resolving a locator by passing `has:` with a nested locator (`label(...)`, `css(...)`, `text(...)`, `testid(...)`, and other helper kinds).
+Cerberus supports composable locators:
+- same-element AND: `button("Run Search") |> testid("submit-secondary-button")`
+- OR alternatives: `or_(css("#primary"), css("#secondary"))`
+- descendant nesting: `button("Run Search") |> has(testid("submit-secondary-marker"))`
 
 ```elixir
 session()
 |> visit("/live/selector-edge")
-|> click(button("Apply", has: testid("apply-secondary-marker")))
+|> click(button("Apply") |> has(testid("apply-secondary-marker")))
 |> assert_has(~l"Selected: secondary"e)
 ```
 

@@ -52,7 +52,10 @@
 - `testid("...")`
 - `css("...")`
 - `role(:button, name: "...")`
-- Composition: `button("Apply", has: testid("apply-secondary-marker"))`
+- Composition:
+  `button("Apply") |> testid("apply-secondary-button")`
+  `button("Apply") |> has(testid("apply-secondary-marker"))`
+  `or_(css("#primary"), css("#secondary"))`
 - Closest ancestor composition: `closest(css(".fieldset"), from: label("Email", exact: true))`
 
 ### Supported role aliases

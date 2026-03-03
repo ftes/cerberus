@@ -187,7 +187,7 @@ defmodule Cerberus.Query do
     end
   end
 
-  @spec matches_state_filters?(map(), Options.state_filter_opts()) :: boolean()
+  @spec matches_state_filters?(map(), keyword()) :: boolean()
   def matches_state_filters?(candidate, opts) when is_map(candidate) and is_list(opts) do
     Enum.all?(@state_keys, fn key ->
       case Keyword.get(opts, key) do

@@ -327,6 +327,12 @@ defmodule Cerberus.Assertions do
 
   defp normalize_assert_locator_kind(%Locator{kind: :text} = locator, _locator_input, opts), do: {locator, opts}
 
+  defp normalize_assert_locator_kind(%Locator{kind: kind}, locator_input, _opts) when kind in [:and, :or] do
+    raise InvalidLocatorError,
+      locator: locator_input,
+      message: "composed locators are not supported for assert_has/3 or refute_has/3 in this slice"
+  end
+
   defp normalize_assert_locator_kind(%Locator{kind: :css}, locator_input, _opts) do
     raise InvalidLocatorError,
       locator: locator_input,

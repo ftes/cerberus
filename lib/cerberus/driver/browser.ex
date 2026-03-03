@@ -627,6 +627,7 @@ defmodule Cerberus.Driver.Browser do
       op: Atom.to_string(op),
       scopeSelector: Session.scope(state),
       selector: Keyword.get(opts, :selector),
+      locator: action_locator_payload(opts),
       expected: text_expectation_payload(expected),
       exact: Keyword.get(opts, :exact, false),
       normalizeWs: Keyword.get(opts, :normalize_ws, true),
@@ -724,13 +725,66 @@ defmodule Cerberus.Driver.Browser do
   defp action_kind(opts, :click), do: opts |> Keyword.get(:kind, :any) |> Atom.to_string()
   defp action_kind(_opts, _op), do: nil
 
+  defp action_locator_payload(opts) do
+    case Keyword.get(opts, :locator) do
+      %Locator{} = locator -> locator_payload(locator)
+      _ -> nil
+    end
+  end
+
+  defp locator_payload(%Locator{kind: kind, value: members, opts: opts}) when kind in [:and, :or] do
+    %{
+      kind: Atom.to_string(kind),
+      members: Enum.map(members, &locator_payload/1),
+      opts: locator_opts_payload(opts)
+    }
+  end
+
+  defp locator_payload(%Locator{kind: :css, value: selector, opts: opts}) do
+    %{
+      kind: "css",
+      value: selector,
+      opts: locator_opts_payload(opts)
+    }
+  end
+
+  defp locator_payload(%Locator{kind: kind, value: expected, opts: opts}) do
+    %{
+      kind: Atom.to_string(kind),
+      expected: text_expectation_payload(expected),
+      opts: locator_opts_payload(opts)
+    }
+  end
+
+  defp locator_opts_payload(opts) when is_list(opts) do
+    %{
+      exact: Keyword.get(opts, :exact),
+      normalizeWs: Keyword.get(opts, :normalize_ws),
+      selector: Keyword.get(opts, :selector),
+      has: nested_locator_payload(Keyword.get(opts, :has)),
+      checked: Keyword.get(opts, :checked),
+      disabled: Keyword.get(opts, :disabled),
+      selected: Keyword.get(opts, :selected),
+      readonly: Keyword.get(opts, :readonly)
+    }
+  end
+
+  defp nested_locator_payload(%Locator{} = locator), do: locator_payload(locator)
+  defp nested_locator_payload(_other), do: nil
+
   defp inspect_failure_prefix(op) when op in [:click], do: "failed to inspect clickable elements"
   defp inspect_failure_prefix(op) when op in [:submit], do: "failed to inspect submit controls"
   defp inspect_failure_prefix(op) when op in [:upload], do: "failed to inspect upload fields"
   defp inspect_failure_prefix(_op), do: "failed to inspect form fields"
 
   defp requires_snapshot_matching?(opts) when is_list(opts) do
-    Keyword.has_key?(opts, :has)
+    case Keyword.get(opts, :locator) do
+      %Locator{} = locator ->
+        Locator.contains_has_filter?(locator)
+
+      _ ->
+        Keyword.has_key?(opts, :has)
+    end
   end
 
   defp do_click(session, state, clickables_data, expected, opts, selector) do
