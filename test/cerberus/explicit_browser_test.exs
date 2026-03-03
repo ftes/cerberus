@@ -3,8 +3,8 @@ defmodule Cerberus.ExplicitBrowserTest do
 
   import Cerberus
 
-  for driver <- [:chrome, :firefox] do
-    test "explicit chrome/firefox drivers run as expected (#{driver})" do
+  for driver <- [:chrome] do
+    test "explicit chrome driver runs as expected (#{driver})" do
       session =
         unquote(driver)
         |> session()
@@ -15,20 +15,12 @@ defmodule Cerberus.ExplicitBrowserTest do
     end
   end
 
-  test "firefox can be targeted directly" do
-    :firefox
-    |> session()
-    |> visit("/articles")
-    |> assert_has(text("Articles", exact: true))
-  end
-
-  for driver <- [:chrome, :firefox] do
+  for driver <- [:chrome] do
     test "explicit driver maps to matching runtime browser (#{driver})" do
       unquote(driver)
       |> session()
       |> Cerberus.Browser.evaluate_js("navigator.userAgent", fn user_agent ->
-        expected = if unquote(driver) == :chrome, do: "Chrome", else: "Firefox"
-        assert user_agent =~ expected
+        assert user_agent =~ "Chrome"
       end)
     end
   end

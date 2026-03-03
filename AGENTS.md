@@ -19,6 +19,7 @@ Keep a log of what you did to present when you're done.
 - Commit in small increments and run `mix precommit` before each commit.
 - Cerberus is unreleased. Feel free to change anything - ignore backwards compatability.
 - Codex: Run browser-tagged tests outside the Codex sandbox (escalated permissions), since Chrome startup can fail inside the sandbox.
+- Current browser policy: run Chrome only. Ignore Firefox and websocket lanes locally and in CI unless explicitly requested.
 - If in doubt about static/live driver behavior, check PhoenixTest static and live driver implementations for reference patterns.
 - If in doubt about browser driver behavior, use Cuprite as the primary implementation reference; use Playwright JS as the secondary reference.
 - For refactors/renames, use Igniter when it helps.

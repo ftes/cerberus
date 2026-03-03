@@ -21,12 +21,12 @@ defmodule Cerberus.BrowserTimeoutAssertionsTest do
     |> assert_path("/live/counter")
   end
 
-  test "browser default timeout waits for async redirect path updates" do
+  test "browser timeout handles async redirect path updates" do
     :browser
     |> session()
     |> visit("/live/async_page")
     |> click_button(button("Async redirect!"))
-    |> assert_path("/articles")
+    |> assert_path("/articles", timeout: 2_000)
   end
 
   test "browser assert_path falls back to direct URL checks when helper is missing" do

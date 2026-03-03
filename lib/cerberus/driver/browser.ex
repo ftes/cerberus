@@ -284,119 +284,130 @@ defmodule Cerberus.Driver.Browser do
     {expected, match_opts} = LocatorOps.click(locator, opts)
     selector = Keyword.get(match_opts, :selector)
 
-    with_driver_ready(session, state, :click, fn ready_state ->
-      if requires_snapshot_matching?(match_opts) do
+    if requires_snapshot_matching?(match_opts) do
+      with_driver_ready(session, state, :click, fn ready_state ->
         do_click_with_snapshot(session, ready_state, expected, match_opts, selector)
-      else
-        do_resolved_click(session, ready_state, expected, match_opts, selector)
-      end
-    end)
+      end)
+    else
+      with_driver_ready(session, state, :click, fn ready_state ->
+        do_resolved_click(session, ready_state, expected, match_opts)
+      end)
+    end
   end
 
   @impl true
   def fill_in(%__MODULE__{} = session, %Locator{} = locator, value, opts) do
     state = state!(session)
     {expected, match_opts} = LocatorOps.form(locator, opts)
-    selector = Keyword.get(match_opts, :selector)
 
-    with_driver_ready(session, state, :fill_in, fn ready_state ->
-      if requires_snapshot_matching?(match_opts) do
+    if requires_snapshot_matching?(match_opts) do
+      selector = Keyword.get(match_opts, :selector)
+
+      with_driver_ready(session, state, :fill_in, fn ready_state ->
         do_fill_in_with_snapshot(session, ready_state, expected, value, match_opts, selector)
-      else
-        do_resolved_fill_in(session, ready_state, expected, value, match_opts, selector)
-      end
-    end)
+      end)
+    else
+      do_resolved_fill_in(session, state, expected, value, match_opts)
+    end
   end
 
   @impl true
   def select(%__MODULE__{} = session, %Locator{} = locator, opts) do
     state = state!(session)
     {expected, match_opts} = LocatorOps.form(locator, opts)
-    selector = Keyword.get(match_opts, :selector)
     option = Keyword.fetch!(opts, :option)
 
-    with_driver_ready(session, state, :select, fn ready_state ->
-      if requires_snapshot_matching?(match_opts) do
+    if requires_snapshot_matching?(match_opts) do
+      selector = Keyword.get(match_opts, :selector)
+
+      with_driver_ready(session, state, :select, fn ready_state ->
         do_select_with_snapshot(session, ready_state, expected, option, match_opts, selector)
-      else
-        do_resolved_select(session, ready_state, expected, option, match_opts, selector)
-      end
-    end)
+      end)
+    else
+      do_resolved_select(session, state, expected, option, match_opts)
+    end
   end
 
   @impl true
   def choose(%__MODULE__{} = session, %Locator{} = locator, opts) do
     state = state!(session)
     {expected, match_opts} = LocatorOps.form(locator, opts)
-    selector = Keyword.get(match_opts, :selector)
 
-    with_driver_ready(session, state, :choose, fn ready_state ->
-      if requires_snapshot_matching?(match_opts) do
+    if requires_snapshot_matching?(match_opts) do
+      selector = Keyword.get(match_opts, :selector)
+
+      with_driver_ready(session, state, :choose, fn ready_state ->
         do_choose_with_snapshot(session, ready_state, expected, match_opts, selector)
-      else
-        do_resolved_choose(session, ready_state, expected, match_opts, selector)
-      end
-    end)
+      end)
+    else
+      do_resolved_choose(session, state, expected, match_opts)
+    end
   end
 
   @impl true
   def check(%__MODULE__{} = session, %Locator{} = locator, opts) do
     state = state!(session)
     {expected, match_opts} = LocatorOps.form(locator, opts)
-    selector = Keyword.get(match_opts, :selector)
 
-    with_driver_ready(session, state, :check, fn ready_state ->
-      if requires_snapshot_matching?(match_opts) do
+    if requires_snapshot_matching?(match_opts) do
+      selector = Keyword.get(match_opts, :selector)
+
+      with_driver_ready(session, state, :check, fn ready_state ->
         do_toggle_checkbox_with_snapshot(session, ready_state, expected, match_opts, selector, true, :check)
-      else
-        do_resolved_toggle_checkbox(session, ready_state, expected, match_opts, selector, true, :check)
-      end
-    end)
+      end)
+    else
+      do_resolved_toggle_checkbox(session, state, expected, match_opts, true, :check)
+    end
   end
 
   @impl true
   def uncheck(%__MODULE__{} = session, %Locator{} = locator, opts) do
     state = state!(session)
     {expected, match_opts} = LocatorOps.form(locator, opts)
-    selector = Keyword.get(match_opts, :selector)
 
-    with_driver_ready(session, state, :uncheck, fn ready_state ->
-      if requires_snapshot_matching?(match_opts) do
+    if requires_snapshot_matching?(match_opts) do
+      selector = Keyword.get(match_opts, :selector)
+
+      with_driver_ready(session, state, :uncheck, fn ready_state ->
         do_toggle_checkbox_with_snapshot(session, ready_state, expected, match_opts, selector, false, :uncheck)
-      else
-        do_resolved_toggle_checkbox(session, ready_state, expected, match_opts, selector, false, :uncheck)
-      end
-    end)
+      end)
+    else
+      do_resolved_toggle_checkbox(session, state, expected, match_opts, false, :uncheck)
+    end
   end
 
   @impl true
   def upload(%__MODULE__{} = session, %Locator{} = locator, path, opts) do
     state = state!(session)
     {expected, match_opts} = LocatorOps.form(locator, opts)
-    selector = Keyword.get(match_opts, :selector)
 
-    with_driver_ready(session, state, :upload, fn ready_state ->
-      if requires_snapshot_matching?(match_opts) do
+    if requires_snapshot_matching?(match_opts) do
+      selector = Keyword.get(match_opts, :selector)
+
+      with_driver_ready(session, state, :upload, fn ready_state ->
         do_upload_with_snapshot(session, ready_state, expected, path, match_opts, selector)
-      else
-        do_resolved_upload(session, ready_state, expected, path, match_opts, selector)
-      end
-    end)
+      end)
+    else
+      do_resolved_upload(session, state, expected, path, match_opts)
+    end
   end
 
   @impl true
   def submit(%__MODULE__{} = session, %Locator{} = locator, opts) do
     state = state!(session)
     {expected, match_opts} = LocatorOps.submit(locator, opts)
-    selector = Keyword.get(match_opts, :selector)
 
-    with_driver_ready(session, state, :submit, fn ready_state ->
-      if requires_snapshot_matching?(match_opts) do
+    if requires_snapshot_matching?(match_opts) do
+      selector = Keyword.get(match_opts, :selector)
+
+      with_driver_ready(session, state, :submit, fn ready_state ->
         do_submit_with_snapshot(session, ready_state, expected, match_opts, selector)
-      else
-        do_resolved_submit(session, ready_state, expected, match_opts, selector)
-      end
-    end)
+      end)
+    else
+      with_driver_ready(session, state, :submit, fn ready_state ->
+        do_resolved_submit(session, ready_state, expected, match_opts)
+      end)
+    end
   end
 
   @impl true
@@ -508,17 +519,15 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp do_resolved_click(session, state, expected, opts, selector) do
+  defp do_resolved_click(session, state, expected, opts) do
     kind = Keyword.get(opts, :kind, :any)
 
-    case resolve_action_target(session, state, :click, expected, opts) do
-      {:ok, %{"kind" => "link"} = link} ->
-        click_link(session, state, link)
+    case perform_action(session, state, :click, expected, opts) do
+      {:ok, %{"target" => target} = result} when is_map(target) ->
+        click_target_result(session, state, target, result)
 
-      {:ok, %{"kind" => "button"} = button} ->
-        click_button(session, state, button, selector)
-
-      {:ok, target} ->
+      {:ok, result} ->
+        target = Map.get(result, "target")
         observed = %{action: :click, path: state.current_path, target: target}
         {:error, session, observed, no_clickable_error(kind)}
 
@@ -527,12 +536,13 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp do_resolved_submit(session, state, expected, opts, selector) do
-    case resolve_action_target(session, state, :submit, expected, opts) do
-      {:ok, %{"kind" => "button"} = button} ->
-        submit_button(session, state, button, selector)
+  defp do_resolved_submit(session, state, expected, opts) do
+    case perform_action(session, state, :submit, expected, opts) do
+      {:ok, %{"target" => %{"kind" => "button"} = button} = result} ->
+        submit_result(session, state, button, result)
 
-      {:ok, target} ->
+      {:ok, result} ->
+        target = Map.get(result, "target")
         observed = %{action: :submit, path: state.current_path, target: target}
         {:error, session, observed, "no submit button matched locator"}
 
@@ -541,118 +551,82 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp do_resolved_fill_in(session, state, expected, value, opts, selector) do
-    case resolve_action_target(session, state, :fill_in, expected, opts) do
-      {:ok, field} ->
-        fill_field(session, state, field, value, selector)
+  defp do_resolved_fill_in(session, state, expected, value, opts) do
+    case perform_action(session, state, :fill_in, expected, opts, %{value: to_string(value)}) do
+      {:ok, %{"target" => field} = result} when is_map(field) ->
+        fill_in_result(session, state, field, value, result)
 
       {:error, _failed_session, _observed, _reason} = error ->
         error
     end
   end
 
-  defp do_resolved_select(session, state, expected, option, opts, selector) do
-    case resolve_action_target(session, state, :select, expected, opts) do
-      {:ok, field} ->
-        cond do
-          not select_field?(field) ->
-            observed = %{action: :select, path: state.current_path, field: field, option: option}
-            {:error, session, observed, "matched field is not a select element"}
+  defp do_resolved_select(session, state, expected, option, opts) do
+    exact_option = Keyword.get(opts, :exact_option, true)
+    option_values = option |> List.wrap() |> Enum.map(&to_string/1)
 
-          field_disabled?(field) ->
-            observed = %{action: :select, path: state.current_path, field: field, option: option}
-            {:error, session, observed, "matched select field is disabled"}
-
-          true ->
-            exact_option = Keyword.get(opts, :exact_option, true)
-            select_field_option(session, state, field, option, exact_option, selector)
-        end
+    case perform_action(session, state, :select, expected, opts, %{option: option_values, exactOption: exact_option}) do
+      {:ok, %{"target" => field} = result} when is_map(field) ->
+        select_result(session, state, field, option, result)
 
       {:error, _failed_session, _observed, _reason} = error ->
         error
     end
   end
 
-  defp do_resolved_choose(session, state, expected, opts, selector) do
-    case resolve_action_target(session, state, :choose, expected, opts) do
-      {:ok, field} ->
-        cond do
-          not radio_field?(field) ->
-            observed = %{action: :choose, path: state.current_path, field: field}
-            {:error, session, observed, "matched field is not a radio input"}
-
-          field_disabled?(field) ->
-            observed = %{action: :choose, path: state.current_path, field: field}
-            {:error, session, observed, "matched field is disabled"}
-
-          true ->
-            choose_radio_field(session, state, field, selector)
-        end
+  defp do_resolved_choose(session, state, expected, opts) do
+    case perform_action(session, state, :choose, expected, opts) do
+      {:ok, %{"target" => field} = result} when is_map(field) ->
+        choose_result(session, state, field, result)
 
       {:error, _failed_session, _observed, _reason} = error ->
         error
     end
   end
 
-  defp do_resolved_toggle_checkbox(session, state, expected, opts, selector, checked?, op) do
-    case resolve_action_target(session, state, op, expected, opts) do
-      {:ok, field} ->
-        if checkbox_field?(field) do
-          toggle_checkbox_field(session, state, field, checked?, selector, op)
-        else
-          observed = %{action: op, path: state.current_path, field: field}
-          {:error, session, observed, "matched field is not a checkbox"}
-        end
+  defp do_resolved_toggle_checkbox(session, state, expected, opts, checked?, op) do
+    case perform_action(session, state, op, expected, opts) do
+      {:ok, %{"target" => field} = result} when is_map(field) ->
+        checkbox_result(session, state, field, checked?, op, result)
 
       {:error, _failed_session, _observed, _reason} = error ->
         error
     end
   end
 
-  defp do_resolved_upload(session, state, expected, path, opts, selector) do
-    case resolve_action_target(session, state, :upload, expected, opts) do
-      {:ok, field} ->
-        upload_field(session, state, field, path, selector)
-
-      {:error, _failed_session, _observed, _reason} = error ->
-        error
-    end
-  end
-
-  defp resolve_action_target(session, state, op, expected, opts) when is_list(opts) do
-    timeout_ms = state.ready_timeout_ms
-    {between_min, between_max} = between_bounds(opts)
+  defp do_resolved_upload(session, state, expected, path, opts) do
+    file = UploadFile.read!(path)
 
     payload = %{
-      op: Atom.to_string(op),
-      scopeSelector: Session.scope(state),
-      selector: Keyword.get(opts, :selector),
-      locator: action_locator_payload(opts),
-      expected: text_expectation_payload(expected),
-      exact: Keyword.get(opts, :exact, false),
-      normalizeWs: Keyword.get(opts, :normalize_ws, true),
-      matchBy: action_match_by(opts, op),
-      kind: action_kind(opts, op),
-      count: Keyword.get(opts, :count),
-      min: Keyword.get(opts, :min),
-      max: Keyword.get(opts, :max),
-      betweenMin: between_min,
-      betweenMax: between_max,
-      first: Keyword.get(opts, :first, false),
-      last: Keyword.get(opts, :last, false),
-      nth: Keyword.get(opts, :nth),
-      index: Keyword.get(opts, :index),
-      checked: Keyword.get(opts, :checked),
-      disabled: Keyword.get(opts, :disabled),
-      selected: Keyword.get(opts, :selected),
-      readonly: Keyword.get(opts, :readonly),
-      timeoutMs: timeout_ms,
-      pollMs: 100
+      file: %{
+        fileName: file.file_name,
+        mimeType: file.mime_type,
+        lastModified: file.last_modified_unix_ms,
+        contentBase64: Base.encode64(file.content)
+      }
     }
 
+    case perform_action(session, state, :upload, expected, opts, payload) do
+      {:ok, %{"target" => field} = result} when is_map(field) ->
+        upload_result(session, state, field, file.file_name, result)
+
+      {:error, _failed_session, _observed, _reason} = error ->
+        error
+    end
+  rescue
+    error in [ArgumentError, File.Error] ->
+      observed = %{action: :upload, path: state.current_path, file_path: path}
+      {:error, session, observed, Exception.message(error)}
+  end
+
+  defp perform_action(session, state, op, expected, opts, extra_payload \\ %{})
+       when is_list(opts) and is_map(extra_payload) do
+    timeout_ms = state.ready_timeout_ms
+    payload = build_action_payload(state, op, expected, opts, extra_payload)
+
     with :ok <- maybe_ensure_action_helpers(state),
-         {:ok, result} <- eval_json(state, Expressions.action_resolve(payload), command_timeout_ms(timeout_ms)) do
-      action_resolve_result(session, state, op, opts, result)
+         {:ok, result} <- eval_json(state, Expressions.action_perform(payload), command_timeout_ms(timeout_ms)) do
+      action_perform_result(session, state, op, opts, result)
     else
       {:error, reason, details} ->
         observed = %{action: op, path: state.current_path, details: details}
@@ -660,12 +634,12 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp action_resolve_result(_session, _state, _op, _opts, %{"ok" => true, "target" => target}) when is_map(target) do
-    {:ok, target}
+  defp action_perform_result(_session, _state, _op, _opts, %{"ok" => true} = result) do
+    {:ok, result}
   end
 
-  defp action_resolve_result(session, state, op, opts, %{"ok" => false} = result) do
-    reason = action_match_failure_reason(op, opts, result)
+  defp action_perform_result(session, state, op, opts, %{"ok" => false} = result) do
+    reason = action_failure_reason(op, opts, result, "failed to perform browser action")
 
     observed = %{
       action: op,
@@ -678,12 +652,12 @@ defmodule Cerberus.Driver.Browser do
     {:error, session, observed, reason}
   end
 
-  defp action_resolve_result(session, state, op, _opts, result) do
+  defp action_perform_result(session, state, op, _opts, result) do
     observed = %{action: op, path: state.current_path, result: result}
-    {:error, session, observed, "unexpected action resolver payload"}
+    {:error, session, observed, "unexpected action execution payload"}
   end
 
-  defp action_match_failure_reason(op, opts, result) do
+  defp action_failure_reason(op, opts, result, fallback) do
     case Map.get(result, "reason") do
       "no elements matched locator" ->
         no_action_target_error(op, opts)
@@ -696,12 +670,84 @@ defmodule Cerberus.Driver.Browser do
           {:error, reason} -> reason
         end
 
+      "click_target_failed" ->
+        no_clickable_error(Keyword.get(opts, :kind, :any))
+
+      "submit_target_failed" ->
+        "no submit button matched locator"
+
+      "field_fill_failed" ->
+        "no form field matched locator"
+
+      "field_not_select" ->
+        "matched field is not a select element"
+
+      "field_not_radio" ->
+        "matched field is not a radio input"
+
+      "field_not_checkbox" ->
+        "matched field is not a checkbox"
+
+      "field_disabled" ->
+        action_disabled_reason(op)
+
+      "option_not_found" ->
+        "browser select failed: option_not_found"
+
+      "option_disabled" ->
+        "browser select failed: option_disabled"
+
+      "select_not_multiple" ->
+        "browser select failed: select_not_multiple"
+
+      "upload_failed" ->
+        "browser upload failed: upload_failed"
+
       reason when is_binary(reason) ->
         reason
 
       _ ->
-        "failed to resolve action target"
+        fallback
     end
+  end
+
+  defp action_disabled_reason(:select), do: "matched select field is disabled"
+  defp action_disabled_reason(_op), do: "matched field is disabled"
+
+  defp build_action_payload(state, op, expected, opts, extra_payload) when is_list(opts) and is_map(extra_payload) do
+    timeout_ms = state.ready_timeout_ms
+    {between_min, between_max} = between_bounds(opts)
+
+    Map.merge(
+      %{
+        op: Atom.to_string(op),
+        scopeSelector: Session.scope(state),
+        selector: Keyword.get(opts, :selector),
+        locator: action_locator_payload(opts),
+        expected: text_expectation_payload(expected),
+        exact: Keyword.get(opts, :exact, false),
+        normalizeWs: Keyword.get(opts, :normalize_ws, true),
+        matchBy: action_match_by(opts, op),
+        kind: action_kind(opts, op),
+        count: Keyword.get(opts, :count),
+        min: Keyword.get(opts, :min),
+        max: Keyword.get(opts, :max),
+        betweenMin: between_min,
+        betweenMax: between_max,
+        first: Keyword.get(opts, :first, false),
+        last: Keyword.get(opts, :last, false),
+        nth: Keyword.get(opts, :nth),
+        index: Keyword.get(opts, :index),
+        checked: Keyword.get(opts, :checked),
+        disabled: Keyword.get(opts, :disabled),
+        selected: Keyword.get(opts, :selected),
+        readonly: Keyword.get(opts, :readonly),
+        readyTimeoutMs: state.ready_timeout_ms,
+        timeoutMs: timeout_ms,
+        pollMs: 100
+      },
+      extra_payload
+    )
   end
 
   defp no_action_target_error(:click, opts), do: no_clickable_error(Keyword.get(opts, :kind, :any))
@@ -777,14 +823,8 @@ defmodule Cerberus.Driver.Browser do
   defp inspect_failure_prefix(op) when op in [:upload], do: "failed to inspect upload fields"
   defp inspect_failure_prefix(_op), do: "failed to inspect form fields"
 
-  defp requires_snapshot_matching?(opts) when is_list(opts) do
-    case Keyword.get(opts, :locator) do
-      %Locator{} = locator ->
-        Locator.contains_has_filter?(locator)
-
-      _ ->
-        Keyword.has_key?(opts, :has)
-    end
+  defp requires_snapshot_matching?(_opts) do
+    false
   end
 
   defp do_click(session, state, clickables_data, expected, opts, selector) do
@@ -1004,6 +1044,143 @@ defmodule Cerberus.Driver.Browser do
     else
       navigate_link(session, state, link, url)
     end
+  end
+
+  defp click_target_result(session, state, target, result) when is_map(target) and is_map(result) do
+    case await_driver_ready(state) do
+      {:ok, readiness} ->
+        path =
+          result
+          |> action_result_path(state.current_path)
+          |> ready_path(readiness)
+
+        next_state = %{state | current_path: path}
+
+        observed = %{
+          action: :click,
+          clicked: target["text"],
+          path: path,
+          target: target,
+          readiness: readiness
+        }
+
+        {:ok, update_session(session, next_state, :click, observed), observed}
+
+      {:error, reason, readiness} ->
+        observed = %{
+          action: :click,
+          clicked: target["text"],
+          path: state.current_path,
+          target: target,
+          readiness: readiness
+        }
+
+        {:error, session, observed, readiness_error(reason, readiness)}
+    end
+  end
+
+  defp submit_result(session, state, button, result) when is_map(result) do
+    case await_driver_ready(state) do
+      {:ok, readiness} ->
+        path =
+          result
+          |> action_result_path(state.current_path)
+          |> ready_path(readiness)
+
+        next_state = %{state | current_path: path}
+
+        observed = %{
+          action: :submit,
+          clicked: button["text"],
+          path: path,
+          target: button,
+          readiness: readiness
+        }
+
+        {:ok, update_session(session, next_state, :submit, observed), observed}
+
+      {:error, reason, readiness} ->
+        observed = %{
+          action: :submit,
+          clicked: button["text"],
+          path: state.current_path,
+          target: button,
+          readiness: readiness
+        }
+
+        {:error, session, observed, readiness_error(reason, readiness)}
+    end
+  end
+
+  defp fill_in_result(session, state, field, value, result) when is_map(result) do
+    path = action_result_path(result, state.current_path)
+    next_state = %{state | current_path: path}
+
+    observed = %{
+      action: :fill_in,
+      path: path,
+      field: field,
+      value: value
+    }
+
+    {:ok, update_session(session, next_state, :fill_in, observed), observed}
+  end
+
+  defp select_result(session, state, field, option, result) when is_map(result) do
+    path = action_result_path(result, state.current_path)
+    next_state = %{state | current_path: path}
+
+    observed = %{
+      action: :select,
+      path: path,
+      field: field,
+      option: option,
+      value: Map.get(result, "value")
+    }
+
+    {:ok, update_session(session, next_state, :select, observed), observed}
+  end
+
+  defp choose_result(session, state, field, result) when is_map(result) do
+    path = action_result_path(result, state.current_path)
+    next_state = %{state | current_path: path}
+
+    observed = %{
+      action: :choose,
+      path: path,
+      field: field,
+      value: Map.get(result, "value")
+    }
+
+    {:ok, update_session(session, next_state, :choose, observed), observed}
+  end
+
+  defp checkbox_result(session, state, field, checked?, op, result) when is_map(result) do
+    path = action_result_path(result, state.current_path)
+    next_state = %{state | current_path: path}
+
+    observed = %{
+      action: op,
+      path: path,
+      field: field,
+      checked: checked?
+    }
+
+    {:ok, update_session(session, next_state, op, observed), observed}
+  end
+
+  defp upload_result(session, state, field, file_name, result) when is_map(result) do
+    path = action_result_path(result, state.current_path)
+    next_state = %{state | current_path: path}
+
+    observed = %{
+      action: :upload,
+      path: path,
+      field: field,
+      file_name: file_name
+    }
+
+    {:ok, update_session(session, next_state, :upload, observed), observed}
   end
 
   defp submit_button(session, state, button, selector) do
@@ -1258,8 +1435,17 @@ defmodule Cerberus.Driver.Browser do
 
   defp navigate_link(session, state, link, url) do
     case navigate_browser(state, url) do
-      {:ok, _} ->
-        link_snapshot_result(session, state, link)
+      {:ok, result} ->
+        path = navigation_path(result, url, state.current_path)
+        next_state = %{state | current_path: path}
+
+        observed = %{
+          action: :link,
+          clicked: link["text"],
+          path: path
+        }
+
+        {:ok, update_session(session, next_state, :click, observed), observed}
 
       {:error, reason, details} ->
         observed = %{action: :link, clicked: link["text"], path: state.current_path, details: details}
@@ -1267,24 +1453,29 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp link_snapshot_result(session, state, link) do
-    case with_snapshot(state) do
-      {next_state, snapshot} ->
-        observed = %{
-          action: :link,
-          clicked: link["text"],
-          path: snapshot.path,
-          title: snapshot.title,
-          texts: snapshot.visible ++ snapshot.hidden
-        }
+  defp navigation_path(%{"url" => url}, _fallback_url, current_path) when is_binary(url),
+    do: path_from_url(url, current_path)
 
-        {:ok, update_session(session, next_state, :click, observed), observed}
+  defp navigation_path(_result, fallback_url, current_path), do: path_from_url(fallback_url, current_path)
 
-      {:error, reason, details} ->
-        observed = %{action: :link, clicked: link["text"], path: state.current_path, details: details}
-        {:error, session, observed, "failed to inspect page after link click: #{reason}"}
+  defp path_from_url(url, current_path) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{path: path, query: query} when is_binary(path) and path != "" ->
+        if is_binary(query) and query != "", do: path <> "?" <> query, else: path
+
+      _ ->
+        current_path
     end
   end
+
+  defp action_result_path(%{"path" => path}, _fallback_path) when is_binary(path), do: path
+  defp action_result_path(_result, fallback_path), do: fallback_path
+
+  defp ready_path(path, %{"path" => ready_path}) when is_binary(path) and is_binary(ready_path) and ready_path != "" do
+    ready_path
+  end
+
+  defp ready_path(path, _readiness) when is_binary(path), do: path
 
   defp find_matching_clickable(items, expected, opts) do
     matches =
@@ -1530,14 +1721,7 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp run_text_assertion(state, expected, visible, match_opts, timeout_ms, mode) when mode in [:assert, :refute] do
-    case maybe_ensure_assertion_helpers(state) do
-      :ok ->
-        do_run_text_assertion(state, expected, visible, match_opts, timeout_ms, mode)
-
-      {:error, reason, details} ->
-        observed = %{path: state.current_path, details: details}
-        {:error, "failed to load browser assertion helpers: #{reason}", observed}
-    end
+    do_run_text_assertion(state, expected, visible, match_opts, timeout_ms, mode)
   end
 
   defp do_run_text_assertion(state, expected, visible, match_opts, timeout_ms, mode) do
@@ -1630,19 +1814,33 @@ defmodule Cerberus.Driver.Browser do
         expected
       end
 
-    assertion = %{
-      expected: expected,
-      expected_query: expected_query,
-      exact: exact,
-      timeout_ms: timeout_ms,
-      op: op,
-      payload: path_expectation_payload(expected_path),
-      deadline: System.monotonic_time(:millisecond) + timeout_ms
-    }
+    expected_payload = path_expectation_payload(expected_path)
 
-    case maybe_ensure_assertion_helpers(state) do
-      :ok ->
-        do_run_path_assertion(session, state, assertion)
+    do_run_path_assertion(session, state, expected, expected_query, exact, timeout_ms, op, expected_payload)
+  end
+
+  defp do_run_path_assertion(session, state, expected, expected_query, exact, timeout_ms, op, expected_payload) do
+    expression = Expressions.path_assertion(expected_payload, expected_query, exact, op, timeout_ms, 100)
+
+    case eval_json(state, expression, command_timeout_ms(timeout_ms)) do
+      {:ok, result} ->
+        observed = %{
+          path: result["path"] || state.current_path,
+          scope: Session.scope(session),
+          expected: expected,
+          query: expected_query,
+          exact: exact,
+          timeout: timeout_ms,
+          path_match?: result["path_match?"] == true,
+          query_match?: result["query_match?"] == true
+        }
+
+        if result["ok"] == true do
+          updated = %{session | current_path: observed.path}
+          {:ok, updated, observed}
+        else
+          {:error, session, observed, "path assertion failed"}
+        end
 
       {:error, reason, details} ->
         observed = %{
@@ -1657,67 +1855,7 @@ defmodule Cerberus.Driver.Browser do
           details: details
         }
 
-        {:error, session, observed, "failed to load browser assertion helpers: #{reason}"}
-    end
-  end
-
-  defp do_run_path_assertion(session, state, assertion) do
-    expected = assertion.expected
-    expected_query = assertion.expected_query
-    exact = assertion.exact
-    timeout_ms = assertion.timeout_ms
-    op = assertion.op
-    expected_payload = assertion.payload
-    deadline = assertion.deadline
-    remaining_timeout = max(deadline - System.monotonic_time(:millisecond), 0)
-
-    expression = Expressions.path_assertion(expected_payload, expected_query, exact, op)
-
-    case eval_json(state, expression, command_timeout_ms(remaining_timeout)) do
-      {:ok, result} ->
-        observed = %{
-          path: result["path"] || state.current_path,
-          scope: Session.scope(session),
-          expected: expected,
-          query: expected_query,
-          exact: exact,
-          timeout: timeout_ms,
-          path_match?: result["path_match?"] == true,
-          query_match?: result["query_match?"] == true
-        }
-
-        cond do
-          result["ok"] == true ->
-            updated = %{session | current_path: observed.path}
-            {:ok, updated, observed}
-
-          remaining_timeout > 0 ->
-            updated_session = wait_for_assertion_signal(session, remaining_timeout)
-            do_run_path_assertion(updated_session, state!(updated_session), assertion)
-
-          true ->
-            {:error, session, observed, "path assertion failed"}
-        end
-
-      {:error, reason, details} ->
-        if remaining_timeout > 0 and navigation_transition_error?(reason, details) do
-          updated_session = wait_for_assertion_signal(session, remaining_timeout)
-          do_run_path_assertion(updated_session, state!(updated_session), assertion)
-        else
-          observed = %{
-            path: state.current_path,
-            scope: Session.scope(session),
-            expected: expected,
-            query: expected_query,
-            exact: exact,
-            timeout: timeout_ms,
-            path_match?: false,
-            query_match?: false,
-            details: details
-          }
-
-          {:error, session, observed, "failed to evaluate browser path assertion: #{reason}"}
-        end
+        {:error, session, observed, "failed to evaluate browser path assertion: #{reason}"}
     end
   end
 
@@ -1733,39 +1871,7 @@ defmodule Cerberus.Driver.Browser do
     }
   end
 
-  defp maybe_ensure_action_helpers(%{browser_name: :firefox} = state) do
-    expression = Expressions.action_helpers_preload()
-
-    case eval_json(state, expression) do
-      {:ok, %{"ok" => true}} ->
-        :ok
-
-      {:ok, result} ->
-        {:error, "action helper preload failed", %{result: result}}
-
-      {:error, reason, details} ->
-        {:error, reason, details}
-    end
-  end
-
   defp maybe_ensure_action_helpers(_state), do: :ok
-
-  defp maybe_ensure_assertion_helpers(%{browser_name: :firefox} = state) do
-    expression = Expressions.assertion_helpers_preload()
-
-    case eval_json(state, expression) do
-      {:ok, %{"ok" => true}} ->
-        :ok
-
-      {:ok, result} ->
-        {:error, "assertion helper preload failed", %{result: result}}
-
-      {:error, reason, details} ->
-        {:error, reason, details}
-    end
-  end
-
-  defp maybe_ensure_assertion_helpers(_state), do: :ok
 
   defp click_button_after_eval(session, state, button) do
     case await_driver_ready(state) do

@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAssert && window.__cerberusAssert.__version === 5) return;
+    if (window.__cerberusAssert && window.__cerberusAssert.__version === 6) return;
 
     const helper = {};
-    helper.__version = 5;
+    helper.__version = 6;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -578,7 +578,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       });
     };
 
-    helper.pathCheck = (options) => {
+    helper.pathQuick = (options) => {
       const expected = options.expected;
       const expectedQuery = options.expectedQuery;
       const exact = options.exact === true;
@@ -618,12 +618,103 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const combinedMatch = pathMatch && queryMatch;
       const ok = op === "assert_path" ? combinedMatch : !combinedMatch;
 
-      return JSON.stringify({
+      return {
         ok,
         reason: ok ? "matched" : "mismatch",
         path: currentPath,
         "path_match?": pathMatch,
         "query_match?": queryMatch
+      };
+    };
+
+    helper.pathCheck = (options) => {
+      return JSON.stringify(helper.pathQuick(options));
+    };
+
+    helper.path = (options) => {
+      const timeoutMs = Math.max(0, Number(options.timeoutMs || 0));
+      const pollMs = Math.max(50, Number(options.pollMs || 100));
+      const deadline = Date.now() + timeoutMs;
+      const initial = helper.pathQuick(options);
+
+      if (initial.ok || timeoutMs <= 0) {
+        return Promise.resolve(JSON.stringify(initial));
+      }
+
+      return new Promise((resolve) => {
+        let resolved = false;
+        let dirty = true;
+        let pendingCheck = false;
+        const cleanupFns = [];
+
+        const finish = (result) => {
+          if (resolved) return;
+          resolved = true;
+          for (const cleanup of cleanupFns) {
+            try {
+              cleanup();
+            } catch (_error) {
+              // ignored
+            }
+          }
+          resolve(JSON.stringify(result));
+        };
+
+        const scheduleCheck = () => {
+          if (resolved || pendingCheck || !dirty) return;
+          pendingCheck = true;
+
+          const run = () => {
+            pendingCheck = false;
+            if (resolved) return;
+            dirty = false;
+            const attempt = helper.pathQuick(options);
+            if (attempt.ok) finish(attempt);
+          };
+
+          if (typeof window.requestAnimationFrame === "function") {
+            window.requestAnimationFrame(() => run());
+          } else {
+            setTimeout(run, 0);
+          }
+        };
+
+        try {
+          const observer = new MutationObserver(() => {
+            dirty = true;
+            scheduleCheck();
+          });
+
+          const root = document.documentElement || document.body || document;
+          if (root) {
+            observer.observe(root, {
+              subtree: true,
+              childList: true,
+              attributes: true,
+              characterData: true
+            });
+          }
+
+          cleanupFns.push(() => observer.disconnect());
+        } catch (_error) {
+          // ignored
+        }
+
+        const intervalRef = setInterval(() => {
+          if (Date.now() >= deadline) {
+            finish(helper.pathQuick(options));
+            return;
+          }
+
+          dirty = true;
+          scheduleCheck();
+        }, pollMs);
+        cleanupFns.push(() => clearInterval(intervalRef));
+
+        const timeoutRef = setTimeout(() => finish(helper.pathQuick(options)), timeoutMs);
+        cleanupFns.push(() => clearTimeout(timeoutRef));
+
+        scheduleCheck();
       });
     };
 

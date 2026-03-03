@@ -40,9 +40,8 @@ defmodule CerberusTest do
     end
   end
 
-  test "chrome/firefox aliases construct browser sessions" do
+  test "chrome alias constructs browser sessions" do
     assert %BrowserSession{} = session(:chrome)
-    assert %BrowserSession{} = session(:firefox)
   end
 
   test "new-session isolation plus open_tab/switch_tab API works for non-browser sessions" do

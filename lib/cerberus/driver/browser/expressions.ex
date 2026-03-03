@@ -32,7 +32,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
       #{assert_helper_binding_snippet()}
 
       return JSON.stringify({
-        ok: !!(helper && typeof helper.text === "function" && typeof helper.pathCheck === "function")
+        ok: !!(helper && typeof helper.text === "function" && typeof helper.path === "function")
       });
     })()
     """
@@ -47,7 +47,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
       const helper = window.__cerberusAction;
 
       return JSON.stringify({
-        ok: !!(helper && typeof helper.resolve === "function")
+        ok: !!(helper && typeof helper.resolve === "function" && typeof helper.perform === "function")
       });
     })()
     """
@@ -63,6 +63,28 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
       if (helper && typeof helper.resolve === "function") {
         return await helper.resolve(#{encoded_payload});
+      }
+
+      return JSON.stringify({
+        ok: false,
+        reason: "action helper is not available",
+        helperMissing: true,
+        path: #{current_path_expression()}
+      });
+    })()
+    """
+  end
+
+  @spec action_perform(map()) :: String.t()
+  def action_perform(payload) when is_map(payload) do
+    encoded_payload = JSON.encode!(payload)
+
+    """
+    (async () => {
+      const helper = window.__cerberusAction;
+
+      if (helper && typeof helper.perform === "function") {
+        return await helper.perform(#{encoded_payload});
       }
 
       return JSON.stringify({
@@ -103,13 +125,25 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
   end
 
-  @spec path_assertion(String.t() | map(), map(), boolean(), :assert_path | :refute_path) :: String.t()
-  def path_assertion(expected, expected_query, exact, op) when op in [:assert_path, :refute_path] do
+  @spec path_assertion(
+          String.t() | map(),
+          map(),
+          boolean(),
+          :assert_path | :refute_path,
+          non_neg_integer(),
+          pos_integer()
+        ) ::
+          String.t()
+  def path_assertion(expected, expected_query, exact, op, timeout_ms, poll_ms)
+      when op in [:assert_path, :refute_path] and is_integer(timeout_ms) and timeout_ms >= 0 and is_integer(poll_ms) and
+             poll_ms > 0 do
     payload = %{
       expected: expected,
       expectedQuery: expected_query,
       exact: exact,
-      op: Atom.to_string(op)
+      op: Atom.to_string(op),
+      timeoutMs: timeout_ms,
+      pollMs: poll_ms
     }
 
     encoded_payload = JSON.encode!(payload)
@@ -117,8 +151,8 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
     (() => {
       #{assert_helper_binding_snippet()}
-      if (helper && typeof helper.pathCheck === "function") {
-        return helper.pathCheck(#{encoded_payload});
+      if (helper && typeof helper.path === "function") {
+        return helper.path(#{encoded_payload});
       }
 
       const payload = #{encoded_payload};
@@ -126,15 +160,8 @@ defmodule Cerberus.Driver.Browser.Expressions do
       const expectedQuery = payload.expectedQuery;
       const exact = payload.exact === true;
       const op = payload.op || "assert_path";
-      const path = #{current_path_expression()};
-      const pathOnly = (() => {
-        try {
-          const idx = path.indexOf("?");
-          return idx >= 0 ? path.slice(0, idx) : path;
-        } catch (_error) {
-          return path || "/";
-        }
-      })();
+      const timeoutMs = Number(payload.timeoutMs) > 0 ? Number(payload.timeoutMs) : 0;
+      const pollMs = Number(payload.pollMs) > 0 ? Number(payload.pollMs) : 100;
 
       const expectedRegex = (() => {
         if (!expected || expected.type !== "regex") return null;
@@ -152,36 +179,82 @@ defmodule Cerberus.Driver.Browser.Expressions do
         }
       })();
 
-      const pathMatch = (() => {
-        if (expectedRegex) return expectedRegex.test(path);
+      const evaluateOnce = () => {
+        const path = #{current_path_expression()};
+        const pathOnly = (() => {
+          try {
+            const idx = path.indexOf("?");
+            return idx >= 0 ? path.slice(0, idx) : path;
+          } catch (_error) {
+            return path || "/";
+          }
+        })();
 
-        const expectedValue = expected && expected.value ? expected.value : "";
-        const actualTarget = expectedValue.includes("?") ? path : pathOnly;
-        return exact ? actualTarget === expectedValue : actualTarget.includes(expectedValue);
-      })();
+        const pathMatch = (() => {
+          if (expectedRegex) return expectedRegex.test(path);
 
-      const queryMatch = (() => {
-        if (!expectedQuery) return true;
+          const expectedValue = expected && expected.value ? expected.value : "";
+          const actualTarget = expectedValue.includes("?") ? path : pathOnly;
+          return exact ? actualTarget === expectedValue : actualTarget.includes(expectedValue);
+        })();
 
-        const idx = path.indexOf("?");
-        const query = idx >= 0 ? path.slice(idx + 1) : "";
-        const params = new URLSearchParams(query);
+        const queryMatch = (() => {
+          if (!expectedQuery) return true;
 
-        return Object.entries(expectedQuery).every(([key, value]) => {
-          return (params.get(key) || null) === String(value);
-        });
-      })();
+          const idx = path.indexOf("?");
+          const query = idx >= 0 ? path.slice(idx + 1) : "";
+          const params = new URLSearchParams(query);
 
-      const combinedMatch = pathMatch && queryMatch;
-      const ok = op === "assert_path" ? combinedMatch : !combinedMatch;
+          return Object.entries(expectedQuery).every(([key, value]) => {
+            return (params.get(key) || null) === String(value);
+          });
+        })();
 
-      return JSON.stringify({
-        ok,
-        reason: ok ? "matched" : "mismatch",
-        path,
-        "path_match?": pathMatch,
-        "query_match?": queryMatch,
-        helperMissing: true
+        const combinedMatch = pathMatch && queryMatch;
+        const ok = op === "assert_path" ? combinedMatch : !combinedMatch;
+
+        return {
+          ok,
+          reason: ok ? "matched" : "mismatch",
+          path,
+          "path_match?": pathMatch,
+          "query_match?": queryMatch,
+          helperMissing: true
+        };
+      };
+
+      const initial = evaluateOnce();
+      if (timeoutMs <= 0 || initial.ok) return JSON.stringify(initial);
+
+      return new Promise((resolve) => {
+        const deadline = Date.now() + timeoutMs;
+        let settled = false;
+
+        const finish = (result) => {
+          if (settled) return;
+          settled = true;
+          resolve(JSON.stringify(result));
+        };
+
+        const tick = () => {
+          const attempt = evaluateOnce();
+          if (attempt.ok || Date.now() >= deadline) {
+            finish(attempt);
+          }
+        };
+
+        const intervalRef = setInterval(tick, pollMs);
+        const timeoutRef = setTimeout(tick, timeoutMs);
+
+        const originalFinish = finish;
+        finish = (result) => {
+          if (settled) return;
+          clearInterval(intervalRef);
+          clearTimeout(timeoutRef);
+          originalFinish(result);
+        };
+
+        tick();
       });
     })()
     """

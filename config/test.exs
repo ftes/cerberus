@@ -36,17 +36,14 @@ config :cerberus, Repo,
   pool_size: 10
 
 config :cerberus, :browser,
-  browser_name: if(System.get_env("CERBERUS_BROWSER_NAME") == "firefox", do: :firefox, else: :chrome),
+  browser_name: :chrome,
   show_browser: System.get_env("SHOW_BROWSER", "false") == "true",
   # Keep Chrome startup stable across constrained CI/container environments.
   chrome_args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
   chrome_webdriver_url: System.get_env("WEBDRIVER_URL_CHROME"),
-  firefox_webdriver_url: System.get_env("WEBDRIVER_URL_FIREFOX"),
-  webdriver_url: System.get_env("WEBDRIVER_URL"),
+  webdriver_url: System.get_env("WEBDRIVER_URL_CHROME") || System.get_env("WEBDRIVER_URL"),
   chrome_binary: System.fetch_env!("CHROME"),
-  chromedriver_binary: System.fetch_env!("CHROMEDRIVER"),
-  firefox_binary: System.fetch_env!("FIREFOX"),
-  geckodriver_binary: System.fetch_env!("GECKODRIVER")
+  chromedriver_binary: System.fetch_env!("CHROMEDRIVER")
 
 config :cerberus, :endpoint, Endpoint
 config :cerberus, :sql_sandbox, true

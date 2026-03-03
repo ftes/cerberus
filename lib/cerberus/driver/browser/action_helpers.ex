@@ -3,15 +3,55 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAction && window.__cerberusAction.__version === 3) return;
+    if (window.__cerberusAction && window.__cerberusAction.__version === 6) return;
 
     const helper = {};
-    helper.__version = 3;
+    helper.__version = 6;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
       if (!normalizeWs) return source;
       return source.replace(/\\s+/g, " ").trim();
+    };
+
+    helper.currentPath = () => window.location.pathname + window.location.search;
+
+    helper.liveRoots = () => {
+      try {
+        return Array.from(document.querySelectorAll("[data-phx-session]"));
+      } catch (_error) {
+        return [];
+      }
+    };
+
+    helper.liveConnected = () => {
+      const roots = helper.liveRoots();
+      if (roots.length === 0) return true;
+
+      return roots.every((root) => {
+        try {
+          return !!(root && root.classList && root.classList.contains("phx-connected"));
+        } catch (_error) {
+          return false;
+        }
+      });
+    };
+
+    helper.waitForLiveConnected = async (timeoutMs, pollMs = 50) => {
+      if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return helper.liveConnected();
+
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() <= deadline) {
+        if (helper.liveConnected()) return true;
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+      }
+
+      return helper.liveConnected();
+    };
+
+    helper.dispatchInputChange = (field) => {
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      field.dispatchEvent(new Event("change", { bubbles: true }));
     };
 
     helper.regexFromExpected = (payload) => {
@@ -751,14 +791,14 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       };
     };
 
-    helper.resolve = (options) => {
+    helper.resolveInternal = (options) => {
       const timeoutMs = Math.max(0, Number(options.timeoutMs || 0));
       const pollMs = Math.max(50, Number(options.pollMs || 100));
       const deadline = Date.now() + timeoutMs;
       const initial = helper.resolveOnce(options);
 
       if (initial.ok || timeoutMs <= 0) {
-        return Promise.resolve(JSON.stringify(initial));
+        return Promise.resolve(initial);
       }
 
       return new Promise((resolve) => {
@@ -777,7 +817,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
               // ignored
             }
           }
-          resolve(JSON.stringify(result));
+          resolve(result);
         };
 
         const scheduleCheck = () => {
@@ -840,6 +880,198 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         const timeoutRef = setTimeout(() => finish(helper.resolveOnce(options)), timeoutMs);
         cleanupFns.push(() => clearTimeout(timeoutRef));
       });
+    };
+
+    helper.resolve = async (options) => JSON.stringify(await helper.resolveInternal(options));
+
+    helper.performResolved = (resolved, options) => {
+      const target = resolved && resolved.target ? resolved.target : null;
+      const op = options && options.op ? options.op : "click";
+
+      if (!target || !target.__el) {
+        return {
+          ok: false,
+          reason: "matched target is no longer attached",
+          matchCount: resolved && Number.isInteger(resolved.matchCount) ? resolved.matchCount : 0,
+          path: helper.currentPath()
+        };
+      }
+
+      const element = target.__el;
+      const matchCount = resolved && Number.isInteger(resolved.matchCount) ? resolved.matchCount : 1;
+      const fail = (reason, extra = {}) => ({
+        ok: false,
+        reason,
+        matchCount,
+        target,
+        path: helper.currentPath(),
+        ...extra
+      });
+
+      if (op === "fill_in") {
+        if (target.kind !== "field") return fail("field_fill_failed");
+
+        try {
+          const value = String(options && options.value !== undefined && options.value !== null ? options.value : "");
+          element.value = value;
+          helper.dispatchInputChange(element);
+          return { ok: true, target, value, matchCount, path: helper.currentPath() };
+        } catch (error) {
+          return fail("field_fill_failed", { message: String(error && error.message ? error.message : error) });
+        }
+      }
+
+      if (op === "select") {
+        if (target.kind !== "field" || target.tag !== "select") return fail("field_not_select");
+        if (target.disabled === true || element.disabled === true) return fail("field_disabled");
+
+        const requestedOptions = Array.isArray(options && options.option)
+          ? options.option.map((value) => String(value))
+          : [];
+        const exactOption = options && options.exactOption !== false;
+
+        if (!element.multiple && requestedOptions.length > 1) return fail("select_not_multiple");
+
+        const matchOption = (option, requested) => {
+          const optionText = helper.normalize(option.textContent, true);
+          const requestedText = helper.normalize(requested, true);
+          return exactOption ? optionText === requestedText : optionText.includes(requestedText);
+        };
+
+        const matched = [];
+
+        for (const requested of requestedOptions) {
+          const enabled = Array.from(element.options || []).find((option) => matchOption(option, requested) && !option.disabled);
+          if (enabled) {
+            matched.push(enabled);
+            continue;
+          }
+
+          const disabled = Array.from(element.options || []).find((option) => matchOption(option, requested) && option.disabled);
+          if (disabled) return fail("option_disabled", { option: requested });
+          return fail("option_not_found", { option: requested });
+        }
+
+        if (element.multiple) {
+          const selectedValues = new Set();
+
+          for (const option of matched) {
+            selectedValues.add(option.value || helper.normalize(option.textContent, true));
+          }
+
+          for (const option of Array.from(element.options || [])) {
+            const value = option.value || helper.normalize(option.textContent, true);
+            option.selected = selectedValues.has(value);
+          }
+        } else {
+          for (const option of Array.from(element.options || [])) {
+            option.selected = false;
+          }
+
+          if (matched[0]) {
+            matched[0].selected = true;
+            element.value = matched[0].value || helper.normalize(matched[0].textContent, true);
+          }
+        }
+
+        helper.dispatchInputChange(element);
+
+        const value = element.multiple
+          ? Array.from(element.selectedOptions || []).map((option) => option.value || helper.normalize(option.textContent, true))
+          : element.value;
+
+        return {
+          ok: true,
+          target,
+          value,
+          matchCount,
+          path: helper.currentPath()
+        };
+      }
+
+      if (op === "choose") {
+        if (target.kind !== "field" || target.type !== "radio") return fail("field_not_radio");
+        if (target.disabled === true || element.disabled === true) return fail("field_disabled");
+
+        element.checked = true;
+        helper.dispatchInputChange(element);
+        return { ok: true, target, value: element.value || "on", matchCount, path: helper.currentPath() };
+      }
+
+      if (op === "check" || op === "uncheck") {
+        if (target.kind !== "field" || target.type !== "checkbox") return fail("field_not_checkbox");
+        if (target.disabled === true || element.disabled === true) return fail("field_disabled");
+
+        element.checked = op === "check";
+        helper.dispatchInputChange(element);
+        return { ok: true, target, value: element.checked, matchCount, path: helper.currentPath() };
+      }
+
+      if (op === "upload") {
+        if (target.kind !== "field" || target.type !== "file") return fail("no file input matched locator");
+        if (target.disabled === true || element.disabled === true) return fail("field_disabled");
+
+        const filePayload = options && options.file && typeof options.file === "object" ? options.file : null;
+        if (!filePayload || typeof filePayload.contentBase64 !== "string") return fail("upload_failed");
+
+        try {
+          const decoded = atob(filePayload.contentBase64);
+          const bytes = new Uint8Array(decoded.length);
+
+          for (let i = 0; i < decoded.length; i += 1) {
+            bytes[i] = decoded.charCodeAt(i);
+          }
+
+          const file = new File([bytes], filePayload.fileName || "upload.bin", {
+            type: filePayload.mimeType || "application/octet-stream",
+            lastModified: Number(filePayload.lastModified || Date.now())
+          });
+
+          const transfer = new DataTransfer();
+          transfer.items.add(file);
+          element.files = transfer.files;
+          helper.dispatchInputChange(element);
+
+          return { ok: true, target, fileName: file.name, matchCount, path: helper.currentPath() };
+        } catch (error) {
+          return fail("upload_failed", { message: String(error && error.message ? error.message : error) });
+        }
+      }
+
+      if (op === "submit") {
+        if (target.kind !== "button") return fail("submit_target_failed");
+
+        try {
+          element.click();
+          return { ok: true, target, matchCount, path: helper.currentPath() };
+        } catch (error) {
+          return fail("submit_target_failed", { message: String(error && error.message ? error.message : error) });
+        }
+      }
+
+      if (target.kind !== "button" && target.kind !== "link") return fail("click_target_failed");
+
+      try {
+        element.click();
+        return { ok: true, target, matchCount, path: helper.currentPath() };
+      } catch (error) {
+        return fail("click_target_failed", { message: String(error && error.message ? error.message : error) });
+      }
+    };
+
+    helper.perform = async (options) => {
+      const readyTimeoutMs = Number(options && options.readyTimeoutMs);
+      if (Number.isFinite(readyTimeoutMs) && readyTimeoutMs > 0) {
+        await helper.waitForLiveConnected(readyTimeoutMs, 50);
+      }
+
+      const resolved = await helper.resolveInternal(options);
+
+      if (!resolved || resolved.ok !== true) {
+        return JSON.stringify(resolved || { ok: false, reason: "action_resolve_failed", path: helper.currentPath() });
+      }
+
+      return JSON.stringify(helper.performResolved(resolved, options));
     };
 
     window.__cerberusAction = helper;
