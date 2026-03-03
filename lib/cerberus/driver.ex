@@ -24,6 +24,9 @@ defmodule Cerberus.Driver do
   @type path_opts :: Options.path_opts()
 
   @callback new_session(keyword()) :: session_t()
+  @callback open_tab(session_t()) :: session_t()
+  @callback switch_tab(session_t(), Session.t()) :: Session.t()
+  @callback close_tab(session_t()) :: session_t()
   @callback open_browser(session_t(), (String.t() -> any())) :: session_t()
   @callback unwrap(session_t(), (term() -> term())) :: session_t()
   @callback visit(session_t(), String.t(), keyword()) :: session_t()

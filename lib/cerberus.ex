@@ -161,43 +161,13 @@ defmodule Cerberus do
   end
 
   @spec open_tab(arg) :: arg when arg: var
-  def open_tab(%BrowserSession{} = session), do: BrowserSession.open_tab(session)
-  def open_tab(%StaticSession{} = session), do: StaticSession.open_tab(session)
-  def open_tab(%LiveSession{} = session), do: LiveSession.open_tab(session)
+  def open_tab(session), do: dispatch_tab_operation!(session, :open_tab)
 
   @spec switch_tab(Session.t(), Session.t()) :: Session.t()
-  def switch_tab(%BrowserSession{} = session, %BrowserSession{} = target_session) do
-    BrowserSession.switch_tab(session, target_session)
-  end
-
-  def switch_tab(%BrowserSession{}, _target_session) do
-    raise ArgumentError, "cannot switch browser tab to a non-browser session"
-  end
-
-  def switch_tab(%StaticSession{} = session, %StaticSession{} = target_session) do
-    ensure_same_endpoint!(session, target_session)
-    StaticSession.switch_tab(session, target_session)
-  end
-
-  def switch_tab(%StaticSession{} = session, %LiveSession{} = target_session) do
-    ensure_same_endpoint!(session, target_session)
-    StaticSession.switch_tab(session, target_session)
-  end
-
-  def switch_tab(%LiveSession{} = session, %StaticSession{} = target_session) do
-    ensure_same_endpoint!(session, target_session)
-    LiveSession.switch_tab(session, target_session)
-  end
-
-  def switch_tab(%LiveSession{} = session, %LiveSession{} = target_session) do
-    ensure_same_endpoint!(session, target_session)
-    LiveSession.switch_tab(session, target_session)
-  end
+  def switch_tab(session, target_session), do: dispatch_tab_operation!(session, :switch_tab, [target_session])
 
   @spec close_tab(arg) :: arg when arg: var
-  def close_tab(%BrowserSession{} = session), do: BrowserSession.close_tab(session)
-  def close_tab(%StaticSession{} = session), do: StaticSession.close_tab(session)
-  def close_tab(%LiveSession{} = session), do: LiveSession.close_tab(session)
+  def close_tab(session), do: dispatch_tab_operation!(session, :close_tab)
 
   @doc """
   Executes a callback with driver-native escape-hatch data.
@@ -933,10 +903,9 @@ defmodule Cerberus do
   defp driver_kind(%LiveSession{}), do: :live
   defp driver_kind(%BrowserSession{}), do: :browser
 
-  defp ensure_same_endpoint!(%{endpoint: endpoint}, %{endpoint: endpoint}), do: :ok
-
-  defp ensure_same_endpoint!(_session, _target_session) do
-    raise ArgumentError, "cannot switch tab across sessions with different endpoints"
+  defp dispatch_tab_operation!(session, operation, args \\ []) when operation in [:open_tab, :switch_tab, :close_tab] do
+    driver = driver_module_for_session!(session)
+    apply(driver, operation, [session | args])
   end
 
   defp maybe_put_locator_opt(locator, opts, key) do

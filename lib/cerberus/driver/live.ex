@@ -5,6 +5,7 @@ defmodule Cerberus.Driver.Live do
 
   import Phoenix.LiveViewTest, only: [element: 2, render: 1, render_click: 1]
 
+  alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Live.FormData
   alias Cerberus.Driver.LocatorOps
   alias Cerberus.Driver.Static, as: StaticSession
@@ -53,6 +54,7 @@ defmodule Cerberus.Driver.Live do
     }
   end
 
+  @impl true
   @spec open_tab(t()) :: t()
   def open_tab(%__MODULE__{} = session) do
     new_session(
@@ -62,9 +64,23 @@ defmodule Cerberus.Driver.Live do
     )
   end
 
+  @impl true
   @spec switch_tab(t(), Session.t()) :: Session.t()
-  def switch_tab(%__MODULE__{}, target_session), do: target_session
+  def switch_tab(%__MODULE__{} = session, %StaticSession{} = target_session) do
+    ensure_same_endpoint!(session, target_session)
+    target_session
+  end
 
+  def switch_tab(%__MODULE__{} = session, %__MODULE__{} = target_session) do
+    ensure_same_endpoint!(session, target_session)
+    target_session
+  end
+
+  def switch_tab(%__MODULE__{}, %BrowserSession{}) do
+    raise ArgumentError, "cannot switch non-browser tab to a browser session"
+  end
+
+  @impl true
   @spec close_tab(t()) :: t()
   def close_tab(%__MODULE__{} = session), do: session
 
@@ -989,6 +1005,12 @@ defmodule Cerberus.Driver.Live do
     endpoint.url()
   rescue
     _ -> nil
+  end
+
+  defp ensure_same_endpoint!(%{endpoint: endpoint}, %{endpoint: endpoint}), do: :ok
+
+  defp ensure_same_endpoint!(_session, _target_session) do
+    raise ArgumentError, "cannot switch tab across sessions with different endpoints"
   end
 
   defp update_session(%__MODULE__{} = session, op, observed) do

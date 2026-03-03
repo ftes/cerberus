@@ -129,6 +129,7 @@ defmodule Cerberus.Driver.Browser do
     }
   end
 
+  @impl true
   @spec open_tab(t()) :: t()
   def open_tab(%__MODULE__{} = session) do
     case UserContextProcess.open_tab(session.user_context_pid) do
@@ -145,7 +146,8 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  @spec switch_tab(t(), t()) :: t()
+  @impl true
+  @spec switch_tab(t(), Session.t()) :: t()
   def switch_tab(%__MODULE__{} = session, %__MODULE__{} = target_session) do
     if session.user_context_pid != target_session.user_context_pid do
       raise ArgumentError,
@@ -161,6 +163,11 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
+  def switch_tab(%__MODULE__{}, _target_session) do
+    raise ArgumentError, "cannot switch browser tab to a non-browser session"
+  end
+
+  @impl true
   @spec close_tab(t()) :: t()
   def close_tab(%__MODULE__{} = session) do
     case UserContextProcess.close_tab(session.user_context_pid, session.tab_id) do
