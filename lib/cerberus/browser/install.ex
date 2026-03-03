@@ -218,14 +218,11 @@ defmodule Cerberus.Browser.Install do
 
   defp maybe_put_flag(args, _flag, _value), do: args
 
-  defp installer_script_path(:chrome), do: script_path!("chrome.sh")
-  defp installer_script_path(:firefox), do: script_path!("firefox.sh")
+  defp installer_script_path(:chrome), do: script_path("chrome.sh")
+  defp installer_script_path(:firefox), do: script_path("firefox.sh")
 
-  defp script_path!(script_name) do
-    candidate =
-      "../../.."
-      |> Path.expand(__DIR__)
-      |> Path.join("bin/#{script_name}")
+  defp script_path(script_name) do
+    candidate = Path.expand("bin/#{script_name}")
 
     if File.exists?(candidate) do
       {:ok, candidate}
