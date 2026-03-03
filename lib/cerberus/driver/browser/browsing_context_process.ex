@@ -22,6 +22,7 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   @dialog_events ["browsingContext.userPromptOpened", "browsingContext.userPromptClosed"]
   @download_history_limit 50
   @dialog_history_limit 50
+  @call_timeout_padding_ms 5_000
 
   @spec child_spec(keyword()) :: Supervisor.child_spec()
   def child_spec(opts) do
@@ -87,6 +88,23 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     GenServer.call(pid, :active_dialog)
   end
 
+  @spec await_download(pid(), String.t(), pos_integer()) ::
+          {:ok, Types.payload()} | {:error, :timeout, [Types.payload()]}
+  def await_download(pid, expected_filename, timeout_ms)
+      when is_pid(pid) and is_binary(expected_filename) and is_integer(timeout_ms) and timeout_ms > 0 do
+    GenServer.call(
+      pid,
+      {:await_download, expected_filename, timeout_ms},
+      timeout_ms + @call_timeout_padding_ms
+    )
+  end
+
+  @spec await_dialog_open(pid(), pos_integer()) ::
+          {:ok, Types.payload()} | {:error, :timeout, [Types.payload()]}
+  def await_dialog_open(pid, timeout_ms) when is_pid(pid) and is_integer(timeout_ms) and timeout_ms > 0 do
+    GenServer.call(pid, {:await_dialog_open, timeout_ms}, timeout_ms + @call_timeout_padding_ms)
+  end
+
   @impl true
   def init(opts) do
     user_context_id = Keyword.fetch!(opts, :user_context_id)
@@ -111,7 +129,9 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
          last_readiness: %{},
          download_events: [],
          dialog_events: [],
-         active_dialog: nil
+         active_dialog: nil,
+         download_waiters: %{},
+         dialog_waiters: %{}
        }}
     else
       {:error, reason, details} ->
@@ -141,6 +161,35 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   def handle_call(:active_dialog, _from, state) do
     {:reply, state.active_dialog, state}
+  end
+
+  def handle_call({:await_download, expected_filename, timeout_ms}, from, state) do
+    case find_download_event(state.download_events, expected_filename) do
+      %{} = event ->
+        {:reply, {:ok, event}, state}
+
+      nil ->
+        waiter_id = make_ref()
+        timer = Process.send_after(self(), {:download_waiter_timeout, waiter_id}, timeout_ms)
+
+        download_waiters =
+          Map.put(state.download_waiters, waiter_id, %{from: from, timer: timer, expected: expected_filename})
+
+        {:noreply, %{state | download_waiters: download_waiters}}
+    end
+  end
+
+  def handle_call({:await_dialog_open, timeout_ms}, from, state) do
+    case state.active_dialog do
+      %{} = dialog ->
+        {:reply, {:ok, dialog}, state}
+
+      _ ->
+        waiter_id = make_ref()
+        timer = Process.send_after(self(), {:dialog_waiter_timeout, waiter_id}, timeout_ms)
+        dialog_waiters = Map.put(state.dialog_waiters, waiter_id, %{from: from, timer: timer})
+        {:noreply, %{state | dialog_waiters: dialog_waiters}}
+    end
   end
 
   def handle_call({:navigate, url}, _from, state) do
@@ -206,27 +255,53 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
     cond do
       is_map(event) and method in @download_events ->
-        {:noreply,
-         %{
-           state
-           | last_bidi_event: event,
-             download_events: push_download_event(state.download_events, event)
-         }}
+        state = %{
+          state
+          | last_bidi_event: event,
+            download_events: push_download_event(state.download_events, event)
+        }
+
+        {:noreply, resolve_download_waiters(state, event)}
 
       is_map(event) and method in @dialog_events ->
-        {:noreply,
-         %{
-           state
-           | last_bidi_event: event,
-             dialog_events: push_dialog_event(state.dialog_events, event),
-             active_dialog: next_active_dialog(method, event, state.active_dialog)
-         }}
+        next_dialog = next_active_dialog(method, event, state.active_dialog)
+
+        state = %{
+          state
+          | last_bidi_event: event,
+            dialog_events: push_dialog_event(state.dialog_events, event),
+            active_dialog: next_dialog
+        }
+
+        {:noreply, resolve_dialog_waiters(state, next_dialog)}
 
       is_map(event) ->
         {:noreply, %{state | last_bidi_event: event}}
 
       true ->
         {:noreply, state}
+    end
+  end
+
+  def handle_info({:download_waiter_timeout, waiter_id}, state) do
+    case Map.pop(state.download_waiters, waiter_id) do
+      {nil, _waiters} ->
+        {:noreply, state}
+
+      {waiter, download_waiters} ->
+        GenServer.reply(waiter.from, {:error, :timeout, state.download_events})
+        {:noreply, %{state | download_waiters: download_waiters}}
+    end
+  end
+
+  def handle_info({:dialog_waiter_timeout, waiter_id}, state) do
+    case Map.pop(state.dialog_waiters, waiter_id) do
+      {nil, _waiters} ->
+        {:noreply, state}
+
+      {waiter, dialog_waiters} ->
+        GenServer.reply(waiter.from, {:error, :timeout, state.dialog_events})
+        {:noreply, %{state | dialog_waiters: dialog_waiters}}
     end
   end
 
@@ -410,8 +485,56 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   defp next_active_dialog("browsingContext.userPromptClosed", _event, _active_dialog), do: nil
   defp next_active_dialog(_method, _event, active_dialog), do: active_dialog
 
+  defp find_download_event(download_events, expected_filename)
+       when is_list(download_events) and is_binary(expected_filename) do
+    Enum.find(download_events, &download_event_match?(&1, expected_filename))
+  end
+
+  defp download_event_match?(
+         %{"method" => "browsingContext.downloadWillBegin", "suggestedFilename" => filename},
+         expected_filename
+       )
+       when is_binary(filename) and is_binary(expected_filename) do
+    filename == expected_filename
+  end
+
+  defp download_event_match?(_event, _expected_filename), do: false
+
+  defp resolve_download_waiters(%{download_waiters: waiters} = state, event)
+       when map_size(waiters) == 0 or not is_map(event) do
+    state
+  end
+
+  defp resolve_download_waiters(%{download_waiters: waiters} = state, event) do
+    {resolved, pending} =
+      Enum.split_with(waiters, fn {_waiter_id, waiter} ->
+        download_event_match?(event, waiter.expected)
+      end)
+
+    Enum.each(resolved, fn {_waiter_id, waiter} ->
+      Process.cancel_timer(waiter.timer)
+      GenServer.reply(waiter.from, {:ok, event})
+    end)
+
+    %{state | download_waiters: Map.new(pending)}
+  end
+
+  defp resolve_dialog_waiters(%{dialog_waiters: waiters} = state, dialog)
+       when map_size(waiters) == 0 or not is_map(dialog) do
+    state
+  end
+
+  defp resolve_dialog_waiters(%{dialog_waiters: waiters} = state, dialog) do
+    Enum.each(waiters, fn {_waiter_id, waiter} ->
+      Process.cancel_timer(waiter.timer)
+      GenServer.reply(waiter.from, {:ok, dialog})
+    end)
+
+    %{state | dialog_waiters: %{}}
+  end
+
   defp command_call_timeout_ms(timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
-    timeout_ms + 5_000
+    timeout_ms + @call_timeout_padding_ms
   end
 
   defp readiness_expression(timeout_ms, quiet_ms) do

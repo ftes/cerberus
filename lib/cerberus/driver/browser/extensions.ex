@@ -13,9 +13,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
   @default_dialog_timeout_ms 1_500
   @default_popup_timeout_ms 1_500
   @default_download_timeout_ms 1_500
-  @dialog_poll_ms 25
-  @popup_poll_ms 25
-  @download_poll_ms 25
+  @popup_task_poll_ms 10
 
   @spec type(BrowserSession.t(), String.t(), Options.browser_type_opts()) :: BrowserSession.t()
   def type(%BrowserSession{} = session, text, opts \\ []) when is_binary(text) and is_list(opts) do
@@ -92,7 +90,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
       when is_function(trigger_fun, 1) and is_function(callback_fun, 2) and is_list(opts) do
     timeout_ms = popup_timeout_ms(opts)
     main_tab_id = session.tab_id
-    baseline_tabs = MapSet.new(UserContextProcess.tabs(session.user_context_pid))
+    baseline_tabs = UserContextProcess.context_ids(session.user_context_pid)
 
     trigger_task = Task.async(fn -> run_popup_callback(trigger_fun, [session]) end)
     Process.unlink(trigger_task.pid)
@@ -378,37 +376,36 @@ defmodule Cerberus.Driver.Browser.Extensions do
   end
 
   defp await_open_dialog!(session, locator, timeout_ms) do
-    deadline = System.monotonic_time(:millisecond) + timeout_ms
-    await_open_dialog_loop(session, locator, deadline)
-  end
-
-  defp await_open_dialog_loop(session, locator, deadline) do
-    case UserContextProcess.active_dialog(session.user_context_pid, session.tab_id) do
-      %{} = dialog ->
+    case UserContextProcess.await_dialog_open(session.user_context_pid, timeout_ms, session.tab_id) do
+      {:ok, %{} = dialog} ->
         dialog
 
-      _ ->
-        now = System.monotonic_time(:millisecond)
-        remaining = max(deadline - now, 0)
+      {:error, :timeout, events} ->
+        raise_dialog_timeout!(locator, events)
 
-        if remaining == 0 do
-          observed_messages =
-            session.user_context_pid
-            |> UserContextProcess.dialog_events(session.tab_id)
-            |> Enum.filter(&match?(%{"method" => "browsingContext.userPromptOpened"}, &1))
-            |> Enum.map(&Map.get(&1, "message"))
-            |> Enum.filter(&is_binary/1)
-            |> Enum.uniq()
-            |> Enum.sort()
-
-          raise AssertionError,
-            message:
-              "assert_dialog/3 timed out waiting for #{expected_dialog_text(locator)}; observed dialogs: #{inspect(observed_messages)}"
-        else
-          Process.sleep(min(remaining, @dialog_poll_ms))
-          await_open_dialog_loop(session, locator, deadline)
-        end
+      {:error, reason, details} ->
+        raise AssertionError,
+          message: "assert_dialog/3 failed while waiting for dialog: #{reason} (#{inspect(details)})"
     end
+  end
+
+  defp raise_dialog_timeout!(locator, events) when is_list(events) do
+    observed_messages =
+      events
+      |> Enum.filter(&match?(%{"method" => "browsingContext.userPromptOpened"}, &1))
+      |> Enum.map(&Map.get(&1, "message"))
+      |> Enum.filter(&is_binary/1)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    raise AssertionError,
+      message:
+        "assert_dialog/3 timed out waiting for #{expected_dialog_text(locator)}; observed dialogs: #{inspect(observed_messages)}"
+  end
+
+  defp raise_dialog_timeout!(locator, _events) do
+    raise AssertionError,
+      message: "assert_dialog/3 timed out waiting for #{expected_dialog_text(locator)}; observed dialogs: []"
   end
 
   defp assert_dialog_text_match!(%Locator{value: expected, opts: locator_opts} = locator, %{} = dialog) do
@@ -455,98 +452,76 @@ defmodule Cerberus.Driver.Browser.Extensions do
   defp poll_action_task(action_task, :pending), do: Task.yield(action_task, 0) || :pending
 
   defp await_popup_tab!(session, baseline_tabs, trigger_task, timeout_ms) do
+    popup_task =
+      Task.async(fn -> UserContextProcess.await_popup_tab(session.user_context_pid, baseline_tabs, timeout_ms) end)
+
+    Process.unlink(popup_task.pid)
     deadline = System.monotonic_time(:millisecond) + timeout_ms
-    await_popup_tab_loop(session, baseline_tabs, trigger_task, deadline, :pending)
+
+    try do
+      await_popup_tab_loop(trigger_task, popup_task, deadline, :pending)
+    after
+      _ = Task.shutdown(popup_task, :brutal_kill)
+    end
   end
 
-  defp await_popup_tab_loop(session, baseline_tabs, trigger_task, deadline, trigger_outcome) do
+  defp await_popup_tab_loop(trigger_task, popup_task, deadline, trigger_outcome) do
     trigger_outcome = poll_action_task(trigger_task, trigger_outcome)
+    raise_if_trigger_failed_before_popup!(trigger_outcome)
 
-    case trigger_outcome do
-      {:ok, {:action_failure, formatted_error}} ->
-        raise AssertionError, message: "with_popup/4 trigger callback failed before popup capture: #{formatted_error}"
-
-      _ ->
-        :ok
-    end
-
-    current_tabs = MapSet.new(popup_capture_tabs(session, baseline_tabs))
-    new_tabs = current_tabs |> MapSet.difference(baseline_tabs) |> MapSet.to_list()
-
-    case new_tabs do
-      [popup_tab_id] ->
+    case handle_popup_task_result(Task.yield(popup_task, 0), deadline, trigger_outcome) do
+      {:ok, popup_tab_id, trigger_outcome} ->
         {popup_tab_id, trigger_outcome}
 
-      [] ->
-        now = System.monotonic_time(:millisecond)
-        remaining = max(deadline - now, 0)
-
-        if remaining == 0 do
-          raise AssertionError, message: "with_popup/4 timed out waiting for popup tab"
-        else
-          Process.sleep(min(remaining, @popup_poll_ms))
-          await_popup_tab_loop(session, baseline_tabs, trigger_task, deadline, trigger_outcome)
-        end
-
-      multiple_tabs ->
-        sorted_tabs = Enum.sort(multiple_tabs)
-
-        raise AssertionError,
-          message: "with_popup/4 observed multiple new tabs while capturing popup: #{inspect(sorted_tabs)}"
+      {:recurse, trigger_outcome} ->
+        await_popup_tab_loop(trigger_task, popup_task, deadline, trigger_outcome)
     end
   end
 
-  defp popup_capture_tabs(session, baseline_tabs) do
-    case popup_capture_tabs_from_tree(session, baseline_tabs) do
-      {:ok, tabs} ->
-        tabs
+  defp raise_if_trigger_failed_before_popup!({:ok, {:action_failure, formatted_error}}) do
+    raise AssertionError, message: "with_popup/4 trigger callback failed before popup capture: #{formatted_error}"
+  end
 
-      {:error, _reason} ->
-        UserContextProcess.tabs(session.user_context_pid)
+  defp raise_if_trigger_failed_before_popup!(_trigger_outcome), do: :ok
+
+  defp handle_popup_task_result({:ok, {:ok, popup_tab_id}}, _deadline, trigger_outcome) do
+    {:ok, popup_tab_id, trigger_outcome}
+  end
+
+  defp handle_popup_task_result({:ok, {:error, :timeout}}, _deadline, _trigger_outcome) do
+    raise AssertionError, message: "with_popup/4 timed out waiting for popup tab"
+  end
+
+  defp handle_popup_task_result({:ok, {:error, :multiple, tabs}}, _deadline, _trigger_outcome) do
+    raise AssertionError,
+      message: "with_popup/4 observed multiple new tabs while capturing popup: #{inspect(tabs)}"
+  end
+
+  defp handle_popup_task_result({:ok, {:error, reason, details}}, _deadline, _trigger_outcome) do
+    raise AssertionError,
+      message: "with_popup/4 failed while waiting for popup tab: #{reason} (#{inspect(details)})"
+  end
+
+  defp handle_popup_task_result({:exit, reason}, _deadline, _trigger_outcome) do
+    raise AssertionError,
+      message: "with_popup/4 failed while waiting for popup tab: #{Exception.format_exit(reason)}"
+  end
+
+  defp handle_popup_task_result(nil, deadline, trigger_outcome) do
+    case popup_poll_wait_ms(deadline) do
+      0 ->
+        raise AssertionError, message: "with_popup/4 timed out waiting for popup tab"
+
+      wait_ms ->
+        Process.sleep(wait_ms)
+        {:recurse, trigger_outcome}
     end
   end
 
-  defp popup_capture_tabs_from_tree(session, baseline_tabs) do
-    with {:ok, %{"contexts" => contexts}} when is_list(contexts) <-
-           BiDi.command("browsingContext.getTree", %{"maxDepth" => 0}, bidi_opts(session)),
-         entries when is_list(entries) <- flatten_tree_context_entries(contexts),
-         user_context when is_binary(user_context) and user_context != "" <-
-           infer_user_context(entries, baseline_tabs) do
-      tabs =
-        entries
-        |> Enum.filter(&(&1.user_context == user_context))
-        |> Enum.map(& &1.context_id)
-        |> Enum.uniq()
-
-      {:ok, tabs}
-    else
-      {:error, reason, details} ->
-        {:error, "browsingContext.getTree failed: #{reason} (#{inspect(details)})"}
-
-      _ ->
-        {:error, "unable to resolve user context for popup capture"}
-    end
-  end
-
-  defp flatten_tree_context_entries(contexts) when is_list(contexts) do
-    Enum.flat_map(contexts, &flatten_tree_context_entry/1)
-  end
-
-  defp flatten_tree_context_entries(nil), do: []
-
-  defp flatten_tree_context_entry(%{"context" => context_id} = entry) when is_binary(context_id) do
-    children = flatten_tree_context_entries(Map.get(entry, "children", []))
-    [%{context_id: context_id, user_context: entry["userContext"]} | children]
-  end
-
-  defp flatten_tree_context_entry(_entry), do: []
-
-  defp infer_user_context(entries, baseline_tabs) do
-    Enum.find_value(entries, fn %{context_id: context_id, user_context: user_context} ->
-      if MapSet.member?(baseline_tabs, context_id) and is_binary(user_context) and user_context != "" do
-        user_context
-      end
-    end)
+  defp popup_poll_wait_ms(deadline) do
+    now = System.monotonic_time(:millisecond)
+    remaining = max(deadline - now, 0)
+    min(remaining, @popup_task_poll_ms)
   end
 
   defp ensure_popup_tab_attached!(session, popup_tab_id) do
@@ -650,39 +625,16 @@ defmodule Cerberus.Driver.Browser.Extensions do
   end
 
   defp await_download_match!(session, expected_filename, timeout_ms) do
-    deadline = System.monotonic_time(:millisecond) + timeout_ms
-    await_download_match_loop(session, expected_filename, deadline)
-  end
-
-  defp await_download_match_loop(session, expected_filename, deadline) do
-    download_events = UserContextProcess.download_events(session.user_context_pid, session.tab_id)
-
-    case Enum.find(download_events, &download_event_match?(&1, expected_filename)) do
-      event when is_map(event) ->
+    case UserContextProcess.await_download(session.user_context_pid, expected_filename, timeout_ms, session.tab_id) do
+      {:ok, event} when is_map(event) ->
         event
 
-      nil ->
-        now = System.monotonic_time(:millisecond)
-        remaining = max(deadline - now, 0)
+      {:error, :timeout, events} ->
+        raise_download_timeout!(expected_filename, events)
 
-        if remaining == 0 do
-          await_download_match_on_deadline!(session, expected_filename)
-        else
-          Process.sleep(min(remaining, @download_poll_ms))
-          await_download_match_loop(session, expected_filename, deadline)
-        end
-    end
-  end
-
-  defp await_download_match_on_deadline!(session, expected_filename) do
-    final_events = UserContextProcess.download_events(session.user_context_pid, session.tab_id)
-
-    case Enum.find(final_events, &download_event_match?(&1, expected_filename)) do
-      event when is_map(event) ->
-        event
-
-      nil ->
-        raise_download_timeout!(expected_filename, final_events)
+      {:error, reason, details} ->
+        raise AssertionError,
+          message: "assert_download/3 failed while waiting for download: #{reason} (#{inspect(details)})"
     end
   end
 
@@ -698,16 +650,6 @@ defmodule Cerberus.Driver.Browser.Extensions do
       message:
         "assert_download/3 timed out waiting for #{inspect(expected_filename)}; observed downloads: #{inspect(observed_filenames)}"
   end
-
-  defp download_event_match?(
-         %{"method" => "browsingContext.downloadWillBegin", "suggestedFilename" => filename},
-         expected
-       )
-       when is_binary(filename) do
-    filename == expected
-  end
-
-  defp download_event_match?(_event, _expected), do: false
 
   defp bidi_opts(%BrowserSession{browser_name: browser_name}), do: [browser_name: browser_name]
 

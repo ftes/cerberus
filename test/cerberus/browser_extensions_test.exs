@@ -207,6 +207,31 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_has(returned_main, text("Popup opened", exact: true))
   end
 
+  test "with_popup waits for popup opened after waiter registration" do
+    main =
+      :browser
+      |> session()
+      |> visit("/browser/popup/click")
+
+    returned_main =
+      with_popup(
+        main,
+        fn trigger_session ->
+          Process.sleep(35)
+          click(trigger_session, button("Open Popup"))
+        end,
+        fn callback_main, popup ->
+          assert callback_main.tab_id == main.tab_id
+          assert popup.tab_id != callback_main.tab_id
+          assert_path(popup, "/browser/popup/destination", query: %{source: "click-trigger"})
+        end,
+        timeout: 1_000
+      )
+
+    assert returned_main.tab_id == main.tab_id
+    assert UserContextProcess.active_tab(returned_main.user_context_pid) == returned_main.tab_id
+  end
+
   test "with_popup times out when trigger does not open popup" do
     session =
       :browser

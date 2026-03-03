@@ -9,6 +9,9 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.Types
 
+  @popup_poll_ms 25
+  @call_timeout_padding_ms 5_000
+
   @spec child_spec(keyword()) :: Supervisor.child_spec()
   def child_spec(opts) do
     %{
@@ -100,6 +103,11 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(pid, :tabs)
   end
 
+  @spec context_ids(pid()) :: [String.t()]
+  def context_ids(pid) when is_pid(pid) do
+    GenServer.call(pid, :context_ids)
+  end
+
   @spec active_tab(pid()) :: String.t() | nil
   def active_tab(pid) when is_pid(pid) do
     GenServer.call(pid, :active_tab)
@@ -150,6 +158,54 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(pid, {:active_dialog_tab, tab_id})
   end
 
+  @spec await_download(pid(), String.t(), pos_integer()) ::
+          {:ok, Types.payload()} | {:error, :timeout, [Types.payload()]} | {:error, String.t(), map()}
+  def await_download(pid, expected_filename, timeout_ms)
+      when is_pid(pid) and is_binary(expected_filename) and is_integer(timeout_ms) and timeout_ms > 0 do
+    GenServer.call(
+      pid,
+      {:await_download_tab, nil, expected_filename, timeout_ms},
+      timeout_ms + @call_timeout_padding_ms
+    )
+  end
+
+  @spec await_download(pid(), String.t(), pos_integer(), String.t() | nil) ::
+          {:ok, Types.payload()} | {:error, :timeout, [Types.payload()]} | {:error, String.t(), map()}
+  def await_download(pid, expected_filename, timeout_ms, tab_id)
+      when is_pid(pid) and is_binary(expected_filename) and is_integer(timeout_ms) and timeout_ms > 0 do
+    GenServer.call(
+      pid,
+      {:await_download_tab, tab_id, expected_filename, timeout_ms},
+      timeout_ms + @call_timeout_padding_ms
+    )
+  end
+
+  @spec await_dialog_open(pid(), pos_integer()) ::
+          {:ok, Types.payload()} | {:error, :timeout, [Types.payload()]} | {:error, String.t(), map()}
+  def await_dialog_open(pid, timeout_ms) when is_pid(pid) and is_integer(timeout_ms) and timeout_ms > 0 do
+    GenServer.call(pid, {:await_dialog_open_tab, nil, timeout_ms}, timeout_ms + @call_timeout_padding_ms)
+  end
+
+  @spec await_dialog_open(pid(), pos_integer(), String.t() | nil) ::
+          {:ok, Types.payload()} | {:error, :timeout, [Types.payload()]} | {:error, String.t(), map()}
+  def await_dialog_open(pid, timeout_ms, tab_id) when is_pid(pid) and is_integer(timeout_ms) and timeout_ms > 0 do
+    GenServer.call(
+      pid,
+      {:await_dialog_open_tab, tab_id, timeout_ms},
+      timeout_ms + @call_timeout_padding_ms
+    )
+  end
+
+  @spec await_popup_tab(pid(), [String.t()] | MapSet.t(String.t()), pos_integer()) ::
+          {:ok, String.t()} | {:error, :timeout} | {:error, :multiple, [String.t()]}
+  def await_popup_tab(pid, baseline_tabs, timeout_ms) when is_pid(pid) and is_integer(timeout_ms) and timeout_ms > 0 do
+    GenServer.call(
+      pid,
+      {:await_popup_tab, baseline_tabs, timeout_ms},
+      timeout_ms + @call_timeout_padding_ms
+    )
+  end
+
   @impl true
   def init(opts) do
     owner = Keyword.fetch!(opts, :owner)
@@ -177,7 +233,9 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
          browser_context_defaults: browser_context_defaults,
          bidi_opts: bidi_opts,
          browsing_contexts: browsing_contexts,
-         active_browsing_context_id: first_tab_id
+         active_browsing_context_id: first_tab_id,
+         known_context_ids: MapSet.new([first_tab_id]),
+         popup_waiters: %{}
        }}
     else
       {:error, reason} ->
@@ -244,7 +302,15 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
              state.bidi_opts
            ),
          {:ok, tab_id, browsing_contexts} <- add_browsing_context(state.browsing_contexts, browsing_context_pid) do
-      {:reply, {:ok, tab_id}, %{state | browsing_contexts: browsing_contexts, active_browsing_context_id: tab_id}}
+      known_context_ids = MapSet.put(state.known_context_ids, tab_id)
+
+      {:reply, {:ok, tab_id},
+       %{
+         state
+         | browsing_contexts: browsing_contexts,
+           active_browsing_context_id: tab_id,
+           known_context_ids: known_context_ids
+       }}
     else
       {:error, reason} ->
         {:reply, {:error, inspect(reason), %{}}, state}
@@ -265,7 +331,8 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
              ),
            {:ok, _attached_tab_id, browsing_contexts} <-
              add_browsing_context(state.browsing_contexts, browsing_context_pid) do
-        {:reply, :ok, %{state | browsing_contexts: browsing_contexts}}
+        known_context_ids = MapSet.put(state.known_context_ids, tab_id)
+        {:reply, :ok, %{state | browsing_contexts: browsing_contexts, known_context_ids: known_context_ids}}
       else
         {:error, reason} ->
           {:reply, {:error, inspect(reason), %{tab_id: tab_id}}, state}
@@ -294,13 +361,26 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
         _ = DynamicSupervisor.terminate_child(state.browsing_context_supervisor, entry.pid)
         browsing_contexts = Map.delete(state.browsing_contexts, tab_id)
         active_tab_id = choose_next_active_tab_id(state.active_browsing_context_id, tab_id, browsing_contexts)
-        {:reply, :ok, %{state | browsing_contexts: browsing_contexts, active_browsing_context_id: active_tab_id}}
+        known_context_ids = MapSet.delete(state.known_context_ids, tab_id)
+
+        {:reply, :ok,
+         %{
+           state
+           | browsing_contexts: browsing_contexts,
+             active_browsing_context_id: active_tab_id,
+             known_context_ids: known_context_ids
+         }}
     end
   end
 
   def handle_call(:tabs, _from, state) do
     tabs = state.browsing_contexts |> Map.keys() |> Enum.sort()
     {:reply, tabs, state}
+  end
+
+  def handle_call(:context_ids, _from, state) do
+    context_ids = state.known_context_ids |> MapSet.to_list() |> Enum.sort()
+    {:reply, context_ids, state}
   end
 
   def handle_call(:active_tab, _from, state) do
@@ -355,6 +435,49 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     end
   end
 
+  def handle_call({:await_download_tab, tab_id, expected_filename, timeout_ms}, _from, state) do
+    case browsing_context_pid(state, tab_id) do
+      {:ok, pid} ->
+        {:reply, BrowsingContextProcess.await_download(pid, expected_filename, timeout_ms), state}
+
+      {:error, reason, details} ->
+        {:reply, {:error, reason, details}, state}
+    end
+  end
+
+  def handle_call({:await_dialog_open_tab, tab_id, timeout_ms}, _from, state) do
+    case browsing_context_pid(state, tab_id) do
+      {:ok, pid} ->
+        {:reply, BrowsingContextProcess.await_dialog_open(pid, timeout_ms), state}
+
+      {:error, reason, details} ->
+        {:reply, {:error, reason, details}, state}
+    end
+  end
+
+  def handle_call({:await_popup_tab, baseline_tabs, timeout_ms}, from, state) do
+    state = refresh_known_context_ids(state)
+    baseline_tabs = normalize_context_set(baseline_tabs)
+
+    case popup_waiter_result(state.known_context_ids, baseline_tabs) do
+      {:ok, popup_tab_id} ->
+        {:reply, {:ok, popup_tab_id}, state}
+
+      {:error, :multiple, tabs} ->
+        {:reply, {:error, :multiple, tabs}, state}
+
+      :none ->
+        waiter_id = make_ref()
+        timer = Process.send_after(self(), {:popup_waiter_timeout, waiter_id}, timeout_ms)
+        _ = Process.send_after(self(), {:popup_waiter_poll, waiter_id}, @popup_poll_ms)
+
+        popup_waiters =
+          Map.put(state.popup_waiters, waiter_id, %{from: from, baseline_tabs: baseline_tabs, timer: timer})
+
+        {:noreply, %{state | popup_waiters: popup_waiters}}
+    end
+  end
+
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, _reason}, %{owner_ref: ref} = state) do
     # Owner/test process finished; tear down userContext as a normal shutdown.
@@ -369,11 +492,56 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
         if is_nil(active_tab_id) do
           {:stop, {:browsing_context_down, reason}, state}
         else
-          {:noreply, %{state | browsing_contexts: browsing_contexts, active_browsing_context_id: active_tab_id}}
+          known_context_ids = MapSet.delete(state.known_context_ids, down_tab_id)
+
+          {:noreply,
+           %{
+             state
+             | browsing_contexts: browsing_contexts,
+               active_browsing_context_id: active_tab_id,
+               known_context_ids: known_context_ids
+           }}
         end
 
       :error ->
         {:noreply, state}
+    end
+  end
+
+  def handle_info({:popup_waiter_poll, waiter_id}, state) do
+    state = refresh_known_context_ids(state)
+
+    case Map.fetch(state.popup_waiters, waiter_id) do
+      :error ->
+        {:noreply, state}
+
+      {:ok, waiter} ->
+        case popup_waiter_result(state.known_context_ids, waiter.baseline_tabs) do
+          {:ok, popup_tab_id} ->
+            Process.cancel_timer(waiter.timer)
+            GenServer.reply(waiter.from, {:ok, popup_tab_id})
+            {:noreply, %{state | popup_waiters: Map.delete(state.popup_waiters, waiter_id)}}
+
+          {:error, :multiple, tabs} ->
+            Process.cancel_timer(waiter.timer)
+            GenServer.reply(waiter.from, {:error, :multiple, tabs})
+            {:noreply, %{state | popup_waiters: Map.delete(state.popup_waiters, waiter_id)}}
+
+          :none ->
+            _ = Process.send_after(self(), {:popup_waiter_poll, waiter_id}, @popup_poll_ms)
+            {:noreply, state}
+        end
+    end
+  end
+
+  def handle_info({:popup_waiter_timeout, waiter_id}, state) do
+    case Map.pop(state.popup_waiters, waiter_id) do
+      {nil, _waiters} ->
+        {:noreply, state}
+
+      {waiter, popup_waiters} ->
+        GenServer.reply(waiter.from, {:error, :timeout})
+        {:noreply, %{state | popup_waiters: popup_waiters}}
     end
   end
 
@@ -562,6 +730,68 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
       #{script}
     }
     """
+  end
+
+  defp refresh_known_context_ids(state) do
+    case fetch_user_context_tabs(state.user_context_id, state.bidi_opts) do
+      {:ok, context_ids} ->
+        %{state | known_context_ids: MapSet.new(context_ids)}
+
+      {:error, _reason, _details} ->
+        state
+    end
+  end
+
+  defp fetch_user_context_tabs(user_context_id, bidi_opts) when is_binary(user_context_id) and is_list(bidi_opts) do
+    case BiDi.command("browsingContext.getTree", %{"maxDepth" => 0}, bidi_opts) do
+      {:ok, %{"contexts" => contexts}} when is_list(contexts) ->
+        entries = flatten_tree_context_entries(contexts)
+
+        tabs =
+          entries
+          |> Enum.filter(&(&1.user_context == user_context_id))
+          |> Enum.map(& &1.context_id)
+          |> Enum.uniq()
+
+        {:ok, tabs}
+
+      {:error, reason, details} ->
+        {:error, reason, details}
+
+      _ ->
+        {:error, "unexpected browsingContext.getTree response", %{}}
+    end
+  end
+
+  defp flatten_tree_context_entries(contexts) when is_list(contexts) do
+    Enum.flat_map(contexts, &flatten_tree_context_entry/1)
+  end
+
+  defp flatten_tree_context_entries(nil), do: []
+
+  defp flatten_tree_context_entry(%{"context" => context_id} = entry) when is_binary(context_id) do
+    children = flatten_tree_context_entries(Map.get(entry, "children", []))
+    [%{context_id: context_id, user_context: entry["userContext"]} | children]
+  end
+
+  defp flatten_tree_context_entry(_entry), do: []
+
+  defp normalize_context_set(%MapSet{} = tabs), do: tabs
+  defp normalize_context_set(tabs) when is_list(tabs), do: MapSet.new(Enum.filter(tabs, &is_binary/1))
+  defp normalize_context_set(_tabs), do: MapSet.new()
+
+  defp popup_waiter_result(known_context_ids, baseline_tabs)
+       when is_struct(known_context_ids, MapSet) and is_struct(baseline_tabs, MapSet) do
+    case known_context_ids |> MapSet.difference(baseline_tabs) |> MapSet.to_list() do
+      [popup_tab_id] ->
+        {:ok, popup_tab_id}
+
+      [] ->
+        :none
+
+      tabs ->
+        {:error, :multiple, Enum.sort(tabs)}
+    end
   end
 
   defp await_ready_safe(pid, opts) when is_pid(pid) and is_list(opts) do

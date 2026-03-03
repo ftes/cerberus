@@ -81,6 +81,14 @@ for driver <- [:phoenix, :browser] do
 end
 ```
 
+## Event Waiter Policy
+
+For browser event assertions (`assert_download/3`, `assert_dialog/3`, popup capture), waiter registration and blocking must happen in the owning process (`BrowsingContextProcess` or `UserContextProcess`), not in external polling loops in `Extensions`.
+
+- Why: external polling can miss edge timing between "check state" and "sleep".
+- Rule: waiters first check current process state/history, then register a timed waiter if not yet satisfied.
+- Event handlers resolve waiters directly from process state updates; timeout replies include observed events for diagnostics.
+
 ## Escape Hatches
 
 - `unwrap/2`: direct access to underlying driver primitives when needed.
