@@ -459,22 +459,22 @@ defmodule Cerberus.Driver.Browser.Extensions do
     deadline = System.monotonic_time(:millisecond) + timeout_ms
 
     try do
-      await_popup_tab_loop(trigger_task, popup_task, deadline, :pending)
+      await_popup_tab_loop(trigger_task, popup_task, session, baseline_tabs, deadline, :pending)
     after
       _ = Task.shutdown(popup_task, :brutal_kill)
     end
   end
 
-  defp await_popup_tab_loop(trigger_task, popup_task, deadline, trigger_outcome) do
+  defp await_popup_tab_loop(trigger_task, popup_task, session, baseline_tabs, deadline, trigger_outcome) do
     trigger_outcome = poll_action_task(trigger_task, trigger_outcome)
     raise_if_trigger_failed_before_popup!(trigger_outcome)
 
-    case handle_popup_task_result(Task.yield(popup_task, 0), deadline, trigger_outcome) do
+    case handle_popup_task_result(Task.yield(popup_task, 0), session, baseline_tabs, deadline, trigger_outcome) do
       {:ok, popup_tab_id, trigger_outcome} ->
         {popup_tab_id, trigger_outcome}
 
       {:recurse, trigger_outcome} ->
-        await_popup_tab_loop(trigger_task, popup_task, deadline, trigger_outcome)
+        await_popup_tab_loop(trigger_task, popup_task, session, baseline_tabs, deadline, trigger_outcome)
     end
   end
 
@@ -484,37 +484,51 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   defp raise_if_trigger_failed_before_popup!(_trigger_outcome), do: :ok
 
-  defp handle_popup_task_result({:ok, {:ok, popup_tab_id}}, _deadline, trigger_outcome) do
+  defp handle_popup_task_result({:ok, {:ok, popup_tab_id}}, _session, _baseline_tabs, _deadline, trigger_outcome) do
     {:ok, popup_tab_id, trigger_outcome}
   end
 
-  defp handle_popup_task_result({:ok, {:error, :timeout}}, _deadline, _trigger_outcome) do
+  defp handle_popup_task_result({:ok, {:error, :timeout}}, _session, _baseline_tabs, _deadline, _trigger_outcome) do
     raise AssertionError, message: "with_popup/4 timed out waiting for popup tab"
   end
 
-  defp handle_popup_task_result({:ok, {:error, :multiple, tabs}}, _deadline, _trigger_outcome) do
+  defp handle_popup_task_result({:ok, {:error, :multiple, tabs}}, _session, _baseline_tabs, _deadline, _trigger_outcome) do
     raise AssertionError,
       message: "with_popup/4 observed multiple new tabs while capturing popup: #{inspect(tabs)}"
   end
 
-  defp handle_popup_task_result({:ok, {:error, reason, details}}, _deadline, _trigger_outcome) do
+  defp handle_popup_task_result({:ok, {:error, reason, details}}, _session, _baseline_tabs, _deadline, _trigger_outcome) do
     raise AssertionError,
       message: "with_popup/4 failed while waiting for popup tab: #{reason} (#{inspect(details)})"
   end
 
-  defp handle_popup_task_result({:exit, reason}, _deadline, _trigger_outcome) do
+  defp handle_popup_task_result({:exit, reason}, _session, _baseline_tabs, _deadline, _trigger_outcome) do
     raise AssertionError,
       message: "with_popup/4 failed while waiting for popup tab: #{Exception.format_exit(reason)}"
   end
 
-  defp handle_popup_task_result(nil, deadline, trigger_outcome) do
+  defp handle_popup_task_result(nil, session, baseline_tabs, deadline, trigger_outcome) do
     case popup_poll_wait_ms(deadline) do
       0 ->
-        raise AssertionError, message: "with_popup/4 timed out waiting for popup tab"
+        popup_task_deadline_probe!(session, baseline_tabs, trigger_outcome)
 
       wait_ms ->
         Process.sleep(wait_ms)
         {:recurse, trigger_outcome}
+    end
+  end
+
+  defp popup_task_deadline_probe!(session, baseline_tabs, trigger_outcome) do
+    case UserContextProcess.await_popup_tab(session.user_context_pid, baseline_tabs, 1) do
+      {:ok, popup_tab_id} ->
+        {:ok, popup_tab_id, trigger_outcome}
+
+      {:error, :multiple, tabs} ->
+        raise AssertionError,
+          message: "with_popup/4 observed multiple new tabs while capturing popup: #{inspect(tabs)}"
+
+      {:error, :timeout} ->
+        raise AssertionError, message: "with_popup/4 timed out waiting for popup tab"
     end
   end
 
