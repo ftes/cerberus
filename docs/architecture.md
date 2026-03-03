@@ -85,7 +85,7 @@ end
 
 - `unwrap/2`: direct access to underlying driver primitives when needed.
   Browser unwrap callbacks receive `Cerberus.Browser.Native` (opaque handle), not a raw internals map.
-- `Cerberus.Browser.*`: browser-only low-level APIs for keyboard, drag, dialogs, JS evaluation, and cookies.
+- `Cerberus.Browser.*`: mostly browser-only low-level APIs for keyboard, drag, dialogs, JS evaluation, and cookies (`assert_download/3` also supports static/live response assertions).
 
 > #### Warning
 >

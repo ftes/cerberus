@@ -7,7 +7,7 @@ defmodule Cerberus.BrowserExtensionsTest do
   alias Cerberus.Driver.Browser.UserContextProcess
   alias ExUnit.AssertionError
 
-  test "browser-only APIs are explicit unsupported on static and live sessions" do
+  test "browser-only APIs are explicit unsupported on static and live sessions (except assert_download)" do
     static = visit(session(), "/articles")
 
     static_error =
@@ -40,26 +40,12 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     assert static_popup_error.message =~ "with_popup is not implemented for :static driver"
 
-    static_download_error =
-      assert_raise AssertionError, fn ->
-        assert_download(static, "report.txt")
-      end
-
-    assert static_download_error.message =~ "assert_download is not implemented for :static driver"
-
     live_popup_error =
       assert_raise AssertionError, fn ->
         with_popup(live, fn s -> s end, fn _main, _popup -> :ok end)
       end
 
     assert live_popup_error.message =~ "with_popup is not implemented for :live driver"
-
-    live_download_error =
-      assert_raise AssertionError, fn ->
-        assert_download(live, "report.txt")
-      end
-
-    assert live_download_error.message =~ "assert_download is not implemented for :live driver"
   end
 
   @tag :tmp_dir
@@ -318,6 +304,39 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     assert_download(session, "report.txt", timeout: 500)
     _ = Task.await(trigger_task, 1_000)
+  end
+
+  test "assert_download supports static sessions from controller download responses" do
+    session =
+      session()
+      |> visit("/browser/extensions")
+      |> click(link("Download Report"))
+
+    assert_download(session, "report.txt")
+  end
+
+  test "assert_download supports live sessions redirecting to controller download responses" do
+    session =
+      session()
+      |> visit("/live/counter")
+      |> click(link("Download Report"))
+
+    assert_download(session, "report.txt")
+  end
+
+  test "assert_download reports observed filenames for static/live responses" do
+    session =
+      session()
+      |> visit("/browser/extensions")
+      |> click(link("Download Report"))
+
+    error =
+      assert_raise AssertionError, fn ->
+        assert_download(session, "missing.txt")
+      end
+
+    assert error.message =~ ~s(assert_download/3 expected "missing.txt")
+    assert error.message =~ "report.txt"
   end
 
   test "assert_download times out with helpful observed filenames" do

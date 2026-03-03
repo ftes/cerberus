@@ -2,16 +2,20 @@ defmodule Cerberus.Browser do
   @moduledoc """
   Browser-only extensions for richer real-browser workflows.
 
-  These helpers are intentionally scoped to browser sessions.
-  Calling them with static/live sessions raises explicit unsupported errors.
+  Most helpers are intentionally scoped to browser sessions.
+  `assert_download/3` also works for static/live sessions by inspecting
+  response download headers.
   """
 
   alias Cerberus.Assertions
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Browser.Extensions
+  alias Cerberus.Driver.Live, as: LiveSession
+  alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.Locator
   alias Cerberus.Options
   alias Cerberus.Session
+  alias ExUnit.AssertionError
 
   @type cookie :: %{
           name: String.t() | nil,
@@ -142,21 +146,18 @@ defmodule Cerberus.Browser do
   @spec assert_download(session, String.t(), Options.browser_assert_download_opts()) :: session when session: var
   def assert_download(session, filename, opts \\ [])
 
-  def assert_download(session, filename, opts) do
-    browser_only(
-      session,
-      :assert_download,
-      opts,
-      @assert_download_args_error,
-      &Options.validate_browser_assert_download!/1,
-      fn browser_session, validated_opts ->
-        if is_binary(filename) do
-          {:ok, Extensions.assert_download(browser_session, filename, validated_opts)}
-        else
-          :invalid_args
-        end
-      end
-    )
+  def assert_download(session, filename, opts) when is_list(opts) do
+    validated_opts = Options.validate_browser_assert_download!(opts)
+
+    if is_binary(filename) do
+      assert_download_for_session(session, filename, validated_opts)
+    else
+      raise ArgumentError, @assert_download_args_error
+    end
+  end
+
+  def assert_download(_session, _filename, _opts) do
+    raise ArgumentError, @assert_download_args_error
   end
 
   @spec evaluate_js(Session.t(), String.t()) :: term()
@@ -220,6 +221,116 @@ defmodule Cerberus.Browser do
   end
 
   defp evaluate_js_value(session, _expression), do: {:unsupported, session}
+
+  defp assert_download_for_session(%BrowserSession{} = session, filename, validated_opts) do
+    Extensions.assert_download(session, filename, validated_opts)
+  end
+
+  defp assert_download_for_session(%StaticSession{} = session, filename, _validated_opts) do
+    assert_download_from_conn!(session, filename)
+  end
+
+  defp assert_download_for_session(%LiveSession{} = session, filename, _validated_opts) do
+    assert_download_from_conn!(session, filename)
+  end
+
+  defp assert_download_for_session(session, _filename, opts) do
+    Assertions.unsupported(session, :assert_download, opts)
+  end
+
+  defp assert_download_from_conn!(%{conn: %Plug.Conn{} = conn} = session, expected_filename)
+       when is_binary(expected_filename) do
+    filename = non_empty_text!(expected_filename, "assert_download/3 filename")
+    observed_filenames = response_download_filenames(conn)
+
+    if filename in observed_filenames do
+      session
+    else
+      raise AssertionError,
+        message:
+          "assert_download/3 expected #{inspect(filename)} from response content-disposition; observed downloads: #{inspect(observed_filenames)}"
+    end
+  end
+
+  defp assert_download_from_conn!(_session, _expected_filename) do
+    raise AssertionError,
+      message: "assert_download/3 requires a response-backed static/live session with an available conn"
+  end
+
+  defp response_download_filenames(conn) do
+    conn
+    |> Plug.Conn.get_resp_header("content-disposition")
+    |> Enum.flat_map(&extract_content_disposition_filenames/1)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  defp extract_content_disposition_filenames(header) when is_binary(header) do
+    segments =
+      header
+      |> String.split(";")
+      |> Enum.map(&String.trim/1)
+      |> Enum.reject(&(&1 == ""))
+
+    filename_star =
+      Enum.find_value(segments, &disposition_segment_value(&1, "filename*", :extended))
+
+    filename =
+      Enum.find_value(segments, &disposition_segment_value(&1, "filename", :basic))
+
+    Enum.filter([filename_star, filename], &(is_binary(&1) and &1 != ""))
+  end
+
+  defp extract_content_disposition_filenames(_header), do: []
+
+  defp disposition_segment_value(segment, expected_key, mode) when is_binary(segment) and is_binary(expected_key) do
+    case String.split(segment, "=", parts: 2) do
+      [key, value] ->
+        if String.downcase(String.trim(key)) == expected_key do
+          decode_disposition_param_value(value, mode)
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp decode_disposition_param_value(value, mode) when is_binary(value) do
+    value
+    |> String.trim()
+    |> trim_wrapping_quotes()
+    |> decode_disposition_value(mode)
+    |> String.trim()
+  end
+
+  defp decode_disposition_value(value, :extended) when is_binary(value) do
+    case String.split(value, "''", parts: 2) do
+      [_charset, encoded] -> URI.decode(encoded)
+      _ -> URI.decode(value)
+    end
+  rescue
+    _ -> value
+  end
+
+  defp decode_disposition_value(value, :basic), do: value
+
+  defp trim_wrapping_quotes(value) when is_binary(value) do
+    if String.starts_with?(value, "\"") and String.ends_with?(value, "\"") and byte_size(value) >= 2 do
+      value
+      |> String.trim_leading("\"")
+      |> String.trim_trailing("\"")
+    else
+      value
+    end
+  end
+
+  defp non_empty_text!(value, label) when is_binary(value) do
+    if String.trim(value) == "" do
+      raise ArgumentError, "#{label} must be a non-empty string"
+    else
+      value
+    end
+  end
 
   defp browser_only(session, op, opts, invalid_args_message, validator, fun)
        when is_list(opts) and is_function(validator, 1) and is_function(fun, 2) do
