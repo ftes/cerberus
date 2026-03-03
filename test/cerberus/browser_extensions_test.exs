@@ -60,8 +60,8 @@ defmodule Cerberus.BrowserExtensionsTest do
       |> session()
       |> visit("/browser/extensions")
       |> screenshot(path: path)
-      |> type("hello browser", selector: "#keyboard-input", timeout: 250)
-      |> press("Enter", selector: "#press-input", timeout: 250)
+      |> type("hello browser", selector: "#keyboard-input")
+      |> press("Enter", selector: "#press-input")
 
     evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), 10)")
     session = assert_dialog(session, text("Delete item?", exact: true))
@@ -72,7 +72,7 @@ defmodule Cerberus.BrowserExtensionsTest do
              assert value == "hello browser"
            end)
 
-    session = drag(session, "#drag-source", "#drop-target", timeout: 250)
+    session = drag(session, "#drag-source", "#drop-target")
 
     assert_has(session, text("Press result: submitted", exact: true))
     assert_has(session, text("Dialog result: cancelled", exact: true))
