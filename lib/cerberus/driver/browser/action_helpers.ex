@@ -142,17 +142,11 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       }
 
       if (op === "click") {
-        if (target && target.kind === "link") {
-          return true;
-        }
-
-        if (pathChanged) return true;
-        return liveDriven ? !settled : false;
+        return true;
       }
 
       if (op === "submit") {
-        if (pathChanged) return true;
-        return liveDriven ? !settled : true;
+        return true;
       }
 
       return true;
@@ -1203,12 +1197,12 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
         if (result && result.ok === true) {
           const op = options && options.op ? options.op : "click";
-          const target = result && result.target && typeof result.target === "object" ? result.target : null;
-          const isLinkClick = op === "click" && target && target.kind === "link";
+          const settleEligible =
+            op === "fill_in" || op === "select" || op === "choose" || op === "check" || op === "uncheck" || op === "upload";
 
           let settle = { attempted: false, settled: false, reason: "not_attempted" };
 
-          if (!isLinkClick) {
+          if (settleEligible) {
             const settleStartedAt = now();
             settle = await helper.waitForLiveSettled(readyTimeoutMs, 40, 25);
             postActionSettleMs = now() - settleStartedAt;

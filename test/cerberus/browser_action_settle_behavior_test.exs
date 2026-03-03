@@ -15,29 +15,33 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     {:ok, shared_browser_session: browser_session}
   end
 
-  test "browser click on live non-navigation actions can skip await_ready", context do
+  test "browser click on live non-navigation actions still performs await_ready", context do
     :browser
     |> SharedBrowserSession.driver_session(context)
     |> visit("/live/counter")
     |> click_button(button("Increment", exact: true))
     |> then(fn updated ->
-      assert %{"reason" => "in-action-settle", "skippedAwaitReady" => true} =
-               updated.last_result.observed.readiness
+      readiness = updated.last_result.observed.readiness
+      assert is_map(readiness)
+      refute readiness["reason"] == "in-action-settle"
+      refute readiness["skippedAwaitReady"] == true
 
       updated
     end)
     |> assert_has(text("Count: 1", exact: true))
   end
 
-  test "browser submit on live non-navigation forms can skip await_ready", context do
+  test "browser submit on live non-navigation forms still performs await_ready", context do
     :browser
     |> SharedBrowserSession.driver_session(context)
     |> visit("/live/form-sync")
     |> fill_in("Nickname (submit only)", "Aragorn")
     |> submit(button("Save No Change", exact: true))
     |> then(fn updated ->
-      assert %{"reason" => "in-action-settle", "skippedAwaitReady" => true} =
-               updated.last_result.observed.readiness
+      readiness = updated.last_result.observed.readiness
+      assert is_map(readiness)
+      refute readiness["reason"] == "in-action-settle"
+      refute readiness["skippedAwaitReady"] == true
 
       updated
     end)
