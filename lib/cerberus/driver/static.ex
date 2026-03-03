@@ -93,6 +93,16 @@ defmodule Cerberus.Driver.Static do
   end
 
   @impl true
+  def within(%__MODULE__{} = session, %Locator{} = locator, callback) when is_function(callback, 1) do
+    previous_scope = Session.scope(session)
+    resolved_scope = resolve_within_scope!(session, locator, previous_scope)
+    scoped_session = Session.with_scope(session, resolved_scope)
+    callback_result = callback.(scoped_session)
+
+    restore_scope!(callback_result, previous_scope)
+  end
+
+  @impl true
   def visit(%__MODULE__{} = session, path, _opts) do
     conn = Conn.ensure_conn(session.conn)
     conn = Conn.follow_get(session.endpoint, conn, path)
@@ -662,6 +672,27 @@ defmodule Cerberus.Driver.Static do
     endpoint.url()
   rescue
     _ -> nil
+  end
+
+  defp resolve_within_scope!(session, locator, previous_scope) do
+    case Html.find_scope_target(session_html!(session), locator, previous_scope) do
+      {:ok, %{selector: selector}} when is_binary(selector) and selector != "" ->
+        selector
+
+      {:error, reason} ->
+        raise ExUnit.AssertionError, message: "within/3 failed: #{reason}"
+    end
+  end
+
+  defp session_html!(%{html: html}) when is_binary(html), do: html
+  defp session_html!(_session), do: raise(ArgumentError, "within/3 requires a session with rendered html")
+
+  defp restore_scope!(%{__struct__: _} = session, previous_scope) do
+    Session.with_scope(session, previous_scope)
+  end
+
+  defp restore_scope!(_value, _previous_scope) do
+    raise ArgumentError, "within/3 callback must return a Cerberus session"
   end
 
   defp ensure_same_endpoint!(%{endpoint: endpoint}, %{endpoint: endpoint}), do: :ok

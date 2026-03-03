@@ -105,6 +105,30 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
+  def within(%__MODULE__{} = session, %Locator{} = locator, callback) when is_function(callback, 1) do
+    previous_scope = Session.scope(session)
+    resolved_scope = resolve_within_scope!(session, locator, previous_scope)
+    live_child_scope = live_child_scope_candidate(locator, previous_scope, resolved_scope)
+
+    case live_child_view_for_scope(session, live_child_scope) do
+      {:ok, child_view} ->
+        child_session =
+          session
+          |> Map.put(:view, child_view)
+          |> Map.put(:html, Phoenix.LiveViewTest.render(child_view))
+          |> Session.with_scope(nil)
+
+        callback_result = callback.(child_session)
+        restore_live_child_scope!(callback_result, session, previous_scope)
+
+      :error ->
+        scoped_session = Session.with_scope(session, resolved_scope)
+        callback_result = callback.(scoped_session)
+        restore_scope!(callback_result, previous_scope)
+    end
+  end
+
+  @impl true
   def visit(%__MODULE__{} = session, path, _opts) do
     conn = Conn.ensure_conn(session.conn)
     conn = Conn.follow_get(session.endpoint, conn, path)
@@ -1006,6 +1030,70 @@ defmodule Cerberus.Driver.Live do
   rescue
     _ -> nil
   end
+
+  defp resolve_within_scope!(session, locator, previous_scope) do
+    case Html.find_scope_target(session_html!(session), locator, previous_scope) do
+      {:ok, %{selector: selector}} when is_binary(selector) and selector != "" ->
+        selector
+
+      {:error, reason} ->
+        raise ExUnit.AssertionError, message: "within/3 failed: #{reason}"
+    end
+  end
+
+  defp session_html!(%{html: html}) when is_binary(html), do: html
+  defp session_html!(_session), do: raise(ArgumentError, "within/3 requires a session with rendered html")
+
+  defp restore_scope!(%{__struct__: _} = session, previous_scope) do
+    Session.with_scope(session, previous_scope)
+  end
+
+  defp restore_scope!(_value, _previous_scope) do
+    raise ArgumentError, "within/3 callback must return a Cerberus session"
+  end
+
+  defp live_child_scope_candidate(%Locator{kind: :css, value: scope}, previous_scope, resolved_scope)
+       when previous_scope in [nil, ""] and is_binary(scope) and scope != "" do
+    if simple_id_selector?(scope), do: scope, else: resolved_scope
+  end
+
+  defp live_child_scope_candidate(_locator, _previous_scope, resolved_scope), do: resolved_scope
+
+  defp restore_live_child_scope!(%{__struct__: _} = callback_result, parent_session, previous_scope) do
+    case callback_result do
+      %__MODULE__{} = live_result ->
+        if Session.current_path(live_result) == Session.current_path(parent_session) do
+          live_result
+          |> Map.put(:view, parent_session.view)
+          |> Map.put(:html, Phoenix.LiveViewTest.render(parent_session.view))
+          |> Session.with_scope(previous_scope)
+        else
+          Session.with_scope(live_result, previous_scope)
+        end
+
+      _ ->
+        Session.with_scope(callback_result, previous_scope)
+    end
+  end
+
+  defp restore_live_child_scope!(_value, _parent_session, _previous_scope) do
+    raise ArgumentError, "within/3 callback must return a Cerberus session"
+  end
+
+  defp live_child_view_for_scope(%__MODULE__{view: %View{} = view}, scope) when is_binary(scope) do
+    if simple_id_selector?(scope) do
+      case Phoenix.LiveViewTest.find_live_child(view, String.trim_leading(scope, "#")) do
+        %View{} = child_view -> {:ok, child_view}
+        _ -> :error
+      end
+    else
+      :error
+    end
+  end
+
+  defp live_child_view_for_scope(_session, _scope), do: :error
+
+  defp simple_id_selector?(scope), do: String.match?(scope, ~r/^#[A-Za-z_][A-Za-z0-9_-]*$/)
 
   defp ensure_same_endpoint!(%{endpoint: endpoint}, %{endpoint: endpoint}), do: :ok
 

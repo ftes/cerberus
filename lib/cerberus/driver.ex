@@ -22,6 +22,7 @@ defmodule Cerberus.Driver do
   @type submit_opts :: Options.submit_opts()
   @type assert_opts :: Options.assert_opts()
   @type path_opts :: Options.path_opts()
+  @type within_callback :: (Session.t() -> Session.t())
 
   @callback new_session(keyword()) :: session_t()
   @callback open_tab(session_t()) :: session_t()
@@ -29,6 +30,7 @@ defmodule Cerberus.Driver do
   @callback close_tab(session_t()) :: session_t()
   @callback open_browser(session_t(), (String.t() -> any())) :: session_t()
   @callback unwrap(session_t(), (term() -> term())) :: session_t()
+  @callback within(session_t(), Locator.t(), within_callback()) :: Session.t()
   @callback visit(session_t(), String.t(), keyword()) :: session_t()
   @callback click(session_t(), Locator.t(), click_opts()) :: op_ok() | op_error()
   @callback fill_in(session_t(), Locator.t(), fill_in_value(), fill_in_opts()) ::

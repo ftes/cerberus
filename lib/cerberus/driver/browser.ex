@@ -275,6 +275,25 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
+  @impl true
+  def within(%__MODULE__{} = session, %Locator{} = locator, callback) when is_function(callback, 1) do
+    previous_scope = Session.scope(session)
+
+    resolved_scope =
+      case resolve_within_scope(session, locator, previous_scope) do
+        {:ok, scope} ->
+          scope
+
+        {:error, reason} ->
+          raise ExUnit.AssertionError, message: "within/3 failed: #{reason}"
+      end
+
+    scoped_session = Session.with_scope(session, resolved_scope)
+    callback_result = callback.(scoped_session)
+
+    restore_scope!(callback_result, previous_scope)
+  end
+
   @doc false
   @spec assert_path(t(), String.t() | Regex.t(), Options.path_opts()) ::
           {:ok, t(), map()} | {:error, t(), map(), String.t()}
@@ -1499,6 +1518,14 @@ defmodule Cerberus.Driver.Browser do
   defp text_expectation_payload(expected), do: Config.text_expectation_payload(expected)
   defp path_expectation_payload(expected), do: Config.path_expectation_payload(expected)
   defp visibility_mode(visible), do: Config.visibility_mode(visible)
+
+  defp restore_scope!(%{__struct__: _} = session, previous_scope) do
+    Session.with_scope(session, previous_scope)
+  end
+
+  defp restore_scope!(_value, _previous_scope) do
+    raise ArgumentError, "within/3 callback must return a Cerberus session"
+  end
 
   defp ensure_popup_mode_supported!(browser_name, popup_mode),
     do: Config.ensure_popup_mode_supported!(browser_name, popup_mode)

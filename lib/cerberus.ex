@@ -32,7 +32,6 @@ defmodule Cerberus do
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.Static, as: StaticSession
-  alias Cerberus.Html
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
   alias Cerberus.Options
@@ -43,7 +42,6 @@ defmodule Cerberus do
   alias Ecto.Adapters.SQL.Sandbox, as: EctoSandbox
   alias ExUnit.AssertionError
   alias Phoenix.Ecto.SQL.Sandbox, as: PhoenixSandbox
-  alias Phoenix.LiveViewTest.View
 
   @type driver_kind :: :static | :live | :browser
   @type locator_input :: Locator.input()
@@ -497,46 +495,9 @@ defmodule Cerberus do
   the query root to that iframe document. Only same-origin iframes are supported.
   """
   @spec within(arg, scope_locator_input(), (arg -> arg)) :: arg when arg: var
-  def within(%LiveSession{} = session, locator, callback) when not is_binary(locator) and is_function(callback, 1) do
-    normalized_locator = Locator.normalize(locator)
-    previous_scope = Session.scope(session)
-    resolved_scope = resolve_within_scope!(session, normalized_locator, previous_scope)
-    live_child_scope = live_child_scope_candidate(normalized_locator, previous_scope, resolved_scope)
-
-    case live_child_view_for_scope(session, live_child_scope) do
-      {:ok, child_view} ->
-        child_session =
-          session
-          |> Map.put(:view, child_view)
-          |> Map.put(:html, Phoenix.LiveViewTest.render(child_view))
-          |> Session.with_scope(nil)
-
-        callback_result = callback.(child_session)
-        restore_live_child_scope(callback_result, session, previous_scope)
-
-      :error ->
-        scoped_session = Session.with_scope(session, resolved_scope)
-        callback_result = callback.(scoped_session)
-        restore_scope(callback_result, previous_scope)
-    end
-  end
-
-  def within(%BrowserSession{} = session, locator, callback) when not is_binary(locator) and is_function(callback, 1) do
-    previous_scope = Session.scope(session)
-    resolved_scope = resolve_within_scope!(session, locator, previous_scope)
-    scoped_session = Session.with_scope(session, resolved_scope)
-    callback_result = callback.(scoped_session)
-
-    restore_scope(callback_result, previous_scope)
-  end
-
   def within(session, locator, callback) when not is_binary(locator) and is_function(callback, 1) do
-    previous_scope = Session.scope(session)
-    resolved_scope = resolve_within_scope!(session, locator, previous_scope)
-    scoped_session = Session.with_scope(session, resolved_scope)
-    callback_result = callback.(scoped_session)
-
-    restore_scope(callback_result, previous_scope)
+    normalized_locator = Locator.normalize(locator)
+    driver_module_for_session!(session).within(session, normalized_locator, callback)
   end
 
   @spec assert_path(arg, String.t() | Regex.t(), Options.path_opts()) :: arg when arg: var
@@ -781,85 +742,6 @@ defmodule Cerberus do
     raise ArgumentError,
           "unsupported session #{inspect(session)}; expected a Cerberus session"
   end
-
-  defp restore_scope(%{__struct__: _} = session, previous_scope) do
-    Session.with_scope(session, previous_scope)
-  end
-
-  defp restore_scope(_value, _previous_scope) do
-    raise ArgumentError, "within/3 callback must return a Cerberus session"
-  end
-
-  defp resolve_within_scope!(%BrowserSession{} = session, locator, previous_scope) do
-    normalized_locator = Locator.normalize(locator)
-
-    case BrowserSession.resolve_within_scope(session, normalized_locator, previous_scope) do
-      {:ok, resolved_scope} ->
-        resolved_scope
-
-      {:error, reason} ->
-        raise AssertionError, message: "within/3 failed: #{reason}"
-    end
-  end
-
-  defp resolve_within_scope!(session, locator, previous_scope) do
-    normalized_locator = Locator.normalize(locator)
-    html = session_html!(session)
-
-    case Html.find_scope_target(html, normalized_locator, previous_scope) do
-      {:ok, %{selector: selector}} when is_binary(selector) and selector != "" ->
-        selector
-
-      {:error, reason} ->
-        raise AssertionError, message: "within/3 failed: #{reason}"
-    end
-  end
-
-  defp session_html!(%{html: html}) when is_binary(html), do: html
-  defp session_html!(_session), do: raise(ArgumentError, "within/3 requires a session with rendered html")
-
-  defp live_child_scope_candidate(%Locator{kind: :css, value: scope}, previous_scope, resolved_scope)
-       when previous_scope in [nil, ""] and is_binary(scope) and scope != "" do
-    if simple_id_selector?(scope), do: scope, else: resolved_scope
-  end
-
-  defp live_child_scope_candidate(_locator, _previous_scope, resolved_scope), do: resolved_scope
-
-  defp restore_live_child_scope(%{__struct__: _} = callback_result, parent_session, previous_scope) do
-    case callback_result do
-      %LiveSession{} = live_result ->
-        if Session.current_path(live_result) == Session.current_path(parent_session) do
-          live_result
-          |> Map.put(:view, parent_session.view)
-          |> Map.put(:html, Phoenix.LiveViewTest.render(parent_session.view))
-          |> Session.with_scope(previous_scope)
-        else
-          Session.with_scope(live_result, previous_scope)
-        end
-
-      _ ->
-        Session.with_scope(callback_result, previous_scope)
-    end
-  end
-
-  defp restore_live_child_scope(_value, _parent_session, _previous_scope) do
-    raise ArgumentError, "within/3 callback must return a Cerberus session"
-  end
-
-  defp live_child_view_for_scope(%LiveSession{view: %View{} = view}, scope) when is_binary(scope) do
-    if simple_id_selector?(scope) do
-      case Phoenix.LiveViewTest.find_live_child(view, String.trim_leading(scope, "#")) do
-        %View{} = child_view -> {:ok, child_view}
-        _ -> :error
-      end
-    else
-      :error
-    end
-  end
-
-  defp live_child_view_for_scope(_session, _scope), do: :error
-
-  defp simple_id_selector?(scope), do: String.match?(scope, ~r/^#[A-Za-z_][A-Za-z0-9_-]*$/)
 
   defp run_path_assertion!(%BrowserSession{} = session, expected, opts, timeout, op)
        when op in [:assert_path, :refute_path] do
