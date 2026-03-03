@@ -69,6 +69,14 @@ defmodule Cerberus.Driver.Static do
   end
 
   @impl true
+  def unwrap(%__MODULE__{} = session, fun) when is_function(fun, 1) do
+    session.conn
+    |> Conn.ensure_conn()
+    |> fun.()
+    |> unwrap_conn_result(session, :static)
+  end
+
+  @impl true
   def visit(%__MODULE__{} = session, path, _opts) do
     conn = Conn.ensure_conn(session.conn)
     conn = Conn.follow_get(session.endpoint, conn, path)
@@ -441,6 +449,92 @@ defmodule Cerberus.Driver.Static do
         }
     end
   end
+
+  defp unwrap_conn_result(%Plug.Conn{} = conn, session, from_driver) when from_driver in [:static, :live] do
+    case redirect_target(conn) do
+      nil ->
+        build_unwrap_session_from_conn(session, conn, from_driver)
+
+      redirect_path ->
+        redirected_session =
+          session
+          |> static_seed_from_session(conn)
+          |> visit(redirect_path, [])
+
+        unwrap_transition =
+          transition(
+            from_driver,
+            driver_kind(redirected_session),
+            :unwrap,
+            session.current_path,
+            Session.current_path(redirected_session)
+          )
+
+        update_last_result(redirected_session, :unwrap, %{
+          path: Session.current_path(redirected_session),
+          transition: unwrap_transition
+        })
+    end
+  end
+
+  defp unwrap_conn_result(other, _session, _from_driver) do
+    raise ArgumentError,
+          "unwrap callback must return a Plug.Conn in static mode, got: #{inspect(other)}"
+  end
+
+  defp build_unwrap_session_from_conn(session, conn, from_driver) do
+    current_path = Conn.current_path(conn, session.current_path)
+
+    case try_live(conn) do
+      {:ok, view, html} ->
+        unwrap_transition = transition(from_driver, :live, :unwrap, session.current_path, current_path)
+
+        %LiveSession{
+          endpoint: session.endpoint,
+          conn: conn,
+          view: view,
+          html: html,
+          form_data: session.form_data,
+          scope: session.scope,
+          current_path: current_path,
+          last_result: LastResult.new(:unwrap, %{path: current_path, transition: unwrap_transition}, LiveSession)
+        }
+
+      :error ->
+        unwrap_transition = transition(from_driver, :static, :unwrap, session.current_path, current_path)
+
+        %__MODULE__{
+          endpoint: session.endpoint,
+          conn: conn,
+          html: conn.resp_body || "",
+          form_data: session.form_data,
+          scope: session.scope,
+          current_path: current_path,
+          last_result: LastResult.new(:unwrap, %{path: current_path, transition: unwrap_transition}, __MODULE__)
+        }
+    end
+  end
+
+  defp static_seed_from_session(session, conn) do
+    %__MODULE__{
+      endpoint: session.endpoint,
+      conn: conn,
+      html: conn.resp_body || "",
+      form_data: session.form_data,
+      scope: session.scope,
+      current_path: Conn.current_path(conn, session.current_path),
+      last_result: session.last_result
+    }
+  end
+
+  defp redirect_target(%Plug.Conn{status: status} = conn) when status in 300..399 do
+    case Plug.Conn.get_resp_header(conn, "location") do
+      [location | _] -> Cerberus.Path.normalize(location)
+      _ -> nil
+    end
+  end
+
+  defp redirect_target(_conn), do: nil
 
   defp normalize_submit_method(value) when is_binary(value) do
     value

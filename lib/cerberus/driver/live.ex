@@ -19,6 +19,7 @@ defmodule Cerberus.Driver.Live do
   alias Cerberus.Session.LastResult
   alias Cerberus.UploadFile
   alias Phoenix.LiveViewTest.TreeDOM
+  alias Phoenix.LiveViewTest.View
 
   @type t :: %__MODULE__{
           endpoint: module(),
@@ -73,6 +74,18 @@ defmodule Cerberus.Driver.Live do
     path = OpenBrowser.write_snapshot!(html, endpoint_url(session.endpoint))
     _ = open_fun.(path)
     session
+  end
+
+  @impl true
+  def unwrap(%__MODULE__{view: nil}, _fun) do
+    raise ArgumentError, "unwrap/2 requires an active LiveView; visit a live route first"
+  end
+
+  @impl true
+  def unwrap(%__MODULE__{} = session, fun) when is_function(fun, 1) do
+    session.view
+    |> fun.()
+    |> unwrap_live_result(session)
   end
 
   @impl true
@@ -2098,6 +2111,168 @@ defmodule Cerberus.Driver.Live do
         }
     end
   end
+
+  defp unwrap_conn_result(%Plug.Conn{} = conn, session, from_driver) when from_driver in [:static, :live] do
+    case redirect_target(conn) do
+      nil ->
+        build_unwrap_session_from_conn(session, conn, from_driver)
+
+      redirect_path ->
+        redirected_session =
+          session
+          |> static_seed_from_session(conn)
+          |> StaticSession.visit(redirect_path, [])
+
+        unwrap_transition =
+          transition(
+            from_driver,
+            driver_kind(redirected_session),
+            :unwrap,
+            session.current_path,
+            Session.current_path(redirected_session)
+          )
+
+        update_last_result(redirected_session, :unwrap, %{
+          path: Session.current_path(redirected_session),
+          transition: unwrap_transition
+        })
+    end
+  end
+
+  defp unwrap_conn_result(other, _session, _from_driver) do
+    raise ArgumentError,
+          "unwrap callback must return a Plug.Conn in static mode, got: #{inspect(other)}"
+  end
+
+  defp unwrap_live_result({:ok, %Plug.Conn{} = conn}, %__MODULE__{} = session) do
+    unwrap_conn_result(conn, session, :live)
+  end
+
+  defp unwrap_live_result(%Plug.Conn{} = conn, %__MODULE__{} = session) do
+    unwrap_conn_result(conn, session, :live)
+  end
+
+  defp unwrap_live_result({:ok, %View{} = view, html}, %__MODULE__{} = session) when is_binary(html) do
+    build_live_session_from_view(session, view, html)
+  end
+
+  defp unwrap_live_result({:ok, %View{} = view, _extra}, %__MODULE__{} = session) do
+    build_live_session_from_view(session, view, Phoenix.LiveViewTest.render(view))
+  end
+
+  defp unwrap_live_result(%View{} = view, %__MODULE__{} = session) do
+    build_live_session_from_view(session, view, Phoenix.LiveViewTest.render(view))
+  end
+
+  defp unwrap_live_result({:error, {kind, %{to: to}}}, %__MODULE__{} = session)
+       when kind in [:redirect, :live_redirect] and is_binary(to) do
+    redirected = follow_redirect(session, to)
+
+    unwrap_transition =
+      transition(
+        :live,
+        driver_kind(redirected),
+        kind,
+        session.current_path,
+        Session.current_path(redirected)
+      )
+
+    update_last_result(redirected, :unwrap, %{
+      path: Session.current_path(redirected),
+      transition: unwrap_transition
+    })
+  end
+
+  defp unwrap_live_result({:error, {:live_patch, %{to: to}}}, %__MODULE__{} = session) when is_binary(to) do
+    path = Cerberus.Path.normalize(to) || session.current_path
+    html = Phoenix.LiveViewTest.render(session.view)
+    unwrap_transition = transition(:live, :live, :live_patch, session.current_path, path)
+
+    session
+    |> Map.put(:html, html)
+    |> Map.put(:current_path, path)
+    |> update_last_result(:unwrap, %{path: path, transition: unwrap_transition})
+  end
+
+  defp unwrap_live_result(rendered, %__MODULE__{} = session) when is_binary(rendered) do
+    path = maybe_live_patch_path(session.view, session.current_path)
+    unwrap_transition = transition(:live, :live, :unwrap, session.current_path, path)
+
+    session
+    |> Map.put(:html, rendered)
+    |> Map.put(:current_path, path)
+    |> update_last_result(:unwrap, %{path: path, transition: unwrap_transition})
+  end
+
+  defp unwrap_live_result(other, _session) do
+    raise ArgumentError,
+          "unwrap callback in live mode must return render output, redirect tuple, view, or Plug.Conn; got: #{inspect(other)}"
+  end
+
+  defp build_unwrap_session_from_conn(session, conn, from_driver) do
+    current_path = Conn.current_path(conn, session.current_path)
+
+    case try_live(conn) do
+      {:ok, view, html} ->
+        unwrap_transition = transition(from_driver, :live, :unwrap, session.current_path, current_path)
+
+        %__MODULE__{
+          endpoint: session.endpoint,
+          conn: conn,
+          view: view,
+          html: html,
+          form_data: Map.get(session, :form_data),
+          scope: session.scope,
+          current_path: current_path,
+          last_result: LastResult.new(:unwrap, %{path: current_path, transition: unwrap_transition}, __MODULE__)
+        }
+
+      :error ->
+        unwrap_transition = transition(from_driver, :static, :unwrap, session.current_path, current_path)
+
+        %StaticSession{
+          endpoint: session.endpoint,
+          conn: conn,
+          html: conn.resp_body || "",
+          form_data: Map.get(session, :form_data),
+          scope: session.scope,
+          current_path: current_path,
+          last_result: LastResult.new(:unwrap, %{path: current_path, transition: unwrap_transition}, StaticSession)
+        }
+    end
+  end
+
+  defp build_live_session_from_view(session, view, html) do
+    path = maybe_live_patch_path(view, session.current_path)
+    unwrap_transition = transition(:live, :live, :unwrap, session.current_path, path)
+
+    session
+    |> Map.put(:view, view)
+    |> Map.put(:html, html)
+    |> Map.put(:current_path, path)
+    |> update_last_result(:unwrap, %{path: path, transition: unwrap_transition})
+  end
+
+  defp static_seed_from_session(session, conn) do
+    %StaticSession{
+      endpoint: session.endpoint,
+      conn: conn,
+      html: conn.resp_body || "",
+      form_data: Map.get(session, :form_data),
+      scope: session.scope,
+      current_path: Conn.current_path(conn, session.current_path),
+      last_result: session.last_result
+    }
+  end
+
+  defp redirect_target(%Plug.Conn{status: status} = conn) when status in 300..399 do
+    case Plug.Conn.get_resp_header(conn, "location") do
+      [location | _] -> Cerberus.Path.normalize(location)
+      _ -> nil
+    end
+  end
+
+  defp redirect_target(_conn), do: nil
 
   defp normalize_submit_method(value) when is_binary(value) do
     value

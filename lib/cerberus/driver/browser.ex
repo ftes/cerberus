@@ -3,6 +3,7 @@ defmodule Cerberus.Driver.Browser do
 
   @behaviour Cerberus.Driver
 
+  alias Cerberus.Browser.Native, as: BrowserNative
   alias Cerberus.Driver.Browser.BiDi
   alias Cerberus.Driver.Browser.Config
   alias Cerberus.Driver.Browser.Expressions
@@ -197,6 +198,17 @@ defmodule Cerberus.Driver.Browser do
       {:error, reason, details} ->
         raise ArgumentError, "failed to collect browser HTML snapshot: #{reason} (#{inspect(details)})"
     end
+  end
+
+  @impl true
+  def unwrap(%__MODULE__{} = session, fun) when is_function(fun, 1) do
+    _ =
+      fun.(%BrowserNative{
+        user_context_pid: session.user_context_pid,
+        tab_id: session.tab_id
+      })
+
+    session
   end
 
   @spec screenshot(t(), Options.screenshot_opts()) :: t()

@@ -1,8 +1,6 @@
 defprotocol Cerberus.Session do
   @moduledoc "Runtime session access protocol used by Cerberus drivers."
 
-  alias Cerberus.Session.LastResult
-
   @type observed :: %{optional(String.t() | atom()) => term()}
   @type scope_value :: String.t() | observed() | nil
   @type transition :: observed()
@@ -21,7 +19,11 @@ defprotocol Cerberus.Session do
           | :assert_path
           | :refute_path
           | :unwrap
-  @type result :: LastResult.t()
+  @type result :: %{
+          op: operation(),
+          observed: observed() | nil,
+          transition: transition() | nil
+        }
   @type last_result :: result() | nil
   @type t :: struct()
 
