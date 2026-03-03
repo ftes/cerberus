@@ -1228,69 +1228,29 @@ defmodule Cerberus do
   defp locator_kind_key?(_key), do: false
 
   defp checkout_ecto_repos(repo, context) do
-    if ecto_sandbox_available?() do
-      repos = List.wrap(repo)
-      owner = checkout_sandbox_repos(repos, context)
-
-      metadata = PhoenixSandbox.metadata_for(repos, owner)
-      PhoenixSandbox.encode_metadata(metadata)
-    else
-      "Ecto not loaded"
-    end
+    repos = List.wrap(repo)
+    metadata = sandbox_metadata_for_repos(repos, context)
+    PhoenixSandbox.encode_metadata(metadata)
   end
 
-  defp ecto_sandbox_available? do
-    Code.ensure_loaded?(EctoSandbox) and Code.ensure_loaded?(PhoenixSandbox)
+  defp sandbox_metadata_for_repos([repo], context),
+    do: PhoenixSandbox.metadata_for(repo, start_sandbox_owner(repo, context))
+
+  defp sandbox_metadata_for_repos(repos, context) when is_list(repos) do
+    Enum.each(repos, &start_sandbox_owner(&1, context))
+    PhoenixSandbox.metadata_for(repos, self())
   end
 
-  defp checkout_sandbox_repos([repo], context), do: ensure_sandbox_owner(repo, context)
-
-  defp checkout_sandbox_repos(repos, context) when is_list(repos) do
-    Enum.each(repos, &ensure_sandbox_owner(&1, context))
-    self()
-  end
-
-  defp ensure_sandbox_owner(repo, context) do
-    owner_key = sandbox_owner_registry_key(repo)
-    reset_sandbox_owner(owner_key)
-    start_sandbox_owner(repo, context, owner_key)
-  end
-
-  defp start_sandbox_owner(repo, context, owner_key) do
+  defp start_sandbox_owner(repo, context) do
     pid = EctoSandbox.start_owner!(repo, shared: not context.async)
-    Process.put(owner_key, pid)
-    ExUnit.Callbacks.on_exit(fn -> stop_tracked_sandbox_owner(owner_key, pid) end)
+    ExUnit.Callbacks.on_exit(fn -> stop_sandbox_owner(pid) end)
     pid
-  end
-
-  defp stop_tracked_sandbox_owner(owner_key, checkout_pid) do
-    case Process.get(owner_key) do
-      ^checkout_pid -> Process.delete(owner_key)
-      _ -> :ok
-    end
-
-    stop_sandbox_owner(checkout_pid)
-  end
-
-  defp reset_sandbox_owner(owner_key) do
-    case Process.get(owner_key) do
-      pid when is_pid(pid) ->
-        stop_sandbox_owner(pid)
-        Process.delete(owner_key)
-
-      _ ->
-        :ok
-    end
   end
 
   defp stop_sandbox_owner(checkout_pid) do
     EctoSandbox.stop_owner(checkout_pid)
   catch
     :exit, {:noproc, _} -> :ok
-  end
-
-  defp sandbox_owner_registry_key(repo) do
-    {__MODULE__, :sandbox_owner_pid, repo}
   end
 
   defp format_path_error(op, observed) do
