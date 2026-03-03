@@ -31,17 +31,10 @@ defmodule Cerberus.Browser.Install do
   @spec install(browser(), [install_opt()]) :: {:ok, install_payload()} | {:error, String.t()}
   def install(browser, opts \\ []) when browser in [:chrome, :firefox] and is_list(opts) do
     with {:ok, script_path} <- installer_script_path(browser),
-         {:ok, key_values} <- run_script(script_path, script_args(browser, opts), command_runner(opts)) do
-      case parse_payload(browser, key_values) do
-        {:ok, payload} ->
-          case ensure_stable_symlinks(payload, opts) do
-            :ok -> {:ok, payload}
-            {:error, reason} -> {:error, reason}
-          end
-
-        {:error, reason} ->
-          {:error, reason}
-      end
+         {:ok, key_values} <- run_script(script_path, script_args(browser, opts), command_runner(opts)),
+         {:ok, payload} <- parse_payload(browser, key_values),
+         :ok <- ensure_stable_symlinks(payload, opts) do
+      {:ok, payload}
     end
   end
 
@@ -157,21 +150,33 @@ defmodule Cerberus.Browser.Install do
        when browser in [:chrome, :firefox] and is_map(binaries) do
     stable_link_dir = stable_link_dir(opts)
 
+    with :ok <- ensure_stable_link_dir(stable_link_dir) do
+      ensure_stable_link_targets(browser, binaries, stable_link_dir)
+    end
+  end
+
+  defp ensure_stable_link_dir(stable_link_dir) when is_binary(stable_link_dir) do
     case File.mkdir_p(stable_link_dir) do
       :ok ->
-        browser
-        |> stable_link_targets(binaries, stable_link_dir)
-        |> Enum.reduce_while(:ok, fn {link_path, target_path}, :ok ->
-          case replace_stable_symlink(link_path, target_path) do
-            :ok -> {:cont, :ok}
-            {:error, reason} -> {:halt, {:error, reason}}
-          end
-        end)
+        :ok
 
-      {:error, reason, _path} ->
+      {:error, reason} ->
         {:error, "failed to create stable link dir #{stable_link_dir}: #{:file.format_error(reason)}"}
     end
   end
+
+  defp ensure_stable_link_targets(browser, binaries, stable_link_dir) when is_map(binaries) do
+    browser
+    |> stable_link_targets(binaries, stable_link_dir)
+    |> Enum.reduce_while(:ok, fn {link_path, target_path}, :ok ->
+      link_path
+      |> replace_stable_symlink(target_path)
+      |> stable_link_replace_result()
+    end)
+  end
+
+  defp stable_link_replace_result(:ok), do: {:cont, :ok}
+  defp stable_link_replace_result({:error, reason}), do: {:halt, {:error, reason}}
 
   defp stable_link_targets(:chrome, binaries, stable_link_dir) do
     [

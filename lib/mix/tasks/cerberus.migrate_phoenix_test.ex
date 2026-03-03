@@ -364,7 +364,9 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
       {:ok, ast} ->
         {_ast, found?} =
           Macro.prewalk(ast, false, fn
-            {{:., _dot_meta, [{:__aliases__, _alias_meta, [:Application]}, :put_env]}, _call_meta, args} = node, found? ->
+            {{:., _dot_meta, [{:__aliases__, _alias_meta, [:Application]}, :put_env]}, _call_meta, args} =
+                node,
+            found? ->
               {node, found? or cerberus_endpoint_put_env_call_args?(args)}
 
             node, found? ->

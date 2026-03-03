@@ -1227,46 +1227,61 @@ defmodule Cerberus do
   defp locator_kind_key?(key) when is_binary(key), do: key in @locator_kind_string_keys
   defp locator_kind_key?(_key), do: false
 
-  @includes_ecto Code.ensure_loaded?(EctoSandbox) && Code.ensure_loaded?(PhoenixSandbox)
+  defp checkout_ecto_repos(repo, context) do
+    if ecto_sandbox_available?() do
+      repos = List.wrap(repo)
+      owner = checkout_sandbox_repos(repos, context)
 
-  if @includes_ecto do
-    defp checkout_ecto_repos(repo, context) do
-      repo
-      |> List.wrap()
-      |> Enum.map(&maybe_start_sandbox_owner(&1, context))
-      |> PhoenixSandbox.metadata_for(self())
-      |> PhoenixSandbox.encode_metadata()
-    end
-
-    defp maybe_start_sandbox_owner(repo, context) do
-      pid = EctoSandbox.start_owner!(repo, shared: not context.async)
-      ExUnit.Callbacks.on_exit(fn -> stop_sandbox_owner(pid, context) end)
-      repo
-    rescue
-      e in MatchError ->
-        case e do
-          %MatchError{term: {:error, {{:badmatch, {:already, :allowed}}, _}}} ->
-            # Already checked out (e.g. second new_session call in same test)
-            repo
-
-          _ ->
-            reraise e, __STACKTRACE__
-        end
-    end
-
-    defp stop_sandbox_owner(checkout_pid, _context), do: do_stop_sandbox_owner(checkout_pid)
-
-    defp do_stop_sandbox_owner(checkout_pid) do
-      # delay = Keyword.fetch!(config, :ecto_sandbox_stop_owner_delay)
-      # if delay > 0, do: Process.sleep(delay)
-      EctoSandbox.stop_owner(checkout_pid)
-    catch
-      :exit, {:noproc, _} -> :ok
-    end
-  else
-    defp checkout_ecto_repos(_, _) do
+      metadata = PhoenixSandbox.metadata_for(repos, owner)
+      PhoenixSandbox.encode_metadata(metadata)
+    else
       "Ecto not loaded"
     end
+  end
+
+  defp ecto_sandbox_available? do
+    Code.ensure_loaded?(EctoSandbox) and Code.ensure_loaded?(PhoenixSandbox)
+  end
+
+  defp checkout_sandbox_repos([repo], context), do: ensure_sandbox_owner(repo, context)
+
+  defp checkout_sandbox_repos(repos, context) when is_list(repos) do
+    Enum.each(repos, &ensure_sandbox_owner(&1, context))
+    self()
+  end
+
+  defp ensure_sandbox_owner(repo, context) do
+    owner_key = sandbox_owner_registry_key(repo)
+
+    case Process.get(owner_key) do
+      pid when is_pid(pid) ->
+        if Process.alive?(pid), do: pid, else: start_sandbox_owner(repo, context, owner_key)
+
+      _ ->
+        start_sandbox_owner(repo, context, owner_key)
+    end
+  end
+
+  defp start_sandbox_owner(repo, context, owner_key) do
+    pid = EctoSandbox.start_owner!(repo, shared: not context.async)
+    Process.put(owner_key, pid)
+    ExUnit.Callbacks.on_exit(fn -> stop_tracked_sandbox_owner(owner_key, pid) end)
+    pid
+  end
+
+  defp stop_tracked_sandbox_owner(owner_key, checkout_pid) do
+    case Process.get(owner_key) do
+      ^checkout_pid -> Process.delete(owner_key)
+      _ -> :ok
+    end
+
+    EctoSandbox.stop_owner(checkout_pid)
+  catch
+    :exit, {:noproc, _} -> :ok
+  end
+
+  defp sandbox_owner_registry_key(repo) do
+    {__MODULE__, :sandbox_owner_pid, repo}
   end
 
   defp format_path_error(op, observed) do

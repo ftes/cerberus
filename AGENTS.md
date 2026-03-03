@@ -5,6 +5,7 @@ Don't include backticks in the text you pass to beans - this WILL cause shell ex
 Other agents may be running (beans in-progress).
 Pick next bean that won't lead to edit conflicts.
 Ignore other changes in git - commit your changes only.
+Run tests with random `PORT=4xxx` env var.
 
 ## Be autonomous
 Read a lot up front. Try to ask all questions up front.

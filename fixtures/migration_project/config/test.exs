@@ -8,6 +8,4 @@ config :migration_fixture, MigrationFixtureWeb.Endpoint,
 
 config :phoenix, :plug_init_mode, :runtime
 
-config :phoenix_test,
-  endpoint: MigrationFixtureWeb.Endpoint,
-  otp_app: :migration_fixture
+config :phoenix_test, endpoint: MigrationFixtureWeb.Endpoint
