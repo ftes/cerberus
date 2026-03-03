@@ -134,7 +134,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/live/selector-edge")
-        |> click("Apply" |> button() |> testid("apply-secondary-marker"))
+        |> click("Apply" |> button() |> testid("apply-secondary-marker"), timeout: 0)
       end
 
       unquote(driver)
@@ -151,7 +151,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
                      unquote(driver)
                      |> driver_session(context)
                      |> visit("/live/selector-edge")
-                     |> click(or_(css("#primary-actions button"), css("#secondary-actions button")))
+                     |> click(or_(css("#primary-actions button"), css("#secondary-actions button")), timeout: 0)
                    end
     end
 
@@ -191,7 +191,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/live/controls")
-        |> choose(label("Email Choice"), selected: true)
+        |> choose(label("Email Choice"), selected: true, timeout: 0)
       end
     end
 
@@ -200,14 +200,14 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/live/controls")
-        |> select(label("Disabled select"), option: "Cannot submit", disabled: false)
+        |> select(label("Disabled select"), option: "Cannot submit", disabled: false, timeout: 0)
       end
 
       assert_raise ExUnit.AssertionError, ~r/matched select field is disabled/, fn ->
         unquote(driver)
         |> driver_session(context)
         |> visit("/live/controls")
-        |> select(label("Disabled select"), option: "Cannot submit", disabled: true)
+        |> select(label("Disabled select"), option: "Cannot submit", disabled: true, timeout: 0)
       end
     end
   end

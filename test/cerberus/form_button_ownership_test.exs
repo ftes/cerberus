@@ -33,7 +33,7 @@ defmodule Cerberus.FormButtonOwnershipTest do
           |> fill_in("Name", "Aragorn")
 
         assert {:error, session_after_reset, _observed, _reason} =
-                 submit_for_session(session, reset_locator, [])
+                 submit_for_session(session, reset_locator, timeout: 0)
 
         assert {:ok, submitted_session, _observed} =
                  submit_for_session(session_after_reset, save_locator, [])

@@ -69,13 +69,27 @@ defmodule Cerberus.Browser do
     raise ArgumentError, "Browser.press/3 expects key as a string and options as a keyword list"
   end
 
-  @spec drag(session, String.t(), String.t()) :: session when session: var
-  def drag(%BrowserSession{} = session, source_selector, target_selector)
-      when is_binary(source_selector) and is_binary(target_selector) do
-    Extensions.drag(session, source_selector, target_selector)
+  @spec drag(session, String.t(), String.t(), Options.browser_drag_opts()) :: session when session: var
+  def drag(session, source_selector, target_selector, opts \\ [])
+
+  def drag(%BrowserSession{} = session, source_selector, target_selector, opts)
+      when is_binary(source_selector) and is_binary(target_selector) and is_list(opts) do
+    opts = Options.validate_browser_drag!(opts)
+    Extensions.drag(session, source_selector, target_selector, opts)
   end
 
-  def drag(session, _source_selector, _target_selector), do: Assertions.unsupported(session, :drag)
+  def drag(%BrowserSession{}, _source_selector, _target_selector, opts) when is_list(opts) do
+    raise ArgumentError,
+          "Browser.drag/4 expects source and target selectors as strings and options as a keyword list"
+  end
+
+  def drag(session, _source_selector, _target_selector, opts) when is_list(opts),
+    do: Assertions.unsupported(session, :drag, opts)
+
+  def drag(_session, _source_selector, _target_selector, _opts) do
+    raise ArgumentError,
+          "Browser.drag/4 expects source and target selectors as strings and options as a keyword list"
+  end
 
   @spec with_dialog(session, (session -> term()), Options.browser_with_dialog_opts()) :: session when session: var
   def with_dialog(session, action, opts \\ [])

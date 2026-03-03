@@ -60,8 +60,8 @@ defmodule Cerberus.BrowserExtensionsTest do
       |> session()
       |> visit("/browser/extensions")
       |> screenshot(path: path)
-      |> type("hello browser", selector: "#keyboard-input")
-      |> press("Enter", selector: "#press-input")
+      |> type("hello browser", selector: "#keyboard-input", timeout: 250)
+      |> press("Enter", selector: "#press-input", timeout: 250)
       |> with_dialog(fn dialog_session ->
         click(dialog_session, button("Open Confirm Dialog"))
       end)
@@ -72,7 +72,7 @@ defmodule Cerberus.BrowserExtensionsTest do
              assert value == "hello browser"
            end)
 
-    session = drag(session, "#drag-source", "#drop-target")
+    session = drag(session, "#drag-source", "#drop-target", timeout: 250)
 
     assert_has(session, text("Press result: submitted", exact: true))
     assert_has(session, text("Dialog result: cancelled", exact: true))
@@ -133,6 +133,14 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     assert_raise ArgumentError, ~r/Browser.type\/3 invalid options/, fn ->
       type(session, "hello", unknown: true)
+    end
+
+    assert_raise ArgumentError, ~r/Browser.press\/3 invalid options/, fn ->
+      press(session, "Enter", timeout: -1)
+    end
+
+    assert_raise ArgumentError, ~r/Browser.drag\/4 invalid options/, fn ->
+      drag(session, "#drag-source", "#drop-target", timeout: -1)
     end
 
     assert_raise ArgumentError, ~r/Browser.with_dialog\/3 invalid options/, fn ->

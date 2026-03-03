@@ -115,6 +115,7 @@ defmodule Cerberus.Options do
 
   @type click_opts :: [
           kind: click_kind(),
+          timeout: non_neg_integer(),
           selector: String.t() | nil,
           checked: boolean() | nil,
           disabled: boolean() | nil,
@@ -140,6 +141,7 @@ defmodule Cerberus.Options do
         ]
 
   @type fill_in_opts :: [
+          timeout: non_neg_integer(),
           selector: String.t() | nil,
           checked: boolean() | nil,
           disabled: boolean() | nil,
@@ -156,6 +158,7 @@ defmodule Cerberus.Options do
         ]
 
   @type check_opts :: [
+          timeout: non_neg_integer(),
           selector: String.t() | nil,
           checked: boolean() | nil,
           disabled: boolean() | nil,
@@ -174,6 +177,7 @@ defmodule Cerberus.Options do
   @type select_opts :: [
           option: select_value(),
           exact_option: boolean(),
+          timeout: non_neg_integer(),
           selector: String.t() | nil,
           checked: boolean() | nil,
           disabled: boolean() | nil,
@@ -190,6 +194,7 @@ defmodule Cerberus.Options do
         ]
 
   @type choose_opts :: [
+          timeout: non_neg_integer(),
           selector: String.t() | nil,
           checked: boolean() | nil,
           disabled: boolean() | nil,
@@ -206,6 +211,7 @@ defmodule Cerberus.Options do
         ]
 
   @type upload_opts :: [
+          timeout: non_neg_integer(),
           selector: String.t() | nil,
           checked: boolean() | nil,
           disabled: boolean() | nil,
@@ -222,6 +228,7 @@ defmodule Cerberus.Options do
         ]
 
   @type submit_opts :: [
+          timeout: non_neg_integer(),
           selector: String.t() | nil,
           checked: boolean() | nil,
           disabled: boolean() | nil,
@@ -253,10 +260,18 @@ defmodule Cerberus.Options do
 
   @type browser_type_opts :: [
           selector: String.t() | nil,
-          clear: boolean()
+          clear: boolean(),
+          timeout: non_neg_integer()
         ]
 
-  @type browser_press_opts :: browser_selector_opts()
+  @type browser_press_opts :: [
+          selector: String.t() | nil,
+          timeout: non_neg_integer()
+        ]
+
+  @type browser_drag_opts :: [
+          timeout: non_neg_integer()
+        ]
 
   @type browser_with_dialog_opts :: [
           timeout: pos_integer(),
@@ -284,6 +299,7 @@ defmodule Cerberus.Options do
       default: :any,
       doc: "Limits click matching to links, buttons, or both."
     ],
+    timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],
     selector: [type: :any, default: nil, doc: "Limits matching to elements that satisfy the CSS selector."],
     checked: [type: :any, default: nil, doc: "Requires matched elements to be checked/unchecked."],
     disabled: [type: :any, default: nil, doc: "Requires matched elements to be disabled/enabled."],
@@ -317,6 +333,7 @@ defmodule Cerberus.Options do
   ]
 
   @fill_in_opts_schema [
+    timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],
     selector: [type: :any, default: nil, doc: "Limits field lookup to elements that satisfy the CSS selector."],
     checked: [type: :any, default: nil, doc: "Requires matched fields to be checked/unchecked."],
     disabled: [type: :any, default: nil, doc: "Requires matched fields to be disabled/enabled."],
@@ -333,6 +350,7 @@ defmodule Cerberus.Options do
   ]
 
   @submit_opts_schema [
+    timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],
     selector: [
       type: :any,
       default: nil,
@@ -353,6 +371,7 @@ defmodule Cerberus.Options do
   ]
 
   @upload_opts_schema [
+    timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],
     selector: [type: :any, default: nil, doc: "Limits file-input lookup to elements that satisfy the CSS selector."],
     checked: [type: :any, default: nil, doc: "Requires matched file inputs to be checked/unchecked."],
     disabled: [type: :any, default: nil, doc: "Requires matched file inputs to be disabled/enabled."],
@@ -375,6 +394,7 @@ defmodule Cerberus.Options do
       doc: "Option text to select; for multi-select inputs pass all desired values on each call."
     ],
     exact_option: [type: :boolean, default: true, doc: "Requires exact option-text matches unless disabled."],
+    timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],
     selector: [type: :any, default: nil, doc: "Limits select lookup to elements that satisfy the CSS selector."],
     checked: [type: :any, default: nil, doc: "Requires matched selects to be checked/unchecked."],
     disabled: [type: :any, default: nil, doc: "Requires matched selects to be disabled/enabled."],
@@ -478,11 +498,17 @@ defmodule Cerberus.Options do
 
   @browser_type_opts_schema [
     selector: [type: :any, default: nil, doc: "Limits typing target to elements that satisfy the CSS selector."],
-    clear: [type: :boolean, default: false, doc: "Clears the field before typing."]
+    clear: [type: :boolean, default: false, doc: "Clears the field before typing."],
+    timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."]
   ]
 
   @browser_press_opts_schema [
-    selector: [type: :any, default: nil, doc: "Limits keypress target to elements that satisfy the CSS selector."]
+    selector: [type: :any, default: nil, doc: "Limits keypress target to elements that satisfy the CSS selector."],
+    timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."]
+  ]
+
+  @browser_drag_opts_schema [
+    timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."]
   ]
 
   @browser_with_dialog_opts_schema [
@@ -532,6 +558,9 @@ defmodule Cerberus.Options do
 
   @spec browser_press_schema() :: keyword()
   def browser_press_schema, do: @browser_press_opts_schema
+
+  @spec browser_drag_schema() :: keyword()
+  def browser_drag_schema, do: @browser_drag_opts_schema
 
   @spec browser_with_dialog_schema() :: keyword()
   def browser_with_dialog_schema, do: @browser_with_dialog_opts_schema
@@ -662,6 +691,11 @@ defmodule Cerberus.Options do
     opts
     |> validate!(@browser_press_opts_schema, "Browser.press/3")
     |> validate_selector!("Browser.press/3")
+  end
+
+  @spec validate_browser_drag!(keyword()) :: browser_drag_opts()
+  def validate_browser_drag!(opts) do
+    validate!(opts, @browser_drag_opts_schema, "Browser.drag/4")
   end
 
   @spec validate_browser_with_dialog!(keyword()) :: browser_with_dialog_opts()

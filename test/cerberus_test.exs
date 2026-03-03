@@ -299,6 +299,56 @@ defmodule CerberusTest do
     end
   end
 
+  test "action timeout options must be non-negative integers" do
+    assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
+      session()
+      |> visit("/articles")
+      |> click(text("Articles"), timeout: -1)
+    end
+
+    assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
+      session()
+      |> visit("/search")
+      |> fill_in(label("Search term"), "Gandalf", timeout: -1)
+    end
+
+    assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
+      session()
+      |> visit("/controls")
+      |> select("Race", option: "Elf", timeout: -1)
+    end
+
+    assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
+      session()
+      |> visit("/controls")
+      |> choose("Email Choice", timeout: -1)
+    end
+
+    assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
+      session()
+      |> visit("/controls")
+      |> check("Subscribe", timeout: -1)
+    end
+
+    assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
+      session()
+      |> visit("/controls")
+      |> uncheck("Subscribe", timeout: -1)
+    end
+
+    assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
+      session()
+      |> visit("/controls")
+      |> submit(text("Save Controls"), timeout: -1)
+    end
+
+    assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
+      session()
+      |> visit("/live/uploads")
+      |> upload("Avatar", "test/support/files/elixir.jpg", timeout: -1)
+    end
+  end
+
   test "reload_page revisits the current path" do
     session = visit(session(), "/articles")
 

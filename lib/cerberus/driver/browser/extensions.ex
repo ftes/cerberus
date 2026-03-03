@@ -22,8 +22,9 @@ defmodule Cerberus.Driver.Browser.Extensions do
   def type(%BrowserSession{} = session, text, opts \\ []) when is_binary(text) and is_list(opts) do
     selector = selector_opt!(opts)
     clear? = Keyword.get(opts, :clear, false)
+    timeout_ms = extension_timeout_ms(session, opts)
 
-    case evaluate_json(session, type_expression(selector, text, clear?)) do
+    case evaluate_json(session, type_expression(selector, text, clear?), timeout_ms) do
       {:ok, %{"ok" => true}} ->
         session
 
@@ -38,8 +39,9 @@ defmodule Cerberus.Driver.Browser.Extensions do
   @spec press(BrowserSession.t(), String.t(), Options.browser_press_opts()) :: BrowserSession.t()
   def press(%BrowserSession{} = session, key, opts \\ []) when is_binary(key) and is_list(opts) do
     selector = selector_opt!(opts)
+    timeout_ms = extension_timeout_ms(session, opts)
 
-    case evaluate_json(session, press_expression(selector, key)) do
+    case evaluate_json(session, press_expression(selector, key), timeout_ms) do
       {:ok, %{"ok" => true}} ->
         session
 
@@ -51,13 +53,14 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  @spec drag(BrowserSession.t(), String.t(), String.t()) :: BrowserSession.t()
-  def drag(%BrowserSession{} = session, source_selector, target_selector)
-      when is_binary(source_selector) and is_binary(target_selector) do
-    source_selector = non_empty_selector!(source_selector, "drag/3 source selector")
-    target_selector = non_empty_selector!(target_selector, "drag/3 target selector")
+  @spec drag(BrowserSession.t(), String.t(), String.t(), Options.browser_drag_opts()) :: BrowserSession.t()
+  def drag(%BrowserSession{} = session, source_selector, target_selector, opts \\ [])
+      when is_binary(source_selector) and is_binary(target_selector) and is_list(opts) do
+    source_selector = non_empty_selector!(source_selector, "drag/4 source selector")
+    target_selector = non_empty_selector!(target_selector, "drag/4 target selector")
+    timeout_ms = extension_timeout_ms(session, opts)
 
-    case evaluate_json(session, drag_expression(source_selector, target_selector)) do
+    case evaluate_json(session, drag_expression(source_selector, target_selector), timeout_ms) do
       {:ok, %{"ok" => true}} ->
         session
 
@@ -236,8 +239,14 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  defp evaluate_json(session, expression) do
-    with {:ok, result} <- UserContextProcess.evaluate(session.user_context_pid, expression, session.tab_id),
+  defp evaluate_json(session, expression, timeout_ms) do
+    with {:ok, result} <-
+           UserContextProcess.evaluate_with_timeout(
+             session.user_context_pid,
+             expression,
+             max(timeout_ms, 1),
+             session.tab_id
+           ),
          {:ok, json} <- decode_remote_json(result) do
       {:ok, json}
     else
@@ -246,6 +255,13 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
       {:error, reason} ->
         {:error, reason, %{}}
+    end
+  end
+
+  defp extension_timeout_ms(%BrowserSession{} = session, opts) when is_list(opts) do
+    case Keyword.get(opts, :timeout) do
+      timeout when is_integer(timeout) and timeout > 0 -> timeout
+      _ -> session.ready_timeout_ms
     end
   end
 

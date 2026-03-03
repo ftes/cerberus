@@ -1252,14 +1252,8 @@ defmodule Cerberus do
 
   defp ensure_sandbox_owner(repo, context) do
     owner_key = sandbox_owner_registry_key(repo)
-
-    case Process.get(owner_key) do
-      pid when is_pid(pid) ->
-        if Process.alive?(pid), do: pid, else: start_sandbox_owner(repo, context, owner_key)
-
-      _ ->
-        start_sandbox_owner(repo, context, owner_key)
-    end
+    reset_sandbox_owner(owner_key)
+    start_sandbox_owner(repo, context, owner_key)
   end
 
   defp start_sandbox_owner(repo, context, owner_key) do
@@ -1275,6 +1269,21 @@ defmodule Cerberus do
       _ -> :ok
     end
 
+    stop_sandbox_owner(checkout_pid)
+  end
+
+  defp reset_sandbox_owner(owner_key) do
+    case Process.get(owner_key) do
+      pid when is_pid(pid) ->
+        stop_sandbox_owner(pid)
+        Process.delete(owner_key)
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp stop_sandbox_owner(checkout_pid) do
     EctoSandbox.stop_owner(checkout_pid)
   catch
     :exit, {:noproc, _} -> :ok

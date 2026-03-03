@@ -40,7 +40,7 @@ defmodule Cerberus.LiveNestedScopeBehaviorTest do
           |> visit("/live/nested")
           |> within(css("#child-live-view"), fn scoped ->
             within(scoped, css(".child-actions"), fn nested ->
-              click(nested, button("Missing Action"))
+              click(nested, button("Missing Action"), timeout: 0)
             end)
           end)
         end

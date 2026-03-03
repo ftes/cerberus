@@ -311,13 +311,11 @@ defmodule Cerberus.Driver.Browser do
     selector = Keyword.get(match_opts, :selector)
 
     if requires_snapshot_matching?(match_opts) do
-      with_driver_ready(session, state, :click, fn ready_state ->
+      with_driver_ready(session, state, :click, match_opts, fn ready_state ->
         do_click_with_snapshot(session, ready_state, expected, match_opts, selector)
       end)
     else
-      with_driver_ready(session, state, :click, fn ready_state ->
-        do_resolved_click(session, ready_state, expected, match_opts)
-      end)
+      do_resolved_click(session, state, expected, match_opts)
     end
   end
 
@@ -329,7 +327,7 @@ defmodule Cerberus.Driver.Browser do
     if requires_snapshot_matching?(match_opts) do
       selector = Keyword.get(match_opts, :selector)
 
-      with_driver_ready(session, state, :fill_in, fn ready_state ->
+      with_driver_ready(session, state, :fill_in, match_opts, fn ready_state ->
         do_fill_in_with_snapshot(session, ready_state, expected, value, match_opts, selector)
       end)
     else
@@ -346,7 +344,7 @@ defmodule Cerberus.Driver.Browser do
     if requires_snapshot_matching?(match_opts) do
       selector = Keyword.get(match_opts, :selector)
 
-      with_driver_ready(session, state, :select, fn ready_state ->
+      with_driver_ready(session, state, :select, match_opts, fn ready_state ->
         do_select_with_snapshot(session, ready_state, expected, option, match_opts, selector)
       end)
     else
@@ -362,7 +360,7 @@ defmodule Cerberus.Driver.Browser do
     if requires_snapshot_matching?(match_opts) do
       selector = Keyword.get(match_opts, :selector)
 
-      with_driver_ready(session, state, :choose, fn ready_state ->
+      with_driver_ready(session, state, :choose, match_opts, fn ready_state ->
         do_choose_with_snapshot(session, ready_state, expected, match_opts, selector)
       end)
     else
@@ -378,7 +376,7 @@ defmodule Cerberus.Driver.Browser do
     if requires_snapshot_matching?(match_opts) do
       selector = Keyword.get(match_opts, :selector)
 
-      with_driver_ready(session, state, :check, fn ready_state ->
+      with_driver_ready(session, state, :check, match_opts, fn ready_state ->
         do_toggle_checkbox_with_snapshot(session, ready_state, expected, match_opts, selector, true, :check)
       end)
     else
@@ -394,7 +392,7 @@ defmodule Cerberus.Driver.Browser do
     if requires_snapshot_matching?(match_opts) do
       selector = Keyword.get(match_opts, :selector)
 
-      with_driver_ready(session, state, :uncheck, fn ready_state ->
+      with_driver_ready(session, state, :uncheck, match_opts, fn ready_state ->
         do_toggle_checkbox_with_snapshot(session, ready_state, expected, match_opts, selector, false, :uncheck)
       end)
     else
@@ -410,7 +408,7 @@ defmodule Cerberus.Driver.Browser do
     if requires_snapshot_matching?(match_opts) do
       selector = Keyword.get(match_opts, :selector)
 
-      with_driver_ready(session, state, :upload, fn ready_state ->
+      with_driver_ready(session, state, :upload, match_opts, fn ready_state ->
         do_upload_with_snapshot(session, ready_state, expected, path, match_opts, selector)
       end)
     else
@@ -426,13 +424,11 @@ defmodule Cerberus.Driver.Browser do
     if requires_snapshot_matching?(match_opts) do
       selector = Keyword.get(match_opts, :selector)
 
-      with_driver_ready(session, state, :submit, fn ready_state ->
+      with_driver_ready(session, state, :submit, match_opts, fn ready_state ->
         do_submit_with_snapshot(session, ready_state, expected, match_opts, selector)
       end)
     else
-      with_driver_ready(session, state, :submit, fn ready_state ->
-        do_resolved_submit(session, ready_state, expected, match_opts)
-      end)
+      do_resolved_submit(session, state, expected, match_opts)
     end
   end
 
@@ -550,7 +546,7 @@ defmodule Cerberus.Driver.Browser do
 
     case perform_action(session, state, :click, expected, opts) do
       {:ok, %{"target" => target} = result} when is_map(target) ->
-        click_target_result(session, state, target, result)
+        click_target_result(session, state, target, result, opts)
 
       {:ok, result} ->
         target = Map.get(result, "target")
@@ -565,7 +561,7 @@ defmodule Cerberus.Driver.Browser do
   defp do_resolved_submit(session, state, expected, opts) do
     case perform_action(session, state, :submit, expected, opts) do
       {:ok, %{"target" => %{"kind" => "button"} = button} = result} ->
-        submit_result(session, state, button, result)
+        submit_result(session, state, button, result, opts)
 
       {:ok, result} ->
         target = Map.get(result, "target")
@@ -647,8 +643,8 @@ defmodule Cerberus.Driver.Browser do
 
   defp perform_action(session, state, op, expected, opts, extra_payload \\ %{})
        when is_list(opts) and is_map(extra_payload) do
-    timeout_ms = state.ready_timeout_ms
-    payload = build_action_payload(state, op, expected, opts, extra_payload)
+    timeout_ms = action_timeout_ms(opts, state.ready_timeout_ms)
+    payload = build_action_payload(state, op, expected, opts, timeout_ms, extra_payload)
 
     with :ok <- maybe_ensure_action_helpers(state),
          {:ok, result} <- eval_json(state, Expressions.action_perform(payload), command_timeout_ms(timeout_ms)) do
@@ -719,8 +715,8 @@ defmodule Cerberus.Driver.Browser do
   defp action_disabled_reason(:select), do: "matched select field is disabled"
   defp action_disabled_reason(_op), do: "matched field is disabled"
 
-  defp build_action_payload(state, op, expected, opts, extra_payload) when is_list(opts) and is_map(extra_payload) do
-    timeout_ms = state.ready_timeout_ms
+  defp build_action_payload(state, op, expected, opts, timeout_ms, extra_payload)
+       when is_list(opts) and is_integer(timeout_ms) and timeout_ms >= 0 and is_map(extra_payload) do
     {between_min, between_max} = between_bounds(opts)
 
     Map.merge(
@@ -747,7 +743,7 @@ defmodule Cerberus.Driver.Browser do
         disabled: Keyword.get(opts, :disabled),
         selected: Keyword.get(opts, :selected),
         readonly: Keyword.get(opts, :readonly),
-        readyTimeoutMs: state.ready_timeout_ms,
+        readyTimeoutMs: timeout_ms,
         timeoutMs: timeout_ms,
         pollMs: 100
       },
@@ -846,7 +842,7 @@ defmodule Cerberus.Driver.Browser do
             {:error, session, observed, no_clickable_error(kind)}
 
           button ->
-            click_button(session, state, button, selector)
+            click_button(session, state, button, selector, opts)
         end
 
       found_link ->
@@ -866,7 +862,7 @@ defmodule Cerberus.Driver.Browser do
         {:error, session, observed, reason}
 
       {:ok, button} ->
-        submit_button(session, state, button, selector)
+        submit_button(session, state, button, selector, opts)
     end
   end
 
@@ -879,7 +875,7 @@ defmodule Cerberus.Driver.Browser do
         {:error, session, observed, reason}
 
       {:ok, field} ->
-        fill_field(session, state, field, value, selector)
+        fill_field(session, state, field, value, selector, opts)
     end
   end
 
@@ -903,7 +899,7 @@ defmodule Cerberus.Driver.Browser do
 
           true ->
             exact_option = Keyword.get(opts, :exact_option, true)
-            select_field_option(session, state, field, option, exact_option, selector)
+            select_field_option(session, state, field, option, exact_option, selector, opts)
         end
     end
   end
@@ -927,7 +923,7 @@ defmodule Cerberus.Driver.Browser do
             {:error, session, observed, "matched field is disabled"}
 
           true ->
-            choose_radio_field(session, state, field, selector)
+            choose_radio_field(session, state, field, selector, opts)
         end
     end
   end
@@ -941,7 +937,7 @@ defmodule Cerberus.Driver.Browser do
         {:error, session, observed, reason}
 
       {:ok, field} ->
-        upload_field(session, state, field, path, selector)
+        upload_field(session, state, field, path, selector, opts)
     end
   end
 
@@ -955,7 +951,7 @@ defmodule Cerberus.Driver.Browser do
 
       {:ok, field} ->
         if checkbox_field?(field) do
-          toggle_checkbox_field(session, state, field, checked?, selector, op)
+          toggle_checkbox_field(session, state, field, checked?, selector, op, opts)
         else
           observed = %{action: op, path: state.current_path, field: field}
           {:error, session, observed, "matched field is not a checkbox"}
@@ -963,7 +959,7 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp upload_field(session, state, field, path, selector) do
+  defp upload_field(session, state, field, path, selector, opts) do
     file = UploadFile.read!(path)
     index = field["index"] || 0
 
@@ -980,7 +976,7 @@ defmodule Cerberus.Driver.Browser do
 
     case eval_json(state, expression) do
       {:ok, result} ->
-        upload_field_result(session, state, field, file.file_name, result)
+        upload_field_result(session, state, field, file.file_name, result, opts)
 
       {:error, reason, details} ->
         observed = %{action: :upload, path: state.current_path, field: field, file_path: path, details: details}
@@ -992,8 +988,8 @@ defmodule Cerberus.Driver.Browser do
       {:error, session, observed, Exception.message(error)}
   end
 
-  defp upload_field_result(session, state, field, file_name, %{"ok" => true} = result) do
-    case await_driver_ready(state) do
+  defp upload_field_result(session, state, field, file_name, %{"ok" => true} = result, opts) do
+    case await_driver_ready(state, action_timeout_ms(opts, state.ready_timeout_ms)) do
       {:ok, readiness} ->
         case snapshot_with_retry(state) do
           {next_state, snapshot} ->
@@ -1034,7 +1030,7 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp upload_field_result(session, state, field, file_name, result) do
+  defp upload_field_result(session, state, field, file_name, result, _opts) do
     reason = Map.get(result, "reason", "upload_failed")
     observed = %{action: :upload, path: state.current_path, field: field, file_name: file_name, result: result}
     {:error, session, observed, "browser upload failed: #{reason}"}
@@ -1051,7 +1047,7 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp click_target_result(session, state, target, result) when is_map(target) and is_map(result) do
+  defp click_target_result(session, state, target, result, opts) when is_map(target) and is_map(result) do
     await_failure_observed = %{
       action: :click,
       clicked: target["text"],
@@ -1059,7 +1055,7 @@ defmodule Cerberus.Driver.Browser do
       target: target
     }
 
-    maybe_await_ready_result(session, state, result, await_failure_observed, fn readiness ->
+    maybe_await_ready_result(session, state, result, opts, await_failure_observed, fn readiness ->
       path =
         result
         |> action_result_path(state.current_path)
@@ -1079,7 +1075,7 @@ defmodule Cerberus.Driver.Browser do
     end)
   end
 
-  defp submit_result(session, state, button, result) when is_map(result) do
+  defp submit_result(session, state, button, result, opts) when is_map(result) do
     await_failure_observed = %{
       action: :submit,
       clicked: button["text"],
@@ -1087,7 +1083,7 @@ defmodule Cerberus.Driver.Browser do
       target: button
     }
 
-    maybe_await_ready_result(session, state, result, await_failure_observed, fn readiness ->
+    maybe_await_ready_result(session, state, result, opts, await_failure_observed, fn readiness ->
       path =
         result
         |> action_result_path(state.current_path)
@@ -1178,13 +1174,13 @@ defmodule Cerberus.Driver.Browser do
     {:ok, update_session(session, next_state, :upload, observed), observed}
   end
 
-  defp submit_button(session, state, button, selector) do
+  defp submit_button(session, state, button, selector, opts) do
     index = button["index"] || 0
     expression = Expressions.button_click(index, Session.scope(state), selector)
 
     case eval_json(state, expression) do
       {:ok, %{"ok" => true}} ->
-        submit_after_eval(session, state, button)
+        submit_after_eval(session, state, button, opts)
 
       {:ok, result} ->
         reason = Map.get(result, "reason", "submit_target_failed")
@@ -1197,8 +1193,8 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp submit_after_eval(session, state, button) do
-    case await_driver_ready(state) do
+  defp submit_after_eval(session, state, button, opts) do
+    case await_driver_ready(state, action_timeout_ms(opts, state.ready_timeout_ms)) do
       {:ok, readiness} ->
         submit_snapshot_result(session, state, button, readiness)
 
@@ -1235,13 +1231,13 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp fill_field(session, state, field, value, selector) do
+  defp fill_field(session, state, field, value, selector, opts) do
     index = field["index"] || 0
     expression = Expressions.field_set(index, value, Session.scope(state), selector)
 
     case eval_json(state, expression) do
       {:ok, result} ->
-        fill_field_result(session, state, field, value, result)
+        fill_field_result(session, state, field, value, result, opts)
 
       {:error, reason, details} ->
         observed = %{action: :fill_in, path: state.current_path, field: field, details: details}
@@ -1249,13 +1245,13 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp toggle_checkbox_field(session, state, field, checked?, selector, op) do
+  defp toggle_checkbox_field(session, state, field, checked?, selector, op, opts) do
     index = field["index"] || 0
     expression = Expressions.checkbox_set(index, checked?, Session.scope(state), selector)
 
     case eval_json(state, expression) do
       {:ok, result} ->
-        toggle_checkbox_result(session, state, field, checked?, op, result)
+        toggle_checkbox_result(session, state, field, checked?, op, result, opts)
 
       {:error, reason, details} ->
         observed = %{action: op, path: state.current_path, field: field, checked: checked?, details: details}
@@ -1263,7 +1259,7 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp select_field_option(session, state, field, option, exact_option, selector) do
+  defp select_field_option(session, state, field, option, exact_option, selector, opts) do
     index = field["index"] || 0
     options = List.wrap(option)
 
@@ -1278,7 +1274,7 @@ defmodule Cerberus.Driver.Browser do
 
     case eval_json(state, expression) do
       {:ok, result} ->
-        select_field_result(session, state, field, option, result)
+        select_field_result(session, state, field, option, result, opts)
 
       {:error, reason, details} ->
         observed = %{action: :select, path: state.current_path, field: field, option: option, details: details}
@@ -1286,13 +1282,13 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp choose_radio_field(session, state, field, selector) do
+  defp choose_radio_field(session, state, field, selector, opts) do
     index = field["index"] || 0
     expression = Expressions.radio_set(index, Session.scope(state), selector)
 
     case eval_json(state, expression) do
       {:ok, result} ->
-        choose_radio_result(session, state, field, result)
+        choose_radio_result(session, state, field, result, opts)
 
       {:error, reason, details} ->
         observed = %{action: :choose, path: state.current_path, field: field, details: details}
@@ -1300,8 +1296,8 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp fill_field_result(session, state, field, value, %{"ok" => true} = result) do
-    case await_driver_ready(state) do
+  defp fill_field_result(session, state, field, value, %{"ok" => true} = result, opts) do
+    case await_driver_ready(state, action_timeout_ms(opts, state.ready_timeout_ms)) do
       {:ok, readiness} ->
         observed = %{
           action: :fill_in,
@@ -1326,14 +1322,14 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp fill_field_result(session, state, field, _value, result) do
+  defp fill_field_result(session, state, field, _value, result, _opts) do
     reason = Map.get(result, "reason", "field_fill_failed")
     observed = %{action: :fill_in, path: state.current_path, field: field, result: result}
     {:error, session, observed, "browser field fill failed: #{reason}"}
   end
 
-  defp toggle_checkbox_result(session, state, field, checked?, op, %{"ok" => true} = result) do
-    case await_driver_ready(state) do
+  defp toggle_checkbox_result(session, state, field, checked?, op, %{"ok" => true} = result, opts) do
+    case await_driver_ready(state, action_timeout_ms(opts, state.ready_timeout_ms)) do
       {:ok, readiness} ->
         observed = %{
           action: op,
@@ -1358,14 +1354,14 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp toggle_checkbox_result(session, state, field, checked?, op, result) do
+  defp toggle_checkbox_result(session, state, field, checked?, op, result, _opts) do
     reason = Map.get(result, "reason", "checkbox_toggle_failed")
     observed = %{action: op, path: state.current_path, field: field, checked: checked?, result: result}
     {:error, session, observed, "browser checkbox toggle failed: #{reason}"}
   end
 
-  defp select_field_result(session, state, field, option, %{"ok" => true} = result) do
-    case await_driver_ready(state) do
+  defp select_field_result(session, state, field, option, %{"ok" => true} = result, opts) do
+    case await_driver_ready(state, action_timeout_ms(opts, state.ready_timeout_ms)) do
       {:ok, readiness} ->
         observed = %{
           action: :select,
@@ -1391,14 +1387,14 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp select_field_result(session, state, field, option, result) do
+  defp select_field_result(session, state, field, option, result, _opts) do
     reason = Map.get(result, "reason", "select_failed")
     observed = %{action: :select, path: state.current_path, field: field, option: option, result: result}
     {:error, session, observed, "browser select failed: #{reason}"}
   end
 
-  defp choose_radio_result(session, state, field, %{"ok" => true} = result) do
-    case await_driver_ready(state) do
+  defp choose_radio_result(session, state, field, %{"ok" => true} = result, opts) do
+    case await_driver_ready(state, action_timeout_ms(opts, state.ready_timeout_ms)) do
       {:ok, readiness} ->
         observed = %{
           action: :choose,
@@ -1422,16 +1418,16 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp choose_radio_result(session, state, field, result) do
+  defp choose_radio_result(session, state, field, result, _opts) do
     reason = Map.get(result, "reason", "choose_failed")
     observed = %{action: :choose, path: state.current_path, field: field, result: result}
     {:error, session, observed, "browser choose failed: #{reason}"}
   end
 
-  defp maybe_await_ready_result(session, state, result, fallback_observed, on_success)
-       when is_map(result) and is_map(fallback_observed) and is_function(on_success, 1) do
+  defp maybe_await_ready_result(session, state, result, opts, fallback_observed, on_success)
+       when is_map(result) and is_list(opts) and is_map(fallback_observed) and is_function(on_success, 1) do
     if await_ready_required?(result) do
-      case await_driver_ready(state) do
+      case await_driver_ready(state, action_timeout_ms(opts, state.ready_timeout_ms)) do
         {:ok, readiness} ->
           on_success.(readiness)
 
@@ -1583,13 +1579,13 @@ defmodule Cerberus.Driver.Browser do
     field["disabled"] == true
   end
 
-  defp click_button(session, state, button, selector) do
+  defp click_button(session, state, button, selector, opts) do
     index = button["index"] || 0
     expression = Expressions.button_click(index, Session.scope(state), selector)
 
     case eval_json(state, expression) do
       {:ok, _result} ->
-        click_button_after_eval(session, state, button)
+        click_button_after_eval(session, state, button, opts)
 
       {:error, reason, details} ->
         observed = %{action: :button, clicked: button["text"], path: state.current_path, details: details}
@@ -1717,8 +1713,10 @@ defmodule Cerberus.Driver.Browser do
 
   defp maybe_record_js_timing(payload), do: payload
 
-  defp with_driver_ready(session, state, action, on_ready) when is_function(on_ready, 1) do
-    case await_driver_ready(state) do
+  defp with_driver_ready(session, state, action, opts, on_ready) when is_list(opts) and is_function(on_ready, 1) do
+    timeout_ms = action_timeout_ms(opts, state.ready_timeout_ms)
+
+    case await_driver_ready(state, timeout_ms) do
       {:ok, _readiness} ->
         on_ready.(state)
 
@@ -1733,8 +1731,27 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp await_driver_ready(state) do
-    opts = [timeout_ms: state.ready_timeout_ms, quiet_ms: state.ready_quiet_ms]
+  defp await_driver_ready(state, timeout_ms \\ nil)
+
+  defp await_driver_ready(state, nil) do
+    await_driver_ready(state, state.ready_timeout_ms)
+  end
+
+  defp await_driver_ready(_state, timeout_ms) when is_integer(timeout_ms) and timeout_ms <= 0 do
+    {:ok,
+     %{
+       "ok" => true,
+       "reason" => "timeout_skipped",
+       "awaited" => [],
+       "lastSignal" => "timeout_skipped",
+       "lastLiveState" => "unknown",
+       "timeoutMs" => timeout_ms
+     }}
+  end
+
+  defp await_driver_ready(state, timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
+    quiet_ms = max(min(state.ready_quiet_ms, timeout_ms), 1)
+    opts = [timeout_ms: timeout_ms, quiet_ms: quiet_ms]
 
     ready_result =
       Profiling.measure({:browser_wait, :await_ready}, fn ->
@@ -1971,8 +1988,8 @@ defmodule Cerberus.Driver.Browser do
     max(budget_ms - elapsed_ms, 0)
   end
 
-  defp click_button_after_eval(session, state, button) do
-    case await_driver_ready(state) do
+  defp click_button_after_eval(session, state, button, opts) do
+    case await_driver_ready(state, action_timeout_ms(opts, state.ready_timeout_ms)) do
       {:ok, readiness} ->
         click_button_snapshot_result(session, state, button, readiness)
 
@@ -2273,6 +2290,18 @@ defmodule Cerberus.Driver.Browser do
   defp visibility_filter(opts), do: Config.visibility_filter(opts)
   defp assertion_timeout_ms(opts), do: Config.assertion_timeout_ms(opts)
   defp path_timeout_ms(opts), do: Config.path_timeout_ms(opts)
+
+  defp action_timeout_ms(opts, fallback_timeout_ms)
+       when is_list(opts) and is_integer(fallback_timeout_ms) and fallback_timeout_ms > 0 do
+    case Keyword.fetch(opts, :timeout) do
+      {:ok, timeout_ms} when is_integer(timeout_ms) and timeout_ms >= 0 ->
+        timeout_ms
+
+      _other ->
+        fallback_timeout_ms
+    end
+  end
+
   defp command_timeout_ms(timeout_ms), do: Config.command_timeout_ms(timeout_ms)
   defp text_expectation_payload(expected), do: Config.text_expectation_payload(expected)
   defp path_expectation_payload(expected), do: Config.path_expectation_payload(expected)
