@@ -72,7 +72,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   ]
   @rewritable_assertions_calls [:assert_has, :refute_has, :assert_path, :refute_path]
   @canonical_text_assertions [:assert_has, :refute_has]
-  @canonical_labeled_value_keys %{fill_in: :with, select: :option}
+  @canonical_labeled_value_keys %{fill_in: :with}
   @local_import_trigger_calls Enum.uniq([:session | @rewritable_direct_calls ++ @rewritable_assertions_calls])
 
   defmodule RewriteState do
@@ -393,7 +393,9 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   @spec canonicalize_node(Macro.t(), boolean()) :: {Macro.t(), boolean()}
   defp canonicalize_node({{:., dot_meta, [module_ast, fun]}, call_meta, args} = node, changed)
        when is_atom(fun) and is_list(args) do
-    case canonicalize_call_args(fun, args) do
+    scope_builder = &build_remote_css_scope(module_ast, &1)
+
+    case canonicalize_call_args(fun, args, scope_builder) do
       {:ok, updated_args} ->
         {{{:., dot_meta, [module_ast, fun]}, call_meta, updated_args}, true}
 
@@ -403,7 +405,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   end
 
   defp canonicalize_node({fun, meta, args} = node, changed) when is_atom(fun) and is_list(args) do
-    case canonicalize_call_args(fun, args) do
+    case canonicalize_call_args(fun, args, &build_local_css_scope/1) do
       {:ok, updated_args} ->
         {{fun, meta, updated_args}, true}
 
@@ -495,11 +497,25 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     {:import, [], [{:__aliases__, [], [:Cerberus]}]}
   end
 
-  @spec canonicalize_call_args(atom(), [Macro.t()]) :: canonicalize_result()
-  defp canonicalize_call_args(fun, args) do
-    with :no_change <- canonicalize_text_assertion_args(fun, args) do
-      canonicalize_labeled_value_call_args(fun, args)
-    end
+  @spec canonicalize_call_args(atom(), [Macro.t()], (Macro.t() -> Macro.t())) :: canonicalize_result()
+  defp canonicalize_call_args(fun, args, scope_builder) when is_function(scope_builder, 1) do
+    {args, changed?} =
+      Enum.reduce(
+        [
+          fn acc -> canonicalize_text_assertion_args(fun, acc) end,
+          fn acc -> canonicalize_labeled_value_call_args(fun, acc) end,
+          fn acc -> canonicalize_scope_locator_args(fun, acc, scope_builder) end
+        ],
+        {args, false},
+        fn transform, {acc, changed?} ->
+          case transform.(acc) do
+            {:ok, updated} -> {updated, true}
+            :no_change -> {acc, changed?}
+          end
+        end
+      )
+
+    if changed?, do: {:ok, args}, else: :no_change
   end
 
   @spec canonicalize_text_assertion_args(atom(), [Macro.t()]) :: canonicalize_result()
@@ -535,6 +551,91 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     else
       _ -> :no_change
     end
+  end
+
+  @spec canonicalize_scope_locator_args(atom(), [Macro.t()], (Macro.t() -> Macro.t())) :: canonicalize_result()
+  defp canonicalize_scope_locator_args(fun, args, scope_builder) when fun in @canonical_text_assertions do
+    canonicalize_assertion_scope_args(args, scope_builder)
+  end
+
+  defp canonicalize_scope_locator_args(:within, args, scope_builder) do
+    canonicalize_within_scope_args(args, scope_builder)
+  end
+
+  defp canonicalize_scope_locator_args(_fun, _args, _scope_builder), do: :no_change
+
+  @spec canonicalize_assertion_scope_args([Macro.t()], (Macro.t() -> Macro.t())) :: canonicalize_result()
+  defp canonicalize_assertion_scope_args(args, scope_builder) when is_function(scope_builder, 1) do
+    case args do
+      [scope, locator] ->
+        if binary_literal_ast?(scope) and not keyword_ast?(locator) do
+          {:ok, [scope_builder.(scope), locator]}
+        else
+          :no_change
+        end
+
+      [first, second, third] ->
+        cond do
+          binary_literal_ast?(second) and not keyword_ast?(third) ->
+            {:ok, [first, scope_builder.(second), third]}
+
+          binary_literal_ast?(first) and keyword_ast?(third) ->
+            {:ok, [scope_builder.(first), second, third]}
+
+          true ->
+            :no_change
+        end
+
+      [session, scope, locator, opts] ->
+        if binary_literal_ast?(scope) and keyword_ast?(opts) do
+          {:ok, [session, scope_builder.(scope), locator, opts]}
+        else
+          :no_change
+        end
+
+      _ ->
+        :no_change
+    end
+  end
+
+  @spec canonicalize_within_scope_args([Macro.t()], (Macro.t() -> Macro.t())) :: canonicalize_result()
+  defp canonicalize_within_scope_args(args, scope_builder) when is_function(scope_builder, 1) do
+    case args do
+      [scope, callback] ->
+        if binary_literal_ast?(scope) and callback_ast?(callback) do
+          {:ok, [scope_builder.(scope), callback]}
+        else
+          :no_change
+        end
+
+      [session, scope, callback] ->
+        if binary_literal_ast?(scope) and callback_ast?(callback) do
+          {:ok, [session, scope_builder.(scope), callback]}
+        else
+          :no_change
+        end
+
+      _ ->
+        :no_change
+    end
+  end
+
+  @spec callback_ast?(Macro.t()) :: boolean()
+  defp callback_ast?({:fn, _, _}), do: true
+  defp callback_ast?({:&, _, _}), do: true
+  defp callback_ast?(_), do: false
+
+  @spec binary_literal_ast?(Macro.t()) :: boolean()
+  defp binary_literal_ast?(value) when is_binary(value), do: true
+  defp binary_literal_ast?({:__block__, _meta, [value]}), do: binary_literal_ast?(value)
+  defp binary_literal_ast?(_value), do: false
+
+  @spec build_local_css_scope(Macro.t()) :: Macro.t()
+  defp build_local_css_scope(scope_ast), do: {:css, [], [scope_ast]}
+
+  @spec build_remote_css_scope(Macro.t(), Macro.t()) :: Macro.t()
+  defp build_remote_css_scope(module_ast, scope_ast) do
+    {{:., [], [module_ast, :css]}, [], [scope_ast]}
   end
 
   @spec split_text_assertion_args([Macro.t()]) :: split_args_result()

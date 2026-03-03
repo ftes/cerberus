@@ -136,10 +136,10 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     rewritten = File.read!(file)
 
     assert rewritten =~ "Cerberus.visit(session(conn), \"/articles\")"
-    assert rewritten =~ ~s{Cerberus.assert_has(session, "#main", "Articles")}
-    assert rewritten =~ ~s{Cerberus.refute_has(session, "#missing", "Nope")}
+    assert rewritten =~ ~s{Cerberus.assert_has(session, Cerberus.css("#main"), "Articles")}
+    assert rewritten =~ ~s{Cerberus.refute_has(session, Cerberus.css("#missing"), "Nope")}
     assert rewritten =~ ~s{Cerberus.fill_in(session, "Search term", "phoenix")}
-    assert rewritten =~ ~s{Cerberus.select(session, "Role", "admin")}
+    assert rewritten =~ ~s{Cerberus.select(session, "Role", option: "admin")}
     refute output =~ "visit(conn, ...)"
     refute output =~ "Direct PhoenixTest.<function> call detected"
   end
@@ -256,7 +256,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     rewritten = File.read!(file)
 
     assert rewritten =~ "alias Cerberus, as: Assertions"
-    assert rewritten =~ ~s{Assertions.assert_has(conn, "#main", "Articles")}
+    assert rewritten =~ ~s{Assertions.assert_has(conn, Assertions.css("#main"), "Articles")}
     refute rewritten =~ "alias PhoenixTest.Assertions"
     assert output =~ "updated #{file}"
   end
@@ -286,7 +286,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     rewritten = File.read!(file)
 
     assert rewritten =~ "alias Cerberus, as: PTA"
-    assert rewritten =~ ~s{PTA.refute_has(conn, "#missing", "Nope")}
+    assert rewritten =~ ~s{PTA.refute_has(conn, PTA.css("#missing"), "Nope")}
     refute rewritten =~ "alias PhoenixTest.Assertions, as: PTA"
     assert output =~ "updated #{file}"
   end
@@ -319,7 +319,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     rewritten = File.read!(file)
 
     assert rewritten =~ ~s{|> fill_in("Search term", "phoenix")}
-    assert rewritten =~ ~s{|> assert_has("body", "Search query: phoenix")}
+    assert rewritten =~ ~r/\|> assert_has\(\s*css\("body"\),\s*"Search query: phoenix"/s
   end
 
   test "reports warnings for unsupported migration patterns", %{tmp_dir: tmp_dir} do
@@ -465,9 +465,9 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
     assert rewritten_static =~ "import Cerberus"
     assert rewritten_feature_case =~ "|> session()"
-    assert rewritten_feature_case =~ "|> assert_has(\"h1\", expected)"
+    assert rewritten_feature_case =~ ~r/\|> assert_has\(\s*css\("h1"\),\s*expected/s
     assert rewritten_form_fill =~ ~s{Cerberus.fill_in(session, "Search term", value)}
-    assert rewritten_form_fill =~ ~s{Cerberus.assert_has(session, "body", expected)}
+    assert rewritten_form_fill =~ ~s{Cerberus.assert_has(session, Cerberus.css("body"), expected)}
     assert rewritten_support_feature_case =~ "import Cerberus"
     refute rewritten_support_feature_case =~ "import PhoenixTest"
   end
@@ -477,6 +477,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     fixture_dir = "fixtures/migration_project"
     work_dir = Path.join(tmp_dir, "work")
     test_glob = "test/features/pt_*_test.exs"
+    support_glob = "test/support/**/*.ex"
 
     File.cp_r!(fixture_dir, work_dir)
 
@@ -490,9 +491,13 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     assert pre_status == 0, "pre-migration suite failed:\n#{pre_output}"
 
     {migrate_output, migrate_status} =
-      run_mix(work_dir, ["cerberus.migrate_phoenix_test", "--write", test_glob])
+      run_mix(work_dir, ["cerberus.migrate_phoenix_test", "--write", test_glob, support_glob])
 
     assert migrate_status == 0, "migration failed:\n#{migrate_output}"
+
+    post_args = ["test" | test_paths]
+    {post_output, post_status} = run_mix(work_dir, post_args)
+    assert post_status == 0, "post-migration suite failed:\n#{post_output}"
   end
 
   defp run_mix(work_dir, args) do

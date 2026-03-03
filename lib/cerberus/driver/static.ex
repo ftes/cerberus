@@ -129,14 +129,7 @@ defmodule Cerberus.Driver.Static do
       :error ->
         case find_clickable_button(session, expected, match_opts, kind) do
           {:ok, button} ->
-            observed = %{
-              action: :button,
-              clicked: button.text,
-              path: session.current_path,
-              transition: Session.transition(session)
-            }
-
-            {:error, session, observed, click_button_error(kind)}
+            maybe_submit_clicked_button(session, expected, match_opts, kind, button)
 
           :error ->
             observed = %{
@@ -341,6 +334,23 @@ defmodule Cerberus.Driver.Static do
 
   defp locator_match_opts(%Locator{opts: locator_opts}, opts) do
     Keyword.merge(locator_opts, opts)
+  end
+
+  defp maybe_submit_clicked_button(session, expected, match_opts, kind, button) do
+    case Html.find_submit_button(session.html, expected, match_opts, Session.scope(session)) do
+      {:ok, submit_button} ->
+        do_submit(session, submit_button)
+
+      :error ->
+        observed = %{
+          action: :button,
+          clicked: button.text,
+          path: session.current_path,
+          transition: Session.transition(session)
+        }
+
+        {:error, session, observed, click_button_error(kind)}
+    end
   end
 
   defp do_submit(session, button) do
