@@ -1081,18 +1081,14 @@ defmodule Cerberus do
         end
     end
 
-    defp stop_sandbox_owner(checkout_pid, context) do
-      if context.async do
-        spawn(fn -> do_stop_sandbox_owner(checkout_pid) end)
-      else
-        do_stop_sandbox_owner(checkout_pid)
-      end
-    end
+    defp stop_sandbox_owner(checkout_pid, _context), do: do_stop_sandbox_owner(checkout_pid)
 
     defp do_stop_sandbox_owner(checkout_pid) do
       # delay = Keyword.fetch!(config, :ecto_sandbox_stop_owner_delay)
       # if delay > 0, do: Process.sleep(delay)
       EctoSandbox.stop_owner(checkout_pid)
+    catch
+      :exit, {:noproc, _} -> :ok
     end
   else
     defp checkout_ecto_repos(_, _) do
