@@ -10,35 +10,35 @@ defmodule Cerberus.BrowserIframeLimitationsTest do
       |> session()
       |> visit("/browser/iframe/cross-origin")
 
-    result =
-      evaluate_js(
-        session,
-        """
-        (() => {
-          const iframe = document.getElementById("cross-origin-frame");
+    evaluate_js(
+      session,
+      """
+      (() => {
+        const iframe = document.getElementById("cross-origin-frame");
 
-          try {
-            return {
-              ok: true,
-              text: iframe.contentWindow.document.body.innerText
-            };
-          } catch (error) {
-            return {
-              ok: false,
-              reason: "cross_origin_blocked",
-              name: error && error.name ? error.name : null,
-              message: String(error && error.message ? error.message : "")
-            };
-          }
-        })()
-        """
-      )
-
-    assert result["ok"] == false
-    assert result["reason"] == "cross_origin_blocked"
-    assert is_binary(result["message"])
-    assert result["message"] != ""
-    assert result["name"] in [nil, "DOMException", "SecurityError"]
+        try {
+          return {
+            ok: true,
+            text: iframe.contentWindow.document.body.innerText
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            reason: "cross_origin_blocked",
+            name: error && error.name ? error.name : null,
+            message: String(error && error.message ? error.message : "")
+          };
+        }
+      })()
+      """,
+      fn result ->
+        assert result["ok"] == false
+        assert result["reason"] == "cross_origin_blocked"
+        assert is_binary(result["message"])
+        assert result["message"] != ""
+        assert result["name"] in [nil, "DOMException", "SecurityError"]
+      end
+    )
   end
 
   test "unguarded cross-origin iframe DOM access raises browser evaluate error" do

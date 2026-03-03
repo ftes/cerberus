@@ -122,11 +122,11 @@ defmodule Cerberus do
   end
 
   @doc """
-  Returns the encoded SQL sandbox user-agent marker for a repo owner process.
+  Returns the encoded SQL sandbox user-agent marker for an ExUnit test context.
 
   This helper is intended for browser-session sandbox wiring:
 
-      metadata = Cerberus.sql_sandbox_user_agent(MyApp.Repo, owner_pid)
+      metadata = Cerberus.sql_sandbox_user_agent(MyApp.Repo, context)
       session(:browser, user_agent: metadata)
 
   The returned value can also be used for raw conn headers:
@@ -135,23 +135,21 @@ defmodule Cerberus do
       |> Plug.Conn.delete_req_header("user-agent")
       |> Plug.Conn.put_req_header("user-agent", metadata)
   """
-  @spec sql_sandbox_user_agent(module(), pid()) :: String.t()
-  def sql_sandbox_user_agent(repo, context) when is_atom(repo) and is_map(context) do
+  @spec sql_sandbox_user_agent(module() | [module()], map()) :: String.t()
+  def sql_sandbox_user_agent(repo, context) when (is_atom(repo) or is_list(repo)) and is_map(context) do
     checkout_ecto_repos(repo, context)
   end
 
   @doc """
   Returns the encoded SQL sandbox user-agent marker for the first configured Ecto repo.
   """
-  @spec sql_sandbox_user_agent(pid()) :: String.t()
-  def sql_sandbox_user_agent(owner_pid) when is_pid(owner_pid) do
-    case Application.get_env(:cerberus, :ecto_repos, []) do
-      [repo | _] when is_atom(repo) ->
-        sql_sandbox_user_agent(repo, owner_pid)
-
-      _ ->
-        raise ArgumentError,
-              "sql_sandbox_user_agent/1 requires :cerberus, :ecto_repos to include at least one repo; use sql_sandbox_user_agent/2 to pass an explicit repo"
+  @spec sql_sandbox_user_agent(map()) :: String.t()
+  def sql_sandbox_user_agent(context) when is_map(context) do
+    if repos = Application.get_env(:cerberus, :ecto_repos) do
+      sql_sandbox_user_agent(repos, context)
+    else
+      raise ArgumentError,
+            "sql_sandbox_user_agent/1 requires :cerberus, :ecto_repos to include at least one repo; use sql_sandbox_user_agent/2 to pass an explicit repo"
     end
   end
 

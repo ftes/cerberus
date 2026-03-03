@@ -85,23 +85,25 @@ defmodule CerberusTest do
       )
       |> visit("/articles")
 
-    assert Cerberus.Browser.evaluate_js(session, "window.__cerberusInit") == "ready"
+    assert Cerberus.Browser.evaluate_js(session, "window.__cerberusInit", fn result ->
+             assert result == "ready"
+           end)
 
-    dimensions =
-      Cerberus.Browser.evaluate_js(
-        session,
-        "({ width: window.innerWidth, height: window.innerHeight })"
-      )
-
-    assert is_integer(dimensions["width"]) and dimensions["width"] >= 880
-    assert is_integer(dimensions["height"]) and dimensions["height"] >= 620
+    Cerberus.Browser.evaluate_js(
+      session,
+      "({ width: window.innerWidth, height: window.innerHeight })",
+      fn %{"width" => width, "height" => height} ->
+        assert is_integer(width) and width >= 880
+        assert is_integer(height) and height >= 620
+      end
+    )
 
     tab2 =
       session
       |> open_tab()
       |> visit("/articles")
 
-    assert Cerberus.Browser.evaluate_js(tab2, "window.__cerberusInit") == "ready"
+    Cerberus.Browser.evaluate_js(tab2, "window.__cerberusInit", &assert(&1 == "ready"))
   end
 
   test "switch_tab rejects mixed browser and non-browser sessions" do

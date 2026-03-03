@@ -24,13 +24,12 @@ defmodule Cerberus.ExplicitBrowserTest do
 
   for driver <- [:chrome, :firefox] do
     test "explicit driver maps to matching runtime browser (#{driver})" do
-      user_agent =
-        unquote(driver)
-        |> session()
-        |> Cerberus.Browser.evaluate_js("navigator.userAgent")
-
-      expected = if unquote(driver) == :chrome, do: "Chrome", else: "Firefox"
-      assert user_agent =~ expected
+      unquote(driver)
+      |> session()
+      |> Cerberus.Browser.evaluate_js("navigator.userAgent", fn user_agent ->
+        expected = if unquote(driver) == :chrome, do: "Chrome", else: "Firefox"
+        assert user_agent =~ expected
+      end)
     end
   end
 end

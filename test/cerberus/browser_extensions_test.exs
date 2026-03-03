@@ -67,7 +67,10 @@ defmodule Cerberus.BrowserExtensionsTest do
       end)
 
     assert File.exists?(path)
-    assert evaluate_js(session, "document.querySelector('#keyboard-input').value") == "hello browser"
+
+    assert evaluate_js(session, "document.querySelector('#keyboard-input').value", fn value ->
+             assert value == "hello browser"
+           end)
 
     session = drag(session, "#drag-source", "#drop-target")
 
@@ -86,12 +89,18 @@ defmodule Cerberus.BrowserExtensionsTest do
       |> session()
       |> visit("/articles")
 
-    assert evaluate_js(session, "(() => 21 + 21)()") == 42
+    evaluate_js(session, "(() => 21 + 21)()", &assert(&1 == 42))
 
-    assert evaluate_js(session, "(() => ({name: 'cerberus', nested: {count: 2}}))()") == %{
-             "name" => "cerberus",
-             "nested" => %{"count" => 2}
-           }
+    evaluate_js(
+      session,
+      "(() => ({name: 'cerberus', nested: {count: 2}}))()",
+      &assert(
+        &1 == %{
+          "name" => "cerberus",
+          "nested" => %{"count" => 2}
+        }
+      )
+    )
 
     session = add_cookie(session, "cerberus-browser-cookie", "cookie-value")
 

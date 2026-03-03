@@ -775,7 +775,7 @@ defmodule Cerberus.LocatorParityTest do
     })()
     """
 
-    true = Browser.evaluate_js(browser_session, expression)
+    Browser.evaluate_js(browser_session, expression, &assert(&1 == true))
     browser_session
   end
 

@@ -219,8 +219,7 @@ Isolation strategy:
 SQL sandbox helper:
 
 ```elixir
-owner_pid = Ecto.Adapters.SQL.Sandbox.start_owner!(MyApp.Repo, shared: false)
-metadata = Cerberus.sql_sandbox_user_agent(MyApp.Repo, owner_pid)
+metadata = Cerberus.sql_sandbox_user_agent(MyApp.Repo, context)
 
 session(:browser, user_agent: metadata)
 ```
