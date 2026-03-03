@@ -23,3 +23,5 @@ erl_crash.dump
 cerberus-*.tar
 
 .DS_Store
+
+.claude/worktrees
