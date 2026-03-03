@@ -231,6 +231,70 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     assert output =~ "updated #{file}"
   end
 
+  test "write mode rewrites config :phoenix_test to config :cerberus and keeps phoenix_test endpoint compat", %{
+    tmp_dir: tmp_dir
+  } do
+    config_dir = Path.join(tmp_dir, "config")
+    File.mkdir_p!(config_dir)
+    file = Path.join(config_dir, "test.exs")
+
+    File.write!(
+      file,
+      """
+      import Config
+
+      config :phoenix_test,
+        endpoint: MyAppWeb.Endpoint,
+        otp_app: :my_app
+      """
+    )
+
+    output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ "config :cerberus"
+    assert rewritten =~ "endpoint: MyAppWeb.Endpoint"
+    assert rewritten =~ "otp_app: :my_app"
+    assert rewritten =~ "config :phoenix_test, endpoint: MyAppWeb.Endpoint"
+    assert output =~ "updated #{file}"
+  end
+
+  test "write mode appends test helper endpoint bootstrap inferred from neighboring config/test.exs", %{tmp_dir: tmp_dir} do
+    config_dir = Path.join(tmp_dir, "config")
+    test_dir = Path.join(tmp_dir, "test")
+    File.mkdir_p!(config_dir)
+    File.mkdir_p!(test_dir)
+
+    File.write!(
+      Path.join(config_dir, "test.exs"),
+      """
+      import Config
+      config :phoenix_test, endpoint: MyAppWeb.Endpoint
+      """
+    )
+
+    helper = Path.join(test_dir, "test_helper.exs")
+    File.write!(helper, "ExUnit.start()\n")
+
+    output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", helper])
+      end)
+
+    rewritten = File.read!(helper)
+
+    assert rewritten =~ "ExUnit.start()"
+    assert rewritten =~ "Application.put_env(:cerberus, :endpoint, MyAppWeb.Endpoint)"
+    refute output =~ "WARNING"
+    assert output =~ "updated #{helper}"
+  end
+
   test "write mode rewrites alias PhoenixTest.Assertions with preserved alias name", %{tmp_dir: tmp_dir} do
     file = Path.join(tmp_dir, "sample_alias_assertions_test.exs")
 
