@@ -16,6 +16,8 @@ defmodule Cerberus.Driver.Browser do
   alias Cerberus.Profiling
   alias Cerberus.Query
   alias Cerberus.Session
+  alias Cerberus.Session.Config, as: SessionConfig
+  alias Cerberus.Session.LastResult
   alias Cerberus.UploadFile
 
   @default_ready_timeout_ms 1_500
@@ -117,7 +119,8 @@ defmodule Cerberus.Driver.Browser do
       tab_id: tab_id,
       browser_name: browser_name,
       base_url: base_url,
-      assert_timeout_ms: Session.assert_timeout_from_opts!(opts, Session.live_browser_assert_timeout_default_ms()),
+      assert_timeout_ms:
+        SessionConfig.assert_timeout_from_opts!(opts, SessionConfig.live_browser_assert_timeout_default_ms()),
       ready_timeout_ms: ready_timeout_ms(opts),
       ready_quiet_ms: ready_quiet_ms(opts),
       browser_context_defaults: context_defaults,
@@ -1336,7 +1339,7 @@ defmodule Cerberus.Driver.Browser do
         sandbox_metadata: state.sandbox_metadata,
         scope: session.scope,
         current_path: state.current_path,
-        last_result: %{op: op, observed: observed}
+        last_result: LastResult.new(op, observed, session)
     }
   end
 

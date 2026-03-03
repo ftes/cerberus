@@ -164,7 +164,7 @@ defmodule Cerberus.Assertions do
 
   @spec unsupported(Session.t(), atom(), keyword()) :: no_return()
   def unsupported(session, operation, opts) when is_atom(operation) and is_list(opts) do
-    driver_kind = Session.driver_kind(session)
+    driver_kind = driver_kind(session)
 
     raise AssertionError,
       message:
@@ -255,7 +255,7 @@ defmodule Cerberus.Assertions do
           Session.t()
         ) :: String.t()
   defp format_error(op, locator, opts, reason, observed, session) do
-    transition = observed_transition(observed) || Session.transition(session)
+    transition = observed_transition(observed) || session_transition(session)
     scope = Session.scope(session)
     current_path = session |> Session.current_path() |> Path.normalize()
 
@@ -270,7 +270,7 @@ defmodule Cerberus.Assertions do
     """
   end
 
-  @spec observed_transition(Session.observed()) :: Session.transition() | nil
+  @spec observed_transition(Session.observed()) :: Session.observed() | nil
   defp observed_transition(observed) when is_map(observed) do
     observed[:transition] || observed["transition"]
   end
@@ -278,16 +278,22 @@ defmodule Cerberus.Assertions do
   defp observed_transition(_observed), do: nil
 
   defp resolve_assert_timeout(_session, true, validated_timeout), do: validated_timeout
-  defp resolve_assert_timeout(%LiveSession{} = session, false, _validated_timeout), do: Session.assert_timeout_ms(session)
+  defp resolve_assert_timeout(%LiveSession{assert_timeout_ms: timeout}, false, _validated_timeout), do: timeout
 
-  defp resolve_assert_timeout(%BrowserSession{} = session, false, _validated_timeout),
-    do: Session.assert_timeout_ms(session)
+  defp resolve_assert_timeout(%BrowserSession{assert_timeout_ms: timeout}, false, _validated_timeout), do: timeout
 
   defp resolve_assert_timeout(_session, false, _validated_timeout), do: 0
 
   defp profile_driver_operation(session, op, fun) when is_atom(op) and is_function(fun, 0) do
-    Profiling.measure({:driver_operation, Session.driver_kind(session), op}, fun)
+    Profiling.measure({:driver_operation, driver_kind(session), op}, fun)
   end
+
+  defp session_transition(%{last_result: %{transition: transition}}), do: transition
+  defp session_transition(_session), do: nil
+
+  defp driver_kind(%StaticSession{}), do: :static
+  defp driver_kind(%LiveSession{}), do: :live
+  defp driver_kind(%BrowserSession{}), do: :browser
 
   defp driver_module_for_session!(%StaticSession{}), do: StaticSession
   defp driver_module_for_session!(%LiveSession{}), do: LiveSession

@@ -3,7 +3,9 @@ defmodule Cerberus.AutoModeTest do
 
   import Cerberus
 
-  alias Cerberus.Session
+  alias Cerberus.Driver.Browser
+  alias Cerberus.Driver.Live
+  alias Cerberus.Driver.Static
 
   test "auto mode starts static and switches to live when navigating to live routes" do
     session()
@@ -23,36 +25,36 @@ defmodule Cerberus.AutoModeTest do
 
   test "auto mode tracks redirect and live_redirect transitions with path and active driver" do
     session = visit(session(), "/live/redirects")
-    assert Session.driver_kind(session) == :live
+    assert match?(%Live{}, session)
 
     session = click_button(session, button("Redirect to Articles", exact: true))
     assert session.current_path == "/articles"
-    assert Session.driver_kind(session) == :static
-    assert session.last_result.observed.transition.reason == :live_redirect
-    assert session.last_result.observed.transition.from_driver == :live
-    assert session.last_result.observed.transition.to_driver == :static
+    assert match?(%Static{}, session)
+    assert session.last_result.transition.reason == :live_redirect
+    assert session.last_result.transition.from_driver == :live
+    assert session.last_result.transition.to_driver == :static
 
     session = visit(session, "/live/redirects")
-    assert Session.driver_kind(session) == :live
+    assert match?(%Live{}, session)
 
     session = click_button(session, button("Hard Redirect to Articles", exact: true))
     assert session.current_path == "/articles"
-    assert Session.driver_kind(session) == :static
-    assert session.last_result.observed.transition.reason == :redirect
-    assert session.last_result.observed.transition.from_driver == :live
-    assert session.last_result.observed.transition.to_driver == :static
+    assert match?(%Static{}, session)
+    assert session.last_result.transition.reason == :redirect
+    assert session.last_result.transition.from_driver == :live
+    assert session.last_result.transition.to_driver == :static
   end
 
   test "browser mode stays browser across live and static navigation transitions" do
     session = visit(session(:browser), "/articles")
-    assert Session.driver_kind(session) == :browser
+    assert match?(%Browser{}, session)
 
     session = click_link(session, text: "Counter")
-    assert Session.driver_kind(session) == :browser
+    assert match?(%Browser{}, session)
     assert session.current_path == "/live/counter"
 
     session = click_link(session, text: "Articles")
-    assert Session.driver_kind(session) == :browser
+    assert match?(%Browser{}, session)
     assert session.current_path == "/articles"
   end
 

@@ -3,6 +3,7 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
 
   import Cerberus
 
+  alias Cerberus.Driver.Browser
   alias Cerberus.TestSupport.SharedBrowserSession
 
   setup_all do
@@ -23,6 +24,7 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> then(fn updated ->
       readiness = updated.last_result.observed.readiness
       assert is_map(readiness)
+      assert updated.last_result.observed.driver == Browser
       refute readiness["reason"] == "in-action-settle"
       refute readiness["skippedAwaitReady"] == true
 
@@ -40,6 +42,7 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> then(fn updated ->
       readiness = updated.last_result.observed.readiness
       assert is_map(readiness)
+      assert updated.last_result.observed.driver == Browser
       refute readiness["reason"] == "in-action-settle"
       refute readiness["skippedAwaitReady"] == true
 
@@ -56,6 +59,7 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> then(fn updated ->
       readiness = updated.last_result.observed.readiness
       assert is_map(readiness)
+      assert updated.last_result.observed.driver == Browser
       refute readiness["reason"] == "in-action-settle"
       refute readiness["skippedAwaitReady"] == true
       updated

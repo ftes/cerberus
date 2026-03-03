@@ -42,12 +42,13 @@ defmodule Cerberus do
   alias Cerberus.Phoenix.LiveViewTimeout
   alias Cerberus.Profiling
   alias Cerberus.Session
+  alias Cerberus.Session.LastResult
   alias Ecto.Adapters.SQL.Sandbox, as: EctoSandbox
   alias ExUnit.AssertionError
   alias Phoenix.Ecto.SQL.Sandbox, as: PhoenixSandbox
   alias Phoenix.LiveViewTest.View
 
-  @type driver_kind :: Session.driver_kind()
+  @type driver_kind :: :static | :live | :browser
   @type locator_input :: Locator.input()
   @type scope_locator_input :: Locator.input()
   @locator_kind_keys [:text, :label, :link, :button, :placeholder, :title, :alt, :role, :css, :testid, :and, :or]
@@ -519,7 +520,7 @@ defmodule Cerberus do
 
   @spec visit(arg, String.t(), keyword()) :: arg when arg: var
   def visit(session, path, opts \\ []) when is_binary(path) do
-    Profiling.measure({:driver_operation, Session.driver_kind(session), :visit}, fn ->
+    Profiling.measure({:driver_operation, driver_kind(session), :visit}, fn ->
       driver_module_for_session!(session).visit(session, path, opts)
     end)
   end
@@ -931,7 +932,7 @@ defmodule Cerberus do
   defp simple_id_selector?(scope), do: String.match?(scope, ~r/^#[A-Za-z_][A-Za-z0-9_-]*$/)
 
   defp update_last_result(%{last_result: _} = session, op, observed) do
-    %{session | last_result: %{op: op, observed: observed}}
+    %{session | last_result: LastResult.new(op, observed, session)}
   end
 
   defp update_last_result(session, _op, _observed), do: session
@@ -955,7 +956,7 @@ defmodule Cerberus do
   end
 
   defp run_non_browser_path_assertion(session, expected, opts, timeout, op) when op in [:assert_path, :refute_path] do
-    Profiling.measure({:driver_operation, Session.driver_kind(session), op}, fn ->
+    Profiling.measure({:driver_operation, driver_kind(session), op}, fn ->
       LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
         finalize_non_browser_path_assertion(timed_session, expected, opts, timeout, op)
       end)
@@ -994,10 +995,9 @@ defmodule Cerberus do
   end
 
   defp resolve_path_timeout(_session, true, validated_timeout), do: validated_timeout
-  defp resolve_path_timeout(%LiveSession{} = session, false, _validated_timeout), do: Session.assert_timeout_ms(session)
+  defp resolve_path_timeout(%LiveSession{assert_timeout_ms: timeout}, false, _validated_timeout), do: timeout
 
-  defp resolve_path_timeout(%BrowserSession{} = session, false, _validated_timeout),
-    do: Session.assert_timeout_ms(session)
+  defp resolve_path_timeout(%BrowserSession{assert_timeout_ms: timeout}, false, _validated_timeout), do: timeout
 
   defp resolve_path_timeout(_session, false, _validated_timeout), do: 0
 
@@ -1018,7 +1018,7 @@ defmodule Cerberus do
         transition =
           transition(
             from_driver,
-            Session.driver_kind(redirected_session),
+            driver_kind(redirected_session),
             :unwrap,
             session.current_path,
             Session.current_path(redirected_session)
@@ -1026,7 +1026,6 @@ defmodule Cerberus do
 
         update_last_result(redirected_session, :unwrap, %{
           path: Session.current_path(redirected_session),
-          mode: Session.driver_kind(redirected_session),
           transition: transition
         })
     end
@@ -1064,7 +1063,7 @@ defmodule Cerberus do
     transition =
       transition(
         :live,
-        Session.driver_kind(redirected),
+        driver_kind(redirected),
         kind,
         session.current_path,
         Session.current_path(redirected)
@@ -1072,7 +1071,6 @@ defmodule Cerberus do
 
     update_last_result(redirected, :unwrap, %{
       path: Session.current_path(redirected),
-      mode: Session.driver_kind(redirected),
       transition: transition
     })
   end
@@ -1085,7 +1083,7 @@ defmodule Cerberus do
     session
     |> Map.put(:html, html)
     |> Map.put(:current_path, path)
-    |> update_last_result(:unwrap, %{path: path, mode: :live, transition: transition})
+    |> update_last_result(:unwrap, %{path: path, transition: transition})
   end
 
   defp unwrap_live_result(rendered, %LiveSession{} = session) when is_binary(rendered) do
@@ -1095,7 +1093,7 @@ defmodule Cerberus do
     session
     |> Map.put(:html, rendered)
     |> Map.put(:current_path, path)
-    |> update_last_result(:unwrap, %{path: path, mode: :live, transition: transition})
+    |> update_last_result(:unwrap, %{path: path, transition: transition})
   end
 
   defp unwrap_live_result(other, _session) do
@@ -1118,7 +1116,7 @@ defmodule Cerberus do
           form_data: Map.get(session, :form_data),
           scope: session.scope,
           current_path: current_path,
-          last_result: %{op: :unwrap, observed: %{path: current_path, mode: :live, transition: transition}}
+          last_result: LastResult.new(:unwrap, %{path: current_path, transition: transition}, LiveSession)
         }
 
       :error ->
@@ -1131,7 +1129,7 @@ defmodule Cerberus do
           form_data: Map.get(session, :form_data),
           scope: session.scope,
           current_path: current_path,
-          last_result: %{op: :unwrap, observed: %{path: current_path, mode: :static, transition: transition}}
+          last_result: LastResult.new(:unwrap, %{path: current_path, transition: transition}, StaticSession)
         }
     end
   end
@@ -1144,7 +1142,7 @@ defmodule Cerberus do
     |> Map.put(:view, view)
     |> Map.put(:html, html)
     |> Map.put(:current_path, path)
-    |> update_last_result(:unwrap, %{path: path, mode: :live, transition: transition})
+    |> update_last_result(:unwrap, %{path: path, transition: transition})
   end
 
   defp static_seed_from_session(session, conn) do
@@ -1195,6 +1193,10 @@ defmodule Cerberus do
       to_path: to_path
     }
   end
+
+  defp driver_kind(%StaticSession{}), do: :static
+  defp driver_kind(%LiveSession{}), do: :live
+  defp driver_kind(%BrowserSession{}), do: :browser
 
   defp ensure_same_endpoint!(%{endpoint: endpoint}, %{endpoint: endpoint}), do: :ok
 

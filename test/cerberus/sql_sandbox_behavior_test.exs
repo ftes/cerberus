@@ -3,8 +3,10 @@ defmodule Cerberus.SQLSandboxBehaviorTest do
 
   import Cerberus
 
+  alias Cerberus.Driver.Browser, as: BrowserSession
+  alias Cerberus.Driver.Live, as: LiveSession
+  alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.Fixtures.SandboxMessages
-  alias Cerberus.Session
 
   setup context do
     metadata_header = sql_sandbox_user_agent(Cerberus.Fixtures.Repo, context)
@@ -42,7 +44,7 @@ defmodule Cerberus.SQLSandboxBehaviorTest do
   end
 
   defp unique_message(prefix, session) do
-    "#{prefix}-#{Session.driver_kind(session)}-#{System.unique_integer([:positive, :monotonic])}"
+    "#{prefix}-#{driver_tag(session)}-#{System.unique_integer([:positive, :monotonic])}"
   end
 
   defp sandbox_session(driver, context) when driver in [:phoenix, :browser] do
@@ -53,4 +55,8 @@ defmodule Cerberus.SQLSandboxBehaviorTest do
       :phoenix -> session(:phoenix, opts)
     end
   end
+
+  defp driver_tag(%StaticSession{}), do: "static"
+  defp driver_tag(%LiveSession{}), do: "live"
+  defp driver_tag(%BrowserSession{}), do: "browser"
 end

@@ -15,6 +15,8 @@ defmodule Cerberus.Driver.Live do
   alias Cerberus.Phoenix.LiveViewHTML
   alias Cerberus.Query
   alias Cerberus.Session
+  alias Cerberus.Session.Config, as: SessionConfig
+  alias Cerberus.Session.LastResult
   alias Cerberus.UploadFile
   alias Phoenix.LiveViewTest.TreeDOM
 
@@ -45,7 +47,8 @@ defmodule Cerberus.Driver.Live do
     %__MODULE__{
       endpoint: Conn.endpoint!(opts),
       conn: initial_conn(opts),
-      assert_timeout_ms: Session.assert_timeout_from_opts!(opts, Session.live_browser_assert_timeout_default_ms())
+      assert_timeout_ms:
+        SessionConfig.assert_timeout_from_opts!(opts, SessionConfig.live_browser_assert_timeout_default_ms())
     }
   end
 
@@ -91,7 +94,7 @@ defmodule Cerberus.Driver.Live do
             html: html,
             scope: session.scope,
             current_path: current_path,
-            last_result: %{op: :visit, observed: %{path: current_path, mode: :live, transition: transition}}
+            last_result: LastResult.new(:visit, %{path: current_path, transition: transition}, __MODULE__)
         }
 
       :error ->
@@ -106,7 +109,7 @@ defmodule Cerberus.Driver.Live do
           form_data: session.form_data,
           scope: session.scope,
           current_path: current_path,
-          last_result: %{op: :visit, observed: %{path: current_path, mode: :static, transition: transition}}
+          last_result: LastResult.new(:visit, %{path: current_path, transition: transition}, StaticSession)
         }
     end
   end
@@ -140,9 +143,8 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :click,
               path: session.current_path,
-              mode: route_kind(session),
               texts: Html.texts(session.html, :any, Session.scope(session)),
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:error, session, observed, no_clickable_error(kind)}
@@ -167,10 +169,9 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :fill_in,
               path: session.current_path,
-              mode: route_kind(session),
               field: field,
               value: value,
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:ok, update_session(updated, :fill_in, observed), observed}
@@ -179,8 +180,7 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :fill_in,
               path: session.current_path,
-              mode: route_kind(session),
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:error, session, observed, "matched field does not include a name attribute"}
@@ -189,8 +189,7 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :fill_in,
               path: session.current_path,
-              mode: route_kind(session),
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:error, session, observed, "no form field matched locator"}
@@ -245,10 +244,9 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :check,
               path: session.current_path,
-              mode: route_kind(session),
               field: field,
               checked: true,
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:ok, update_session(updated, :check, observed), observed}
@@ -257,8 +255,7 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :check,
               path: session.current_path,
-              mode: route_kind(session),
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:error, session, observed, "matched field is not a checkbox"}
@@ -267,8 +264,7 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :check,
               path: session.current_path,
-              mode: route_kind(session),
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:error, session, observed, "matched field does not include a name attribute"}
@@ -277,8 +273,7 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :check,
               path: session.current_path,
-              mode: route_kind(session),
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:error, session, observed, "no form field matched locator"}
@@ -304,10 +299,9 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :uncheck,
               path: session.current_path,
-              mode: route_kind(session),
               field: field,
               checked: false,
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:ok, update_session(updated, :uncheck, observed), observed}
@@ -316,8 +310,7 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :uncheck,
               path: session.current_path,
-              mode: route_kind(session),
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:error, session, observed, "matched field is not a checkbox"}
@@ -326,8 +319,7 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :uncheck,
               path: session.current_path,
-              mode: route_kind(session),
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:error, session, observed, "matched field does not include a name attribute"}
@@ -336,8 +328,7 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :uncheck,
               path: session.current_path,
-              mode: route_kind(session),
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:error, session, observed, "no form field matched locator"}
@@ -360,8 +351,7 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :upload,
               path: session.current_path,
-              mode: route_kind(session),
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:error, session, observed, "matched upload field does not include a name attribute"}
@@ -370,8 +360,7 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :upload,
               path: session.current_path,
-              mode: route_kind(session),
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:error, session, observed, "no file input matched locator"}
@@ -397,8 +386,7 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :submit,
               path: session.current_path,
-              mode: route_kind(session),
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:error, session, observed, "no submit button matched locator"}
@@ -413,8 +401,7 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :submit,
               path: session.current_path,
-              mode: route_kind(session),
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:error, session, observed, "no submit button matched locator"}
@@ -432,12 +419,11 @@ defmodule Cerberus.Driver.Live do
 
     observed = %{
       path: session.current_path,
-      mode: route_kind(session),
       visible: visible,
       texts: texts,
       matched: matched,
       expected: expected,
-      transition: Session.transition(session)
+      transition: session_transition(session)
     }
 
     case Query.assertion_count_outcome(length(matched), match_opts, :assert) do
@@ -459,12 +445,11 @@ defmodule Cerberus.Driver.Live do
 
     observed = %{
       path: session.current_path,
-      mode: route_kind(session),
       visible: visible,
       texts: texts,
       matched: matched,
       expected: expected,
-      transition: Session.transition(session)
+      transition: session_transition(session)
     }
 
     case Query.assertion_count_outcome(length(matched), match_opts, :refute) do
@@ -506,9 +491,8 @@ defmodule Cerberus.Driver.Live do
           action: :button,
           clicked: button.text,
           path: session.current_path,
-          mode: route_kind(session),
           result: other,
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, session, observed, "unexpected live click result"}
@@ -534,7 +518,6 @@ defmodule Cerberus.Driver.Live do
             action: :button,
             clicked: button.text,
             path: Session.current_path(changed_session),
-            mode: Session.driver_kind(changed_session),
             phx_change: change.triggered,
             target: change.target,
             texts: Html.texts(changed_session.html, :any, Session.scope(changed_session)),
@@ -551,8 +534,7 @@ defmodule Cerberus.Driver.Live do
         action: :button,
         clicked: button.text,
         path: session.current_path,
-        mode: route_kind(session),
-        transition: Session.transition(session)
+        transition: session_transition(session)
       }
 
       {:error, session, observed, "dispatch(change) requires a resolvable form selector"}
@@ -591,7 +573,6 @@ defmodule Cerberus.Driver.Live do
           action: :button,
           clicked: button.text,
           path: Session.current_path(updated),
-          mode: Session.driver_kind(updated),
           texts: Html.texts(updated.html, :any, Session.scope(updated)),
           transition: transition
         }
@@ -608,9 +589,8 @@ defmodule Cerberus.Driver.Live do
       action: :button,
       clicked: button.text,
       path: session.current_path,
-      mode: route_kind(session),
       details: details,
-      transition: Session.transition(session)
+      transition: session_transition(session)
     }
 
     {:error, failed_session, observed, reason}
@@ -629,7 +609,6 @@ defmodule Cerberus.Driver.Live do
           action: :link,
           clicked: link.text,
           path: path,
-          mode: :live,
           texts: Html.texts(rendered, :any, Session.scope(updated)),
           transition: transition
         }
@@ -652,7 +631,6 @@ defmodule Cerberus.Driver.Live do
           action: :link,
           clicked: link.text,
           path: path,
-          mode: :live,
           texts: Html.texts(rendered, :any, Session.scope(updated)),
           transition: transition
         }
@@ -673,7 +651,7 @@ defmodule Cerberus.Driver.Live do
     transition =
       transition(
         route_kind(session),
-        Session.driver_kind(updated),
+        driver_kind(updated),
         reason,
         session.current_path,
         Session.current_path(updated)
@@ -682,7 +660,6 @@ defmodule Cerberus.Driver.Live do
     observed = %{
       action: :link,
       path: Session.current_path(updated),
-      mode: Session.driver_kind(updated),
       clicked: link.text,
       texts: Html.texts(updated.html, :any, Session.scope(updated)),
       transition: transition
@@ -775,7 +752,7 @@ defmodule Cerberus.Driver.Live do
     transition =
       transition(
         route_kind(session),
-        Session.driver_kind(updated),
+        driver_kind(updated),
         reason,
         session.current_path,
         Session.current_path(updated)
@@ -785,7 +762,6 @@ defmodule Cerberus.Driver.Live do
       action: action,
       clicked: clicked.text,
       path: Session.current_path(updated),
-      mode: Session.driver_kind(updated),
       texts: Html.texts(updated.html, :any, Session.scope(updated)),
       transition: transition
     }
@@ -965,15 +941,15 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp update_session(%__MODULE__{} = session, op, observed) do
-    %{session | last_result: %{op: op, observed: observed}}
+    %{session | last_result: LastResult.new(op, observed, session)}
   end
 
   defp update_last_result(%__MODULE__{} = session, op, observed) do
-    %{session | last_result: %{op: op, observed: observed}}
+    %{session | last_result: LastResult.new(op, observed, session)}
   end
 
   defp update_last_result(%StaticSession{} = session, op, observed) do
-    %{session | last_result: %{op: op, observed: observed}}
+    %{session | last_result: LastResult.new(op, observed, session)}
   end
 
   defp find_clickable_link(_session, _expected, _opts, :button), do: :error
@@ -1011,8 +987,7 @@ defmodule Cerberus.Driver.Live do
         action: :button,
         clicked: button.text,
         path: session.current_path,
-        mode: route_kind(session),
-        transition: Session.transition(session)
+        transition: session_transition(session)
       }
 
       {:error, session, observed, click_button_error(kind)}
@@ -1055,9 +1030,8 @@ defmodule Cerberus.Driver.Live do
       observed = %{
         action: :upload,
         path: session.current_path,
-        mode: route_kind(session),
         field: field,
-        transition: Session.transition(session)
+        transition: session_transition(session)
       }
 
       {:error, session, observed, Exception.message(error)}
@@ -1079,7 +1053,6 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :upload,
           path: path,
-          mode: :live,
           field: field,
           file_name: file_name,
           texts: Html.texts(rendered, :any, Session.scope(updated)),
@@ -1103,7 +1076,6 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :upload,
           path: path,
-          mode: :live,
           field: field,
           file_name: file_name,
           texts: Html.texts(rendered, :any, Session.scope(updated)),
@@ -1116,11 +1088,10 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :upload,
           path: session.current_path,
-          mode: route_kind(session),
           field: field,
           file_name: file_name,
           result: other,
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, session, observed, "unexpected live upload result"}
@@ -1133,7 +1104,7 @@ defmodule Cerberus.Driver.Live do
     transition =
       transition(
         route_kind(session),
-        Session.driver_kind(updated),
+        driver_kind(updated),
         reason,
         session.current_path,
         Session.current_path(updated)
@@ -1142,7 +1113,6 @@ defmodule Cerberus.Driver.Live do
     observed = %{
       action: :upload,
       path: Session.current_path(updated),
-      mode: Session.driver_kind(updated),
       field: field,
       file_name: file_name,
       texts: Html.texts(updated.html, :any, Session.scope(updated)),
@@ -1271,7 +1241,7 @@ defmodule Cerberus.Driver.Live do
       transition =
         transition(
           route_kind(session),
-          Session.driver_kind(updated),
+          driver_kind(updated),
           :submit,
           session.current_path,
           Session.current_path(updated)
@@ -1282,7 +1252,6 @@ defmodule Cerberus.Driver.Live do
         clicked: button.text,
         path: Session.current_path(updated),
         method: method,
-        mode: Session.driver_kind(updated),
         params: submitted_params,
         transition: transition
       }
@@ -1294,8 +1263,7 @@ defmodule Cerberus.Driver.Live do
         action: :submit,
         clicked: button.text,
         path: session.current_path,
-        mode: route_kind(session),
-        transition: Session.transition(session)
+        transition: session_transition(session)
       }
 
       {:error, session, observed, "live driver static mode only supports GET form submissions"}
@@ -1329,8 +1297,7 @@ defmodule Cerberus.Driver.Live do
         action: :submit,
         clicked: button.text,
         path: session.current_path,
-        mode: route_kind(session),
-        transition: Session.transition(session)
+        transition: session_transition(session)
       }
 
       {:error, session, observed, "live submit requires a resolvable form selector"}
@@ -1348,7 +1315,6 @@ defmodule Cerberus.Driver.Live do
           clicked: button.text,
           path: Session.current_path(updated),
           method: method,
-          mode: Session.driver_kind(updated),
           params: params,
           transition: transition
         }
@@ -1361,9 +1327,8 @@ defmodule Cerberus.Driver.Live do
           action: :submit,
           clicked: button.text,
           path: session.current_path,
-          mode: route_kind(session),
           details: details,
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, failed_session, observed, reason}
@@ -1378,7 +1343,6 @@ defmodule Cerberus.Driver.Live do
           clicked: button.text,
           path: Session.current_path(updated),
           method: normalize_submit_method(button.method),
-          mode: Session.driver_kind(updated),
           params: submitted_params,
           transition: transition
         }
@@ -1391,9 +1355,8 @@ defmodule Cerberus.Driver.Live do
           action: :submit,
           clicked: button.text,
           path: session.current_path,
-          mode: route_kind(session),
           details: details,
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, failed_session, observed, reason}
@@ -1419,7 +1382,6 @@ defmodule Cerberus.Driver.Live do
           clicked: button.text,
           path: Session.current_path(updated),
           method: normalize_submit_method(button.method),
-          mode: Session.driver_kind(updated),
           params: submitted_params,
           transition: transition
         }
@@ -1432,9 +1394,8 @@ defmodule Cerberus.Driver.Live do
           action: :submit,
           clicked: button.text,
           path: session.current_path,
-          mode: route_kind(session),
           details: details,
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, failed_session, observed, reason}
@@ -1445,9 +1406,8 @@ defmodule Cerberus.Driver.Live do
     observed = %{
       action: :submit,
       path: session.current_path,
-      mode: route_kind(session),
       result: other,
-      transition: Session.transition(session)
+      transition: session_transition(session)
     }
 
     {:error, session, observed, "unexpected live submit result"}
@@ -1459,7 +1419,7 @@ defmodule Cerberus.Driver.Live do
     transition =
       transition(
         route_kind(session),
-        Session.driver_kind(updated),
+        driver_kind(updated),
         reason,
         session.current_path,
         Session.current_path(updated)
@@ -1470,7 +1430,6 @@ defmodule Cerberus.Driver.Live do
       clicked: button.text,
       path: Session.current_path(updated),
       method: normalize_submit_method(button.method),
-      mode: Session.driver_kind(updated),
       params: submitted_params,
       transition: transition
     }
@@ -1490,11 +1449,10 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :select,
               path: session.current_path,
-              mode: route_kind(session),
               field: field,
               option: option,
               value: value,
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:ok, update_session(updated, :select, observed), observed}
@@ -1503,10 +1461,9 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :select,
               path: session.current_path,
-              mode: route_kind(session),
               field: field,
               option: option,
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:error, session, observed, reason}
@@ -1516,8 +1473,7 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :select,
           path: session.current_path,
-          mode: route_kind(session),
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, session, observed, "matched field is not a select element"}
@@ -1526,8 +1482,7 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :select,
           path: session.current_path,
-          mode: route_kind(session),
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, session, observed, "matched field does not include a name attribute"}
@@ -1536,8 +1491,7 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :select,
           path: session.current_path,
-          mode: route_kind(session),
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, session, observed, "no form field matched locator"}
@@ -1553,10 +1507,9 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :choose,
           path: session.current_path,
-          mode: route_kind(session),
           field: field,
           value: value,
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:ok, update_session(updated, :choose, observed), observed}
@@ -1565,8 +1518,7 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :choose,
           path: session.current_path,
-          mode: route_kind(session),
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, session, observed, "matched field is not a radio input"}
@@ -1575,8 +1527,7 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :choose,
           path: session.current_path,
-          mode: route_kind(session),
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, session, observed, "matched field does not include a name attribute"}
@@ -1585,8 +1536,7 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :choose,
           path: session.current_path,
-          mode: route_kind(session),
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, session, observed, "no form field matched locator"}
@@ -1603,10 +1553,9 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :upload,
           path: session.current_path,
-          mode: route_kind(session),
           field: field,
           file_name: file.file_name,
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:ok, update_session(updated, :upload, observed), observed}
@@ -1615,8 +1564,7 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :upload,
           path: session.current_path,
-          mode: route_kind(session),
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, session, observed, "matched field is not a file input"}
@@ -1625,8 +1573,7 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :upload,
           path: session.current_path,
-          mode: route_kind(session),
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, session, observed, "matched upload field does not include a name attribute"}
@@ -1635,8 +1582,7 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :upload,
           path: session.current_path,
-          mode: route_kind(session),
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, session, observed, "no file input matched locator"}
@@ -1646,8 +1592,7 @@ defmodule Cerberus.Driver.Live do
       observed = %{
         action: :upload,
         path: session.current_path,
-        mode: route_kind(session),
-        transition: Session.transition(session)
+        transition: session_transition(session)
       }
 
       {:error, session, observed, Exception.message(error)}
@@ -1718,13 +1663,12 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :select,
           path: Session.current_path(changed_session),
-          mode: Session.driver_kind(changed_session),
           field: field,
           option: option,
           value: value,
           phx_change: change.triggered,
           target: change.target,
-          transition: change.transition || Session.transition(changed_session)
+          transition: change.transition || session_transition(changed_session)
         }
 
         {:ok, update_last_result(changed_session, :select, observed), observed}
@@ -1733,12 +1677,11 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :select,
           path: session.current_path,
-          mode: route_kind(session),
           field: field,
           option: option,
           value: value,
           details: details,
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, failed_session, observed, reason}
@@ -1751,12 +1694,11 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :choose,
           path: Session.current_path(changed_session),
-          mode: Session.driver_kind(changed_session),
           field: field,
           value: value,
           phx_change: change.triggered,
           target: change.target,
-          transition: change.transition || Session.transition(changed_session)
+          transition: change.transition || session_transition(changed_session)
         }
 
         {:ok, update_last_result(changed_session, :choose, observed), observed}
@@ -1765,11 +1707,10 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :choose,
           path: session.current_path,
-          mode: route_kind(session),
           field: field,
           value: value,
           details: details,
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, failed_session, observed, reason}
@@ -1780,9 +1721,8 @@ defmodule Cerberus.Driver.Live do
     observed = %{
       action: :select,
       path: session.current_path,
-      mode: route_kind(session),
       option: option,
-      transition: Session.transition(session)
+      transition: session_transition(session)
     }
 
     {:error, session, observed, reason}
@@ -1792,8 +1732,7 @@ defmodule Cerberus.Driver.Live do
     observed = %{
       action: :choose,
       path: session.current_path,
-      mode: route_kind(session),
-      transition: Session.transition(session)
+      transition: session_transition(session)
     }
 
     {:error, session, observed, reason}
@@ -1810,12 +1749,11 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :fill_in,
               path: Session.current_path(changed_session),
-              mode: Session.driver_kind(changed_session),
               field: field,
               value: value,
               phx_change: change.triggered,
               target: change.target,
-              transition: change.transition || Session.transition(changed_session)
+              transition: change.transition || session_transition(changed_session)
             }
 
             {:ok, update_last_result(changed_session, :fill_in, observed), observed}
@@ -1824,11 +1762,10 @@ defmodule Cerberus.Driver.Live do
             observed = %{
               action: :fill_in,
               path: session.current_path,
-              mode: route_kind(session),
               field: field,
               value: value,
               details: details,
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:error, failed_session, observed, reason}
@@ -1838,8 +1775,7 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :fill_in,
           path: session.current_path,
-          mode: route_kind(session),
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, session, observed, "matched field does not include a name attribute"}
@@ -1848,8 +1784,7 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :fill_in,
           path: session.current_path,
-          mode: route_kind(session),
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, session, observed, "no form field matched locator"}
@@ -1893,12 +1828,11 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: op,
           path: Session.current_path(changed_session),
-          mode: Session.driver_kind(changed_session),
           field: field,
           checked: checked?,
           phx_change: change.triggered,
           target: change.target,
-          transition: change.transition || Session.transition(changed_session)
+          transition: change.transition || session_transition(changed_session)
         }
 
         {:ok, update_last_result(changed_session, op, observed), observed}
@@ -1907,11 +1841,10 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: op,
           path: session.current_path,
-          mode: route_kind(session),
           field: field,
           checked: checked?,
           details: details,
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, failed_session, observed, reason}
@@ -1922,17 +1855,16 @@ defmodule Cerberus.Driver.Live do
     %{
       action: op,
       path: session.current_path,
-      mode: route_kind(session),
-      transition: Session.transition(session)
+      transition: session_transition(session)
     }
   end
 
   defp clear_submitted_session(%__MODULE__{} = session, form_data, op, observed) do
-    %{session | form_data: form_data, last_result: %{op: op, observed: observed}}
+    %{session | form_data: form_data, last_result: LastResult.new(op, observed, session)}
   end
 
   defp clear_submitted_session(%StaticSession{} = session, form_data, op, observed) do
-    %{session | form_data: form_data, last_result: %{op: op, observed: observed}}
+    %{session | form_data: form_data, last_result: LastResult.new(op, observed, session)}
   end
 
   defp maybe_trigger_live_change(%__MODULE__{} = session, field) do
@@ -1944,7 +1876,7 @@ defmodule Cerberus.Driver.Live do
         trigger_form_phx_change(session, field)
 
       true ->
-        {:ok, session, %{triggered: false, target: nil, transition: Session.transition(session)}}
+        {:ok, session, %{triggered: false, target: nil, transition: session_transition(session)}}
     end
   end
 
@@ -2005,7 +1937,7 @@ defmodule Cerberus.Driver.Live do
     transition =
       transition(
         route_kind(session),
-        Session.driver_kind(redirected),
+        driver_kind(redirected),
         :live_redirect,
         session.current_path,
         Session.current_path(redirected)
@@ -2020,7 +1952,7 @@ defmodule Cerberus.Driver.Live do
     transition =
       transition(
         route_kind(session),
-        Session.driver_kind(redirected),
+        driver_kind(redirected),
         :redirect,
         session.current_path,
         Session.current_path(redirected)
@@ -2058,7 +1990,7 @@ defmodule Cerberus.Driver.Live do
         transition =
           transition(
             route_kind(session),
-            Session.driver_kind(updated),
+            driver_kind(updated),
             reason,
             session.current_path,
             Session.current_path(updated)
@@ -2120,7 +2052,7 @@ defmodule Cerberus.Driver.Live do
     transition =
       transition(
         route_kind(session),
-        Session.driver_kind(updated),
+        driver_kind(updated),
         :submit,
         session.current_path,
         Session.current_path(updated)
@@ -2288,4 +2220,10 @@ defmodule Cerberus.Driver.Live do
       to_path: to_path
     }
   end
+
+  defp session_transition(%{last_result: %{transition: transition}}), do: transition
+  defp session_transition(_session), do: nil
+
+  defp driver_kind(%__MODULE__{}), do: :live
+  defp driver_kind(%StaticSession{}), do: :static
 end

@@ -12,6 +12,8 @@ defmodule Cerberus.Driver.Static do
   alias Cerberus.Phoenix.Conn
   alias Cerberus.Query
   alias Cerberus.Session
+  alias Cerberus.Session.Config, as: SessionConfig
+  alias Cerberus.Session.LastResult
   alias Cerberus.UploadFile
 
   @type t :: %__MODULE__{
@@ -39,7 +41,7 @@ defmodule Cerberus.Driver.Static do
     %__MODULE__{
       endpoint: Conn.endpoint!(opts),
       conn: initial_conn(opts),
-      assert_timeout_ms: Session.assert_timeout_from_opts!(opts)
+      assert_timeout_ms: SessionConfig.assert_timeout_from_opts!(opts)
     }
   end
 
@@ -86,7 +88,7 @@ defmodule Cerberus.Driver.Static do
           form_data: session.form_data,
           scope: session.scope,
           current_path: current_path,
-          last_result: %{op: :visit, observed: %{path: current_path, mode: :live, transition: transition}}
+          last_result: LastResult.new(:visit, %{path: current_path, transition: transition}, LiveSession)
         }
 
       :error ->
@@ -98,7 +100,7 @@ defmodule Cerberus.Driver.Static do
           | conn: conn,
             html: html,
             current_path: current_path,
-            last_result: %{op: :visit, observed: %{path: current_path, mode: :static, transition: transition}}
+            last_result: LastResult.new(:visit, %{path: current_path, transition: transition}, __MODULE__)
         }
     end
   end
@@ -113,12 +115,11 @@ defmodule Cerberus.Driver.Static do
         updated = visit(session, link.href, [])
 
         transition =
-          transition(:static, Session.driver_kind(updated), :click, session.current_path, Session.current_path(updated))
+          transition(:static, driver_kind(updated), :click, session.current_path, Session.current_path(updated))
 
         observed = %{
           action: :link,
           path: Session.current_path(updated),
-          mode: Session.driver_kind(updated),
           clicked: link.text,
           texts: Html.texts(updated.html, :any, Session.scope(updated)),
           transition: transition
@@ -136,7 +137,7 @@ defmodule Cerberus.Driver.Static do
               action: :click,
               path: session.current_path,
               texts: Html.texts(session.html, :any, Session.scope(session)),
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:error, session, observed, no_clickable_error(kind)}
@@ -157,17 +158,17 @@ defmodule Cerberus.Driver.Static do
           path: session.current_path,
           field: field,
           value: value,
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:ok, update_session(updated, :fill_in, observed), observed}
 
       {:ok, _field} ->
-        observed = %{action: :fill_in, path: session.current_path, transition: Session.transition(session)}
+        observed = %{action: :fill_in, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched field does not include a name attribute"}
 
       :error ->
-        observed = %{action: :fill_in, path: session.current_path, transition: Session.transition(session)}
+        observed = %{action: :fill_in, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "no form field matched locator"}
     end
   end
@@ -212,26 +213,26 @@ defmodule Cerberus.Driver.Static do
           path: session.current_path,
           field: field,
           file_name: file.file_name,
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:ok, update_session(updated, :upload, observed), observed}
 
       {:ok, %{name: name}} when is_binary(name) and name != "" ->
-        observed = %{action: :upload, path: session.current_path, transition: Session.transition(session)}
+        observed = %{action: :upload, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched field is not a file input"}
 
       {:ok, _field} ->
-        observed = %{action: :upload, path: session.current_path, transition: Session.transition(session)}
+        observed = %{action: :upload, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched upload field does not include a name attribute"}
 
       :error ->
-        observed = %{action: :upload, path: session.current_path, transition: Session.transition(session)}
+        observed = %{action: :upload, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "no file input matched locator"}
     end
   rescue
     error in [ArgumentError, File.Error] ->
-      observed = %{action: :upload, path: session.current_path, transition: Session.transition(session)}
+      observed = %{action: :upload, path: session.current_path, transition: session_transition(session)}
       {:error, session, observed, Exception.message(error)}
   end
 
@@ -244,7 +245,7 @@ defmodule Cerberus.Driver.Static do
         do_submit(session, button)
 
       :error ->
-        observed = %{action: :submit, path: session.current_path, transition: Session.transition(session)}
+        observed = %{action: :submit, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "no submit button matched locator"}
     end
   end
@@ -263,7 +264,7 @@ defmodule Cerberus.Driver.Static do
       texts: texts,
       matched: matched,
       expected: expected,
-      transition: Session.transition(session)
+      transition: session_transition(session)
     }
 
     case Query.assertion_count_outcome(length(matched), match_opts, :assert) do
@@ -289,7 +290,7 @@ defmodule Cerberus.Driver.Static do
       texts: texts,
       matched: matched,
       expected: expected,
-      transition: Session.transition(session)
+      transition: session_transition(session)
     }
 
     case Query.assertion_count_outcome(length(matched), match_opts, :refute) do
@@ -302,15 +303,15 @@ defmodule Cerberus.Driver.Static do
   end
 
   defp update_session(session, op, observed) do
-    %{session | last_result: %{op: op, observed: observed}}
+    %{session | last_result: LastResult.new(op, observed, session)}
   end
 
   defp update_last_result(%__MODULE__{} = session, op, observed) do
-    %{session | last_result: %{op: op, observed: observed}}
+    %{session | last_result: LastResult.new(op, observed, session)}
   end
 
   defp update_last_result(%LiveSession{} = session, op, observed) do
-    %{session | last_result: %{op: op, observed: observed}}
+    %{session | last_result: LastResult.new(op, observed, session)}
   end
 
   defp find_clickable_link(_session, _expected, _opts, :button), do: :error
@@ -346,7 +347,7 @@ defmodule Cerberus.Driver.Static do
           action: :button,
           clicked: button.text,
           path: session.current_path,
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, session, observed, click_button_error(kind)}
@@ -365,7 +366,6 @@ defmodule Cerberus.Driver.Static do
           clicked: button.text,
           method: method,
           path: Session.current_path(updated),
-          mode: Session.driver_kind(updated),
           params: submitted_params,
           transition: transition
         }
@@ -379,9 +379,8 @@ defmodule Cerberus.Driver.Static do
           clicked: button.text,
           method: method,
           path: session.current_path,
-          mode: :static,
           details: details,
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:error, failed_session, observed, reason}
@@ -400,7 +399,7 @@ defmodule Cerberus.Driver.Static do
     updated = session_from_conn(session, conn, request_path)
 
     transition =
-      transition(:static, Session.driver_kind(updated), :submit, session.current_path, Session.current_path(updated))
+      transition(:static, driver_kind(updated), :submit, session.current_path, Session.current_path(updated))
 
     {:ok, updated, transition}
   rescue
@@ -460,10 +459,10 @@ defmodule Cerberus.Driver.Static do
   defp normalize_submit_method(nil), do: "get"
 
   defp assert_timeout_for_live(session) do
-    static_default = Session.default_assert_timeout_ms()
+    static_default = SessionConfig.default_assert_timeout_ms()
 
     if session.assert_timeout_ms == static_default do
-      Session.live_browser_assert_timeout_default_ms()
+      SessionConfig.live_browser_assert_timeout_default_ms()
     else
       session.assert_timeout_ms
     end
@@ -473,7 +472,7 @@ defmodule Cerberus.Driver.Static do
     %{
       session
       | form_data: form_data,
-        last_result: %{op: op, observed: observed}
+        last_result: LastResult.new(op, observed, session)
     }
   end
 
@@ -481,7 +480,7 @@ defmodule Cerberus.Driver.Static do
     %{
       session
       | form_data: form_data,
-        last_result: %{op: op, observed: observed}
+        last_result: LastResult.new(op, observed, session)
     }
   end
 
@@ -598,21 +597,21 @@ defmodule Cerberus.Driver.Static do
           path: session.current_path,
           field: field,
           checked: checked?,
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:ok, update_session(updated, op, observed), observed}
 
       {:ok, %{name: name}} when is_binary(name) and name != "" ->
-        observed = %{action: op, path: session.current_path, transition: Session.transition(session)}
+        observed = %{action: op, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched field is not a checkbox"}
 
       {:ok, _field} ->
-        observed = %{action: op, path: session.current_path, transition: Session.transition(session)}
+        observed = %{action: op, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched field does not include a name attribute"}
 
       :error ->
-        observed = %{action: op, path: session.current_path, transition: Session.transition(session)}
+        observed = %{action: op, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "no form field matched locator"}
     end
   end
@@ -628,21 +627,21 @@ defmodule Cerberus.Driver.Static do
           path: session.current_path,
           field: field,
           value: value,
-          transition: Session.transition(session)
+          transition: session_transition(session)
         }
 
         {:ok, update_session(updated, :choose, observed), observed}
 
       {:ok, %{name: name}} when is_binary(name) and name != "" ->
-        observed = %{action: :choose, path: session.current_path, transition: Session.transition(session)}
+        observed = %{action: :choose, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched field is not a radio input"}
 
       {:ok, _field} ->
-        observed = %{action: :choose, path: session.current_path, transition: Session.transition(session)}
+        observed = %{action: :choose, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched field does not include a name attribute"}
 
       :error ->
-        observed = %{action: :choose, path: session.current_path, transition: Session.transition(session)}
+        observed = %{action: :choose, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "no form field matched locator"}
     end
   end
@@ -661,7 +660,7 @@ defmodule Cerberus.Driver.Static do
               field: field,
               option: option,
               value: value,
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:ok, update_session(updated, op, observed), observed}
@@ -672,22 +671,22 @@ defmodule Cerberus.Driver.Static do
               path: session.current_path,
               field: field,
               option: option,
-              transition: Session.transition(session)
+              transition: session_transition(session)
             }
 
             {:error, session, observed, reason}
         end
 
       {:ok, %{name: name}} when is_binary(name) and name != "" ->
-        observed = %{action: op, path: session.current_path, transition: Session.transition(session)}
+        observed = %{action: op, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched field is not a select element"}
 
       {:ok, _field} ->
-        observed = %{action: op, path: session.current_path, transition: Session.transition(session)}
+        observed = %{action: op, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched field does not include a name attribute"}
 
       :error ->
-        observed = %{action: op, path: session.current_path, transition: Session.transition(session)}
+        observed = %{action: op, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "no form field matched locator"}
     end
   end
@@ -701,4 +700,10 @@ defmodule Cerberus.Driver.Static do
       to_path: to_path
     }
   end
+
+  defp session_transition(%{last_result: %{transition: transition}}), do: transition
+  defp session_transition(_session), do: nil
+
+  defp driver_kind(%__MODULE__{}), do: :static
+  defp driver_kind(%LiveSession{}), do: :live
 end
