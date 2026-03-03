@@ -546,6 +546,30 @@ defmodule Cerberus.LocatorParityTest do
         run: &submit(&1, "Run Search" |> button() |> has(css(".kind-secondary")))
       },
       %{
+        name: "submit supports nested and composition inside has",
+        html: @chained_locator_html,
+        expect: :ok,
+        run:
+          &submit(
+            &1,
+            "Run Search"
+            |> button()
+            |> has(and_(testid("submit-secondary-marker"), text("secondary", exact: true)))
+          )
+      },
+      %{
+        name: "submit supports nested or composition inside has",
+        html: @chained_locator_html,
+        expect: :ok,
+        run:
+          &submit(
+            &1,
+            "Run Search"
+            |> button()
+            |> has(or_(testid("submit-primary-marker"), testid("submit-secondary-marker")))
+          )
+      },
+      %{
         name: "submit or composition enforces strict uniqueness for actions",
         html: @chained_locator_html,
         expect: :error,

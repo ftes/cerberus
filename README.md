@@ -252,8 +252,6 @@ Popup behavior:
 - Preferred: use `Browser.with_popup/4` for deterministic popup capture and two-session assertions.
 - `popup_mode: :allow` keeps browser default popup/new-window behavior (default).
 - `popup_mode: :same_tab` injects an early preload script that rewrites `window.open(...)` to same-tab navigation.
-- Firefox limitation: `popup_mode: :same_tab` is currently unsupported and raises explicitly.
-- Known bug: Firefox BiDi preload registration may emit `chrome://remote/content/shared/Realm.sys.mjs` TypeError logs.
 - `:same_tab` is a pragmatic fallback for autonomous flows that you cannot reliably trigger from test callbacks.
 
 Same-tab workaround (OAuth-style redirect/result flow):

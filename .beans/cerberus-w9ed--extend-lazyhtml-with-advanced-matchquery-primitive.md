@@ -3,9 +3,9 @@
 title: Extend LazyHTML with advanced match/query primitives
 status: todo
 type: task
-priority: normal
+priority: deferred
 created_at: 2026-03-03T14:44:43Z
-updated_at: 2026-03-03T14:45:25Z
+updated_at: 2026-03-03T18:42:09Z
 ---
 
 Add lower-level NIF-backed primitives to reduce selector parse/setup overhead and avoid repeated query plus filter orchestration in Elixir.

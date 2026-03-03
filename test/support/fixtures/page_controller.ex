@@ -564,6 +564,45 @@ defmodule Cerberus.Fixtures.PageController do
     """)
   end
 
+  def browser_link_semantics(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Browser Link Semantics</title>
+      </head>
+      <body>
+        <main>
+          <h1>Browser Link Semantics</h1>
+          <p id="link-event-result">Link result: idle</p>
+          <a id="prevented-link" href="/main?from=prevented">Prevented link</a>
+          <a id="intercepted-link" href="/main?from=href-default">Intercepted link</a>
+        </main>
+
+        <script>
+          (() => {
+            const result = document.getElementById("link-event-result");
+            const prevented = document.getElementById("prevented-link");
+            const intercepted = document.getElementById("intercepted-link");
+
+            prevented.addEventListener("click", (event) => {
+              event.preventDefault();
+              result.textContent = "Link result: prevented";
+            });
+
+            intercepted.addEventListener("click", (event) => {
+              event.preventDefault();
+              result.textContent = "Link result: intercepted";
+              window.location.assign("/main?from=intercepted");
+            });
+          })();
+        </script>
+      </body>
+    </html>
+    """)
+  end
+
   def popup_click(conn, _params) do
     html(conn, """
     <!doctype html>

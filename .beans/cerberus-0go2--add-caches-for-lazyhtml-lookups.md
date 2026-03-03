@@ -3,9 +3,9 @@
 title: Add caches for LazyHTML lookups
 status: todo
 type: task
-priority: normal
+priority: deferred
 created_at: 2026-03-03T14:44:43Z
-updated_at: 2026-03-03T14:45:08Z
+updated_at: 2026-03-03T18:42:09Z
 ---
 
 Introduce explicit caching for repeated lookup/query work on the same parsed document and operation scope.

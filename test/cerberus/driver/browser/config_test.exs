@@ -91,6 +91,10 @@ defmodule Cerberus.Driver.Browser.ConfigTest do
              ]
     end
 
+    test "same-tab popup mode is accepted for firefox" do
+      assert :ok == Config.ensure_popup_mode_supported!(:firefox, :same_tab)
+    end
+
     test "raises on invalid popup mode" do
       assert_raise ArgumentError, ~r/:popup_mode must be :allow or :same_tab/, fn ->
         Config.browser_context_defaults(browser: [popup_mode: :current_tab])

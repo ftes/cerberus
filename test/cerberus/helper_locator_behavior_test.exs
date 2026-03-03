@@ -155,6 +155,22 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
                    end
     end
 
+    test "count-position filters pick deterministic action targets across fill_in and submit (#{driver})", context do
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/search")
+      |> submit(button(~r/^Run/))
+      |> assert_path("/search/results")
+      |> visit("/search")
+      |> fill_in(label("Search term"), "shire", first: true)
+      |> submit(button(~r/^Run/), first: true)
+      |> assert_path("/search/results", query: [q: "shire"])
+      |> visit("/search")
+      |> fill_in(label("Search term"), "gondor", last: true)
+      |> submit(button(~r/^Run/), last: true)
+      |> assert_path("/search/nested/results", query: [nested_q: "gondor"])
+    end
+
     test "placeholder/title/alt helpers behave consistently in static and browser (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
