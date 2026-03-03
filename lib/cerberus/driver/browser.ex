@@ -8,6 +8,7 @@ defmodule Cerberus.Driver.Browser do
   alias Cerberus.Driver.Browser.Expressions
   alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.UserContextProcess
+  alias Cerberus.Driver.LocatorOps
   alias Cerberus.Html
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
@@ -278,146 +279,122 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @impl true
-  def click(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
+  def click(%__MODULE__{} = session, %Locator{} = locator, opts) do
     state = state!(session)
-    match_opts = locator_match_opts(locator, opts)
+    {expected, match_opts} = LocatorOps.click(locator, opts)
     selector = Keyword.get(match_opts, :selector)
 
     with_driver_ready(session, state, :click, fn ready_state ->
-      case clickables(ready_state, selector) do
-        {:ok, clickables_data} ->
-          do_click(session, ready_state, clickables_data, expected, match_opts, selector)
-
-        {:error, reason, details} ->
-          observed = %{path: ready_state.current_path, details: details}
-          {:error, session, observed, "failed to inspect clickable elements: #{reason}"}
+      if requires_snapshot_matching?(match_opts) do
+        do_click_with_snapshot(session, ready_state, expected, match_opts, selector)
+      else
+        do_resolved_click(session, ready_state, expected, match_opts, selector)
       end
     end)
   end
 
   @impl true
-  def fill_in(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, value, opts) do
+  def fill_in(%__MODULE__{} = session, %Locator{} = locator, value, opts) do
     state = state!(session)
-    match_opts = locator_match_opts(locator, opts)
+    {expected, match_opts} = LocatorOps.form(locator, opts)
     selector = Keyword.get(match_opts, :selector)
 
     with_driver_ready(session, state, :fill_in, fn ready_state ->
-      case form_fields(ready_state, selector) do
-        {:ok, fields_data} ->
-          do_fill_in(session, ready_state, fields_data, expected, value, match_opts, selector)
-
-        {:error, reason, details} ->
-          observed = %{path: ready_state.current_path, details: details}
-          {:error, session, observed, "failed to inspect form fields: #{reason}"}
+      if requires_snapshot_matching?(match_opts) do
+        do_fill_in_with_snapshot(session, ready_state, expected, value, match_opts, selector)
+      else
+        do_resolved_fill_in(session, ready_state, expected, value, match_opts, selector)
       end
     end)
   end
 
   @impl true
-  def select(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
+  def select(%__MODULE__{} = session, %Locator{} = locator, opts) do
     state = state!(session)
-    match_opts = locator_match_opts(locator, opts)
+    {expected, match_opts} = LocatorOps.form(locator, opts)
     selector = Keyword.get(match_opts, :selector)
     option = Keyword.fetch!(opts, :option)
 
     with_driver_ready(session, state, :select, fn ready_state ->
-      case form_fields(ready_state, selector) do
-        {:ok, fields_data} ->
-          do_select(session, ready_state, fields_data, expected, option, match_opts, selector)
-
-        {:error, reason, details} ->
-          observed = %{path: ready_state.current_path, details: details}
-          {:error, session, observed, "failed to inspect form fields: #{reason}"}
+      if requires_snapshot_matching?(match_opts) do
+        do_select_with_snapshot(session, ready_state, expected, option, match_opts, selector)
+      else
+        do_resolved_select(session, ready_state, expected, option, match_opts, selector)
       end
     end)
   end
 
   @impl true
-  def choose(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
+  def choose(%__MODULE__{} = session, %Locator{} = locator, opts) do
     state = state!(session)
-    match_opts = locator_match_opts(locator, opts)
+    {expected, match_opts} = LocatorOps.form(locator, opts)
     selector = Keyword.get(match_opts, :selector)
 
     with_driver_ready(session, state, :choose, fn ready_state ->
-      case form_fields(ready_state, selector) do
-        {:ok, fields_data} ->
-          do_choose_radio(session, ready_state, fields_data, expected, match_opts, selector)
-
-        {:error, reason, details} ->
-          observed = %{path: ready_state.current_path, details: details}
-          {:error, session, observed, "failed to inspect form fields: #{reason}"}
+      if requires_snapshot_matching?(match_opts) do
+        do_choose_with_snapshot(session, ready_state, expected, match_opts, selector)
+      else
+        do_resolved_choose(session, ready_state, expected, match_opts, selector)
       end
     end)
   end
 
   @impl true
-  def check(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
+  def check(%__MODULE__{} = session, %Locator{} = locator, opts) do
     state = state!(session)
-    match_opts = locator_match_opts(locator, opts)
+    {expected, match_opts} = LocatorOps.form(locator, opts)
     selector = Keyword.get(match_opts, :selector)
 
     with_driver_ready(session, state, :check, fn ready_state ->
-      case form_fields(ready_state, selector) do
-        {:ok, fields_data} ->
-          do_toggle_checkbox(session, ready_state, fields_data, expected, match_opts, selector, true, :check)
-
-        {:error, reason, details} ->
-          observed = %{path: ready_state.current_path, details: details}
-          {:error, session, observed, "failed to inspect form fields: #{reason}"}
+      if requires_snapshot_matching?(match_opts) do
+        do_toggle_checkbox_with_snapshot(session, ready_state, expected, match_opts, selector, true, :check)
+      else
+        do_resolved_toggle_checkbox(session, ready_state, expected, match_opts, selector, true, :check)
       end
     end)
   end
 
   @impl true
-  def uncheck(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
+  def uncheck(%__MODULE__{} = session, %Locator{} = locator, opts) do
     state = state!(session)
-    match_opts = locator_match_opts(locator, opts)
+    {expected, match_opts} = LocatorOps.form(locator, opts)
     selector = Keyword.get(match_opts, :selector)
 
     with_driver_ready(session, state, :uncheck, fn ready_state ->
-      case form_fields(ready_state, selector) do
-        {:ok, fields_data} ->
-          do_toggle_checkbox(session, ready_state, fields_data, expected, match_opts, selector, false, :uncheck)
-
-        {:error, reason, details} ->
-          observed = %{path: ready_state.current_path, details: details}
-          {:error, session, observed, "failed to inspect form fields: #{reason}"}
+      if requires_snapshot_matching?(match_opts) do
+        do_toggle_checkbox_with_snapshot(session, ready_state, expected, match_opts, selector, false, :uncheck)
+      else
+        do_resolved_toggle_checkbox(session, ready_state, expected, match_opts, selector, false, :uncheck)
       end
     end)
   end
 
   @impl true
-  def upload(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, path, opts) do
+  def upload(%__MODULE__{} = session, %Locator{} = locator, path, opts) do
     state = state!(session)
-    match_opts = locator_match_opts(locator, opts)
+    {expected, match_opts} = LocatorOps.form(locator, opts)
     selector = Keyword.get(match_opts, :selector)
 
     with_driver_ready(session, state, :upload, fn ready_state ->
-      case file_fields(ready_state, selector) do
-        {:ok, fields_data} ->
-          do_upload(session, ready_state, fields_data, expected, path, match_opts, selector)
-
-        {:error, reason, details} ->
-          observed = %{path: ready_state.current_path, details: details}
-          {:error, session, observed, "failed to inspect upload fields: #{reason}"}
+      if requires_snapshot_matching?(match_opts) do
+        do_upload_with_snapshot(session, ready_state, expected, path, match_opts, selector)
+      else
+        do_resolved_upload(session, ready_state, expected, path, match_opts, selector)
       end
     end)
   end
 
   @impl true
-  def submit(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
+  def submit(%__MODULE__{} = session, %Locator{} = locator, opts) do
     state = state!(session)
-    match_opts = locator_match_opts(locator, opts)
+    {expected, match_opts} = LocatorOps.submit(locator, opts)
     selector = Keyword.get(match_opts, :selector)
 
     with_driver_ready(session, state, :submit, fn ready_state ->
-      case clickables(ready_state, selector) do
-        {:ok, clickables_data} ->
-          do_submit(session, ready_state, clickables_data, expected, match_opts, selector)
-
-        {:error, reason, details} ->
-          observed = %{path: ready_state.current_path, details: details}
-          {:error, session, observed, "failed to inspect submit controls: #{reason}"}
+      if requires_snapshot_matching?(match_opts) do
+        do_submit_with_snapshot(session, ready_state, expected, match_opts, selector)
+      else
+        do_resolved_submit(session, ready_state, expected, match_opts, selector)
       end
     end)
   end
@@ -452,6 +429,308 @@ defmodule Cerberus.Driver.Browser do
       {:error, reason, observed} ->
         {:error, session, observed, reason}
     end
+  end
+
+  defp do_click_with_snapshot(session, state, expected, opts, selector) do
+    case clickables(state, selector) do
+      {:ok, clickables_data} ->
+        do_click(session, state, clickables_data, expected, opts, selector)
+
+      {:error, reason, details} ->
+        observed = %{path: state.current_path, details: details}
+        {:error, session, observed, "failed to inspect clickable elements: #{reason}"}
+    end
+  end
+
+  defp do_fill_in_with_snapshot(session, state, expected, value, opts, selector) do
+    case form_fields(state, selector) do
+      {:ok, fields_data} ->
+        do_fill_in(session, state, fields_data, expected, value, opts, selector)
+
+      {:error, reason, details} ->
+        observed = %{path: state.current_path, details: details}
+        {:error, session, observed, "failed to inspect form fields: #{reason}"}
+    end
+  end
+
+  defp do_select_with_snapshot(session, state, expected, option, opts, selector) do
+    case form_fields(state, selector) do
+      {:ok, fields_data} ->
+        do_select(session, state, fields_data, expected, option, opts, selector)
+
+      {:error, reason, details} ->
+        observed = %{path: state.current_path, details: details}
+        {:error, session, observed, "failed to inspect form fields: #{reason}"}
+    end
+  end
+
+  defp do_choose_with_snapshot(session, state, expected, opts, selector) do
+    case form_fields(state, selector) do
+      {:ok, fields_data} ->
+        do_choose_radio(session, state, fields_data, expected, opts, selector)
+
+      {:error, reason, details} ->
+        observed = %{path: state.current_path, details: details}
+        {:error, session, observed, "failed to inspect form fields: #{reason}"}
+    end
+  end
+
+  defp do_toggle_checkbox_with_snapshot(session, state, expected, opts, selector, checked?, op) do
+    case form_fields(state, selector) do
+      {:ok, fields_data} ->
+        do_toggle_checkbox(session, state, fields_data, expected, opts, selector, checked?, op)
+
+      {:error, reason, details} ->
+        observed = %{path: state.current_path, details: details}
+        {:error, session, observed, "failed to inspect form fields: #{reason}"}
+    end
+  end
+
+  defp do_upload_with_snapshot(session, state, expected, path, opts, selector) do
+    case file_fields(state, selector) do
+      {:ok, fields_data} ->
+        do_upload(session, state, fields_data, expected, path, opts, selector)
+
+      {:error, reason, details} ->
+        observed = %{path: state.current_path, details: details}
+        {:error, session, observed, "failed to inspect upload fields: #{reason}"}
+    end
+  end
+
+  defp do_submit_with_snapshot(session, state, expected, opts, selector) do
+    case clickables(state, selector) do
+      {:ok, clickables_data} ->
+        do_submit(session, state, clickables_data, expected, opts, selector)
+
+      {:error, reason, details} ->
+        observed = %{path: state.current_path, details: details}
+        {:error, session, observed, "failed to inspect submit controls: #{reason}"}
+    end
+  end
+
+  defp do_resolved_click(session, state, expected, opts, selector) do
+    kind = Keyword.get(opts, :kind, :any)
+
+    case resolve_action_target(session, state, :click, expected, opts) do
+      {:ok, %{"kind" => "link"} = link} ->
+        click_link(session, state, link)
+
+      {:ok, %{"kind" => "button"} = button} ->
+        click_button(session, state, button, selector)
+
+      {:ok, target} ->
+        observed = %{action: :click, path: state.current_path, target: target}
+        {:error, session, observed, no_clickable_error(kind)}
+
+      {:error, _failed_session, _observed, _reason} = error ->
+        error
+    end
+  end
+
+  defp do_resolved_submit(session, state, expected, opts, selector) do
+    case resolve_action_target(session, state, :submit, expected, opts) do
+      {:ok, %{"kind" => "button"} = button} ->
+        submit_button(session, state, button, selector)
+
+      {:ok, target} ->
+        observed = %{action: :submit, path: state.current_path, target: target}
+        {:error, session, observed, "no submit button matched locator"}
+
+      {:error, _failed_session, _observed, _reason} = error ->
+        error
+    end
+  end
+
+  defp do_resolved_fill_in(session, state, expected, value, opts, selector) do
+    case resolve_action_target(session, state, :fill_in, expected, opts) do
+      {:ok, field} ->
+        fill_field(session, state, field, value, selector)
+
+      {:error, _failed_session, _observed, _reason} = error ->
+        error
+    end
+  end
+
+  defp do_resolved_select(session, state, expected, option, opts, selector) do
+    case resolve_action_target(session, state, :select, expected, opts) do
+      {:ok, field} ->
+        cond do
+          not select_field?(field) ->
+            observed = %{action: :select, path: state.current_path, field: field, option: option}
+            {:error, session, observed, "matched field is not a select element"}
+
+          field_disabled?(field) ->
+            observed = %{action: :select, path: state.current_path, field: field, option: option}
+            {:error, session, observed, "matched select field is disabled"}
+
+          true ->
+            exact_option = Keyword.get(opts, :exact_option, true)
+            select_field_option(session, state, field, option, exact_option, selector)
+        end
+
+      {:error, _failed_session, _observed, _reason} = error ->
+        error
+    end
+  end
+
+  defp do_resolved_choose(session, state, expected, opts, selector) do
+    case resolve_action_target(session, state, :choose, expected, opts) do
+      {:ok, field} ->
+        cond do
+          not radio_field?(field) ->
+            observed = %{action: :choose, path: state.current_path, field: field}
+            {:error, session, observed, "matched field is not a radio input"}
+
+          field_disabled?(field) ->
+            observed = %{action: :choose, path: state.current_path, field: field}
+            {:error, session, observed, "matched field is disabled"}
+
+          true ->
+            choose_radio_field(session, state, field, selector)
+        end
+
+      {:error, _failed_session, _observed, _reason} = error ->
+        error
+    end
+  end
+
+  defp do_resolved_toggle_checkbox(session, state, expected, opts, selector, checked?, op) do
+    case resolve_action_target(session, state, op, expected, opts) do
+      {:ok, field} ->
+        if checkbox_field?(field) do
+          toggle_checkbox_field(session, state, field, checked?, selector, op)
+        else
+          observed = %{action: op, path: state.current_path, field: field}
+          {:error, session, observed, "matched field is not a checkbox"}
+        end
+
+      {:error, _failed_session, _observed, _reason} = error ->
+        error
+    end
+  end
+
+  defp do_resolved_upload(session, state, expected, path, opts, selector) do
+    case resolve_action_target(session, state, :upload, expected, opts) do
+      {:ok, field} ->
+        upload_field(session, state, field, path, selector)
+
+      {:error, _failed_session, _observed, _reason} = error ->
+        error
+    end
+  end
+
+  defp resolve_action_target(session, state, op, expected, opts) when is_list(opts) do
+    timeout_ms = state.ready_timeout_ms
+    {between_min, between_max} = between_bounds(opts)
+
+    payload = %{
+      op: Atom.to_string(op),
+      scopeSelector: Session.scope(state),
+      selector: Keyword.get(opts, :selector),
+      expected: text_expectation_payload(expected),
+      exact: Keyword.get(opts, :exact, false),
+      normalizeWs: Keyword.get(opts, :normalize_ws, true),
+      matchBy: action_match_by(opts, op),
+      kind: action_kind(opts, op),
+      count: Keyword.get(opts, :count),
+      min: Keyword.get(opts, :min),
+      max: Keyword.get(opts, :max),
+      betweenMin: between_min,
+      betweenMax: between_max,
+      first: Keyword.get(opts, :first, false),
+      last: Keyword.get(opts, :last, false),
+      nth: Keyword.get(opts, :nth),
+      index: Keyword.get(opts, :index),
+      checked: Keyword.get(opts, :checked),
+      disabled: Keyword.get(opts, :disabled),
+      selected: Keyword.get(opts, :selected),
+      readonly: Keyword.get(opts, :readonly),
+      timeoutMs: timeout_ms,
+      pollMs: 100
+    }
+
+    with :ok <- maybe_ensure_action_helpers(state),
+         {:ok, result} <- eval_json(state, Expressions.action_resolve(payload), command_timeout_ms(timeout_ms)) do
+      action_resolve_result(session, state, op, opts, result)
+    else
+      {:error, reason, details} ->
+        observed = %{action: op, path: state.current_path, details: details}
+        {:error, session, observed, "#{inspect_failure_prefix(op)}: #{reason}"}
+    end
+  end
+
+  defp action_resolve_result(_session, _state, _op, _opts, %{"ok" => true, "target" => target}) when is_map(target) do
+    {:ok, target}
+  end
+
+  defp action_resolve_result(session, state, op, opts, %{"ok" => false} = result) do
+    reason = action_match_failure_reason(op, opts, result)
+
+    observed = %{
+      action: op,
+      path: Map.get(result, "path", state.current_path),
+      match_count: Map.get(result, "matchCount"),
+      reason: Map.get(result, "reason"),
+      result: result
+    }
+
+    {:error, session, observed, reason}
+  end
+
+  defp action_resolve_result(session, state, op, _opts, result) do
+    observed = %{action: op, path: state.current_path, result: result}
+    {:error, session, observed, "unexpected action resolver payload"}
+  end
+
+  defp action_match_failure_reason(op, opts, result) do
+    case Map.get(result, "reason") do
+      "no elements matched locator" ->
+        no_action_target_error(op, opts)
+
+      "matched element count did not satisfy count constraints" ->
+        match_count = Map.get(result, "matchCount", 0)
+
+        case Query.apply_count_constraints(match_count, opts) do
+          :ok -> "matched element count did not satisfy count constraints"
+          {:error, reason} -> reason
+        end
+
+      reason when is_binary(reason) ->
+        reason
+
+      _ ->
+        "failed to resolve action target"
+    end
+  end
+
+  defp no_action_target_error(:click, opts), do: no_clickable_error(Keyword.get(opts, :kind, :any))
+  defp no_action_target_error(:submit, _opts), do: "no submit button matched locator"
+  defp no_action_target_error(:upload, _opts), do: "no file input matched locator"
+  defp no_action_target_error(_op, _opts), do: "no form field matched locator"
+
+  defp action_match_by(opts, op) do
+    default =
+      if op in [:click, :submit] do
+        :text
+      else
+        :label
+      end
+
+    opts
+    |> Keyword.get(:match_by, default)
+    |> Atom.to_string()
+  end
+
+  defp action_kind(opts, :click), do: opts |> Keyword.get(:kind, :any) |> Atom.to_string()
+  defp action_kind(_opts, _op), do: nil
+
+  defp inspect_failure_prefix(op) when op in [:click], do: "failed to inspect clickable elements"
+  defp inspect_failure_prefix(op) when op in [:submit], do: "failed to inspect submit controls"
+  defp inspect_failure_prefix(op) when op in [:upload], do: "failed to inspect upload fields"
+  defp inspect_failure_prefix(_op), do: "failed to inspect form fields"
+
+  defp requires_snapshot_matching?(opts) when is_list(opts) do
+    Keyword.has_key?(opts, :has)
   end
 
   defp do_click(session, state, clickables_data, expected, opts, selector) do
@@ -1399,6 +1678,23 @@ defmodule Cerberus.Driver.Browser do
       expected: expected
     }
   end
+
+  defp maybe_ensure_action_helpers(%{browser_name: :firefox} = state) do
+    expression = Expressions.action_helpers_preload()
+
+    case eval_json(state, expression) do
+      {:ok, %{"ok" => true}} ->
+        :ok
+
+      {:ok, result} ->
+        {:error, "action helper preload failed", %{result: result}}
+
+      {:error, reason, details} ->
+        {:error, reason, details}
+    end
+  end
+
+  defp maybe_ensure_action_helpers(_state), do: :ok
 
   defp maybe_ensure_assertion_helpers(%{browser_name: :firefox} = state) do
     expression = Expressions.assertion_helpers_preload()

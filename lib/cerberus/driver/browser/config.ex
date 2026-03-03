@@ -1,6 +1,7 @@
 defmodule Cerberus.Driver.Browser.Config do
   @moduledoc false
 
+  alias Cerberus.Driver.Browser.ActionHelpers
   alias Cerberus.Driver.Browser.AssertionHelpers
   alias Cerberus.Driver.Browser.PopupHelpers
   alias Cerberus.Driver.Browser.Types
@@ -195,7 +196,7 @@ defmodule Cerberus.Driver.Browser.Config do
         :allow -> []
       end
 
-    [AssertionHelpers.preload_script() | popup_script] ++ scripts
+    [AssertionHelpers.preload_script(), ActionHelpers.preload_script() | popup_script] ++ scripts
   end
 
   defp merged_browser_opts(opts) do

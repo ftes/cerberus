@@ -150,8 +150,8 @@ defmodule CerberusTest do
     assert session.current_path == "/search/results?q=phoenix"
   end
 
-  test "label locators are explicit to fill_in; click rejects while assertions treat as text" do
-    assert_raise InvalidLocatorError, ~r/label locators target form-field lookup/, fn ->
+  test "click with label locator defers to driver matching while assertions treat label locators as text" do
+    assert_raise AssertionError, ~r/no clickable element matched locator/, fn ->
       session()
       |> visit("/search")
       |> click(label("Search term"))
@@ -208,12 +208,12 @@ defmodule CerberusTest do
            )
   end
 
-  test "fill_in rejects explicit text locators to keep label semantics explicit" do
-    assert_raise InvalidLocatorError, ~r/text locators are not supported for fill_in\/4/, fn ->
-      session()
-      |> visit("/search")
-      |> fill_in(text("Search term"), "phoenix")
-    end
+  test "fill_in accepts explicit text locators" do
+    assert is_struct(
+             session()
+             |> visit("/search")
+             |> fill_in(text("Search term"), "phoenix")
+           )
   end
 
   test "check and uncheck support label shorthand on checkbox groups" do
@@ -234,15 +234,17 @@ defmodule CerberusTest do
     assert_has(unchecked, text("Selected Items: None", exact: true))
   end
 
-  test "check rejects explicit text locators to keep label semantics explicit" do
-    assert_raise InvalidLocatorError, ~r/text locators are not supported for check\/3/, fn ->
+  test "check accepts explicit text locators" do
+    checked =
       session()
       |> visit("/checkbox-array")
       |> check(text("Two"))
-    end
+      |> submit(text("Save Items"))
+
+    assert_has(checked, text("Selected Items: one,two", exact: true))
   end
 
-  test "upload accepts string labels and rejects explicit text locators" do
+  test "upload accepts string labels and explicit text locators" do
     jpg = "test/support/files/elixir.jpg"
 
     assert is_struct(
@@ -253,13 +255,13 @@ defmodule CerberusTest do
              end)
            )
 
-    assert_raise InvalidLocatorError, ~r/text locators are not supported for upload\/4/, fn ->
-      session()
-      |> visit("/live/uploads")
-      |> within(css("#upload-change-form"), fn scoped ->
-        upload(scoped, text("Avatar"), jpg)
-      end)
-    end
+    assert is_struct(
+             session()
+             |> visit("/live/uploads")
+             |> within(css("#upload-change-form"), fn scoped ->
+               upload(scoped, text("Avatar"), jpg)
+             end)
+           )
   end
 
   test "invalid keyword options are rejected via NimbleOptions" do

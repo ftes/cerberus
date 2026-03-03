@@ -395,15 +395,14 @@ defmodule Cerberus.LocatorParityTest do
       %{name: "fill_in css locator", expect: :ok, run: &fill_in(&1, css("#search_q"), "cerberus")},
       %{name: "fill_in regex label shorthand", expect: :ok, run: &fill_in(&1, ~r/Search term/, "regex value")},
       %{
-        name: "fill_in explicit text locator rejected",
-        expect: :error,
-        error_module: InvalidLocatorError,
+        name: "fill_in explicit text locator",
+        expect: :ok,
         run: &fill_in(&1, text("Email Address"), "invalid")
       },
       %{
-        name: "fill_in role link rejected",
+        name: "fill_in role link locator errors when no field matches",
         expect: :error,
-        error_module: InvalidLocatorError,
+        error_module: AssertionError,
         run: &fill_in(&1, role(:link, name: "Counter Link"), "invalid")
       },
       %{
@@ -547,17 +546,17 @@ defmodule Cerberus.LocatorParityTest do
         error_module: AssertionError,
         run: &upload(&1, label("Nickname"), upload_path)
       },
-      # click/submit locator normalization errors
+      # click/submit with non-clickable locator kinds
       %{
-        name: "click with label locator rejected",
+        name: "click with label locator errors when no clickable matches",
         expect: :error,
-        error_module: InvalidLocatorError,
+        error_module: AssertionError,
         run: &click(&1, label("Search term"))
       },
       %{
-        name: "submit with label locator rejected",
+        name: "submit with label locator errors when no submit control matches",
         expect: :error,
-        error_module: InvalidLocatorError,
+        error_module: AssertionError,
         run: &submit(&1, label("Search term"))
       },
       # sigil-rich cases

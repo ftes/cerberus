@@ -1,6 +1,7 @@
 defmodule Cerberus.Driver.Browser.Expressions do
   @moduledoc false
 
+  alias Cerberus.Driver.Browser.ActionHelpers
   alias Cerberus.Driver.Browser.AssertionHelpers
 
   @spec browser_html() :: String.t()
@@ -32,6 +33,43 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
       return JSON.stringify({
         ok: !!(helper && typeof helper.text === "function" && typeof helper.pathCheck === "function")
+      });
+    })()
+    """
+  end
+
+  @spec action_helpers_preload() :: String.t()
+  def action_helpers_preload do
+    """
+    (() => {
+      #{ActionHelpers.preload_script()}
+
+      const helper = window.__cerberusAction;
+
+      return JSON.stringify({
+        ok: !!(helper && typeof helper.resolve === "function")
+      });
+    })()
+    """
+  end
+
+  @spec action_resolve(map()) :: String.t()
+  def action_resolve(payload) when is_map(payload) do
+    encoded_payload = JSON.encode!(payload)
+
+    """
+    (async () => {
+      const helper = window.__cerberusAction;
+
+      if (helper && typeof helper.resolve === "function") {
+        return await helper.resolve(#{encoded_payload});
+      }
+
+      return JSON.stringify({
+        ok: false,
+        reason: "action helper is not available",
+        helperMissing: true,
+        path: #{current_path_expression()}
       });
     })()
     """

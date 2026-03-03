@@ -4,6 +4,7 @@ defmodule Cerberus.Driver.Static do
   @behaviour Cerberus.Driver
 
   alias Cerberus.Driver.Live, as: LiveSession
+  alias Cerberus.Driver.LocatorOps
   alias Cerberus.Driver.Static.FormData
   alias Cerberus.Html
   alias Cerberus.Locator
@@ -103,8 +104,8 @@ defmodule Cerberus.Driver.Static do
   end
 
   @impl true
-  def click(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
-    match_opts = locator_match_opts(locator, opts)
+  def click(%__MODULE__{} = session, %Locator{} = locator, opts) do
+    {expected, match_opts} = LocatorOps.click(locator, opts)
     kind = Keyword.get(opts, :kind, :any)
 
     case find_clickable_link(session, expected, match_opts, kind) do
@@ -151,8 +152,8 @@ defmodule Cerberus.Driver.Static do
   end
 
   @impl true
-  def fill_in(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, value, opts) do
-    match_opts = locator_match_opts(locator, opts)
+  def fill_in(%__MODULE__{} = session, %Locator{} = locator, value, opts) do
+    {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
       {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
@@ -179,33 +180,33 @@ defmodule Cerberus.Driver.Static do
   end
 
   @impl true
-  def select(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
-    match_opts = locator_match_opts(locator, opts)
+  def select(%__MODULE__{} = session, %Locator{} = locator, opts) do
+    {expected, match_opts} = LocatorOps.form(locator, opts)
     option = Keyword.fetch!(opts, :option)
     select_field(session, expected, match_opts, option, :select)
   end
 
   @impl true
-  def choose(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
-    match_opts = locator_match_opts(locator, opts)
+  def choose(%__MODULE__{} = session, %Locator{} = locator, opts) do
+    {expected, match_opts} = LocatorOps.form(locator, opts)
     choose_radio(session, expected, match_opts)
   end
 
   @impl true
-  def check(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
-    match_opts = locator_match_opts(locator, opts)
+  def check(%__MODULE__{} = session, %Locator{} = locator, opts) do
+    {expected, match_opts} = LocatorOps.form(locator, opts)
     toggle_checkbox(session, expected, match_opts, true, :check)
   end
 
   @impl true
-  def uncheck(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
-    match_opts = locator_match_opts(locator, opts)
+  def uncheck(%__MODULE__{} = session, %Locator{} = locator, opts) do
+    {expected, match_opts} = LocatorOps.form(locator, opts)
     toggle_checkbox(session, expected, match_opts, false, :uncheck)
   end
 
   @impl true
-  def upload(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, path, opts) do
-    match_opts = locator_match_opts(locator, opts)
+  def upload(%__MODULE__{} = session, %Locator{} = locator, path, opts) do
+    {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
       {:ok, %{name: name, input_type: "file"} = field} when is_binary(name) and name != "" ->
@@ -242,8 +243,8 @@ defmodule Cerberus.Driver.Static do
   end
 
   @impl true
-  def submit(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
-    match_opts = locator_match_opts(locator, opts)
+  def submit(%__MODULE__{} = session, %Locator{} = locator, opts) do
+    {expected, match_opts} = LocatorOps.submit(locator, opts)
 
     case Html.find_submit_button(session.html, expected, match_opts, Session.scope(session)) do
       {:ok, button} ->

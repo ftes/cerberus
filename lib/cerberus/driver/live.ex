@@ -6,6 +6,7 @@ defmodule Cerberus.Driver.Live do
   import Phoenix.LiveViewTest, only: [element: 2, render: 1, render_click: 1]
 
   alias Cerberus.Driver.Live.FormData
+  alias Cerberus.Driver.LocatorOps
   alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.Html
   alias Cerberus.Locator
@@ -117,9 +118,9 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def click(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
+  def click(%__MODULE__{} = session, %Locator{} = locator, opts) do
     session = with_latest_html(session)
-    match_opts = locator_match_opts(locator, opts)
+    {expected, match_opts} = LocatorOps.click(locator, opts)
     kind = Keyword.get(opts, :kind, :any)
 
     case find_clickable_link(session, expected, match_opts, kind) do
@@ -150,9 +151,9 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def fill_in(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, value, opts) do
+  def fill_in(%__MODULE__{} = session, %Locator{} = locator, value, opts) do
     session = with_latest_html(session)
-    match_opts = locator_match_opts(locator, opts)
+    {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case route_kind(session) do
       :live ->
@@ -198,9 +199,9 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def select(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
+  def select(%__MODULE__{} = session, %Locator{} = locator, opts) do
     session = with_latest_html(session)
-    match_opts = locator_match_opts(locator, opts)
+    {expected, match_opts} = LocatorOps.form(locator, opts)
     option = Keyword.fetch!(opts, :option)
 
     case route_kind(session) do
@@ -213,9 +214,9 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def choose(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
+  def choose(%__MODULE__{} = session, %Locator{} = locator, opts) do
     session = with_latest_html(session)
-    match_opts = locator_match_opts(locator, opts)
+    {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case route_kind(session) do
       :live ->
@@ -227,9 +228,9 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def check(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
+  def check(%__MODULE__{} = session, %Locator{} = locator, opts) do
     session = with_latest_html(session)
-    match_opts = locator_match_opts(locator, opts)
+    {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case route_kind(session) do
       :live ->
@@ -286,9 +287,9 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def uncheck(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, opts) do
+  def uncheck(%__MODULE__{} = session, %Locator{} = locator, opts) do
     session = with_latest_html(session)
-    match_opts = locator_match_opts(locator, opts)
+    {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case route_kind(session) do
       :live ->
@@ -345,9 +346,9 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def upload(%__MODULE__{} = session, %Locator{kind: :label, value: expected} = locator, path, opts) do
+  def upload(%__MODULE__{} = session, %Locator{} = locator, path, opts) do
     session = with_latest_html(session)
-    match_opts = locator_match_opts(locator, opts)
+    {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case route_kind(session) do
       :live ->
@@ -382,9 +383,9 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def submit(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
+  def submit(%__MODULE__{} = session, %Locator{} = locator, opts) do
     session = with_latest_html(session)
-    match_opts = locator_match_opts(locator, opts)
+    {expected, match_opts} = LocatorOps.submit(locator, opts)
 
     case route_kind(session) do
       :live ->

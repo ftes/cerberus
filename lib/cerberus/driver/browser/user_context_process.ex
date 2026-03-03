@@ -3,6 +3,7 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
   use GenServer
 
+  alias Cerberus.Driver.Browser.ActionHelpers
   alias Cerberus.Driver.Browser.AssertionHelpers
   alias Cerberus.Driver.Browser.BiDi
   alias Cerberus.Driver.Browser.BrowsingContextProcess
@@ -491,7 +492,9 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   end
 
   defp skip_firefox_problematic_preload?(script, :firefox) when is_binary(script) do
-    script == AssertionHelpers.preload_script() or script == PopupHelpers.same_tab_popup_preload_script()
+    script == AssertionHelpers.preload_script() or
+      script == ActionHelpers.preload_script() or
+      script == PopupHelpers.same_tab_popup_preload_script()
   end
 
   defp skip_firefox_problematic_preload?(_script, _browser_name), do: false
