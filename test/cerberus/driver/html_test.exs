@@ -84,4 +84,22 @@ defmodule Cerberus.HtmlTest do
 
     assert :error = Html.find_button(html, "Save", match_by: :title, count: 1)
   end
+
+  test "resolver APIs accept a pre-parsed LazyHTML document" do
+    html = """
+    <main>
+      <form id="profile-form">
+        <label for="profile_name">Name</label>
+        <input id="profile_name" name="profile[name]" value="Aragorn" />
+        <button type="submit">Save</button>
+      </form>
+    </main>
+    """
+
+    doc = LazyHTML.from_document(html)
+
+    assert {:ok, %{name: "profile[name]"}} = Html.find_form_field(doc, "Name", exact: true)
+    assert {:ok, %{text: "Save"}} = Html.find_submit_button(doc, "Save", exact: true)
+    assert %{"profile[name]" => "Aragorn"} = Html.form_defaults(doc, ~s(form[id="profile-form"]))
+  end
 end

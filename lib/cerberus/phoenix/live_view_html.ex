@@ -31,11 +31,17 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   @spec find_form_field(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
           {:ok, map()} | :error
   def find_form_field(html, expected, opts, scope \\ nil) when is_binary(html) do
-    case Html.find_form_field(html, expected, opts, scope) do
-      {:ok, field} ->
-        {:ok, Map.merge(field, form_field_live_flags(html, field, scope))}
+    case parse_document(html) do
+      {:ok, lazy_html} ->
+        case Html.find_form_field(lazy_html, expected, opts, scope) do
+          {:ok, field} ->
+            {:ok, Map.merge(field, form_field_live_flags(lazy_html, field, scope))}
 
-      :error ->
+          :error ->
+            :error
+        end
+
+      _ ->
         :error
     end
   end
@@ -54,11 +60,17 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
            }}
           | :error
   def find_submit_button(html, expected, opts, scope \\ nil) when is_binary(html) do
-    case Html.find_submit_button(html, expected, opts, scope) do
-      {:ok, button} ->
-        {:ok, Map.put(button, :form_phx_submit, form_phx_submit?(html, button, scope))}
+    case parse_document(html) do
+      {:ok, lazy_html} ->
+        case Html.find_submit_button(lazy_html, expected, opts, scope) do
+          {:ok, button} ->
+            {:ok, Map.put(button, :form_phx_submit, form_phx_submit?(lazy_html, button, scope))}
 
-      :error ->
+          :error ->
+            :error
+        end
+
+      _ ->
         :error
     end
   end
@@ -67,7 +79,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   def trigger_action_forms(html) when is_binary(html) do
     case parse_document(html) do
       {:ok, lazy_html} ->
-        trigger_action_forms_in_doc(lazy_html, html)
+        trigger_action_forms_in_doc(lazy_html)
 
       _ ->
         []
@@ -178,18 +190,12 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     end
   end
 
-  defp form_field_live_flags(html, field, scope) do
+  defp form_field_live_flags(lazy_html, field, scope) do
     defaults = %{input_phx_change: false, form_phx_change: false}
 
-    case parse_document(html) do
-      {:ok, lazy_html} ->
-        lazy_html
-        |> scoped_nodes(scope)
-        |> Enum.find_value(defaults, &field_live_flags_in_root(&1, field))
-
-      _ ->
-        defaults
-    end
+    lazy_html
+    |> scoped_nodes(scope)
+    |> Enum.find_value(defaults, &field_live_flags_in_root(&1, field))
   end
 
   defp field_live_flags_in_root(root_node, field) do
@@ -218,7 +224,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   end
 
   defp field_candidates(%{id: id}, root_node) when is_binary(id) and id != "" do
-    safe_query(root_node, ~s([id="#{css_attr_escape(id)}"]))
+    safe_query_by_id(root_node, id)
   end
 
   defp field_candidates(%{name: name}, root_node) when is_binary(name) and name != "" do
@@ -256,16 +262,10 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     end)
   end
 
-  defp form_phx_submit?(html, button, scope) do
-    case parse_document(html) do
-      {:ok, lazy_html} ->
-        lazy_html
-        |> scoped_nodes(scope)
-        |> Enum.find_value(false, &submit_form_phx_submit_in_root(&1, button))
-
-      _ ->
-        false
-    end
+  defp form_phx_submit?(lazy_html, button, scope) do
+    lazy_html
+    |> scoped_nodes(scope)
+    |> Enum.find_value(false, &submit_form_phx_submit_in_root(&1, button))
   end
 
   defp submit_form_phx_submit_in_root(root_node, button) do
@@ -285,14 +285,14 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
 
   defp resolve_submit_form_node(_root_node, _button), do: nil
 
-  defp trigger_action_forms_in_doc(root_node, html) do
+  defp trigger_action_forms_in_doc(root_node) do
     root_node
     |> safe_query("form")
     |> Enum.flat_map(fn form_node ->
       if trigger_action_enabled?(attr(form_node, "phx-trigger-action")) do
         form_id = attr(form_node, "id")
         selector = form_selector(root_node, form_node, form_id)
-        defaults = trigger_action_defaults(html, selector)
+        defaults = trigger_action_defaults(root_node, selector)
 
         [
           %{
@@ -309,8 +309,8 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     end)
   end
 
-  defp trigger_action_defaults(_html, nil), do: %{}
-  defp trigger_action_defaults(html, selector), do: Html.form_defaults(html, selector)
+  defp trigger_action_defaults(_root_node, nil), do: %{}
+  defp trigger_action_defaults(root_node, selector), do: Html.form_defaults(root_node, selector)
 
   defp live_clickable_button_node?(root_node, node) do
     button_node?(node) and
@@ -398,10 +398,8 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
 
   defp form_by_id(root_node, id) do
     root_node
-    |> safe_query("form")
-    |> Enum.find(fn form_node ->
-      attr(form_node, "id") == id
-    end)
+    |> safe_query_by_id(id)
+    |> Enum.find(&(node_tag(&1) == "form"))
   end
 
   defp maybe_put_unique_selector(%{} = mapped, lazy_html, node) do
@@ -467,15 +465,14 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   end
 
   defp node_tag(node) do
-    case LazyHTML.to_tree(node) do
-      [{tag, _attrs, _children} | _] -> to_string(tag)
-      _ -> "*"
-    end
+    node
+    |> LazyHTML.tag()
+    |> List.first() || "*"
   end
 
   defp node_attrs(node) do
-    case LazyHTML.to_tree(node) do
-      [{_tag, attrs, _children} | _] when is_list(attrs) ->
+    case LazyHTML.attributes(node) do
+      [attrs | _] when is_list(attrs) ->
         Enum.reduce(attrs, %{}, fn
           {name, value}, acc ->
             Map.put(acc, to_string(name), value_to_string(value))
@@ -552,6 +549,14 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   rescue
     _ -> []
   end
+
+  defp safe_query_by_id(node, id) when is_binary(id) and id != "" do
+    LazyHTML.query_by_id(node, id)
+  rescue
+    _ -> []
+  end
+
+  defp safe_query_by_id(_node, _id), do: []
 
   defp selector_opt(opts) do
     case Keyword.get(opts, :selector) do
