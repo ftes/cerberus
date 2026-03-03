@@ -913,7 +913,11 @@ defmodule Cerberus.Driver.Browser.Runtime do
   def webdriver_session_payload(opts, managed?, browser_name) when is_list(opts) and is_boolean(managed?) do
     capabilities =
       maybe_put_browser_options(
-        %{"browserName" => Atom.to_string(browser_name), "webSocketUrl" => true},
+        %{
+          "browserName" => Atom.to_string(browser_name),
+          "webSocketUrl" => true,
+          "unhandledPromptBehavior" => "ignore"
+        },
         browser_options(opts, managed?, browser_name),
         browser_name
       )

@@ -40,12 +40,26 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     assert static_popup_error.message =~ "with_popup is not implemented for :static driver"
 
+    static_download_error =
+      assert_raise AssertionError, fn ->
+        assert_download(static, "report.txt")
+      end
+
+    assert static_download_error.message =~ "assert_download is not implemented for :static driver"
+
     live_popup_error =
       assert_raise AssertionError, fn ->
         with_popup(live, fn s -> s end, fn _main, _popup -> :ok end)
       end
 
     assert live_popup_error.message =~ "with_popup is not implemented for :live driver"
+
+    live_download_error =
+      assert_raise AssertionError, fn ->
+        assert_download(live, "report.txt")
+      end
+
+    assert live_download_error.message =~ "assert_download is not implemented for :live driver"
   end
 
   @tag :tmp_dir
@@ -276,6 +290,33 @@ defmodule Cerberus.BrowserExtensionsTest do
              "with_dialog/3 callback completed before browsingContext.userPromptOpened was observed"
   end
 
+  test "assert_download matches download emitted before assertion call and keeps events non-consuming" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+      |> click(link("Download Report"))
+
+    assert_download(session, "report.txt")
+    assert_download(session, "report.txt")
+  end
+
+  test "assert_download times out with helpful observed filenames" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+      |> click(link("Download Report"))
+
+    error =
+      assert_raise AssertionError, fn ->
+        assert_download(session, "missing.txt", timeout: 50)
+      end
+
+    assert error.message =~ ~s(assert_download/3 timed out waiting for "missing.txt")
+    assert error.message =~ "report.txt"
+  end
+
   test "with_dialog raises when observed dialog message does not match expected message" do
     session =
       :browser
@@ -341,6 +382,21 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_has(returned_session, text("Dialog result: cancelled", exact: true))
   end
 
+  test "with_dialog supports explicit accept/confirm behavior" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+      |> with_dialog(
+        fn dialog_session ->
+          click(dialog_session, button("Open Confirm Dialog"))
+        end,
+        accept: true
+      )
+
+    assert_has(session, text("Dialog result: confirmed", exact: true))
+  end
+
   test "with_dialog surfaces callback failures after dialog handling" do
     session =
       :browser
@@ -358,5 +414,16 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     assert error.message =~ "with_dialog/3 callback failed:"
     assert error.message =~ "dialog callback exploded"
+  end
+
+  test "with_dialog validates prompt_text requires accept: true" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+
+    assert_raise ArgumentError, ~r/prompt_text requires :accept to be true/, fn ->
+      with_dialog(session, fn scoped -> scoped end, prompt_text: "42")
+    end
   end
 end

@@ -112,8 +112,10 @@ Use `Cerberus.Browser` only with `session(:browser)`.
 | Press key | `Browser.press(session, "Enter", selector: "#input")` |
 | Drag and drop | `Browser.drag(session, "#drag-source", "#drop-target")` |
 | Dialog capture | `Browser.with_dialog(session, fn s -> click(s, ~l"button:Open Confirm Dialog"r) end)` |
+| Dialog confirm | `Browser.with_dialog(session, fn s -> click(s, ~l"button:Open Confirm Dialog"r) end, accept: true)` |
 | Popup capture | `Browser.with_popup(session, fn main -> click(main, ~l"button:Open Popup"r) end, fn main, popup -> assert_path(popup, "/browser/popup/destination") end)` |
 | Popup same-tab fallback | `session(:browser, browser: [popup_mode: :same_tab]) |> visit("/browser/popup/auto") |> assert_path("/browser/popup/destination", timeout: 1500)` |
+| Assert download | `session |> click(~l"link:Download Report"r) |> Browser.assert_download("report.txt")` |
 | Evaluate JS | `Browser.evaluate_js(session, "(() => 42)()")` |
 | Evaluate JS with assertion callback | `Browser.evaluate_js(session, "(() => 42)()", fn value -> assert value == 42 end)` |
 | Cookie lookup | `Browser.cookie(session, "_my_cookie")` |

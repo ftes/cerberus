@@ -273,8 +273,14 @@ defmodule Cerberus.Options do
           timeout: non_neg_integer()
         ]
 
+  @type browser_assert_download_opts :: [
+          timeout: pos_integer()
+        ]
+
   @type browser_with_dialog_opts :: [
           timeout: pos_integer(),
+          accept: boolean(),
+          prompt_text: String.t() | nil,
           message: String.t() | nil,
           browser: keyword()
         ]
@@ -511,8 +517,14 @@ defmodule Cerberus.Options do
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."]
   ]
 
+  @browser_assert_download_opts_schema [
+    timeout: [type: :pos_integer, default: 1_500, doc: "Wait timeout in milliseconds for download detection."]
+  ]
+
   @browser_with_dialog_opts_schema [
     timeout: [type: :pos_integer, doc: "Wait timeout in milliseconds for dialog lifecycle events."],
+    accept: [type: :boolean, default: false, doc: "Whether to accept/confirm the dialog. Defaults to dismiss/cancel."],
+    prompt_text: [type: :any, default: nil, doc: "Prompt text sent when accepting prompt dialogs."],
     message: [type: :any, default: nil, doc: "Expected dialog message text."],
     browser: [type: :keyword_list, default: [], doc: "Per-call browser config overrides used for timeout defaults."]
   ]
@@ -561,6 +573,9 @@ defmodule Cerberus.Options do
 
   @spec browser_drag_schema() :: keyword()
   def browser_drag_schema, do: @browser_drag_opts_schema
+
+  @spec browser_assert_download_schema() :: keyword()
+  def browser_assert_download_schema, do: @browser_assert_download_opts_schema
 
   @spec browser_with_dialog_schema() :: keyword()
   def browser_with_dialog_schema, do: @browser_with_dialog_opts_schema
@@ -698,11 +713,18 @@ defmodule Cerberus.Options do
     validate!(opts, @browser_drag_opts_schema, "Browser.drag/4")
   end
 
+  @spec validate_browser_assert_download!(keyword()) :: browser_assert_download_opts()
+  def validate_browser_assert_download!(opts) do
+    validate!(opts, @browser_assert_download_opts_schema, "Browser.assert_download/3")
+  end
+
   @spec validate_browser_with_dialog!(keyword()) :: browser_with_dialog_opts()
   def validate_browser_with_dialog!(opts) do
     opts
     |> validate!(@browser_with_dialog_opts_schema, "Browser.with_dialog/3")
+    |> validate_optional_string!("Browser.with_dialog/3", :prompt_text)
     |> validate_optional_string!("Browser.with_dialog/3", :message)
+    |> validate_prompt_text_with_accept!("Browser.with_dialog/3")
   end
 
   @spec validate_browser_with_popup!(keyword()) :: browser_with_popup_opts()
@@ -904,6 +926,16 @@ defmodule Cerberus.Options do
       other ->
         raise ArgumentError,
               "#{op_name} invalid options: :same_site must be one of :strict, :lax, :none, \"strict\", \"lax\", or \"none\" (got #{inspect(other)})"
+    end
+  end
+
+  defp validate_prompt_text_with_accept!(opts, op_name) do
+    case {Keyword.get(opts, :accept, false), Keyword.get(opts, :prompt_text)} do
+      {false, prompt_text} when is_binary(prompt_text) ->
+        raise ArgumentError, "#{op_name} invalid options: :prompt_text requires :accept to be true"
+
+      _ ->
+        opts
     end
   end
 

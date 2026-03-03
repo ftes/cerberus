@@ -487,6 +487,11 @@ defmodule Cerberus.Fixtures.PageController do
           </section>
 
           <section>
+            <h2>Download</h2>
+            <a id="download-report" href="/browser/download/report">Download Report</a>
+          </section>
+
+          <section>
             <h2>Drag</h2>
             <div id="drag-source" draggable="true">Drag source</div>
             <div id="drop-target">Drop target</div>
@@ -539,6 +544,13 @@ defmodule Cerberus.Fixtures.PageController do
       </body>
     </html>
     """)
+  end
+
+  def browser_download_report(conn, _params) do
+    conn
+    |> put_resp_content_type("text/plain")
+    |> put_resp_header("content-disposition", ~s(attachment; filename="report.txt"))
+    |> send_resp(200, "cerberus,download")
   end
 
   def popup_auto(conn, _params) do

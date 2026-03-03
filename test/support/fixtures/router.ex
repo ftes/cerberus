@@ -44,6 +44,7 @@ defmodule Cerberus.Fixtures.Router do
     get("/controls", PageController, :controls_form)
     get("/controls/result", PageController, :controls_result)
     get("/browser/extensions", PageController, :browser_extensions)
+    get("/browser/download/report", PageController, :browser_download_report)
     get("/browser/link/semantics", PageController, :browser_link_semantics)
     get("/browser/popup/auto", PageController, :popup_auto)
     get("/browser/popup/click", PageController, :popup_click)

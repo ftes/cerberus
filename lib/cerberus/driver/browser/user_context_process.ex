@@ -120,6 +120,16 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(pid, {:last_readiness_tab, tab_id})
   end
 
+  @spec download_events(pid()) :: [Types.payload()]
+  def download_events(pid) when is_pid(pid) do
+    GenServer.call(pid, {:download_events_tab, nil})
+  end
+
+  @spec download_events(pid(), String.t() | nil) :: [Types.payload()]
+  def download_events(pid, tab_id) when is_pid(pid) do
+    GenServer.call(pid, {:download_events_tab, tab_id})
+  end
+
   @impl true
   def init(opts) do
     owner = Keyword.fetch!(opts, :owner)
@@ -292,6 +302,16 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
       {:error, _reason, _details} ->
         {:reply, %{}, state}
+    end
+  end
+
+  def handle_call({:download_events_tab, tab_id}, _from, state) do
+    case browsing_context_pid(state, tab_id) do
+      {:ok, pid} ->
+        {:reply, BrowsingContextProcess.download_events(pid), state}
+
+      {:error, _reason, _details} ->
+        {:reply, [], state}
     end
   end
 

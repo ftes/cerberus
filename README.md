@@ -142,9 +142,14 @@ session =
   |> visit("/browser/extensions")
   |> type("hello", selector: "#keyboard-input")
   |> press("Enter", selector: "#press-input")
-  |> with_dialog(fn dialog_session ->
-    click(dialog_session, ~l"button:Open Confirm Dialog"r)
-  end)
+  |> with_dialog(
+    fn dialog_session ->
+      click(dialog_session, ~l"button:Open Confirm Dialog"r)
+    end,
+    accept: false
+  )
+  |> click(~l"link:Download Report"r)
+  |> assert_download("report.txt")
 
 session
 |> assert_has(~l"Press result: submitted")

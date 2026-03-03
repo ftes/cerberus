@@ -15,8 +15,10 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   @default_dialog_timeout_ms 1_500
   @default_popup_timeout_ms 1_500
+  @default_download_timeout_ms 1_500
   @dialog_poll_ms 25
   @popup_poll_ms 25
+  @download_poll_ms 25
 
   @spec type(BrowserSession.t(), String.t(), Options.browser_type_opts()) :: BrowserSession.t()
   def type(%BrowserSession{} = session, text, opts \\ []) when is_binary(text) and is_list(opts) do
@@ -77,6 +79,8 @@ defmodule Cerberus.Driver.Browser.Extensions do
   def with_dialog(%BrowserSession{} = session, action, opts \\ []) when is_function(action, 1) and is_list(opts) do
     timeout_ms = dialog_timeout_ms(opts)
     expected_message = Keyword.get(opts, :message)
+    accept? = Keyword.get(opts, :accept, false)
+    prompt_text = Keyword.get(opts, :prompt_text)
     main_tab_id = session.tab_id
 
     protocol_subscription_id = subscribe_dialog_protocol_events!(session)
@@ -87,9 +91,9 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
     try do
       {opened_event, action_outcome} =
-        await_dialog_opened_event!(session, action_task, timeout_ms)
+        await_dialog_opened_event!(session, action_task, timeout_ms, accept?, prompt_text)
 
-      observed = handle_dialog_flow!(session, opened_event, timeout_ms)
+      observed = handle_dialog_flow!(session, opened_event, timeout_ms, accept?, prompt_text)
       _ = await_dialog_action_result!(action_task, action_outcome, timeout_ms)
 
       assert_dialog_message!(observed, expected_message)
@@ -156,6 +160,14 @@ defmodule Cerberus.Driver.Browser.Extensions do
     after
       _ = Task.shutdown(trigger_task, :brutal_kill)
     end
+  end
+
+  @spec assert_download(BrowserSession.t(), String.t(), Options.browser_assert_download_opts()) :: BrowserSession.t()
+  def assert_download(%BrowserSession{} = session, filename, opts \\ []) when is_binary(filename) and is_list(opts) do
+    filename = non_empty_text!(filename, "assert_download/3 filename")
+    timeout_ms = download_timeout_ms(opts)
+    _download = await_download_match!(session, filename, timeout_ms)
+    session
   end
 
   @spec evaluate_js(BrowserSession.t(), String.t()) :: term()
@@ -380,6 +392,18 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
+  @doc false
+  @spec download_timeout_ms(Options.browser_assert_download_opts()) :: pos_integer()
+  def download_timeout_ms(opts) when is_list(opts) do
+    case Keyword.get(opts, :timeout, @default_download_timeout_ms) do
+      timeout when is_integer(timeout) and timeout > 0 ->
+        timeout
+
+      timeout ->
+        raise ArgumentError, "assert_download/3 :timeout must be a positive integer, got: #{inspect(timeout)}"
+    end
+  end
+
   defp merged_browser_opts(opts) do
     :cerberus
     |> Application.get_env(:browser, [])
@@ -433,8 +457,8 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  defp handle_dialog_flow!(session, {:opened, opened}, timeout_ms) do
-    handle_dialog_prompt!(session, timeout_ms)
+  defp handle_dialog_flow!(session, {:opened, opened}, timeout_ms, accept?, prompt_text) do
+    handle_dialog_prompt!(session, timeout_ms, accept?, prompt_text)
     closed = await_dialog_event!("browsingContext.userPromptClosed", session.tab_id, timeout_ms)
 
     %{
@@ -445,16 +469,16 @@ defmodule Cerberus.Driver.Browser.Extensions do
     }
   end
 
-  defp handle_dialog_flow!(_session, :handled_without_open_event, _timeout_ms) do
+  defp handle_dialog_flow!(_session, :handled_without_open_event, _timeout_ms, _accept?, _prompt_text) do
     %{type: nil, message: nil, handler: nil, accepted: false}
   end
 
-  defp await_dialog_opened_event!(session, action_task, timeout_ms) do
+  defp await_dialog_opened_event!(session, action_task, timeout_ms, accept?, prompt_text) do
     deadline = System.monotonic_time(:millisecond) + timeout_ms
-    await_dialog_opened_event_loop(session, action_task, deadline, :pending, timeout_ms)
+    await_dialog_opened_event_loop(session, action_task, deadline, :pending, timeout_ms, accept?, prompt_text)
   end
 
-  defp await_dialog_opened_event_loop(session, action_task, deadline, action_outcome, timeout_ms) do
+  defp await_dialog_opened_event_loop(session, action_task, deadline, action_outcome, timeout_ms, accept?, prompt_text) do
     action_outcome = poll_action_task(action_task, action_outcome)
     context_id = session.tab_id
 
@@ -462,7 +486,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
     remaining = max(deadline - now, 0)
 
     if remaining == 0 do
-      case maybe_handle_prompt_without_open_event!(session, timeout_ms) do
+      case maybe_handle_prompt_without_open_event!(session, timeout_ms, accept?, prompt_text) do
         :handled ->
           {:handled_without_open_event, poll_action_task(action_task, action_outcome)}
 
@@ -481,17 +505,33 @@ defmodule Cerberus.Driver.Browser.Extensions do
           {{:opened, params}, action_outcome}
 
         {:cerberus_bidi_event, _other} ->
-          await_dialog_opened_event_loop(session, action_task, deadline, action_outcome, timeout_ms)
+          await_dialog_opened_event_loop(
+            session,
+            action_task,
+            deadline,
+            action_outcome,
+            timeout_ms,
+            accept?,
+            prompt_text
+          )
       after
         wait_ms ->
-          await_dialog_opened_event_loop(session, action_task, deadline, action_outcome, timeout_ms)
+          await_dialog_opened_event_loop(
+            session,
+            action_task,
+            deadline,
+            action_outcome,
+            timeout_ms,
+            accept?,
+            prompt_text
+          )
       end
     end
   end
 
-  defp maybe_handle_prompt_without_open_event!(session, timeout_ms) do
+  defp maybe_handle_prompt_without_open_event!(session, timeout_ms, accept?, prompt_text) do
     fallback_timeout_ms = max(min(timeout_ms, 500), @dialog_poll_ms * 4)
-    params = %{"context" => session.tab_id, "accept" => false}
+    params = dialog_prompt_params(session.tab_id, accept?, prompt_text)
     opts = Keyword.put(bidi_opts(session), :timeout, fallback_timeout_ms)
 
     case BiDi.command("browsingContext.handleUserPrompt", params, opts) do
@@ -558,8 +598,8 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  defp handle_dialog_prompt!(session, timeout_ms) do
-    params = %{"context" => session.tab_id, "accept" => false}
+  defp handle_dialog_prompt!(session, timeout_ms, accept?, prompt_text) do
+    params = dialog_prompt_params(session.tab_id, accept?, prompt_text)
     opts = Keyword.put(bidi_opts(session), :timeout, timeout_ms)
 
     case BiDi.command("browsingContext.handleUserPrompt", params, opts) do
@@ -802,6 +842,60 @@ defmodule Cerberus.Driver.Browser.Extensions do
     raise ArgumentError,
           "add_cookie/4 :same_site must be :lax, :strict, :none (or lowercase strings), got: #{inspect(value)}"
   end
+
+  defp dialog_prompt_params(context_id, accept?, prompt_text) do
+    base = %{"context" => context_id, "accept" => accept?}
+
+    if accept? and is_binary(prompt_text) do
+      Map.put(base, "userText", prompt_text)
+    else
+      base
+    end
+  end
+
+  defp await_download_match!(session, expected_filename, timeout_ms) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    await_download_match_loop(session, expected_filename, deadline)
+  end
+
+  defp await_download_match_loop(session, expected_filename, deadline) do
+    download_events = UserContextProcess.download_events(session.user_context_pid, session.tab_id)
+
+    case Enum.find(download_events, &download_event_match?(&1, expected_filename)) do
+      event when is_map(event) ->
+        event
+
+      nil ->
+        now = System.monotonic_time(:millisecond)
+        remaining = max(deadline - now, 0)
+
+        if remaining == 0 do
+          observed_filenames =
+            download_events
+            |> Enum.map(&Map.get(&1, "suggestedFilename"))
+            |> Enum.filter(&is_binary/1)
+            |> Enum.uniq()
+            |> Enum.sort()
+
+          raise AssertionError,
+            message:
+              "assert_download/3 timed out waiting for #{inspect(expected_filename)}; observed downloads: #{inspect(observed_filenames)}"
+        else
+          Process.sleep(min(remaining, @download_poll_ms))
+          await_download_match_loop(session, expected_filename, deadline)
+        end
+    end
+  end
+
+  defp download_event_match?(
+         %{"method" => "browsingContext.downloadWillBegin", "suggestedFilename" => filename},
+         expected
+       )
+       when is_binary(filename) do
+    filename == expected
+  end
+
+  defp download_event_match?(_event, _expected), do: false
 
   defp bidi_opts(%BrowserSession{browser_name: browser_name}), do: [browser_name: browser_name]
 

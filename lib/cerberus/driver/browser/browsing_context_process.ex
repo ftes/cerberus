@@ -13,9 +13,13 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     "browsingContext.navigationStarted",
     "browsingContext.domContentLoaded",
     "browsingContext.load",
+    "browsingContext.downloadWillBegin",
+    "browsingContext.downloadEnd",
     "browsingContext.userPromptOpened",
     "browsingContext.userPromptClosed"
   ]
+  @download_events ["browsingContext.downloadWillBegin", "browsingContext.downloadEnd"]
+  @download_history_limit 50
 
   @spec child_spec(keyword()) :: Supervisor.child_spec()
   def child_spec(opts) do
@@ -66,6 +70,11 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     GenServer.call(pid, :last_readiness)
   end
 
+  @spec download_events(pid()) :: [Types.payload()]
+  def download_events(pid) when is_pid(pid) do
+    GenServer.call(pid, :download_events)
+  end
+
   @impl true
   def init(opts) do
     user_context_id = Keyword.fetch!(opts, :user_context_id)
@@ -87,7 +96,8 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
          browser_name: browser_name,
          bidi_opts: bidi_opts,
          last_bidi_event: nil,
-         last_readiness: %{}
+         last_readiness: %{},
+         download_events: []
        }}
     else
       {:error, reason, details} ->
@@ -105,6 +115,10 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   def handle_call(:last_readiness, _from, state) do
     {:reply, state.last_readiness, state}
+  end
+
+  def handle_call(:download_events, _from, state) do
+    {:reply, state.download_events, state}
   end
 
   def handle_call({:navigate, url}, _from, state) do
@@ -157,14 +171,26 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
           "context" => params["context"],
           "url" => params["url"],
           "navigation" => params["navigation"],
+          "suggestedFilename" => params["suggestedFilename"],
+          "status" => params["status"],
           "timestampMs" => System.monotonic_time(:millisecond)
         }
       end
 
-    if is_map(event) do
-      {:noreply, %{state | last_bidi_event: event}}
-    else
-      {:noreply, state}
+    cond do
+      is_map(event) and method in @download_events ->
+        {:noreply,
+         %{
+           state
+           | last_bidi_event: event,
+             download_events: push_download_event(state.download_events, event)
+         }}
+
+      is_map(event) ->
+        {:noreply, %{state | last_bidi_event: event}}
+
+      true ->
+        {:noreply, state}
     end
   end
 
@@ -331,6 +357,12 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
   defp normalize_positive_integer(_value, default), do: default
+
+  defp push_download_event(download_events, event) when is_list(download_events) and is_map(event) do
+    download_events
+    |> Kernel.++([event])
+    |> Enum.take(-@download_history_limit)
+  end
 
   defp command_call_timeout_ms(timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
     timeout_ms + 5_000

@@ -27,6 +27,7 @@ defmodule Cerberus.Browser do
   @drag_args_error "Browser.drag/4 expects source and target selectors as strings and options as a keyword list"
   @with_dialog_args_error "Browser.with_dialog/3 expects a callback with arity 1 and options as a keyword list"
   @with_popup_args_error "Browser.with_popup/4 expects trigger callback arity 1, callback arity 2, and options as a keyword list"
+  @assert_download_args_error "Browser.assert_download/3 expects a filename string and options as a keyword list"
   @add_cookie_args_error "Browser.add_cookie/4 expects cookie name and value strings and options as a keyword list"
 
   @spec screenshot(session, String.t() | keyword()) :: session when session: var
@@ -128,6 +129,26 @@ defmodule Cerberus.Browser do
       fn browser_session, validated_opts ->
         if is_function(trigger_fun, 1) and is_function(callback_fun, 2) do
           {:ok, Extensions.with_popup(browser_session, trigger_fun, callback_fun, validated_opts)}
+        else
+          :invalid_args
+        end
+      end
+    )
+  end
+
+  @spec assert_download(session, String.t(), Options.browser_assert_download_opts()) :: session when session: var
+  def assert_download(session, filename, opts \\ [])
+
+  def assert_download(session, filename, opts) do
+    browser_only(
+      session,
+      :assert_download,
+      opts,
+      @assert_download_args_error,
+      &Options.validate_browser_assert_download!/1,
+      fn browser_session, validated_opts ->
+        if is_binary(filename) do
+          {:ok, Extensions.assert_download(browser_session, filename, validated_opts)}
         else
           :invalid_args
         end
