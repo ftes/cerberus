@@ -26,15 +26,13 @@ defmodule Cerberus.Driver.Browser.Runtime do
           service: service(),
           browser_name: Types.browser_name(),
           session_id: String.t(),
-          web_socket_url: String.t(),
-          owners: MapSet.t(pid())
+          web_socket_url: String.t()
         }
 
   @type state :: %{
           runtime_sessions: %{optional(Types.browser_name()) => runtime_session()},
           base_url: String.t() | nil,
-          opts: keyword(),
-          owner_refs: %{optional(reference()) => {Types.browser_name(), pid()}}
+          opts: keyword()
         }
 
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -61,7 +59,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
   def init(opts) do
     Process.flag(:trap_exit, true)
     ensure_http_stack!()
-    {:ok, %{runtime_sessions: %{}, base_url: Keyword.get(opts, :base_url), opts: opts, owner_refs: %{}}}
+    {:ok, %{runtime_sessions: %{}, base_url: Keyword.get(opts, :base_url), opts: opts}}
   end
 
   @impl true
@@ -99,47 +97,12 @@ defmodule Cerberus.Driver.Browser.Runtime do
     {:noreply, state}
   end
 
-  def handle_info({:DOWN, ref, :process, pid, _reason}, state) do
-    {:noreply, release_owner_runtime_session(state, ref, pid)}
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
+    {:noreply, state}
   end
 
   def handle_info(_message, state) do
     {:noreply, state}
-  end
-
-  defp release_owner_runtime_session(state, ref, pid) do
-    case Map.pop(state.owner_refs, ref) do
-      {nil, _owner_refs} ->
-        state
-
-      {{browser_name, ^pid}, owner_refs} ->
-        state
-        |> Map.put(:owner_refs, owner_refs)
-        |> prune_owner_from_runtime_session(browser_name, pid)
-    end
-  end
-
-  defp prune_owner_from_runtime_session(state, browser_name, pid) do
-    case Map.fetch(state.runtime_sessions, browser_name) do
-      {:ok, runtime_session} ->
-        owners = MapSet.delete(runtime_session.owners, pid)
-        update_runtime_session_owners(state, browser_name, runtime_session, owners)
-
-      :error ->
-        state
-    end
-  end
-
-  defp update_runtime_session_owners(state, browser_name, runtime_session, owners) do
-    if MapSet.size(owners) == 0 do
-      maybe_stop_runtime_session(runtime_session, state.opts)
-      runtime_sessions = Map.delete(state.runtime_sessions, browser_name)
-      %{state | runtime_sessions: runtime_sessions}
-    else
-      runtime_session = %{runtime_session | owners: owners}
-      runtime_sessions = Map.put(state.runtime_sessions, browser_name, runtime_session)
-      %{state | runtime_sessions: runtime_sessions}
-    end
   end
 
   @impl true
@@ -151,18 +114,14 @@ defmodule Cerberus.Driver.Browser.Runtime do
   defp ensure_runtime_session(state, opts) do
     merged_opts = merge_runtime_opts(state.opts, opts)
     browser_name = browser_name(merged_opts)
-    owner = owner_pid(merged_opts)
 
     case Map.fetch(state.runtime_sessions, browser_name) do
       {:ok, runtime_session} ->
-        {runtime_session, state} = maybe_track_owner(runtime_session, state, browser_name, owner)
-        runtime_sessions = Map.put(state.runtime_sessions, browser_name, runtime_session)
-        {:ok, runtime_session, %{state | runtime_sessions: runtime_sessions}}
+        {:ok, runtime_session, state}
 
       :error ->
         case start_runtime_session(merged_opts) do
           {:ok, runtime_session} ->
-            {runtime_session, state} = maybe_track_owner(runtime_session, state, browser_name, owner)
             runtime_sessions = Map.put(state.runtime_sessions, browser_name, runtime_session)
             {:ok, runtime_session, %{state | runtime_sessions: runtime_sessions}}
 
@@ -185,8 +144,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
              service: service,
              browser_name: service.browser_name,
              session_id: session_id,
-             web_socket_url: web_socket_url,
-             owners: MapSet.new()
+             web_socket_url: web_socket_url
            }}
 
         {:error, service, reason} ->
@@ -208,28 +166,6 @@ defmodule Cerberus.Driver.Browser.Runtime do
     Enum.each(runtime_sessions, fn {_browser_name, runtime_session} ->
       maybe_stop_runtime_session(runtime_session, opts)
     end)
-  end
-
-  defp maybe_track_owner(runtime_session, state, _browser_name, nil), do: {runtime_session, state}
-
-  defp maybe_track_owner(runtime_session, state, browser_name, owner) when is_pid(owner) do
-    owners = Map.get(runtime_session, :owners, MapSet.new())
-
-    if MapSet.member?(owners, owner) do
-      {runtime_session, state}
-    else
-      monitor_ref = Process.monitor(owner)
-      owner_refs = Map.put(state.owner_refs, monitor_ref, {browser_name, owner})
-      runtime_session = %{runtime_session | owners: MapSet.put(owners, owner)}
-      {runtime_session, %{state | owner_refs: owner_refs}}
-    end
-  end
-
-  defp owner_pid(opts) when is_list(opts) do
-    case Keyword.get(opts, :owner) do
-      owner when is_pid(owner) -> owner
-      _ -> nil
-    end
   end
 
   defp start_service(opts) do
