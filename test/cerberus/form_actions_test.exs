@@ -28,7 +28,7 @@ defmodule Cerberus.FormActionsTest do
       |> assert_has(text: "Search query: phoenix", exact: true)
     end
 
-    test "submit/1 compatibility works for migrated PhoenixTest flows (#{driver})", context do
+    test "submit/1 submits the first submit-capable control in scope (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/search")

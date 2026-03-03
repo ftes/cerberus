@@ -402,8 +402,8 @@ defmodule CerberusTest do
     assert session.scope == nil
   end
 
-  test "within rejects CSS selector strings and requires locator input" do
-    assert_raise ArgumentError, ~r/within\/3 no longer accepts CSS selector strings/, fn ->
+  test "within requires locator input and rejects raw string scopes" do
+    assert_raise FunctionClauseError, fn ->
       session()
       |> visit("/scoped")
       |> within("#secondary-panel", fn scoped -> scoped end)

@@ -37,27 +37,6 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
       assert Runtime.remote_webdriver_url(webdriver_url: "http://session-override:5555") == "http://session-override:5555"
     end
 
-    test "supports legacy chromedriver_url as fallback when webdriver_url is not configured" do
-      Application.put_env(:cerberus, :browser, [])
-
-      assert Runtime.remote_webdriver_url(chromedriver_url: "http://legacy:9515") == "http://legacy:9515"
-    end
-
-    test "supports per-browser webdriver_urls map/keyword selection" do
-      Application.put_env(:cerberus, :browser,
-        webdriver_urls: [chrome: "http://chrome:4444", firefox: "http://firefox:4444"]
-      )
-
-      assert Runtime.remote_webdriver_url(browser_name: :chrome) == "http://chrome:4444"
-      assert Runtime.remote_webdriver_url(browser_name: :firefox) == "http://firefox:4444"
-
-      assert Runtime.remote_webdriver_url(
-               browser_name: :firefox,
-               webdriver_urls: %{firefox: "http://override-firefox:4444"}
-             ) ==
-               "http://override-firefox:4444"
-    end
-
     test "supports top-level per-browser webdriver url keys" do
       Application.put_env(:cerberus, :browser,
         chrome_webdriver_url: "http://config-chrome:4444",

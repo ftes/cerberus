@@ -890,17 +890,10 @@ defmodule Cerberus.Driver.Browser.Runtime do
     browser_opts = browser_opts(opts)
     browser_webdriver_url = browser_specific_webdriver_url(opts, browser_opts, browser_name)
 
-    webdriver_urls =
-      opts
-      |> Keyword.get(:webdriver_urls, browser_opts[:webdriver_urls])
-      |> normalize_webdriver_urls(browser_name)
-
     opts
     |> Keyword.get(
       :webdriver_url,
-      browser_webdriver_url ||
-        webdriver_urls ||
-        browser_opts[:webdriver_url] || opts[:chromedriver_url] || browser_opts[:chromedriver_url]
+      browser_webdriver_url || browser_opts[:webdriver_url]
     )
     |> normalize_non_empty_string(nil)
   end
@@ -1132,16 +1125,6 @@ defmodule Cerberus.Driver.Browser.Runtime do
   end
 
   defp merge_browser_opts(base, _overrides), do: base
-
-  defp normalize_webdriver_urls(urls, browser_name) when is_list(urls) and is_atom(browser_name) do
-    if Keyword.keyword?(urls), do: urls[browser_name]
-  end
-
-  defp normalize_webdriver_urls(urls, browser_name) when is_map(urls) and is_atom(browser_name) do
-    Map.get(urls, browser_name) || Map.get(urls, Atom.to_string(browser_name))
-  end
-
-  defp normalize_webdriver_urls(_urls, _browser_name), do: nil
 
   defp browser_specific_webdriver_url(opts, browser_opts, :chrome) when is_list(opts) and is_list(browser_opts) do
     normalize_non_empty_string(opts[:chrome_webdriver_url], nil) ||

@@ -552,10 +552,6 @@ defmodule Cerberus do
   the query root to that iframe document. Only same-origin iframes are supported.
   """
   @spec within(arg, scope_locator_input(), (arg -> arg)) :: arg when arg: var
-  def within(_session, scope, _callback) when is_binary(scope) do
-    raise ArgumentError, ~s{within/3 no longer accepts CSS selector strings; use ~l"..."c or css("...")}
-  end
-
   def within(%LiveSession{} = session, locator, callback) when not is_binary(locator) and is_function(callback, 1) do
     normalized_locator = Locator.normalize(locator)
     previous_scope = Session.scope(session)
@@ -698,9 +694,6 @@ defmodule Cerberus do
 
   @doc """
   Submits the first submit-capable button in scope.
-
-  This arity exists as a compatibility bridge for migrated `PhoenixTest.submit/1`
-  pipelines, where no explicit locator is provided.
   """
   @spec submit(arg) :: arg when arg: var
   def submit(session), do: submit(session, css(@default_submit_selector), [])

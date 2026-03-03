@@ -72,7 +72,6 @@ defmodule Cerberus.Options do
           webdriver_url: String.t() | nil,
           chrome_webdriver_url: String.t() | nil,
           firefox_webdriver_url: String.t() | nil,
-          chromedriver_url: String.t() | nil,
           browser_name: :chrome | :firefox | nil,
           show_browser: boolean() | nil,
           headless: boolean() | nil,
@@ -98,8 +97,6 @@ defmodule Cerberus.Options do
           webdriver_url: String.t() | nil,
           chrome_webdriver_url: String.t() | nil,
           firefox_webdriver_url: String.t() | nil,
-          chromedriver_url: String.t() | nil,
-          webdriver_urls: map() | keyword() | nil,
           chrome_binary: String.t() | nil,
           firefox_binary: String.t() | nil,
           chromedriver_binary: String.t() | nil,
@@ -431,8 +428,6 @@ defmodule Cerberus.Options do
     webdriver_url: [type: :any, doc: "Remote WebDriver URL."],
     chrome_webdriver_url: [type: :any, doc: "Remote Chrome WebDriver URL."],
     firefox_webdriver_url: [type: :any, doc: "Remote Firefox WebDriver URL."],
-    chromedriver_url: [type: :any, doc: "Legacy Chrome WebDriver URL."],
-    webdriver_urls: [type: :any, doc: "Legacy per-browser WebDriver URL map."],
     chrome_binary: [type: :any, doc: "Chrome binary path override."],
     firefox_binary: [type: :any, doc: "Firefox binary path override."],
     chromedriver_binary: [type: :any, doc: "ChromeDriver binary path override."],
@@ -466,7 +461,6 @@ defmodule Cerberus.Options do
     webdriver_url: [type: :any, doc: "Remote WebDriver URL."],
     chrome_webdriver_url: [type: :any, doc: "Remote Chrome WebDriver URL."],
     firefox_webdriver_url: [type: :any, doc: "Remote Firefox WebDriver URL."],
-    chromedriver_url: [type: :any, doc: "Legacy Chrome WebDriver URL."],
     browser_name: [type: {:in, [:chrome, :firefox]}, doc: "Browser lane selector."],
     show_browser: [type: :boolean, doc: "Headed browser toggle."],
     headless: [type: :boolean, doc: "Headless browser toggle."],
@@ -710,7 +704,6 @@ defmodule Cerberus.Options do
     |> validate_optional_non_empty_string!("session(:browser, opts)", :webdriver_url)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :chrome_webdriver_url)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :firefox_webdriver_url)
-    |> validate_optional_non_empty_string!("session(:browser, opts)", :chromedriver_url)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :chrome_binary)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :firefox_binary)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :chromedriver_binary)
@@ -719,7 +712,6 @@ defmodule Cerberus.Options do
     |> validate_optional_non_empty_string!("session(:browser, opts)", :base_url)
     |> validate_optional_string_list!("session(:browser, opts)", :chrome_args)
     |> validate_optional_string_list!("session(:browser, opts)", :firefox_args)
-    |> validate_optional_webdriver_urls!("session(:browser, opts)", :webdriver_urls)
     |> validate_browser_override!("session(:browser, opts)")
   end
 
@@ -839,20 +831,6 @@ defmodule Cerberus.Options do
     end
   end
 
-  defp validate_optional_webdriver_urls!(opts, op_name, key) do
-    case Keyword.get(opts, key) do
-      nil ->
-        opts
-
-      value ->
-        if is_map(value) or Keyword.keyword?(value) do
-          opts
-        else
-          raise ArgumentError, "#{op_name} invalid options: :#{key} must be a map, keyword list, or nil"
-        end
-    end
-  end
-
   defp validate_browser_override!(opts, op_name) do
     case Keyword.get(opts, :browser) do
       nil ->
@@ -868,7 +846,6 @@ defmodule Cerberus.Options do
         |> validate_optional_non_empty_string!(op_name, :webdriver_url)
         |> validate_optional_non_empty_string!(op_name, :chrome_webdriver_url)
         |> validate_optional_non_empty_string!(op_name, :firefox_webdriver_url)
-        |> validate_optional_non_empty_string!(op_name, :chromedriver_url)
         |> validate_optional_non_empty_string!(op_name, :chrome_binary)
         |> validate_optional_non_empty_string!(op_name, :firefox_binary)
         |> validate_optional_non_empty_string!(op_name, :chromedriver_binary)
