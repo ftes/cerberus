@@ -1052,69 +1052,59 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp click_target_result(session, state, target, result) when is_map(target) and is_map(result) do
-    case await_driver_ready(state) do
-      {:ok, readiness} ->
-        path =
-          result
-          |> action_result_path(state.current_path)
-          |> ready_path(readiness)
+    await_failure_observed = %{
+      action: :click,
+      clicked: target["text"],
+      path: state.current_path,
+      target: target
+    }
 
-        next_state = %{state | current_path: path}
+    maybe_await_ready_result(session, state, result, await_failure_observed, fn readiness ->
+      path =
+        result
+        |> action_result_path(state.current_path)
+        |> ready_path(readiness)
 
-        observed = %{
-          action: :click,
-          clicked: target["text"],
-          path: path,
-          target: target,
-          readiness: readiness
-        }
+      next_state = %{state | current_path: path}
 
-        {:ok, update_session(session, next_state, :click, observed), observed}
+      observed = %{
+        action: :click,
+        clicked: target["text"],
+        path: path,
+        target: target,
+        readiness: readiness
+      }
 
-      {:error, reason, readiness} ->
-        observed = %{
-          action: :click,
-          clicked: target["text"],
-          path: state.current_path,
-          target: target,
-          readiness: readiness
-        }
-
-        {:error, session, observed, readiness_error(reason, readiness)}
-    end
+      {:ok, update_session(session, next_state, :click, observed), observed}
+    end)
   end
 
   defp submit_result(session, state, button, result) when is_map(result) do
-    case await_driver_ready(state) do
-      {:ok, readiness} ->
-        path =
-          result
-          |> action_result_path(state.current_path)
-          |> ready_path(readiness)
+    await_failure_observed = %{
+      action: :submit,
+      clicked: button["text"],
+      path: state.current_path,
+      target: button
+    }
 
-        next_state = %{state | current_path: path}
+    maybe_await_ready_result(session, state, result, await_failure_observed, fn readiness ->
+      path =
+        result
+        |> action_result_path(state.current_path)
+        |> ready_path(readiness)
 
-        observed = %{
-          action: :submit,
-          clicked: button["text"],
-          path: path,
-          target: button,
-          readiness: readiness
-        }
+      next_state = %{state | current_path: path}
 
-        {:ok, update_session(session, next_state, :submit, observed), observed}
+      observed = %{
+        action: :submit,
+        clicked: button["text"],
+        path: path,
+        target: button,
+        readiness: readiness
+      }
 
-      {:error, reason, readiness} ->
-        observed = %{
-          action: :submit,
-          clicked: button["text"],
-          path: state.current_path,
-          target: button,
-          readiness: readiness
-        }
-
-        {:error, session, observed, readiness_error(reason, readiness)}
-    end
+      {:ok, update_session(session, next_state, :submit, observed), observed}
+    end)
   end
 
   defp fill_in_result(session, state, field, value, result) when is_map(result) do
@@ -1436,6 +1426,36 @@ defmodule Cerberus.Driver.Browser do
     reason = Map.get(result, "reason", "choose_failed")
     observed = %{action: :choose, path: state.current_path, field: field, result: result}
     {:error, session, observed, "browser choose failed: #{reason}"}
+  end
+
+  defp maybe_await_ready_result(session, state, result, fallback_observed, on_success)
+       when is_map(result) and is_map(fallback_observed) and is_function(on_success, 1) do
+    if await_ready_required?(result) do
+      case await_driver_ready(state) do
+        {:ok, readiness} ->
+          on_success.(readiness)
+
+        {:error, reason, readiness} ->
+          observed = Map.merge(fallback_observed, %{readiness: readiness, result: result})
+
+          {:error, session, observed, readiness_error(reason, readiness)}
+      end
+    else
+      readiness = inline_settle_readiness(result)
+      on_success.(readiness)
+    end
+  end
+
+  defp await_ready_required?(%{"needsAwaitReady" => value}) when is_boolean(value), do: value
+  defp await_ready_required?(_result), do: true
+
+  defp inline_settle_readiness(result) when is_map(result) do
+    %{
+      "ok" => true,
+      "reason" => "in-action-settle",
+      "skippedAwaitReady" => true,
+      "settle" => Map.get(result, "settle")
+    }
   end
 
   defp navigate_link(session, state, link, url) do

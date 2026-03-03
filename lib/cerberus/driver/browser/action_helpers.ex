@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAction && window.__cerberusAction.__version === 7) return;
+    if (window.__cerberusAction && window.__cerberusAction.__version === 8) return;
 
     const helper = {};
-    helper.__version = 7;
+    helper.__version = 8;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -47,6 +47,115 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       }
 
       return helper.liveConnected();
+    };
+
+    helper.actionTargetElement = (result) => {
+      const target = result && result.target && typeof result.target === "object" ? result.target : null;
+      return target && target.__el ? target.__el : null;
+    };
+
+    helper.inLiveRoot = (element) => {
+      if (!element || typeof element.closest !== "function") return false;
+      return !!element.closest("[data-phx-session]");
+    };
+
+    helper.liveDrivenAction = (op, element, target) => {
+      if (!element) return false;
+      if (helper.inLiveRoot(element)) return true;
+
+      if (typeof element.hasAttribute === "function") {
+        if (element.hasAttribute("phx-click") || element.hasAttribute("phx-submit") || element.hasAttribute("phx-change")) {
+          return true;
+        }
+
+        if (target && target.kind === "link" && element.hasAttribute("data-phx-link")) {
+          return true;
+        }
+      }
+
+      const form = element.form || (typeof element.closest === "function" ? element.closest("form") : null);
+
+      if (form && typeof form.hasAttribute === "function") {
+        if (form.hasAttribute("phx-submit")) return true;
+        if (op !== "submit" && form.hasAttribute("phx-change")) return true;
+      }
+
+      return false;
+    };
+
+    helper.waitForLiveSettled = async (timeoutMs, quietMs = 40, pollMs = 25) => {
+      const roots = helper.liveRoots();
+      if (roots.length === 0) return { attempted: false, settled: false, reason: "no_live_roots" };
+      if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+        return { attempted: false, settled: false, reason: "timeout_disabled" };
+      }
+
+      let observer = null;
+      let lastMutationAt = Date.now();
+
+      try {
+        observer = new MutationObserver(() => {
+          lastMutationAt = Date.now();
+        });
+
+        for (const root of roots) {
+          if (!root) continue;
+          observer.observe(root, {
+            subtree: true,
+            childList: true,
+            attributes: true,
+            characterData: true
+          });
+        }
+      } catch (_error) {
+        observer = null;
+      }
+
+      try {
+        const deadline = Date.now() + timeoutMs;
+
+        while (Date.now() <= deadline) {
+          if (helper.liveConnected() && Date.now() - lastMutationAt >= quietMs) {
+            return { attempted: true, settled: true, reason: "live_quiet" };
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, pollMs));
+        }
+
+        return { attempted: true, settled: false, reason: "timeout" };
+      } finally {
+        if (observer) observer.disconnect();
+      }
+    };
+
+    helper.needsAwaitReady = (options, result, prePath, settle) => {
+      const op = options && options.op ? options.op : "click";
+      const target = result && result.target && typeof result.target === "object" ? result.target : null;
+      const element = helper.actionTargetElement(result);
+      const liveDriven = helper.liveDrivenAction(op, element, target);
+      const path = result && typeof result.path === "string" ? result.path : helper.currentPath();
+      const pathChanged = typeof prePath === "string" && prePath !== path;
+      const settled = settle && settle.settled === true;
+
+      if (op === "fill_in" || op === "select" || op === "choose" || op === "check" || op === "uncheck" || op === "upload") {
+        return liveDriven ? !settled : false;
+      }
+
+      if (op === "click") {
+        if (target && target.kind === "link") {
+          return true;
+        }
+
+        if (pathChanged) return true;
+        return liveDriven ? !settled : false;
+      }
+
+      if (op === "submit") {
+        if (pathChanged) return true;
+        return liveDriven ? !settled : true;
+      }
+
+      return true;
     };
 
     helper.dispatchInputChange = (field) => {
@@ -1069,6 +1178,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       let waitForLiveMs = 0;
       let resolveMs = 0;
       let performResolvedMs = 0;
+      let postActionSettleMs = 0;
 
       const readyTimeoutMs = Number(options && options.readyTimeoutMs);
       if (Number.isFinite(readyTimeoutMs) && readyTimeoutMs > 0) {
@@ -1086,9 +1196,27 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       if (!resolved || resolved.ok !== true) {
         result = resolved || { ok: false, reason: "action_resolve_failed", path: helper.currentPath() };
       } else {
+        const prePath = helper.currentPath();
         const performStartedAt = now();
         result = helper.performResolved(resolved, options);
         performResolvedMs = now() - performStartedAt;
+
+        if (result && result.ok === true) {
+          const op = options && options.op ? options.op : "click";
+          const target = result && result.target && typeof result.target === "object" ? result.target : null;
+          const isLinkClick = op === "click" && target && target.kind === "link";
+
+          let settle = { attempted: false, settled: false, reason: "not_attempted" };
+
+          if (!isLinkClick) {
+            const settleStartedAt = now();
+            settle = await helper.waitForLiveSettled(readyTimeoutMs, 40, 25);
+            postActionSettleMs = now() - settleStartedAt;
+          }
+
+          result.settle = settle;
+          result.needsAwaitReady = helper.needsAwaitReady(options, result, prePath, settle);
+        }
       }
 
       if (!result || typeof result !== "object") {
@@ -1102,6 +1230,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         actionWaitForLiveMs: waitForLiveMs,
         actionResolveMs: resolveMs,
         actionPerformResolvedMs: performResolvedMs,
+        actionPostSettleMs: postActionSettleMs,
         actionTotalMs: now() - startedAt
       };
 
