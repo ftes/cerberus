@@ -79,6 +79,10 @@ Cerberus.TestHelperSupport.ensure_postgres_database!(Repo.config())
   )
 
 ExUnit.after_suite(fn _results ->
+  if Cerberus.Profiling.enabled?() do
+    Cerberus.Profiling.dump_summary()
+  end
+
   Cerberus.TestHelperSupport.stop_test_support_supervisor()
 end)
 

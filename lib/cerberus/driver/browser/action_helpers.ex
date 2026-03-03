@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAction && window.__cerberusAction.__version === 6) return;
+    if (window.__cerberusAction && window.__cerberusAction.__version === 7) return;
 
     const helper = {};
-    helper.__version = 6;
+    helper.__version = 7;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -1060,18 +1060,52 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
     };
 
     helper.perform = async (options) => {
+      const now = () =>
+        typeof performance !== "undefined" && typeof performance.now === "function"
+          ? performance.now()
+          : Date.now();
+
+      const startedAt = now();
+      let waitForLiveMs = 0;
+      let resolveMs = 0;
+      let performResolvedMs = 0;
+
       const readyTimeoutMs = Number(options && options.readyTimeoutMs);
       if (Number.isFinite(readyTimeoutMs) && readyTimeoutMs > 0) {
+        const waitStartedAt = now();
         await helper.waitForLiveConnected(readyTimeoutMs, 50);
+        waitForLiveMs = now() - waitStartedAt;
       }
 
+      const resolveStartedAt = now();
       const resolved = await helper.resolveInternal(options);
+      resolveMs = now() - resolveStartedAt;
+
+      let result = null;
 
       if (!resolved || resolved.ok !== true) {
-        return JSON.stringify(resolved || { ok: false, reason: "action_resolve_failed", path: helper.currentPath() });
+        result = resolved || { ok: false, reason: "action_resolve_failed", path: helper.currentPath() };
+      } else {
+        const performStartedAt = now();
+        result = helper.performResolved(resolved, options);
+        performResolvedMs = now() - performStartedAt;
       }
 
-      return JSON.stringify(helper.performResolved(resolved, options));
+      if (!result || typeof result !== "object") {
+        result = { ok: false, reason: "action_perform_failed", path: helper.currentPath() };
+      }
+
+      const jsTiming = result.jsTiming && typeof result.jsTiming === "object" ? result.jsTiming : {};
+
+      result.jsTiming = {
+        ...jsTiming,
+        actionWaitForLiveMs: waitForLiveMs,
+        actionResolveMs: resolveMs,
+        actionPerformResolvedMs: performResolvedMs,
+        actionTotalMs: now() - startedAt
+      };
+
+      return JSON.stringify(result);
     };
 
     window.__cerberusAction = helper;

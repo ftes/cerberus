@@ -13,6 +13,7 @@ defmodule Cerberus.Driver.Browser do
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
   alias Cerberus.Options
+  alias Cerberus.Profiling
   alias Cerberus.Query
   alias Cerberus.Session
   alias Cerberus.UploadFile
@@ -23,6 +24,17 @@ defmodule Cerberus.Driver.Browser do
   @empty_browser_context_defaults %{viewport: nil, user_agent: nil, init_scripts: [], popup_mode: :allow}
   @clickable_match_field_by %{title: "title", alt: "alt", testid: "testid"}
   @field_match_field_by %{placeholder: "placeholder", title: "title", testid: "testid"}
+  @action_failure_reason_messages %{
+    "submit_target_failed" => "no submit button matched locator",
+    "field_fill_failed" => "no form field matched locator",
+    "field_not_select" => "matched field is not a select element",
+    "field_not_radio" => "matched field is not a radio input",
+    "field_not_checkbox" => "matched field is not a checkbox",
+    "option_not_found" => "browser select failed: option_not_found",
+    "option_disabled" => "browser select failed: option_disabled",
+    "select_not_multiple" => "browser select failed: select_not_multiple",
+    "upload_failed" => "browser upload failed: upload_failed"
+  }
 
   @type viewport :: %{width: pos_integer(), height: pos_integer()}
   @type browser_context_defaults :: %{
@@ -254,11 +266,13 @@ defmodule Cerberus.Driver.Browser do
       quiet_ms = max(min(session.ready_quiet_ms, timeout_ms), 1)
 
       _ =
-        UserContextProcess.await_ready(
-          state.user_context_pid,
-          [timeout_ms: timeout_ms, quiet_ms: quiet_ms],
-          state.tab_id
-        )
+        Profiling.measure({:browser_wait, :await_ready, :assertion_signal}, fn ->
+          UserContextProcess.await_ready(
+            state.user_context_pid,
+            [timeout_ms: timeout_ms, quiet_ms: quiet_ms],
+            state.tab_id
+          )
+        end)
     end
 
     refresh_path(session)
@@ -658,56 +672,35 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp action_failure_reason(op, opts, result, fallback) do
-    case Map.get(result, "reason") do
-      "no elements matched locator" ->
+    reason = Map.get(result, "reason")
+
+    cond do
+      reason == "no elements matched locator" ->
         no_action_target_error(op, opts)
 
-      "matched element count did not satisfy count constraints" ->
-        match_count = Map.get(result, "matchCount", 0)
+      reason == "matched element count did not satisfy count constraints" ->
+        count_constraint_reason(result, opts)
 
-        case Query.apply_count_constraints(match_count, opts) do
-          :ok -> "matched element count did not satisfy count constraints"
-          {:error, reason} -> reason
-        end
-
-      "click_target_failed" ->
+      reason == "click_target_failed" ->
         no_clickable_error(Keyword.get(opts, :kind, :any))
 
-      "submit_target_failed" ->
-        "no submit button matched locator"
-
-      "field_fill_failed" ->
-        "no form field matched locator"
-
-      "field_not_select" ->
-        "matched field is not a select element"
-
-      "field_not_radio" ->
-        "matched field is not a radio input"
-
-      "field_not_checkbox" ->
-        "matched field is not a checkbox"
-
-      "field_disabled" ->
+      reason == "field_disabled" ->
         action_disabled_reason(op)
 
-      "option_not_found" ->
-        "browser select failed: option_not_found"
+      is_binary(reason) ->
+        Map.get(@action_failure_reason_messages, reason, reason)
 
-      "option_disabled" ->
-        "browser select failed: option_disabled"
-
-      "select_not_multiple" ->
-        "browser select failed: select_not_multiple"
-
-      "upload_failed" ->
-        "browser upload failed: upload_failed"
-
-      reason when is_binary(reason) ->
-        reason
-
-      _ ->
+      true ->
         fallback
+    end
+  end
+
+  defp count_constraint_reason(result, opts) do
+    match_count = Map.get(result, "matchCount", 0)
+
+    case Query.apply_count_constraints(match_count, opts) do
+      :ok -> "matched element count did not satisfy count constraints"
+      {:error, reason} -> reason
     end
   end
 
@@ -1602,7 +1595,9 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp navigate_browser(state, url) do
-    UserContextProcess.navigate(state.user_context_pid, url, state.tab_id)
+    Profiling.measure({:browser_wait, :navigate}, fn ->
+      UserContextProcess.navigate(state.user_context_pid, url, state.tab_id)
+    end)
   end
 
   defp snapshot_after_visit!(session, state) do
@@ -1647,10 +1642,15 @@ defmodule Cerberus.Driver.Browser do
   defp eval_json(state, expression, timeout_ms \\ 10_000)
 
   defp eval_json(state, expression, timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
-    with {:ok, result} <-
-           UserContextProcess.evaluate_with_timeout(state.user_context_pid, expression, timeout_ms, state.tab_id),
-         {:ok, json} <- decode_remote_json(result) do
-      {:ok, json}
+    evaluate_result =
+      Profiling.measure({:browser_wait, :evaluate_with_timeout}, fn ->
+        UserContextProcess.evaluate_with_timeout(state.user_context_pid, expression, timeout_ms, state.tab_id)
+      end)
+
+    with {:ok, result} <- evaluate_result,
+         {:ok, json} <-
+           Profiling.measure({:browser_elixir, :decode_remote_json}, fn -> decode_remote_json(result) end) do
+      {:ok, maybe_record_js_timing(json)}
     else
       {:error, reason, details} ->
         {:error, reason, details}
@@ -1671,6 +1671,20 @@ defmodule Cerberus.Driver.Browser do
     {:error, "unexpected script.evaluate result: #{inspect(result)}"}
   end
 
+  defp maybe_record_js_timing(%{"jsTiming" => timings} = payload) when is_map(timings) do
+    Enum.each(timings, fn
+      {name, value} when is_binary(name) and is_number(value) and value >= 0 ->
+        Profiling.record_us({:browser_js, name}, round(value * 1_000))
+
+      _other ->
+        :ok
+    end)
+
+    payload
+  end
+
+  defp maybe_record_js_timing(payload), do: payload
+
   defp with_driver_ready(session, state, action, on_ready) when is_function(on_ready, 1) do
     case await_driver_ready(state) do
       {:ok, _readiness} ->
@@ -1690,7 +1704,12 @@ defmodule Cerberus.Driver.Browser do
   defp await_driver_ready(state) do
     opts = [timeout_ms: state.ready_timeout_ms, quiet_ms: state.ready_quiet_ms]
 
-    case UserContextProcess.await_ready(state.user_context_pid, opts, state.tab_id) do
+    ready_result =
+      Profiling.measure({:browser_wait, :await_ready}, fn ->
+        UserContextProcess.await_ready(state.user_context_pid, opts, state.tab_id)
+      end)
+
+    case ready_result do
       {:ok, readiness} ->
         {:ok, readiness}
 

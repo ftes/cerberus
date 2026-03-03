@@ -81,17 +81,34 @@ defmodule Cerberus.Driver.Browser.Expressions do
 
     """
     (async () => {
+      const now = () =>
+        typeof performance !== "undefined" && typeof performance.now === "function"
+          ? performance.now()
+          : Date.now();
+
       const helper = window.__cerberusAction;
 
       if (helper && typeof helper.perform === "function") {
-        return await helper.perform(#{encoded_payload});
+        const startedAt = now();
+        const raw = await helper.perform(#{encoded_payload});
+        const elapsedMs = now() - startedAt;
+
+        try {
+          const parsed = JSON.parse(raw);
+          const jsTiming = parsed && parsed.jsTiming && typeof parsed.jsTiming === "object" ? parsed.jsTiming : {};
+          parsed.jsTiming = { ...jsTiming, expressionActionPerformMs: elapsedMs };
+          return JSON.stringify(parsed);
+        } catch (_error) {
+          return raw;
+        }
       }
 
       return JSON.stringify({
         ok: false,
         reason: "action helper is not available",
         helperMissing: true,
-        path: #{current_path_expression()}
+        path: #{current_path_expression()},
+        jsTiming: { expressionActionPerformMs: 0 }
       });
     })()
     """
@@ -103,10 +120,26 @@ defmodule Cerberus.Driver.Browser.Expressions do
     mode_value = Map.get(payload, :mode, "assert")
 
     """
-    (() => {
+    (async () => {
+      const now = () =>
+        typeof performance !== "undefined" && typeof performance.now === "function"
+          ? performance.now()
+          : Date.now();
+
       #{assert_helper_binding_snippet()}
       if (helper && typeof helper.text === "function") {
-        return helper.text(#{encoded_payload});
+        const startedAt = now();
+        const raw = await helper.text(#{encoded_payload});
+        const elapsedMs = now() - startedAt;
+
+        try {
+          const parsed = JSON.parse(raw);
+          const jsTiming = parsed && parsed.jsTiming && typeof parsed.jsTiming === "object" ? parsed.jsTiming : {};
+          parsed.jsTiming = { ...jsTiming, expressionTextAssertionMs: elapsedMs };
+          return JSON.stringify(parsed);
+        } catch (_error) {
+          return raw;
+        }
       }
 
       const mode = #{JSON.encode!(mode_value)};
@@ -119,7 +152,8 @@ defmodule Cerberus.Driver.Browser.Expressions do
         title: document.title || "",
         texts: [],
         matched: [],
-        helperMissing: true
+        helperMissing: true,
+        jsTiming: { expressionTextAssertionMs: 0 }
       });
     })()
     """

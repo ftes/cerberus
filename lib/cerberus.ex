@@ -39,6 +39,7 @@ defmodule Cerberus do
   alias Cerberus.Path
   alias Cerberus.Phoenix.Conn, as: DriverConn
   alias Cerberus.Phoenix.LiveViewTimeout
+  alias Cerberus.Profiling
   alias Cerberus.Session
   alias Ecto.Adapters.SQL.Sandbox, as: EctoSandbox
   alias ExUnit.AssertionError
@@ -516,7 +517,9 @@ defmodule Cerberus do
 
   @spec visit(arg, String.t(), keyword()) :: arg when arg: var
   def visit(session, path, opts \\ []) when is_binary(path) do
-    driver_module_for_session!(session).visit(session, path, opts)
+    Profiling.measure({:driver_operation, Session.driver_kind(session), :visit}, fn ->
+      driver_module_for_session!(session).visit(session, path, opts)
+    end)
   end
 
   @spec reload_page(arg, keyword()) :: arg when arg: var
@@ -930,7 +933,12 @@ defmodule Cerberus do
     browser_opts = Keyword.put(opts, :timeout, timeout)
     run_fun = if op == :assert_path, do: &BrowserSession.assert_path/3, else: &BrowserSession.refute_path/3
 
-    case run_fun.(session, expected, browser_opts) do
+    result =
+      Profiling.measure({:driver_operation, :browser, op}, fn ->
+        run_fun.(session, expected, browser_opts)
+      end)
+
+    case result do
       {:ok, timed_session, observed} ->
         update_last_result(timed_session, op, observed)
 
@@ -940,17 +948,24 @@ defmodule Cerberus do
   end
 
   defp run_non_browser_path_assertion(session, expected, opts, timeout, op) when op in [:assert_path, :refute_path] do
-    LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
-      observed = build_path_observed(timed_session, expected, opts, timeout)
-      matches? = observed.path_match? and observed.query_match?
-      should_pass? = if op == :assert_path, do: matches?, else: not matches?
-
-      if should_pass? do
-        update_last_result(timed_session, op, observed)
-      else
-        raise AssertionError, message: format_path_error(Atom.to_string(op), observed)
-      end
+    Profiling.measure({:driver_operation, Session.driver_kind(session), op}, fn ->
+      LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
+        finalize_non_browser_path_assertion(timed_session, expected, opts, timeout, op)
+      end)
     end)
+  end
+
+  defp finalize_non_browser_path_assertion(timed_session, expected, opts, timeout, op)
+       when op in [:assert_path, :refute_path] do
+    observed = build_path_observed(timed_session, expected, opts, timeout)
+    matches? = observed.path_match? and observed.query_match?
+    should_pass? = if op == :assert_path, do: matches?, else: not matches?
+
+    if should_pass? do
+      update_last_result(timed_session, op, observed)
+    else
+      raise AssertionError, message: format_path_error(Atom.to_string(op), observed)
+    end
   end
 
   defp build_path_observed(session, expected, opts, timeout) do

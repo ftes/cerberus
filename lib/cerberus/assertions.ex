@@ -10,6 +10,7 @@ defmodule Cerberus.Assertions do
   alias Cerberus.Options
   alias Cerberus.Path
   alias Cerberus.Phoenix.LiveViewTimeout
+  alias Cerberus.Profiling
   alias Cerberus.Session
   alias ExUnit.AssertionError
 
@@ -18,8 +19,9 @@ defmodule Cerberus.Assertions do
     {locator, opts} = normalize_click_locator(locator_input, opts)
     opts = Options.validate_click!(opts)
     driver = driver_module_for_session!(session)
+    result = profile_driver_operation(session, :click, fn -> driver.click(session, locator, opts) end)
 
-    case driver.click(session, locator, opts) do
+    case result do
       {:ok, session, _observed} ->
         session
 
@@ -35,7 +37,10 @@ defmodule Cerberus.Assertions do
     opts = Options.validate_fill_in!(opts)
     driver = driver_module_for_session!(session)
 
-    case driver.fill_in(session, locator, to_string(value), opts) do
+    result =
+      profile_driver_operation(session, :fill_in, fn -> driver.fill_in(session, locator, to_string(value), opts) end)
+
+    case result do
       {:ok, session, _observed} ->
         session
 
@@ -50,8 +55,9 @@ defmodule Cerberus.Assertions do
     {locator, opts} = normalize_select_locator(locator_input, opts)
     opts = Options.validate_select!(opts)
     driver = driver_module_for_session!(session)
+    result = profile_driver_operation(session, :select, fn -> driver.select(session, locator, opts) end)
 
-    case driver.select(session, locator, opts) do
+    case result do
       {:ok, session, _observed} ->
         session
 
@@ -66,8 +72,9 @@ defmodule Cerberus.Assertions do
     {locator, opts} = normalize_choose_locator(locator_input, opts)
     opts = Options.validate_choose!(opts, "choose/3")
     driver = driver_module_for_session!(session)
+    result = profile_driver_operation(session, :choose, fn -> driver.choose(session, locator, opts) end)
 
-    case driver.choose(session, locator, opts) do
+    case result do
       {:ok, session, _observed} ->
         session
 
@@ -82,8 +89,9 @@ defmodule Cerberus.Assertions do
     {locator, opts} = normalize_check_locator(locator_input, opts, "check/3")
     opts = Options.validate_check!(opts, "check/3")
     driver = driver_module_for_session!(session)
+    result = profile_driver_operation(session, :check, fn -> driver.check(session, locator, opts) end)
 
-    case driver.check(session, locator, opts) do
+    case result do
       {:ok, session, _observed} ->
         session
 
@@ -98,8 +106,9 @@ defmodule Cerberus.Assertions do
     {locator, opts} = normalize_check_locator(locator_input, opts, "uncheck/3")
     opts = Options.validate_check!(opts, "uncheck/3")
     driver = driver_module_for_session!(session)
+    result = profile_driver_operation(session, :uncheck, fn -> driver.uncheck(session, locator, opts) end)
 
-    case driver.uncheck(session, locator, opts) do
+    case result do
       {:ok, session, _observed} ->
         session
 
@@ -117,8 +126,9 @@ defmodule Cerberus.Assertions do
     {locator, opts} = normalize_upload_locator(locator_input, opts)
     opts = Options.validate_upload!(opts)
     driver = driver_module_for_session!(session)
+    result = profile_driver_operation(session, :upload, fn -> driver.upload(session, locator, path, opts) end)
 
-    case driver.upload(session, locator, path, opts) do
+    case result do
       {:ok, session, _observed} ->
         session
 
@@ -137,8 +147,9 @@ defmodule Cerberus.Assertions do
     {locator, opts} = normalize_submit_locator(locator_input, opts)
     opts = Options.validate_submit!(opts)
     driver = driver_module_for_session!(session)
+    result = profile_driver_operation(session, :submit, fn -> driver.submit(session, locator, opts) end)
 
-    case driver.submit(session, locator, opts) do
+    case result do
       {:ok, session, _observed} ->
         session
 
@@ -215,8 +226,9 @@ defmodule Cerberus.Assertions do
         ) :: Session.t()
   defp run_assertion!(session, op, locator, locator_input, driver_opts, message_opts) do
     driver = driver_module_for_session!(session)
+    result = profile_driver_operation(session, op, fn -> apply(driver, op, [session, locator, driver_opts]) end)
 
-    case apply(driver, op, [session, locator, driver_opts]) do
+    case result do
       {:ok, session, _observed} ->
         session
 
@@ -272,6 +284,10 @@ defmodule Cerberus.Assertions do
     do: Session.assert_timeout_ms(session)
 
   defp resolve_assert_timeout(_session, false, _validated_timeout), do: 0
+
+  defp profile_driver_operation(session, op, fun) when is_atom(op) and is_function(fun, 0) do
+    Profiling.measure({:driver_operation, Session.driver_kind(session), op}, fun)
+  end
 
   defp driver_module_for_session!(%StaticSession{}), do: StaticSession
   defp driver_module_for_session!(%LiveSession{}), do: LiveSession
