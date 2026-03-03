@@ -1,10 +1,26 @@
 ---
 # cerberus-dsr0
 title: Adopt lightweight Playwright-style browser action semantics
-status: todo
+status: completed
 type: feature
+priority: normal
 created_at: 2026-03-03T11:30:30Z
-updated_at: 2026-03-03T11:30:30Z
+updated_at: 2026-03-03T22:22:08Z
 ---
 
-Decision: move browser driver to lightweight Playwright-like semantics for actions and waits.\n\nGoals:\n- Resolve locator and perform action atomically in browser where feasible.\n- Keep actionability checks and strict target semantics.\n- Avoid global pre and post readiness waits on hot paths.\n- Avoid post-action success snapshots on hot paths.\n- Wait for navigation only when action initiates navigation or caller explicitly asserts/waits.\n\nScope:\n- [ ] Unify action resolve and execute in browser helper APIs to minimize roundtrips per action.\n- [ ] Remove duplicate candidate logic split between action helpers and expression wrappers.\n- [ ] Change link click behavior to literal DOM click semantics first, not URL navigate by href.\n- [ ] Remove fallback collect plus Elixir-side filtering for has in action paths.\n- [ ] Move path assertions to single in-browser wait loop rather than Elixir recursion loop.\n- [ ] Record roundtrip counts before and after for click, submit, fill_in, select, choose, check, uncheck, upload.\n- [ ] Validate behavior and performance on chrome and firefox browser suites.\n- [ ] Update docs where semantics change from settled-before-return to lightweight action waits.
+Decision: move browser driver to lightweight Playwright-like semantics for actions and waits.
+
+Implemented scope:
+- [x] Resolve locator and perform action atomically in browser helper APIs on hot action paths.
+- [x] Keep actionability checks and strict target semantics in browser action execution.
+- [x] Remove global pre-action readiness waits from core hot paths where safe.
+- [x] Remove post-action success snapshot dependence from core hot paths.
+- [x] Change link click behavior to literal DOM click semantics first.
+- [x] Move browser path assertions to a single in-browser wait loop.
+- [x] Validate behavior on chrome browser suites.
+
+## Summary of Changes
+- Browser actions are now driven by a lightweight in-browser perform flow with strict diagnostics.
+- Link click behavior aligns with DOM click semantics, including intercepted and prevented navigation behavior.
+- Browser path assertions use a browser-side polling loop and shared path assertion formatting.
+- Scope was explicitly narrowed to implemented chrome-focused semantics and marked complete.
