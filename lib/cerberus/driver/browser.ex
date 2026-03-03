@@ -20,6 +20,18 @@ defmodule Cerberus.Driver.Browser do
 
   @default_ready_timeout_ms 1_500
   @default_ready_quiet_ms 40
+  @transient_eval_retry_interval_ms 25
+  @transient_eval_retry_min_budget_ms 250
+  @transient_navigation_eval_markers [
+    "JSWindowActorChild cannot send",
+    "argument is not a global object",
+    "Inspected target navigated or closed",
+    "Cannot find context with specified id",
+    "execution contexts cleared",
+    "DiscardedBrowsingContextError",
+    "no such frame",
+    "navigation canceled by concurrent navigation"
+  ]
   @user_context_supervisor Cerberus.Driver.Browser.UserContextSupervisor
   @empty_browser_context_defaults %{viewport: nil, user_agent: nil, init_scripts: [], popup_mode: :allow}
   @clickable_match_field_by %{title: "title", alt: "alt", testid: "testid"}
@@ -173,7 +185,7 @@ defmodule Cerberus.Driver.Browser do
   def open_browser(%__MODULE__{} = session, open_fun) when is_function(open_fun, 1) do
     state = state!(session)
 
-    case eval_json(state, Expressions.browser_html()) do
+    case eval_json_transient_read(state, Expressions.browser_html()) do
       {:ok, payload} ->
         html = Map.get(payload, "html", "")
         url = Map.get(payload, "url")
@@ -210,7 +222,7 @@ defmodule Cerberus.Driver.Browser do
   def refresh_path(%__MODULE__{} = session) do
     state = state!(session)
 
-    case eval_json(state, Expressions.current_path()) do
+    case eval_json_transient_read(state, Expressions.current_path()) do
       {:ok, %{"path" => path}} when is_binary(path) ->
         %{session | current_path: path}
 
@@ -225,7 +237,7 @@ defmodule Cerberus.Driver.Browser do
   def resolve_within_scope(%__MODULE__{} = session, %Locator{} = locator, scope \\ nil) do
     state = state!(session)
 
-    with {:ok, snapshot} <- eval_json(state, Expressions.within_scope_snapshot(scope)),
+    with {:ok, snapshot} <- eval_json_transient_read(state, Expressions.within_scope_snapshot(scope)),
          :ok <- validate_within_scope_snapshot(snapshot),
          html when is_binary(html) <- Map.get(snapshot, "html"),
          {:ok, target} <- Html.find_scope_target(html, locator, Map.get(snapshot, "scopeSelector")),
@@ -1566,19 +1578,19 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp clickables(state, selector) do
-    eval_json(state, Expressions.clickables(Session.scope(state), selector))
+    eval_json_transient_read(state, Expressions.clickables(Session.scope(state), selector))
   end
 
   defp form_fields(state, selector) do
-    eval_json(state, Expressions.form_fields(Session.scope(state), selector))
+    eval_json_transient_read(state, Expressions.form_fields(Session.scope(state), selector))
   end
 
   defp file_fields(state, selector) do
-    eval_json(state, Expressions.file_fields(Session.scope(state), selector))
+    eval_json_transient_read(state, Expressions.file_fields(Session.scope(state), selector))
   end
 
   defp with_snapshot(state) do
-    case eval_json(state, Expressions.snapshot(Session.scope(state))) do
+    case eval_json_transient_read(state, Expressions.snapshot(Session.scope(state))) do
       {:ok, snapshot} ->
         snapshot = %{
           path: snapshot["path"],
@@ -1730,9 +1742,7 @@ defmodule Cerberus.Driver.Browser do
   defp navigation_transition_error?(reason, details) do
     combined = "#{reason} #{inspect(details)}"
 
-    String.contains?(combined, "Inspected target navigated or closed") or
-      String.contains?(combined, "Cannot find context with specified id") or
-      String.contains?(combined, "execution contexts cleared")
+    Enum.any?(@transient_navigation_eval_markers, &String.contains?(combined, &1))
   end
 
   defp readiness_payload?(payload) when is_map(payload) do
@@ -1745,10 +1755,16 @@ defmodule Cerberus.Driver.Browser do
 
   defp do_run_text_assertion(state, expected, visible, match_opts, timeout_ms, mode) do
     match_by = Keyword.get(match_opts, :match_by, :text)
-    payload = build_text_assertion_payload(state, expected, visible, match_opts, timeout_ms, mode, match_by)
-    expression = Expressions.text_assertion(payload)
 
-    case eval_json(state, expression, command_timeout_ms(timeout_ms)) do
+    eval_result =
+      eval_json_with_transient_retry(state, timeout_ms, fn remaining_timeout_ms ->
+        payload =
+          build_text_assertion_payload(state, expected, visible, match_opts, remaining_timeout_ms, mode, match_by)
+
+        Expressions.text_assertion(payload)
+      end)
+
+    case eval_result do
       {:ok, result} ->
         next_state = %{state | current_path: result["path"] || state.current_path}
         observed = text_assertion_observed(result, expected, visible, match_by)
@@ -1839,9 +1855,12 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp do_run_path_assertion(session, state, expected, expected_query, exact, timeout_ms, op, expected_payload) do
-    expression = Expressions.path_assertion(expected_payload, expected_query, exact, op, timeout_ms, 100)
+    eval_result =
+      eval_json_with_transient_retry(state, timeout_ms, fn remaining_timeout_ms ->
+        Expressions.path_assertion(expected_payload, expected_query, exact, op, remaining_timeout_ms, 100)
+      end)
 
-    case eval_json(state, expression, command_timeout_ms(timeout_ms)) do
+    case eval_result do
       {:ok, result} ->
         observed = %{
           path: result["path"] || state.current_path,
@@ -1891,6 +1910,46 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp maybe_ensure_action_helpers(_state), do: :ok
+
+  defp eval_json_transient_read(state, expression, timeout_ms \\ 0)
+
+  defp eval_json_transient_read(state, expression, timeout_ms)
+       when is_binary(expression) and is_integer(timeout_ms) and timeout_ms >= 0 do
+    eval_json_with_transient_retry(state, timeout_ms, fn _remaining_timeout_ms -> expression end)
+  end
+
+  defp eval_json_with_transient_retry(state, timeout_ms, build_expression)
+       when is_integer(timeout_ms) and timeout_ms >= 0 and is_function(build_expression, 1) do
+    started_at_ms = System.monotonic_time(:millisecond)
+    retry_budget_ms = max(timeout_ms, @transient_eval_retry_min_budget_ms)
+    do_eval_json_with_transient_retry(state, started_at_ms, timeout_ms, retry_budget_ms, build_expression)
+  end
+
+  defp do_eval_json_with_transient_retry(state, started_at_ms, timeout_ms, retry_budget_ms, build_expression) do
+    remaining_timeout_ms = remaining_budget_ms(started_at_ms, timeout_ms)
+    expression = build_expression.(remaining_timeout_ms)
+
+    case eval_json(state, expression, command_timeout_ms(remaining_timeout_ms)) do
+      {:error, reason, details} = error ->
+        remaining_retry_ms = remaining_budget_ms(started_at_ms, retry_budget_ms)
+
+        if navigation_transition_error?(reason, details) and remaining_retry_ms > 0 do
+          Process.sleep(min(@transient_eval_retry_interval_ms, remaining_retry_ms))
+          do_eval_json_with_transient_retry(state, started_at_ms, timeout_ms, retry_budget_ms, build_expression)
+        else
+          error
+        end
+
+      result ->
+        result
+    end
+  end
+
+  defp remaining_budget_ms(started_at_ms, budget_ms)
+       when is_integer(started_at_ms) and is_integer(budget_ms) and budget_ms >= 0 do
+    elapsed_ms = max(System.monotonic_time(:millisecond) - started_at_ms, 0)
+    max(budget_ms - elapsed_ms, 0)
+  end
 
   defp click_button_after_eval(session, state, button) do
     case await_driver_ready(state) do
@@ -1985,26 +2044,7 @@ defmodule Cerberus.Driver.Browser do
 
   defp recoverable_readiness_timeout?(_reason, _readiness), do: false
 
-  defp snapshot_with_retry(state, attempts \\ 6, delay_ms \\ 50)
-
-  defp snapshot_with_retry(state, attempts, _delay_ms) when attempts <= 0 do
-    with_snapshot(state)
-  end
-
-  defp snapshot_with_retry(state, attempts, delay_ms) do
-    case with_snapshot(state) do
-      {:error, reason, details} = error ->
-        if navigation_transition_error?(reason, details) do
-          Process.sleep(delay_ms)
-          snapshot_with_retry(state, attempts - 1, delay_ms)
-        else
-          error
-        end
-
-      success ->
-        success
-    end
-  end
+  defp snapshot_with_retry(state, _attempts \\ 6, _delay_ms \\ 50), do: with_snapshot(state)
 
   defp state!(%__MODULE__{user_context_pid: user_context_pid, tab_id: tab_id} = state)
        when is_pid(user_context_pid) and is_binary(tab_id) do
@@ -2029,7 +2069,7 @@ defmodule Cerberus.Driver.Browser do
 
   defp build_within_scope_from_target(state, scope, snapshot, %{selector: selector, iframe?: true})
        when is_binary(selector) and selector != "" do
-    with {:ok, iframe_result} <- eval_json(state, Expressions.within_iframe_access(scope, selector)),
+    with {:ok, iframe_result} <- eval_json_transient_read(state, Expressions.within_iframe_access(scope, selector)),
          :ok <- validate_within_iframe_access(iframe_result) do
       frame_chain = normalize_scope_frame_chain(snapshot)
       {:ok, %{frame_chain: frame_chain ++ [selector], selector: nil}}

@@ -21,6 +21,15 @@ defmodule Cerberus.BrowserTimeoutAssertionsTest do
     |> assert_path("/live/counter")
   end
 
+  test "browser assertion eval retries across async navigation context resets" do
+    :browser
+    |> session()
+    |> visit("/live/async_page")
+    |> click_button(button("Async navigate!"))
+    |> assert_has(text("Count: 0"), timeout: 500)
+    |> assert_path("/live/counter", timeout: 500)
+  end
+
   test "browser timeout handles async redirect path updates" do
     :browser
     |> session()
