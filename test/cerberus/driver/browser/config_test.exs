@@ -1,6 +1,7 @@
 defmodule Cerberus.Driver.Browser.ConfigTest do
   use ExUnit.Case, async: false
 
+  alias Cerberus.Driver.Browser.ActionHelpers
   alias Cerberus.Driver.Browser.AssertionHelpers
   alias Cerberus.Driver.Browser.Config
   alias Cerberus.Driver.Browser.PopupHelpers
@@ -31,7 +32,12 @@ defmodule Cerberus.Driver.Browser.ConfigTest do
                init_scripts: init_scripts
              } = Config.browser_context_defaults([])
 
-      assert init_scripts == [AssertionHelpers.preload_script(), "window.fromList = true;", "window.fromSingle = true;"]
+      assert init_scripts == [
+               AssertionHelpers.preload_script(),
+               ActionHelpers.preload_script(),
+               "window.fromList = true;",
+               "window.fromSingle = true;"
+             ]
     end
 
     test "session :browser opts override global browser config" do
@@ -55,7 +61,11 @@ defmodule Cerberus.Driver.Browser.ConfigTest do
                  ]
                )
 
-      assert init_scripts == [AssertionHelpers.preload_script(), "window.fromSession = true;"]
+      assert init_scripts == [
+               AssertionHelpers.preload_script(),
+               ActionHelpers.preload_script(),
+               "window.fromSession = true;"
+             ]
     end
 
     test "top-level user_agent option overrides nested browser user_agent" do
@@ -74,7 +84,11 @@ defmodule Cerberus.Driver.Browser.ConfigTest do
                init_scripts: init_scripts
              } = Config.browser_context_defaults(browser: [popup_mode: :same_tab])
 
-      assert init_scripts == [AssertionHelpers.preload_script(), PopupHelpers.same_tab_popup_preload_script()]
+      assert init_scripts == [
+               AssertionHelpers.preload_script(),
+               ActionHelpers.preload_script(),
+               PopupHelpers.same_tab_popup_preload_script()
+             ]
     end
 
     test "raises on invalid popup mode" do

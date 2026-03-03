@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAction && window.__cerberusAction.__version === 2) return;
+    if (window.__cerberusAction && window.__cerberusAction.__version === 3) return;
 
     const helper = {};
-    helper.__version = 2;
+    helper.__version = 3;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -338,13 +338,15 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
     };
 
     helper.submitCandidates = (roots, selector) => {
-      return helper
-        .queryWithinRoots(roots, "button", selector)
-        .filter((element) => {
+      const allButtons = helper.queryWithinRoots(roots, "button", selector);
+
+      return allButtons
+        .map((element, index) => ({ element, index }))
+        .filter(({ element }) => {
           const type = (element.getAttribute("type") || "submit").toLowerCase();
           return type === "submit" || type === "";
         })
-        .map((element, index) => {
+        .map(({ element, index }) => {
           const type = (element.getAttribute("type") || "submit").toLowerCase();
 
           return helper.attachElement(
