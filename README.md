@@ -163,31 +163,44 @@ main =
 
 ## Locator Quick Look
 
-- Helper constructors:
-  - `text("...")`, `link("...")`, `button("...")`, `label("...")`, `testid("...")`, `css("...")`, `role(:button, name: "...")`
-- Locator composition:
-  - `left |> right(...)` composes same-element AND constraints
-  - `or_(left, right)` composes OR alternatives
-  - `has(locator, nested)` filters matched elements by requiring a descendant locator
-  - `closest(base_locator, from: nested_locator)` resolves the nearest matching ancestor scope (for example nearest field wrapper for a label)
-  - Examples:
-    - `click(button("Apply") |> testid("apply-secondary-button"))`
-    - `click(button("Apply") |> has(testid("apply-secondary-marker")))`
-- Sigil:
-  - `~l"Save"` text
-  - `~l"Save"e` exact text
-  - `~l"Save"i` inexact text
-  - `~l"button:Save"r` role form (`ROLE:NAME`)
-  - `~l"button[type='submit']"c` css form
-  - `~l"save-button"t` testid form (defaults to exact matching)
-  - rules:
-    - at most one kind modifier (`r`, `c`, or `t`)
-    - `e` and `i` are mutually exclusive
-    - `r` requires `ROLE:NAME`
+How to choose locators:
+- default to user-facing selectors first:
+  - form labels for input actions (`fill_in("Email", "...")`, `check("Receive updates")`)
+  - role + accessible name for controls (`~l"button:Save"r`, `~l"link:Billing"r`)
+  - visible text for assertions (`assert_has(~l"Settings saved"e)`)
+- when repeated text makes matching ambiguous, scope first with `within/3`
+- use `testid("...")` when text/role is not stable enough
+- use CSS locators for structure-focused targeting only
+
+Canonical helper constructors:
+- `text("...")`, `link("...")`, `button("...")`, `label("...")`, `testid("...")`, `css("...")`, `role(:button, name: "...")`
+
+Composition (advanced):
+- same-element AND: `left |> right(...)`
+- OR alternatives: `or_(left, right)`
+- descendant requirement: `has(locator, nested)`
+- nearest ancestor scope: `closest(base, from: nested)`
+- examples:
+  - `click(button("Apply") |> testid("apply-secondary-button"))`
+  - `click(button("Apply") |> has(testid("apply-secondary-marker")))`
+
+Sigil `~l`:
+- `~l"Save"` text
+- `~l"Save"e` exact text
+- `~l"Save"i` inexact text
+- `~l"button:Save"r` role form (`ROLE:NAME`)
+- `~l"button[type='submit']"c` css form
+- `~l"save-button"t` testid form (defaults to exact matching)
+- rules:
+  - at most one kind modifier (`r`, `c`, or `t`)
+  - `e` and `i` are mutually exclusive
+  - `r` requires `ROLE:NAME`
 
 Role helpers currently support practical aliases used by actions/assertions:
 - click/assert roles: `button`, `menuitem`, `tab`, `link`, `heading`, `img`
 - form-control roles: `textbox`, `searchbox`, `combobox`, `listbox`, `spinbutton`, `checkbox`, `radio`, `switch`
+
+For a longer walkthrough with step-by-step locator examples, see [docs/getting-started.md](docs/getting-started.md).
 
 ## Switching Modes
 
@@ -195,11 +208,10 @@ Most tests switch modes by changing only the first session line:
 
 ```diff
 -session()
--session()
 +session(:browser)
  |> visit("/live/counter")
  |> click(~l"button:Increment"r)
-|> assert_has(~l"Count: 1")
+ |> assert_has(~l"Count: 1")
 ```
 
 ## Per-Test Browser Overrides

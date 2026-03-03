@@ -44,6 +44,26 @@
 
 ## Locators
 
+Default strategy:
+- prefer user-facing locators first (label text, role + name, visible text)
+- use `testid` when text is ambiguous or intentionally hidden
+- use CSS as a last resort for structure-only targeting
+
+### Common Phoenix/LiveView cases
+
+| Goal | Preferred locator | Example |
+| --- | --- | --- |
+| Fill a text input | label text | `fill_in(session, "Email", "alice@example.com")` |
+| Click a button | role + name | `click(session, ~l"button:Save"r)` |
+| Click a link | role + name | `click(session, ~l"link:Billing"r)` |
+| Assert rendered content | visible text | `assert_has(session, ~l"Settings saved"e)` |
+| Operate inside repeated UI | scope + same locators | `within(session, ~l"#shipping-address"c, fn s -> fill_in(s, "City", "Berlin") end)` |
+| Disambiguate duplicate controls | `testid` | `click(session, testid("apply-secondary-button"))` |
+
+### Supported role aliases
+- Click/assert roles: `button`, `menuitem`, `tab`, `link`, `heading`, `img`
+- Form-control roles: `textbox`, `searchbox`, `combobox`, `listbox`, `spinbutton`, `checkbox`, `radio`, `switch`
+
 ### Helper constructors
 - `text("...")`
 - `link("...")`
@@ -52,15 +72,12 @@
 - `testid("...")`
 - `css("...")`
 - `role(:button, name: "...")`
-- Composition:
-  `button("Apply") |> testid("apply-secondary-button")`
-  `button("Apply") |> has(testid("apply-secondary-marker"))`
-  `or_(css("#primary"), css("#secondary"))`
-- Closest ancestor composition: `closest(css(".fieldset"), from: label("Email", exact: true))`
 
-### Supported role aliases
-- Click/assert roles: `button`, `menuitem`, `tab`, `link`, `heading`, `img`
-- Form-control roles: `textbox`, `searchbox`, `combobox`, `listbox`, `spinbutton`, `checkbox`, `radio`, `switch`
+### Composition (advanced)
+- same-element AND: `button("Apply") |> testid("apply-secondary-button")`
+- descendant requirement: `button("Apply") |> has(testid("apply-secondary-marker"))`
+- alternatives (OR): `or_(css("#primary"), css("#secondary"))`
+- nearest ancestor scope: `closest(css(".fieldset"), from: label("Email", exact: true))`
 
 ### Sigil `~l`
 

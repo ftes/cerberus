@@ -69,17 +69,6 @@ end)
 
 `within/3` expects locator input (`~l"#panel"c`, `~l"button:Open"r`, `~l"search-input"t`, etc.). Browser locator scopes can switch into same-origin iframes.
 
-Locator sigil quick look:
-- `~l"Save"` text
-- `~l"Save"e` exact text
-- `~l"Save"i` inexact text
-- `~l"button:Save"r` role form (`ROLE:NAME`)
-- `~l"button[type='submit']"c` css form
-- `~l"save-button"t` testid form (`exact: true` default)
-- at most one kind modifier (`r`, `c`, or `t`)
-- `e` and `i` are mutually exclusive
-- `r` requires `ROLE:NAME`
-
 Scoped text assertions also support plain-string shorthand:
 
 ```elixir
@@ -92,6 +81,59 @@ session()
 Scoped assertion overloads use explicit scope and locator arguments:
 - `assert_has(session, scope_locator, locator, opts \\ [])`
 - `refute_has(session, scope_locator, locator, opts \\ [])`
+
+## Locator Basics (Phoenix/LiveView First)
+
+A locator is how Cerberus finds elements for actions and assertions.
+
+Start with the most user-facing option that is stable in your UI:
+- form label text for form actions (`fill_in/3`, `check/2`, `choose/2`, `select/3`)
+- role + accessible name for interactive controls (`button`, `link`, etc.)
+- visible text for content assertions
+- `testid`/`css` only when user-facing text is ambiguous or intentionally hidden
+
+Examples:
+
+```elixir
+session()
+|> visit("/settings")
+|> fill_in("Email", "alice@example.com")
+|> check("Receive updates")
+|> click(~l"button:Save"r)
+|> assert_has(~l"Settings saved"e)
+```
+
+When a page has repeated labels/buttons, scope first:
+
+```elixir
+session()
+|> visit("/checkout")
+|> within(~l"#shipping-address"c, fn scoped ->
+  scoped
+  |> fill_in("City", "Berlin")
+  |> click(~l"button:Save"r)
+end)
+```
+
+Use `testid` when text/role cannot disambiguate reliably:
+
+```elixir
+session()
+|> visit("/live/selector-edge")
+|> click(testid("apply-secondary-button"))
+|> assert_has(~l"Selected: secondary"e)
+```
+
+Locator sigil quick look:
+- `~l"Save"` text
+- `~l"Save"e` exact text
+- `~l"Save"i` inexact text
+- `~l"button:Save"r` role form (`ROLE:NAME`)
+- `~l"button[type='submit']"c` css form
+- `~l"save-button"t` testid form (`exact: true` default)
+- at most one kind modifier (`r`, `c`, or `t`)
+- `e` and `i` are mutually exclusive
+- `r` requires `ROLE:NAME`
 
 ## Match Count And Position Filters
 
@@ -118,21 +160,23 @@ session() # or session(conn)
 |> fill_in("Name", "secondary", last: true, count: 2)
 ```
 
-## Locator Composition
+## Advanced Locator Composition (Optional)
 
-Cerberus supports composable locators:
-- same-element AND: `button("Run Search") |> testid("submit-secondary-button")`
+You can compose locators when simple label/role/testid matching is not enough.
+
+Common advanced patterns:
+- same-element AND (pipe composition): `button("Run Search") |> testid("submit-secondary-button")`
+- descendant requirement: `button("Run Search") |> has(testid("submit-secondary-marker"))`
 - OR alternatives: `or_(css("#primary"), css("#secondary"))`
-- descendant nesting: `button("Run Search") |> has(testid("submit-secondary-marker"))`
 
 ```elixir
 session()
 |> visit("/live/selector-edge")
-|> click(button("Apply") |> has(testid("apply-secondary-marker")))
+|> click(button("Apply") |> testid("apply-secondary-button"))
 |> assert_has(~l"Selected: secondary"e)
 ```
 
-Use `closest/2` when the scope should resolve to the nearest matching ancestor around a nested locator (for example, a field wrapper around a label):
+`closest/2` is useful for Phoenix wrapper patterns where you want the nearest ancestor around another locator (for example, a fieldset around a label/control):
 
 ```elixir
 session()
