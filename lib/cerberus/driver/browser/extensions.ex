@@ -5,13 +5,10 @@ defmodule Cerberus.Driver.Browser.Extensions do
   alias Cerberus.Driver.Browser.BiDi
   alias Cerberus.Driver.Browser.Types
   alias Cerberus.Driver.Browser.UserContextProcess
+  alias Cerberus.Locator
   alias Cerberus.Options
+  alias Cerberus.Query
   alias ExUnit.AssertionError
-
-  @dialog_events [
-    "browsingContext.userPromptOpened",
-    "browsingContext.userPromptClosed"
-  ]
 
   @default_dialog_timeout_ms 1_500
   @default_popup_timeout_ms 1_500
@@ -74,45 +71,15 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  @spec with_dialog(BrowserSession.t(), (BrowserSession.t() -> term()), Options.browser_with_dialog_opts()) ::
-          BrowserSession.t()
-  def with_dialog(%BrowserSession{} = session, action, opts \\ []) when is_function(action, 1) and is_list(opts) do
+  @spec assert_dialog(BrowserSession.t(), Locator.t(), Options.browser_assert_dialog_opts()) :: BrowserSession.t()
+  def assert_dialog(%BrowserSession{} = session, %Locator{} = locator, opts \\ []) when is_list(opts) do
     timeout_ms = dialog_timeout_ms(opts)
-    expected_message = Keyword.get(opts, :message)
     accept? = Keyword.get(opts, :accept, false)
     prompt_text = Keyword.get(opts, :prompt_text)
-    main_tab_id = session.tab_id
-
-    protocol_subscription_id = subscribe_dialog_protocol_events!(session)
-    :ok = subscribe_dialog_events!(session)
-    flush_stale_dialog_events(session.tab_id)
-    action_task = Task.async(fn -> run_dialog_action(action, session) end)
-    Process.unlink(action_task.pid)
-
-    try do
-      {opened_event, action_outcome} =
-        await_dialog_opened_event!(session, action_task, timeout_ms, accept?, prompt_text)
-
-      observed = handle_dialog_flow!(session, opened_event, timeout_ms, accept?, prompt_text)
-      _ = await_dialog_action_result!(action_task, action_outcome, timeout_ms)
-
-      assert_dialog_message!(observed, expected_message)
-      restore_main_tab!(session, main_tab_id, "with_dialog/3")
-
-      BrowserSession.refresh_path(session)
-    rescue
-      error ->
-        _ = restore_main_tab_safe(session, main_tab_id)
-        reraise error, __STACKTRACE__
-    catch
-      kind, reason ->
-        _ = restore_main_tab_safe(session, main_tab_id)
-        :erlang.raise(kind, reason, __STACKTRACE__)
-    after
-      _ = Task.shutdown(action_task, :brutal_kill)
-      unsubscribe_dialog_events(session)
-      unsubscribe_dialog_protocol_events(protocol_subscription_id, session)
-    end
+    dialog = await_open_dialog!(session, locator, timeout_ms)
+    handle_dialog_prompt!(session, timeout_ms, accept?, prompt_text, "assert_dialog/3")
+    assert_dialog_text_match!(locator, dialog)
+    session
   end
 
   @spec with_popup(
@@ -363,14 +330,14 @@ defmodule Cerberus.Driver.Browser.Extensions do
   end
 
   @doc false
-  @spec dialog_timeout_ms(Options.browser_with_dialog_opts()) :: pos_integer()
+  @spec dialog_timeout_ms(Options.browser_assert_dialog_opts()) :: pos_integer()
   def dialog_timeout_ms(opts) when is_list(opts) do
     case Keyword.fetch(opts, :timeout) do
       {:ok, timeout} when is_integer(timeout) and timeout > 0 ->
         timeout
 
       {:ok, timeout} ->
-        raise ArgumentError, "with_dialog/3 :timeout must be a positive integer, got: #{inspect(timeout)}"
+        raise ArgumentError, "assert_dialog/3 :timeout must be a positive integer, got: #{inspect(timeout)}"
 
       :error ->
         opts
@@ -410,195 +377,65 @@ defmodule Cerberus.Driver.Browser.Extensions do
     |> Keyword.merge(Keyword.get(opts, :browser, []))
   end
 
-  defp subscribe_dialog_events!(session) do
-    BiDi.subscribe(self(), bidi_opts(session))
-  end
-
-  defp subscribe_dialog_protocol_events!(session) do
-    case BiDi.command(
-           "session.subscribe",
-           %{"events" => @dialog_events, "contexts" => [session.tab_id]},
-           bidi_opts(session)
-         ) do
-      {:ok, %{"subscription" => subscription_id}} when is_binary(subscription_id) ->
-        subscription_id
-
-      {:ok, payload} ->
-        raise ArgumentError, "failed to subscribe to dialog events: #{inspect(payload)}"
-
-      {:error, reason, details} ->
-        raise ArgumentError, "failed to subscribe to dialog events: #{reason} (#{inspect(details)})"
-    end
-  end
-
-  defp unsubscribe_dialog_events(session) do
-    opts = bidi_opts(session)
-    _ = BiDi.unsubscribe(self(), opts)
-    :ok
-  end
-
-  defp unsubscribe_dialog_protocol_events(subscription_id, session) when is_binary(subscription_id) do
-    _ = BiDi.command("session.unsubscribe", %{"subscriptions" => [subscription_id]}, bidi_opts(session))
-    :ok
-  end
-
-  defp flush_stale_dialog_events(context_id) do
-    receive do
-      {:cerberus_bidi_event,
-       %{
-         "method" => method,
-         "params" => %{"context" => ^context_id}
-       }}
-      when method in @dialog_events ->
-        flush_stale_dialog_events(context_id)
-    after
-      0 ->
-        :ok
-    end
-  end
-
-  defp handle_dialog_flow!(session, {:opened, opened}, timeout_ms, accept?, prompt_text) do
-    handle_dialog_prompt!(session, timeout_ms, accept?, prompt_text)
-    closed = await_dialog_event!("browsingContext.userPromptClosed", session.tab_id, timeout_ms)
-
-    %{
-      type: opened["type"],
-      message: opened["message"],
-      handler: opened["handler"],
-      accepted: Map.get(closed, "accepted", false)
-    }
-  end
-
-  defp handle_dialog_flow!(_session, :handled_without_open_event, _timeout_ms, _accept?, _prompt_text) do
-    %{type: nil, message: nil, handler: nil, accepted: false}
-  end
-
-  defp await_dialog_opened_event!(session, action_task, timeout_ms, accept?, prompt_text) do
+  defp await_open_dialog!(session, locator, timeout_ms) do
     deadline = System.monotonic_time(:millisecond) + timeout_ms
-    await_dialog_opened_event_loop(session, action_task, deadline, :pending, timeout_ms, accept?, prompt_text)
+    await_open_dialog_loop(session, locator, deadline)
   end
 
-  defp await_dialog_opened_event_loop(session, action_task, deadline, action_outcome, timeout_ms, accept?, prompt_text) do
-    action_outcome = poll_action_task(action_task, action_outcome)
-    context_id = session.tab_id
+  defp await_open_dialog_loop(session, locator, deadline) do
+    case UserContextProcess.active_dialog(session.user_context_pid, session.tab_id) do
+      %{} = dialog ->
+        dialog
 
-    now = System.monotonic_time(:millisecond)
-    remaining = max(deadline - now, 0)
+      _ ->
+        now = System.monotonic_time(:millisecond)
+        remaining = max(deadline - now, 0)
 
-    if remaining == 0 do
-      case maybe_handle_prompt_without_open_event!(session, timeout_ms, accept?, prompt_text) do
-        :handled ->
-          {:handled_without_open_event, poll_action_task(action_task, action_outcome)}
+        if remaining == 0 do
+          observed_messages =
+            session.user_context_pid
+            |> UserContextProcess.dialog_events(session.tab_id)
+            |> Enum.filter(&match?(%{"method" => "browsingContext.userPromptOpened"}, &1))
+            |> Enum.map(&Map.get(&1, "message"))
+            |> Enum.filter(&is_binary/1)
+            |> Enum.uniq()
+            |> Enum.sort()
 
-        :not_open ->
-          raise_dialog_open_timeout!(action_outcome)
-      end
-    else
-      wait_ms = min(remaining, @dialog_poll_ms)
-
-      receive do
-        {:cerberus_bidi_event,
-         %{
-           "method" => "browsingContext.userPromptOpened",
-           "params" => %{"context" => ^context_id} = params
-         }} ->
-          {{:opened, params}, action_outcome}
-
-        {:cerberus_bidi_event, _other} ->
-          await_dialog_opened_event_loop(
-            session,
-            action_task,
-            deadline,
-            action_outcome,
-            timeout_ms,
-            accept?,
-            prompt_text
-          )
-      after
-        wait_ms ->
-          await_dialog_opened_event_loop(
-            session,
-            action_task,
-            deadline,
-            action_outcome,
-            timeout_ms,
-            accept?,
-            prompt_text
-          )
-      end
-    end
-  end
-
-  defp maybe_handle_prompt_without_open_event!(session, timeout_ms, accept?, prompt_text) do
-    fallback_timeout_ms = max(min(timeout_ms, 500), @dialog_poll_ms * 4)
-    params = dialog_prompt_params(session.tab_id, accept?, prompt_text)
-    opts = Keyword.put(bidi_opts(session), :timeout, fallback_timeout_ms)
-
-    case BiDi.command("browsingContext.handleUserPrompt", params, opts) do
-      {:ok, _payload} ->
-        :handled
-
-      {:error, reason, details} ->
-        if prompt_not_open_or_timeout?(reason, details) do
-          :not_open
+          raise AssertionError,
+            message:
+              "assert_dialog/3 timed out waiting for #{expected_dialog_text(locator)}; observed dialogs: #{inspect(observed_messages)}"
         else
-          raise ArgumentError,
-                "with_dialog/3 failed to verify prompt after missing open event: #{reason} (#{inspect(details)})"
+          Process.sleep(min(remaining, @dialog_poll_ms))
+          await_open_dialog_loop(session, locator, deadline)
         end
     end
   end
 
-  defp prompt_not_open_or_timeout?(_reason, %{"error" => "no such alert"}), do: true
+  defp assert_dialog_text_match!(%Locator{value: expected, opts: locator_opts} = locator, %{} = dialog) do
+    actual = dialog["message"] || ""
+    match_opts = Keyword.take(locator_opts, [:exact, :normalize_ws])
 
-  defp prompt_not_open_or_timeout?(reason, _details) when reason in ["bidi command timeout", "browser readiness timeout"],
-    do: true
-
-  defp prompt_not_open_or_timeout?(reason, _details) when is_binary(reason) do
-    String.contains?(String.downcase(reason), "timeout")
-  end
-
-  defp poll_action_task(_action_task, {:ok, _} = action_outcome), do: action_outcome
-
-  defp poll_action_task(action_task, :pending) do
-    Task.yield(action_task, 0) || :pending
-  end
-
-  defp raise_dialog_open_timeout!(:pending) do
-    raise AssertionError, message: "with_dialog/3 timed out waiting for browsingContext.userPromptOpened"
-  end
-
-  defp raise_dialog_open_timeout!({:ok, {:action_result, _result}}) do
-    raise AssertionError,
-      message: "with_dialog/3 callback completed before browsingContext.userPromptOpened was observed"
-  end
-
-  defp raise_dialog_open_timeout!({:ok, {:action_failure, formatted_error}}) do
-    raise AssertionError,
-      message: "with_dialog/3 callback failed before dialog was observed: #{formatted_error}"
-  end
-
-  defp await_dialog_event!(method, context_id, timeout_ms) do
-    deadline = System.monotonic_time(:millisecond) + timeout_ms
-    await_dialog_event_loop(method, context_id, deadline)
-  end
-
-  defp await_dialog_event_loop(method, context_id, deadline) do
-    now = System.monotonic_time(:millisecond)
-    remaining = max(deadline - now, 0)
-
-    receive do
-      {:cerberus_bidi_event, %{"method" => ^method, "params" => %{"context" => ^context_id} = params}} ->
-        params
-
-      {:cerberus_bidi_event, _other} ->
-        await_dialog_event_loop(method, context_id, deadline)
-    after
-      remaining ->
-        raise AssertionError, message: "with_dialog/3 timed out waiting for #{method}"
+    if Query.match_text?(actual, expected, match_opts) do
+      :ok
+    else
+      raise AssertionError,
+        message: "assert_dialog/3 expected #{expected_dialog_text(locator)} but observed #{inspect(actual)}"
     end
   end
 
-  defp handle_dialog_prompt!(session, timeout_ms, accept?, prompt_text) do
+  defp expected_dialog_text(%Locator{value: %Regex{} = expected}) do
+    "dialog text matching #{inspect(expected)}"
+  end
+
+  defp expected_dialog_text(%Locator{value: expected, opts: opts}) when is_binary(expected) do
+    if Keyword.get(opts, :exact, false) do
+      "dialog text #{inspect(expected)}"
+    else
+      "dialog text containing #{inspect(expected)}"
+    end
+  end
+
+  defp handle_dialog_prompt!(session, timeout_ms, accept?, prompt_text, operation_name) do
     params = dialog_prompt_params(session.tab_id, accept?, prompt_text)
     opts = Keyword.put(bidi_opts(session), :timeout, timeout_ms)
 
@@ -610,44 +447,12 @@ defmodule Cerberus.Driver.Browser.Extensions do
         :ok
 
       {:error, reason, details} ->
-        raise ArgumentError, "with_dialog/3 failed to handle prompt: #{reason} (#{inspect(details)})"
+        raise ArgumentError, "#{operation_name} failed to handle prompt: #{reason} (#{inspect(details)})"
     end
   end
 
-  defp await_dialog_action_result!(_action_task, {:ok, action_outcome}, _timeout_ms) do
-    unwrap_dialog_action_outcome!(action_outcome)
-  end
-
-  defp await_dialog_action_result!(action_task, :pending, timeout_ms) do
-    wait_ms = timeout_ms + 1_000
-
-    case Task.yield(action_task, wait_ms) || Task.shutdown(action_task, :brutal_kill) do
-      {:ok, action_outcome} ->
-        unwrap_dialog_action_outcome!(action_outcome)
-
-      {:exit, reason} ->
-        raise AssertionError, message: "with_dialog/3 callback failed: #{Exception.format_exit(reason)}"
-
-      nil ->
-        raise AssertionError, message: "with_dialog/3 timed out waiting for action callback completion"
-    end
-  end
-
-  defp run_dialog_action(action, session) do
-    {:action_result, action.(session)}
-  rescue
-    error ->
-      {:action_failure, Exception.format(:error, error, __STACKTRACE__)}
-  catch
-    kind, reason ->
-      {:action_failure, Exception.format(kind, reason, __STACKTRACE__)}
-  end
-
-  defp unwrap_dialog_action_outcome!({:action_result, result}), do: result
-
-  defp unwrap_dialog_action_outcome!({:action_failure, formatted_error}) do
-    raise AssertionError, message: "with_dialog/3 callback failed: #{formatted_error}"
-  end
+  defp poll_action_task(_action_task, {:ok, _} = action_outcome), do: action_outcome
+  defp poll_action_task(action_task, :pending), do: Task.yield(action_task, 0) || :pending
 
   defp await_popup_tab!(session, baseline_tabs, trigger_task, timeout_ms) do
     deadline = System.monotonic_time(:millisecond) + timeout_ms
@@ -814,15 +619,6 @@ defmodule Cerberus.Driver.Browser.Extensions do
   defp restore_main_tab_safe(session, main_tab_id) do
     _ = UserContextProcess.switch_tab(session.user_context_pid, main_tab_id)
     :ok
-  end
-
-  defp assert_dialog_message!(_observed, nil), do: :ok
-
-  defp assert_dialog_message!(%{message: actual}, expected) when is_binary(expected) do
-    if actual != expected do
-      raise AssertionError,
-        message: "with_dialog/3 expected message #{inspect(expected)} but observed #{inspect(actual)}"
-    end
   end
 
   defp host_from_base_url(base_url) when is_binary(base_url) do

@@ -142,12 +142,11 @@ session =
   |> visit("/browser/extensions")
   |> type("hello", selector: "#keyboard-input")
   |> press("Enter", selector: "#press-input")
-  |> with_dialog(
-    fn dialog_session ->
-      click(dialog_session, ~l"button:Open Confirm Dialog"r)
-    end,
-    accept: false
-  )
+evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), 10)")
+
+session =
+  session
+  |> assert_dialog(~l"Delete item?"e, accept: false)
   |> click(~l"link:Download Report"r)
   |> assert_download("report.txt")
 

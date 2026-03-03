@@ -130,6 +130,26 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(pid, {:download_events_tab, tab_id})
   end
 
+  @spec dialog_events(pid()) :: [Types.payload()]
+  def dialog_events(pid) when is_pid(pid) do
+    GenServer.call(pid, {:dialog_events_tab, nil})
+  end
+
+  @spec dialog_events(pid(), String.t() | nil) :: [Types.payload()]
+  def dialog_events(pid, tab_id) when is_pid(pid) do
+    GenServer.call(pid, {:dialog_events_tab, tab_id})
+  end
+
+  @spec active_dialog(pid()) :: Types.payload() | nil
+  def active_dialog(pid) when is_pid(pid) do
+    GenServer.call(pid, {:active_dialog_tab, nil})
+  end
+
+  @spec active_dialog(pid(), String.t() | nil) :: Types.payload() | nil
+  def active_dialog(pid, tab_id) when is_pid(pid) do
+    GenServer.call(pid, {:active_dialog_tab, tab_id})
+  end
+
   @impl true
   def init(opts) do
     owner = Keyword.fetch!(opts, :owner)
@@ -312,6 +332,26 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
       {:error, _reason, _details} ->
         {:reply, [], state}
+    end
+  end
+
+  def handle_call({:dialog_events_tab, tab_id}, _from, state) do
+    case browsing_context_pid(state, tab_id) do
+      {:ok, pid} ->
+        {:reply, BrowsingContextProcess.dialog_events(pid), state}
+
+      {:error, _reason, _details} ->
+        {:reply, [], state}
+    end
+  end
+
+  def handle_call({:active_dialog_tab, tab_id}, _from, state) do
+    case browsing_context_pid(state, tab_id) do
+      {:ok, pid} ->
+        {:reply, BrowsingContextProcess.active_dialog(pid), state}
+
+      {:error, _reason, _details} ->
+        {:reply, nil, state}
     end
   end
 

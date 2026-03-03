@@ -83,9 +83,9 @@ defmodule Cerberus.DocumentationExamplesTest do
       |> visit("/browser/extensions")
       |> type("hello", selector: "#keyboard-input")
       |> press("Enter", selector: "#press-input")
-      |> with_dialog(fn dialog_session ->
-        click(dialog_session, button("Open Confirm Dialog"))
-      end)
+
+    evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), 10)")
+    session = assert_dialog(session, text("Delete item?", exact: true))
 
     session
     |> assert_has(text("Press result: submitted", exact: true))

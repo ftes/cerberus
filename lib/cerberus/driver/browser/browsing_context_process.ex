@@ -19,7 +19,9 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     "browsingContext.userPromptClosed"
   ]
   @download_events ["browsingContext.downloadWillBegin", "browsingContext.downloadEnd"]
+  @dialog_events ["browsingContext.userPromptOpened", "browsingContext.userPromptClosed"]
   @download_history_limit 50
+  @dialog_history_limit 50
 
   @spec child_spec(keyword()) :: Supervisor.child_spec()
   def child_spec(opts) do
@@ -75,6 +77,16 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     GenServer.call(pid, :download_events)
   end
 
+  @spec dialog_events(pid()) :: [Types.payload()]
+  def dialog_events(pid) when is_pid(pid) do
+    GenServer.call(pid, :dialog_events)
+  end
+
+  @spec active_dialog(pid()) :: Types.payload() | nil
+  def active_dialog(pid) when is_pid(pid) do
+    GenServer.call(pid, :active_dialog)
+  end
+
   @impl true
   def init(opts) do
     user_context_id = Keyword.fetch!(opts, :user_context_id)
@@ -97,7 +109,9 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
          bidi_opts: bidi_opts,
          last_bidi_event: nil,
          last_readiness: %{},
-         download_events: []
+         download_events: [],
+         dialog_events: [],
+         active_dialog: nil
        }}
     else
       {:error, reason, details} ->
@@ -119,6 +133,14 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   def handle_call(:download_events, _from, state) do
     {:reply, state.download_events, state}
+  end
+
+  def handle_call(:dialog_events, _from, state) do
+    {:reply, state.dialog_events, state}
+  end
+
+  def handle_call(:active_dialog, _from, state) do
+    {:reply, state.active_dialog, state}
   end
 
   def handle_call({:navigate, url}, _from, state) do
@@ -172,6 +194,11 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
           "url" => params["url"],
           "navigation" => params["navigation"],
           "suggestedFilename" => params["suggestedFilename"],
+          "type" => params["type"],
+          "message" => params["message"],
+          "handler" => params["handler"],
+          "accepted" => params["accepted"],
+          "userText" => params["userText"],
           "status" => params["status"],
           "timestampMs" => System.monotonic_time(:millisecond)
         }
@@ -184,6 +211,15 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
            state
            | last_bidi_event: event,
              download_events: push_download_event(state.download_events, event)
+         }}
+
+      is_map(event) and method in @dialog_events ->
+        {:noreply,
+         %{
+           state
+           | last_bidi_event: event,
+             dialog_events: push_dialog_event(state.dialog_events, event),
+             active_dialog: next_active_dialog(method, event, state.active_dialog)
          }}
 
       is_map(event) ->
@@ -363,6 +399,16 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     |> Kernel.++([event])
     |> Enum.take(-@download_history_limit)
   end
+
+  defp push_dialog_event(dialog_events, event) when is_list(dialog_events) and is_map(event) do
+    dialog_events
+    |> Kernel.++([event])
+    |> Enum.take(-@dialog_history_limit)
+  end
+
+  defp next_active_dialog("browsingContext.userPromptOpened", event, _active_dialog), do: event
+  defp next_active_dialog("browsingContext.userPromptClosed", _event, _active_dialog), do: nil
+  defp next_active_dialog(_method, _event, active_dialog), do: active_dialog
 
   defp command_call_timeout_ms(timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
     timeout_ms + 5_000

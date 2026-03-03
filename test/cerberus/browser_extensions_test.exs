@@ -76,9 +76,9 @@ defmodule Cerberus.BrowserExtensionsTest do
       |> screenshot(path: path)
       |> type("hello browser", selector: "#keyboard-input", timeout: 250)
       |> press("Enter", selector: "#press-input", timeout: 250)
-      |> with_dialog(fn dialog_session ->
-        click(dialog_session, button("Open Confirm Dialog"))
-      end)
+
+    evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), 10)")
+    session = assert_dialog(session, text("Delete item?", exact: true))
 
     assert File.exists?(path)
 
@@ -157,8 +157,8 @@ defmodule Cerberus.BrowserExtensionsTest do
       drag(session, "#drag-source", "#drop-target", timeout: -1)
     end
 
-    assert_raise ArgumentError, ~r/Browser.with_dialog\/3 invalid options/, fn ->
-      with_dialog(session, fn scoped -> scoped end, message: 123)
+    assert_raise ArgumentError, ~r/Browser.assert_dialog\/3 invalid options/, fn ->
+      assert_dialog(session, text("Delete item?"), accept: :yes)
     end
 
     assert_raise ArgumentError, ~r/Browser.with_popup\/4 invalid options/, fn ->
@@ -269,25 +269,28 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert UserContextProcess.active_tab(session.user_context_pid) == session.tab_id
   end
 
-  test "with_dialog reports callback completion when no dialog opens" do
+  test "assert_dialog handles a dialog that is already open" do
     session =
       :browser
       |> session()
       |> visit("/browser/extensions")
 
-    error =
-      assert_raise AssertionError, fn ->
-        with_dialog(
-          session,
-          fn dialog_session ->
-            dialog_session
-          end,
-          timeout: 25
-        )
-      end
+    trigger_confirm_dialog(session)
+    Process.sleep(25)
 
-    assert error.message =~
-             "with_dialog/3 callback completed before browsingContext.userPromptOpened was observed"
+    assert_dialog(session, text("Delete item?", exact: true))
+    assert_has(session, text("Dialog result: cancelled", exact: true))
+  end
+
+  test "assert_dialog waits for a dialog that opens after assertion starts" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+
+    trigger_confirm_dialog(session, 30)
+    assert_dialog(session, text("Delete item?", exact: true))
+    assert_has(session, text("Dialog result: cancelled", exact: true))
   end
 
   test "assert_download matches download emitted before assertion call and keeps events non-consuming" do
@@ -299,6 +302,22 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     assert_download(session, "report.txt")
     assert_download(session, "report.txt")
+  end
+
+  test "assert_download waits for download emitted after assertion starts" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+
+    trigger_task =
+      Task.async(fn ->
+        Process.sleep(30)
+        click(session, link("Download Report"))
+      end)
+
+    assert_download(session, "report.txt", timeout: 500)
+    _ = Task.await(trigger_task, 1_000)
   end
 
   test "assert_download times out with helpful observed filenames" do
@@ -317,28 +336,26 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert error.message =~ "report.txt"
   end
 
-  test "with_dialog raises when observed dialog message does not match expected message" do
+  test "assert_dialog raises when observed dialog message does not match expected text" do
     session =
       :browser
       |> session()
       |> visit("/browser/extensions")
 
+    trigger_confirm_dialog(session)
+    Process.sleep(25)
+
     error =
       assert_raise AssertionError, fn ->
-        with_dialog(
-          session,
-          fn dialog_session ->
-            click(dialog_session, button("Open Confirm Dialog"))
-          end,
-          message: "Different message"
-        )
+        assert_dialog(session, text("Different message", exact: true))
       end
 
-    assert error.message =~ ~s(expected message "Different message")
+    assert error.message =~ ~s(expected dialog text "Different message")
     assert error.message =~ ~s(observed "Delete item?")
+    assert_has(session, text("Dialog result: cancelled", exact: true))
   end
 
-  test "with_dialog timeout reports waiting for prompt open when callback stays pending" do
+  test "assert_dialog times out when no dialog opens" do
     session =
       :browser
       |> session()
@@ -346,84 +363,38 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     error =
       assert_raise AssertionError, fn ->
-        with_dialog(
-          session,
-          fn dialog_session ->
-            _ = dialog_session
-            Process.sleep(100)
-            dialog_session
-          end,
-          timeout: 25
-        )
+        assert_dialog(session, text("Delete item?", exact: true), timeout: 25)
       end
 
-    assert error.message =~ "with_dialog/3 timed out waiting for browsingContext.userPromptOpened"
+    assert error.message =~ "assert_dialog/3 timed out waiting for dialog text \"Delete item?\""
   end
 
-  test "with_dialog ignores callback return value and returns refreshed main session" do
+  test "assert_dialog supports explicit accept/confirm behavior" do
     session =
       :browser
       |> session()
       |> visit("/browser/extensions")
-      |> visit("/browser/popup/click")
 
-    returned_session =
-      with_dialog(session, fn dialog_session ->
-        dialog_session
-        |> visit("/browser/extensions")
-        |> click(button("Open Confirm Dialog"))
+    trigger_confirm_dialog(session)
+    Process.sleep(25)
 
-        :ignored
-      end)
-
-    assert returned_session.tab_id == session.tab_id
-    assert UserContextProcess.active_tab(returned_session.user_context_pid) == returned_session.tab_id
-    assert_path(returned_session, "/browser/extensions")
-    assert_has(returned_session, text("Dialog result: cancelled", exact: true))
-  end
-
-  test "with_dialog supports explicit accept/confirm behavior" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
-      |> with_dialog(
-        fn dialog_session ->
-          click(dialog_session, button("Open Confirm Dialog"))
-        end,
-        accept: true
-      )
+    assert_dialog(session, text("Delete item?", exact: true), accept: true)
 
     assert_has(session, text("Dialog result: confirmed", exact: true))
   end
 
-  test "with_dialog surfaces callback failures after dialog handling" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
-
-    error =
-      assert_raise AssertionError, fn ->
-        with_dialog(session, fn dialog_session ->
-          click(dialog_session, button("Open Confirm Dialog"))
-          Process.sleep(10)
-          raise "dialog callback exploded"
-        end)
-      end
-
-    assert error.message =~ "with_dialog/3 callback failed:"
-    assert error.message =~ "dialog callback exploded"
-  end
-
-  test "with_dialog validates prompt_text requires accept: true" do
+  test "assert_dialog validates prompt_text requires accept: true" do
     session =
       :browser
       |> session()
       |> visit("/browser/extensions")
 
     assert_raise ArgumentError, ~r/prompt_text requires :accept to be true/, fn ->
-      with_dialog(session, fn scoped -> scoped end, prompt_text: "42")
+      assert_dialog(session, text("Delete item?"), prompt_text: "42")
     end
+  end
+
+  defp trigger_confirm_dialog(session, delay_ms \\ 0) when is_integer(delay_ms) and delay_ms >= 0 do
+    evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), #{delay_ms})")
   end
 end

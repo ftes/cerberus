@@ -9,6 +9,7 @@ defmodule Cerberus.Browser do
   alias Cerberus.Assertions
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Browser.Extensions
+  alias Cerberus.Locator
   alias Cerberus.Options
   alias Cerberus.Session
 
@@ -25,7 +26,7 @@ defmodule Cerberus.Browser do
   @type_args_error "Browser.type/3 expects text as a string and options as a keyword list"
   @press_args_error "Browser.press/3 expects key as a string and options as a keyword list"
   @drag_args_error "Browser.drag/4 expects source and target selectors as strings and options as a keyword list"
-  @with_dialog_args_error "Browser.with_dialog/3 expects a callback with arity 1 and options as a keyword list"
+  @assert_dialog_args_error "Browser.assert_dialog/3 expects a text locator and options as a keyword list"
   @with_popup_args_error "Browser.with_popup/4 expects trigger callback arity 1, callback arity 2, and options as a keyword list"
   @assert_download_args_error "Browser.assert_download/3 expects a filename string and options as a keyword list"
   @add_cookie_args_error "Browser.add_cookie/4 expects cookie name and value strings and options as a keyword list"
@@ -90,19 +91,21 @@ defmodule Cerberus.Browser do
     end)
   end
 
-  @spec with_dialog(session, (session -> term()), Options.browser_with_dialog_opts()) :: session when session: var
-  def with_dialog(session, action, opts \\ [])
+  @spec assert_dialog(session, Locator.input(), Options.browser_assert_dialog_opts()) :: session when session: var
+  def assert_dialog(session, locator, opts \\ [])
 
-  def with_dialog(session, action, opts) do
+  def assert_dialog(session, locator, opts) do
     browser_only(
       session,
-      :with_dialog,
+      :assert_dialog,
       opts,
-      @with_dialog_args_error,
-      &Options.validate_browser_with_dialog!/1,
+      @assert_dialog_args_error,
+      &Options.validate_browser_assert_dialog!/1,
       fn browser_session, validated_opts ->
-        if is_function(action, 1) do
-          {:ok, Extensions.with_dialog(browser_session, action, validated_opts)}
+        normalized_locator = Locator.normalize(locator)
+
+        if normalized_locator.kind == :text do
+          {:ok, Extensions.assert_dialog(browser_session, normalized_locator, validated_opts)}
         else
           :invalid_args
         end

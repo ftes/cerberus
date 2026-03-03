@@ -277,11 +277,10 @@ defmodule Cerberus.Options do
           timeout: pos_integer()
         ]
 
-  @type browser_with_dialog_opts :: [
+  @type browser_assert_dialog_opts :: [
           timeout: pos_integer(),
           accept: boolean(),
           prompt_text: String.t() | nil,
-          message: String.t() | nil,
           browser: keyword()
         ]
 
@@ -521,11 +520,10 @@ defmodule Cerberus.Options do
     timeout: [type: :pos_integer, default: 1_500, doc: "Wait timeout in milliseconds for download detection."]
   ]
 
-  @browser_with_dialog_opts_schema [
+  @browser_assert_dialog_opts_schema [
     timeout: [type: :pos_integer, doc: "Wait timeout in milliseconds for dialog lifecycle events."],
     accept: [type: :boolean, default: false, doc: "Whether to accept/confirm the dialog. Defaults to dismiss/cancel."],
     prompt_text: [type: :any, default: nil, doc: "Prompt text sent when accepting prompt dialogs."],
-    message: [type: :any, default: nil, doc: "Expected dialog message text."],
     browser: [type: :keyword_list, default: [], doc: "Per-call browser config overrides used for timeout defaults."]
   ]
 
@@ -577,8 +575,8 @@ defmodule Cerberus.Options do
   @spec browser_assert_download_schema() :: keyword()
   def browser_assert_download_schema, do: @browser_assert_download_opts_schema
 
-  @spec browser_with_dialog_schema() :: keyword()
-  def browser_with_dialog_schema, do: @browser_with_dialog_opts_schema
+  @spec browser_assert_dialog_schema() :: keyword()
+  def browser_assert_dialog_schema, do: @browser_assert_dialog_opts_schema
 
   @spec browser_with_popup_schema() :: keyword()
   def browser_with_popup_schema, do: @browser_with_popup_opts_schema
@@ -718,13 +716,12 @@ defmodule Cerberus.Options do
     validate!(opts, @browser_assert_download_opts_schema, "Browser.assert_download/3")
   end
 
-  @spec validate_browser_with_dialog!(keyword()) :: browser_with_dialog_opts()
-  def validate_browser_with_dialog!(opts) do
+  @spec validate_browser_assert_dialog!(keyword()) :: browser_assert_dialog_opts()
+  def validate_browser_assert_dialog!(opts) do
     opts
-    |> validate!(@browser_with_dialog_opts_schema, "Browser.with_dialog/3")
-    |> validate_optional_string!("Browser.with_dialog/3", :prompt_text)
-    |> validate_optional_string!("Browser.with_dialog/3", :message)
-    |> validate_prompt_text_with_accept!("Browser.with_dialog/3")
+    |> validate!(@browser_assert_dialog_opts_schema, "Browser.assert_dialog/3")
+    |> validate_optional_string!("Browser.assert_dialog/3", :prompt_text)
+    |> validate_prompt_text_with_accept!("Browser.assert_dialog/3")
   end
 
   @spec validate_browser_with_popup!(keyword()) :: browser_with_popup_opts()

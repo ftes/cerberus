@@ -139,7 +139,7 @@ defmodule Cerberus.TimeoutDefaultsTest do
     assert Extensions.dialog_timeout_ms(browser: [dialog_timeout_ms: 2_400]) == 2_400
     assert Extensions.dialog_timeout_ms(timeout: 1_100, browser: [dialog_timeout_ms: 2_400]) == 1_100
 
-    assert_raise ArgumentError, ~r/with_dialog\/3 :timeout must be a positive integer/, fn ->
+    assert_raise ArgumentError, ~r/assert_dialog\/3 :timeout must be a positive integer/, fn ->
       Extensions.dialog_timeout_ms(timeout: 0)
     end
   end
