@@ -10,6 +10,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
   @default_chrome_startup_retries 1
   @default_startup_log_tail_bytes 8_192
   @default_startup_log_tail_lines 40
+  @watchdog_script_name "cerberus-browser-runtime-watchdog.sh"
   @startup_attempts 120
   @startup_sleep_ms 50
 
@@ -19,7 +20,8 @@ defmodule Cerberus.Driver.Browser.Runtime do
           managed?: boolean(),
           process: port() | nil,
           startup_log_path: String.t() | nil,
-          startup_log_ephemeral?: boolean()
+          startup_log_ephemeral?: boolean(),
+          watchdog_marker_path: String.t() | nil
         }
 
   @type runtime_session :: %{
@@ -180,7 +182,8 @@ defmodule Cerberus.Driver.Browser.Runtime do
          managed?: false,
          process: nil,
          startup_log_path: nil,
-         startup_log_ephemeral?: false
+         startup_log_ephemeral?: false,
+         watchdog_marker_path: nil
        }}
     else
       start_managed_service(opts, browser_name)
@@ -201,6 +204,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
         args: args
       ])
 
+    watchdog_marker_path = maybe_start_watchdog(process, browser_name)
     url = "http://127.0.0.1:#{port}"
 
     case wait_for_service(url, @startup_attempts, opts) do
@@ -212,10 +216,12 @@ defmodule Cerberus.Driver.Browser.Runtime do
            managed?: true,
            process: process,
            startup_log_path: startup_log_path,
-           startup_log_ephemeral?: startup_log_ephemeral?
+           startup_log_ephemeral?: startup_log_ephemeral?,
+           watchdog_marker_path: watchdog_marker_path
          }}
 
       {:error, reason} ->
+        maybe_disable_watchdog_marker(watchdog_marker_path)
         Port.close(process)
         {:error, reason}
     end
@@ -542,7 +548,9 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   defp maybe_delete_session(_, _, _), do: :ok
 
-  defp maybe_stop_service(%{managed?: true, process: process}) when is_port(process) do
+  defp maybe_stop_service(%{managed?: true, process: process} = service) when is_port(process) do
+    maybe_disable_watchdog_marker(service)
+
     os_pid = process_os_pid(process)
     kill_target = local_service_kill_target(os_pid)
 
@@ -558,7 +566,122 @@ defmodule Cerberus.Driver.Browser.Runtime do
     :ok
   end
 
-  defp maybe_stop_service(_), do: :ok
+  defp maybe_stop_service(service) do
+    maybe_disable_watchdog_marker(service)
+    :ok
+  end
+
+  defp maybe_start_watchdog(process, browser_name) when is_port(process) do
+    with service_pid when is_integer(service_pid) and service_pid > 0 <- process_os_pid(process),
+         runtime_pid when is_integer(runtime_pid) and runtime_pid > 0 <- current_os_pid(),
+         {:ok, marker_path} <- create_watchdog_marker(browser_name),
+         :ok <- launch_watchdog(marker_path, runtime_pid, service_pid) do
+      marker_path
+    else
+      _ -> nil
+    end
+  end
+
+  defp create_watchdog_marker(browser_name) when browser_name in [:chrome, :firefox] do
+    marker_path =
+      Path.join(
+        System.tmp_dir!(),
+        "cerberus-#{browser_name}-webdriver-watchdog-#{:erlang.unique_integer([:positive])}.marker"
+      )
+
+    case File.write(marker_path, "") do
+      :ok -> {:ok, marker_path}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp create_watchdog_marker(_), do: {:error, :unsupported_browser}
+
+  defp launch_watchdog(marker_path, runtime_pid, service_pid) do
+    with {:ok, script_path} <- ensure_watchdog_script(),
+         command = watchdog_launch_command(script_path, marker_path, runtime_pid, service_pid),
+         {_output, 0} <- System.cmd("/bin/sh", ["-c", command], stderr_to_stdout: true) do
+      :ok
+    else
+      _ -> {:error, :watchdog_launch_failed}
+    end
+  rescue
+    _ -> {:error, :watchdog_launch_failed}
+  end
+
+  defp ensure_watchdog_script do
+    script_path = Path.join(System.tmp_dir!(), @watchdog_script_name)
+
+    case File.write(script_path, watchdog_script_contents()) do
+      :ok ->
+        case File.chmod(script_path, 0o700) do
+          :ok -> {:ok, script_path}
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp watchdog_launch_command(script_path, marker_path, runtime_pid, service_pid) do
+    "nohup " <>
+      shell_escape(script_path) <>
+      " " <>
+      shell_escape(marker_path) <>
+      " " <>
+      Integer.to_string(runtime_pid) <>
+      " " <>
+      Integer.to_string(service_pid) <>
+      " >/dev/null 2>&1 &"
+  end
+
+  defp watchdog_script_contents do
+    """
+    #!/bin/sh
+    MARKER_PATH="$1"
+    RUNTIME_PID="$2"
+    SERVICE_PID="$3"
+
+    while [ -f "$MARKER_PATH" ]; do
+      if kill -0 "$RUNTIME_PID" 2>/dev/null; then
+        sleep 1
+        continue
+      fi
+
+      PGID="$(ps -o pgid= -p "$SERVICE_PID" 2>/dev/null | tr -d '[:space:]')"
+
+      if [ -n "$PGID" ]; then
+        kill -TERM -- "-$PGID" 2>/dev/null || true
+        sleep 1
+        kill -KILL -- "-$PGID" 2>/dev/null || true
+      else
+        kill -TERM "$SERVICE_PID" 2>/dev/null || true
+        sleep 1
+        kill -KILL "$SERVICE_PID" 2>/dev/null || true
+      fi
+
+      break
+    done
+
+    rm -f "$MARKER_PATH" 2>/dev/null || true
+    """
+  end
+
+  defp maybe_disable_watchdog_marker(%{watchdog_marker_path: marker_path}) do
+    maybe_disable_watchdog_marker(marker_path)
+  end
+
+  defp maybe_disable_watchdog_marker(marker_path) when is_binary(marker_path) do
+    _ = File.rm(marker_path)
+    :ok
+  end
+
+  defp maybe_disable_watchdog_marker(_), do: :ok
+
+  defp shell_escape(value) when is_binary(value) do
+    "'" <> String.replace(value, "'", "'\"'\"'") <> "'"
+  end
 
   defp process_os_pid(process) when is_port(process) do
     case Port.info(process, :os_pid) do
@@ -611,8 +734,14 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   defp process_group_id(_), do: nil
 
+  defp current_os_pid do
+    :os.getpid()
+    |> List.to_string()
+    |> parse_positive_integer()
+  end
+
   defp current_process_group_id do
-    case parse_positive_integer(:os.getpid()) do
+    case current_os_pid() do
       nil -> nil
       os_pid -> process_group_id(os_pid)
     end

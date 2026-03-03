@@ -50,6 +50,17 @@ defmodule Cerberus.TestHelperSupport do
             "unsupported PostgreSQL identifier #{inspect(value)}; use alphanumeric + underscore only"
     end
   end
+
+  def stop_test_support_supervisor do
+    case Process.whereis(Cerberus.TestSupportSupervisor) do
+      pid when is_pid(pid) ->
+        _ = Supervisor.stop(pid, :normal, 15_000)
+        :ok
+
+      _ ->
+        :ok
+    end
+  end
 end
 
 ExUnit.start()
@@ -68,14 +79,7 @@ Cerberus.TestHelperSupport.ensure_postgres_database!(Repo.config())
   )
 
 ExUnit.after_suite(fn _results ->
-  case Process.whereis(Cerberus.TestSupportSupervisor) do
-    pid when is_pid(pid) ->
-      _ = Supervisor.stop(pid, :normal, 15_000)
-      :ok
-
-    _ ->
-      :ok
-  end
+  Cerberus.TestHelperSupport.stop_test_support_supervisor()
 end)
 
 SQL.query!(
