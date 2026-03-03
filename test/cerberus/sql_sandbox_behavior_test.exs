@@ -5,22 +5,14 @@ defmodule Cerberus.SQLSandboxBehaviorTest do
 
   alias Cerberus.Fixtures.SandboxMessages
   alias Cerberus.Session
-  alias Ecto.Adapters.SQL.Sandbox
 
   setup context do
-    [repo] = Application.get_env(:cerberus, :ecto_repos, [])
-    owner_pid = Sandbox.start_owner!(repo, shared: !context.async)
-
-    metadata_header = sql_sandbox_user_agent(repo, owner_pid)
+    metadata_header = sql_sandbox_user_agent(Cerberus.Fixtures.Repo, context)
 
     conn =
       Phoenix.ConnTest.build_conn()
       |> Plug.Conn.delete_req_header("user-agent")
       |> Plug.Conn.put_req_header("user-agent", metadata_header)
-
-    on_exit(fn ->
-      Sandbox.stop_owner(owner_pid)
-    end)
 
     {:ok, sandbox_metadata: metadata_header, sandbox_conn: conn}
   end

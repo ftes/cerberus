@@ -34,7 +34,9 @@ defmodule Cerberus do
   alias Cerberus.Phoenix.Conn, as: DriverConn
   alias Cerberus.Phoenix.LiveViewTimeout
   alias Cerberus.Session
+  alias Ecto.Adapters.SQL.Sandbox, as: EctoSandbox
   alias ExUnit.AssertionError
+  alias Phoenix.Ecto.SQL.Sandbox, as: PhoenixSandbox
   alias Phoenix.LiveViewTest.View
 
   @type driver_kind :: Session.driver_kind()
@@ -1060,14 +1062,14 @@ defmodule Cerberus do
     defp checkout_ecto_repos(repo, context) do
       repo
       |> List.wrap()
-      |> Enum.map(&maybe_start_sandbox_owner(&1, repo, context))
+      |> Enum.map(&maybe_start_sandbox_owner(&1, context))
       |> PhoenixSandbox.metadata_for(self())
       |> PhoenixSandbox.encode_metadata()
     end
 
     defp maybe_start_sandbox_owner(repo, context) do
       pid = EctoSandbox.start_owner!(repo, shared: not context.async)
-      on_exit(fn -> stop_sandbox_owner(pid, context) end)
+      ExUnit.Callbacks.on_exit(fn -> stop_sandbox_owner(pid, context) end)
       repo
     rescue
       e in MatchError ->

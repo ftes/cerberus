@@ -144,12 +144,12 @@ defmodule Cerberus.Driver.Browser.Config do
 
   defp default_screenshot_path(browser_opts) do
     artifact_dir =
-      browser_opts
-      |> Keyword.get(:screenshot_artifact_dir)
-      |> normalize_non_empty_string(System.tmp_dir!())
+    browser_opts
+    |> Keyword.get(:screenshot_artifact_dir)
+    |> normalize_non_empty_string("tmp/")
 
-    Path.join([artifact_dir, "cerberus-screenshot#{System.unique_integer([:monotonic])}.png"])
-  end
+  Path.join([artifact_dir, "cerberus-screenshot#{System.unique_integer([:monotonic])}.png"])
+end
 
   defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
   defp normalize_positive_integer(_value, default), do: default
