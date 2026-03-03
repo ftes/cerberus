@@ -9,7 +9,8 @@ defmodule Cerberus do
   - Browser unwrap payloads are exposed as `Cerberus.Browser.Native` handles, not raw internals.
   - v0 does not expose a public located-element pipeline type.
 
-  Slice 1 provides one-shot operations over deterministic adapters.
+  Browser assertion/path operations use in-browser wait loops as the fast path.
+  Cerberus applies bounded transient eval retries to smooth navigation/context-reset races.
 
   Locator sigil quick look:
 
@@ -541,7 +542,7 @@ defmodule Cerberus do
   Use `closest/2` when scope should resolve to the nearest matching ancestor
   around a nested element (for example, a field wrapper around a label).
 
-  For one-shot assertions, you can also use scoped assertion overloads:
+  For scoped assertions without entering a `within/3` callback, you can also use scoped assertion overloads:
 
       session
       |> assert_has(closest(~l".fieldset"c, from: ~l"textbox:Email"r), ~l"can't be blank")

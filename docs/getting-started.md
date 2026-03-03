@@ -16,7 +16,8 @@ session()
 >
 > `session()` (or explicit `session(:phoenix)`) gives a PhoenixTest-style flow: static and live routes are handled automatically behind one API.
 > `session(conn)` reuses an existing `Plug.Conn` (including carried session/cookie state) instead of starting from a fresh conn.
-> For browser mode, `session(:browser)` defaults to Chrome; use `session(:chrome)` or `session(:firefox)` for explicit targets. Chrome and Firefox are both first-class supported targets.
+> For browser mode, `session(:browser)` defaults to Chrome; use `session(:chrome)` or `session(:firefox)` for explicit targets.
+> Project CI currently runs Chrome lanes only. Firefox runs are supported, but opt-in.
 
 Set the endpoint once globally (same style as PhoenixTest), then use plain `session()` in tests:
 
@@ -216,6 +217,7 @@ session()
 >
 > Live and browser assertion APIs default to a `500ms` timeout budget (`assert_*` and `refute_*`, including path assertions).
 > You can override per call (`timeout: ...`), per session (`session(assert_timeout_ms: ...)`), or globally (`config :cerberus, :assert_timeout_ms, ...`).
+> In browser mode, text/path assertions run wait loops in browser JS and Cerberus adds bounded transient eval retries for navigation/context-reset races.
 
 ## Step 7: Browser-Only Extensions
 
@@ -321,6 +323,7 @@ mix test.websocket --browsers chrome,firefox
 ```
 
 `mix test.websocket` defaults to `--browsers all`.
+For regular project runs, use Chrome-first invocations unless you are explicitly validating Firefox behavior.
 
 ## Step 11: Headed Browser and Runtime Launch Options
 

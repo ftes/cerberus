@@ -1,17 +1,18 @@
 # Browser Support Policy
 
 This document defines current browser support for Cerberus WebDriver BiDi execution.
-Status last reviewed: February 28, 2026.
+Status last reviewed: March 3, 2026.
 
 ## Supported Browsers
 
 Cerberus currently supports:
 
-- Chrome/Chromium via ChromeDriver BiDi
-- Firefox via geckodriver BiDi
+- Chrome/Chromium via ChromeDriver BiDi (primary target)
+- Firefox via geckodriver BiDi (supported, opt-in)
 
-Both targets are covered by browser conformance suites and shared API examples.
-CI keeps chrome as the baseline lane and includes targeted firefox-tagged conformance coverage.
+Both targets have shared API coverage.
+Current project policy is Chrome-first execution for regular local and CI runs.
+Firefox lanes are available for explicit manual/targeted runs.
 
 ## Runtime Model
 

@@ -7,6 +7,7 @@
 | Phoenix mode (auto static/live switching) | `session()` or `session(:phoenix)` |
 | Real browser behavior | `session(:browser)` |
 | Explicit browser lane | `session(:chrome)` or `session(:firefox)` |
+| Default project lane policy | Chrome-first (CI and regular local runs) |
 | Live/browser assertion timeout default | `500ms` (override with `session(assert_timeout_ms: 300)`) |
 | Browser ready timeout default | `session(:browser, ready_timeout_ms: 2200)` |
 | Global headed mode | `config :cerberus, :browser, show_browser: true` |
@@ -32,6 +33,10 @@
 | Refute scoped text | `refute_has(session, ~l"#secondary-panel"c, "Status: primary")` |
 | Assert path/query | `assert_path(session, "/search/results", query: %{q: "Aragorn"}, timeout: 500)` |
 | Scope to subtree | `within(session, ~l"#secondary-panel"c, fn s -> ... end)` |
+
+Browser assertion execution model:
+- `assert_has`/`refute_has` and path assertions use in-browser wait loops.
+- Cerberus adds bounded transient eval retries for navigation/context-reset races.
 
 ## Multi-Session Operations
 

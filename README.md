@@ -20,6 +20,11 @@ Live (non-browser) assertions are optimized for large pages:
 - they avoid the previous `render(view)` -> HTML string -> LazyHTML re-parse loop on each assertion,
 - matcher semantics stay in Cerberus so locators/matching remain consistent across drivers.
 
+Browser assertions/path checks use an in-browser wait loop as the fast path:
+- assertion/path polling happens inside browser JS (not Elixir-side polling),
+- Cerberus adds a bounded transient retry wrapper when BiDi eval hits navigation/context-reset races,
+- retries keep the original timeout budget semantics while reducing flaky transition failures.
+
 ## 30-Second Start
 ```ex
 # mix.exs
@@ -40,6 +45,7 @@ session()
 > Start with `session()` for most scenarios. Move to `session(:browser)` when validating real browser behavior, keyboard/mouse APIs, or browser-only assertions.
 > Use `session(conn)` when you need to continue from an existing `Plug.Conn` state.
 > Use `session(:chrome)` / `session(:firefox)` when you want an explicit browser target.
+> Project CI currently runs Chrome lanes only; run Firefox lanes explicitly when needed.
 
 ## Progressive Examples
 
@@ -314,6 +320,7 @@ Because browser runtime + BiDi transport are shared per browser lane, runtime la
 
 Cerberus browser tests use WebDriver BiDi.
 Chrome and Firefox are supported browser targets.
+Project CI currently runs Chrome lanes only; Firefox lanes remain available for explicit local/manual runs.
 
 Local managed runtime (default) uses configured browser and WebDriver binaries:
 
