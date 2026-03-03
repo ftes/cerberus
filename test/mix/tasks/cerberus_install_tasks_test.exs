@@ -7,18 +7,21 @@ defmodule Mix.Tasks.Cerberus.InstallTasksTest do
 
   @chrome_task "cerberus.install.chrome"
   @firefox_task "cerberus.install.firefox"
+  @moduletag :tmp_dir
 
-  setup do
+  setup %{tmp_dir: tmp_dir} do
     Install.put_command_runner(nil)
+    Install.put_stable_link_dir(tmp_dir)
 
     on_exit(fn ->
       Install.put_command_runner(nil)
+      Install.put_stable_link_dir(nil)
     end)
 
     :ok
   end
 
-  test "mix cerberus.install.chrome --format json emits machine-readable payload" do
+  test "mix cerberus.install.chrome --format json emits machine-readable payload", %{tmp_dir: tmp_dir} do
     install_output = """
     Chrome runtime ready
     chrome_binary=/tmp/chrome-146/chrome
@@ -51,9 +54,14 @@ defmodule Mix.Tasks.Cerberus.InstallTasksTest do
     assert payload["env"]["CHROME"] == "/tmp/chrome-146/chrome"
     assert payload["env"]["CHROMEDRIVER"] == "/tmp/chromedriver-146/chromedriver"
     assert payload["env"]["CERBERUS_CHROME_VERSION"] == "146.0.7680.31"
+
+    assert File.read_link!(Path.join(tmp_dir, "chrome-current")) == Path.expand("/tmp/chrome-146/chrome")
+
+    assert File.read_link!(Path.join(tmp_dir, "chromedriver-current")) ==
+             Path.expand("/tmp/chromedriver-146/chromedriver")
   end
 
-  test "mix cerberus.install.firefox forwards version flags and renders env" do
+  test "mix cerberus.install.firefox forwards version flags and renders env", %{tmp_dir: tmp_dir} do
     install_output = """
     Firefox runtime ready
     firefox_binary=/tmp/firefox-148/firefox
@@ -89,6 +97,11 @@ defmodule Mix.Tasks.Cerberus.InstallTasksTest do
     assert "GECKODRIVER=/tmp/geckodriver-0.36.0/geckodriver" in lines
     assert "CERBERUS_FIREFOX_VERSION=148.0" in lines
     assert "CERBERUS_GECKODRIVER_VERSION=0.36.0" in lines
+
+    assert File.read_link!(Path.join(tmp_dir, "firefox-current")) == Path.expand("/tmp/firefox-148/firefox")
+
+    assert File.read_link!(Path.join(tmp_dir, "geckodriver-current")) ==
+             Path.expand("/tmp/geckodriver-0.36.0/geckodriver")
   end
 
   test "mix cerberus.install.chrome rejects unsupported format" do

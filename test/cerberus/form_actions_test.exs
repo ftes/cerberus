@@ -28,6 +28,15 @@ defmodule Cerberus.FormActionsTest do
       |> assert_has(text: "Search query: phoenix", exact: true)
     end
 
+    test "submit/1 compatibility works for migrated PhoenixTest flows (#{driver})", context do
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/search")
+      |> fill_in("Search term", "compat")
+      |> submit()
+      |> assert_has(text: "Search query: compat", exact: true)
+    end
+
     test "fill_in matches wrapped labels with nested inline text across static and browser drivers (#{driver})",
          context do
       unquote(driver)

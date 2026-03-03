@@ -30,7 +30,7 @@ defmodule Cerberus.AssertionFilterSemanticsTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/live/form-change")
-        |> assert_has(label(@missing_label, exact: true))
+        |> assert_has(label(@missing_label, exact: true), timeout: 0)
       end
     end
 

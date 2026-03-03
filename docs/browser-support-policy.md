@@ -55,15 +55,7 @@ mix cerberus.install.chrome --format shell
 mix cerberus.install.firefox --format shell
 ```
 
-Configure local browser and WebDriver binaries via `:cerberus, :browser`:
-
-```elixir
-config :cerberus, :browser,
-  chrome_binary: "/path/to/chrome-or-chromium",
-  chromedriver_binary: "/path/to/chromedriver",
-  firefox_binary: "/path/to/firefox",
-  geckodriver_binary: "/path/to/geckodriver"
-```
+Install tasks maintain stable links (`tmp/chrome-current`, `tmp/chromedriver-current`, `tmp/firefox-current`, `tmp/geckodriver-current`) that Cerberus auto-detects for local managed runtime startup.
 
 ## Remote Runtime
 

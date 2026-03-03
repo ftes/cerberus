@@ -843,10 +843,28 @@ defmodule Cerberus.Driver.Browser.Runtime do
   end
 
   defp base_url!(opts) do
+    resolve_base_url(opts) ||
+      raise(
+        ArgumentError,
+        "missing base URL for browser driver; set :base_url, configure :cerberus, :base_url, or configure :cerberus, :endpoint"
+      )
+  end
+
+  @doc false
+  @spec resolve_base_url(keyword()) :: String.t() | nil
+  def resolve_base_url(opts) when is_list(opts) do
     Keyword.get(opts, :base_url) ||
       browser_opts(opts)[:base_url] ||
       Application.get_env(:cerberus, :base_url) ||
-      raise(ArgumentError, "missing :cerberus, :base_url for browser driver")
+      endpoint_base_url(opts)
+  end
+
+  defp endpoint_base_url(opts) do
+    endpoint = Keyword.get(opts, :endpoint) || Application.get_env(:cerberus, :endpoint)
+
+    if is_atom(endpoint) and function_exported?(endpoint, :url, 0) do
+      endpoint.url()
+    end
   end
 
   defp browser_opts(opts) do
@@ -993,24 +1011,36 @@ defmodule Cerberus.Driver.Browser.Runtime do
   end
 
   defp chrome_binary!(opts, merged) do
-    binary = Keyword.get(opts, :chrome_binary) || Keyword.get(merged, :chrome_binary)
+    binary =
+      first_existing_path([
+        Keyword.get(opts, :chrome_binary),
+        Keyword.get(merged, :chrome_binary),
+        System.get_env("CHROME"),
+        stable_binary_path("chrome-current")
+      ])
 
     if is_binary(binary) and File.exists?(binary) do
       binary
     else
       raise ArgumentError,
-            "chrome binary not configured; set :cerberus, :browser chrome_binary (or pass :chrome_binary)"
+            "chrome binary not configured; set :cerberus, :browser chrome_binary (or pass :chrome_binary), set CHROME, or run mix cerberus.install.chrome"
     end
   end
 
   defp firefox_binary!(opts, merged) do
-    binary = Keyword.get(opts, :firefox_binary) || Keyword.get(merged, :firefox_binary)
+    binary =
+      first_existing_path([
+        Keyword.get(opts, :firefox_binary),
+        Keyword.get(merged, :firefox_binary),
+        System.get_env("FIREFOX"),
+        stable_binary_path("firefox-current")
+      ])
 
     if is_binary(binary) and File.exists?(binary) do
       binary
     else
       raise ArgumentError,
-            "firefox binary not configured; set :cerberus, :browser firefox_binary (or pass :firefox_binary)"
+            "firefox binary not configured; set :cerberus, :browser firefox_binary (or pass :firefox_binary), set FIREFOX, or run mix cerberus.install.firefox"
     end
   end
 
@@ -1019,28 +1049,47 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   defp chromedriver_binary!(opts) do
     binary =
-      Keyword.get(opts, :chromedriver_binary) ||
-        browser_opts(opts)[:chromedriver_binary]
+      first_existing_path([
+        Keyword.get(opts, :chromedriver_binary),
+        browser_opts(opts)[:chromedriver_binary],
+        System.get_env("CHROMEDRIVER"),
+        stable_binary_path("chromedriver-current")
+      ])
 
     if is_binary(binary) and File.exists?(binary) do
       binary
     else
       raise ArgumentError,
-            "chromedriver binary not configured; set :cerberus, :browser chromedriver_binary (or pass :chromedriver_binary)"
+            "chromedriver binary not configured; set :cerberus, :browser chromedriver_binary (or pass :chromedriver_binary), set CHROMEDRIVER, or run mix cerberus.install.chrome"
     end
   end
 
   defp geckodriver_binary!(opts) do
     binary =
-      Keyword.get(opts, :geckodriver_binary) ||
-        browser_opts(opts)[:geckodriver_binary]
+      first_existing_path([
+        Keyword.get(opts, :geckodriver_binary),
+        browser_opts(opts)[:geckodriver_binary],
+        System.get_env("GECKODRIVER"),
+        stable_binary_path("geckodriver-current")
+      ])
 
     if is_binary(binary) and File.exists?(binary) do
       binary
     else
       raise ArgumentError,
-            "geckodriver binary not configured; set :cerberus, :browser geckodriver_binary (or pass :geckodriver_binary)"
+            "geckodriver binary not configured; set :cerberus, :browser geckodriver_binary (or pass :geckodriver_binary), set GECKODRIVER, or run mix cerberus.install.firefox"
     end
+  end
+
+  defp first_existing_path(paths) when is_list(paths) do
+    Enum.find(paths, fn
+      path when is_binary(path) -> File.exists?(path)
+      _ -> false
+    end)
+  end
+
+  defp stable_binary_path(name) when is_binary(name) do
+    Path.expand(Path.join("tmp", name))
   end
 
   defp random_port! do

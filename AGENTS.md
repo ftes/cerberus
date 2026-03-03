@@ -14,11 +14,12 @@ Keep a log of what you did to present when you're done.
 ## General Guidelines
 - Keep it simple: choose the least complex approach that satisfies the requirement.
 - Deliver vertical slices end-to-end whenever possible (API + drivers + harness coverage for the slice).
-- Run Live/Static driver tests ALSO against a browser to validate we match HTML/browser behavior. `source .envrc` first to get browser version env vars.
+- `source .envrc` before running tests to get browser version env vars.
+- Run targeted `mix test` often after changing files.
 - Run `mix format` after each logical change set (and before tests/precommit), since precommit checks formatting and does not rewrite files.
-- Commit in small increments and run `mix format` and `mix precommit` before each commit.
+- Commit in small increments and run `mix do format + precommit + test + test.slow` before each commit.
 - Cerberus is unreleased. Feel free to change anything - ignore backwards compatability.
-- Codex: Run browser-tagged tests outside the Codex sandbox (escalated permissions), since Chrome startup can fail inside the sandbox.
+- Codex: Run real-browser tests outside the Codex sandbox (escalated permissions), since Chrome startup can fail inside the sandbox.
 - If public API/behavior/examples changed, update docs in the same change (`README.md`, relevant guides, moduledocs).
 - Current browser policy: run Chrome only. Ignore Firefox and websocket lanes locally and in CI unless explicitly requested.
 - If in doubt about static/live driver behavior, check PhoenixTest static and live driver implementations for reference patterns.

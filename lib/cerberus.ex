@@ -52,6 +52,7 @@ defmodule Cerberus do
   @type scope_locator_input :: Locator.input()
   @locator_kind_keys [:text, :label, :link, :button, :placeholder, :title, :alt, :role, :css, :testid, :and, :or]
   @locator_kind_string_keys Enum.map(@locator_kind_keys, &Atom.to_string/1)
+  @default_submit_selector "button[type='submit'],button:not([type])"
 
   @spec session() :: Session.t()
   def session, do: session([])
@@ -695,8 +696,20 @@ defmodule Cerberus do
     raise ArgumentError, "upload/4 expects a non-empty path string and keyword options"
   end
 
+  @doc """
+  Submits the first submit-capable button in scope.
+
+  This arity exists as a compatibility bridge for migrated `PhoenixTest.submit/1`
+  pipelines, where no explicit locator is provided.
+  """
+  @spec submit(arg) :: arg when arg: var
+  def submit(session), do: submit(session, css(@default_submit_selector), [])
+
+  @spec submit(arg, locator_input()) :: arg when arg: var
+  def submit(session, locator), do: submit(session, locator, [])
+
   @spec submit(arg, locator_input(), Options.submit_opts()) :: arg when arg: var
-  def submit(session, locator, opts \\ []) do
+  def submit(session, locator, opts) when is_list(opts) do
     Assertions.submit(session, locator, opts)
   end
 

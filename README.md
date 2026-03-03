@@ -370,26 +370,26 @@ Global remote-browser invocation (Docker required):
 
 ```bash
 mix test.websocket
-mix test.websocket --browsers chrome,firefox
 mix test.websocket test/cerberus/explicit_browser_test.exs
 ```
 
 `mix test.websocket` starts/stops Selenium container(s) and runs one `mix test`
-invocation with remote browser lane wiring. Use `--browsers` (`chrome`,
-`firefox`, or `all`) to control lane provisioning; default is `all`.
+invocation with remote browser lane wiring. Use `--browsers` when needed to
+override lane provisioning (`chrome`, `firefox`, or `all`); prefer Chrome for
+regular local runs.
 
-Cross-browser conformance run:
+Mixed-driver local browser run:
 
 ```bash
-mix test --only browser test/cerberus --exclude explicit_browser
+mix test test/cerberus
 ```
 
-`@tag :browser` uses the default browser lane. For explicit browser selection, use top-level tags (`@tag :chrome`, `@tag :firefox`) and disable a lane at test scope with `@tag chrome: false` or `@tag firefox: false`.
+Cerberus uses mixed-driver suites (no dedicated `:browser` tag lane), so browser coverage runs as part of normal `test/cerberus` execution.
 
 Explicit browser-lane override coverage:
 
 ```bash
-mix test --only explicit_browser
+mix test test/cerberus/explicit_browser_test.exs
 ```
 
 Install local browser runtimes with public Mix tasks:
@@ -407,20 +407,13 @@ Stable output contracts:
 - `--format env` for `KEY=VALUE` lines (for CI env files)
 - `--format shell` for `export KEY='VALUE'` lines
 
-Recommended runtime handoff:
+After install, Cerberus automatically discovers local managed-runtime binaries via stable links:
+- `tmp/chrome-current`
+- `tmp/chromedriver-current`
+- `tmp/firefox-current`
+- `tmp/geckodriver-current`
 
-```bash
-eval "$(mix cerberus.install.chrome --format shell)"
-eval "$(mix cerberus.install.firefox --format shell)"
-```
-
-```elixir
-config :cerberus, :browser,
-  chrome_binary: System.fetch_env!("CHROME"),
-  chromedriver_binary: System.fetch_env!("CHROMEDRIVER"),
-  firefox_binary: System.fetch_env!("FIREFOX"),
-  geckodriver_binary: System.fetch_env!("GECKODRIVER")
-```
+No extra binary-path config is required for normal local runs after installation.
 
 CI-friendly form:
 

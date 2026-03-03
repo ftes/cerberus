@@ -31,9 +31,9 @@ defmodule Cerberus.MixProject do
       {:phoenix, "~> 1.7"},
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_view, "~> 1.0"},
-      {:phoenix_ecto, "~> 4.6", only: :test},
-      {:ecto_sql, "~> 3.13", only: :test},
-      {:postgrex, "~> 0.19", only: :test},
+      {:phoenix_ecto, "~> 4.6", only: :test, optional: true},
+      {:ecto_sql, "~> 3.13", optional: true},
+      {:postgrex, "~> 0.19", only: :test, optional: true},
       {:lazy_html, ">= 0.1.0"},
       {:nimble_options, "~> 1.1"},
       {:igniter, "~> 0.7.2", runtime: false},
@@ -47,6 +47,7 @@ defmodule Cerberus.MixProject do
 
   defp aliases do
     [
+      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       precommit: [
         "format --check-formatted",
         "credo --strict",
@@ -58,7 +59,12 @@ defmodule Cerberus.MixProject do
 
   defp cli do
     [
-      preferred_envs: ["test.websocket": :test, dialyzer: :test, precommit: :test]
+      preferred_envs: [
+        "test.websocket": :test,
+        test: :test,
+        dialyzer: :test,
+        precommit: :test
+      ]
     ]
   end
 

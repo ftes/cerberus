@@ -4,19 +4,31 @@ defmodule Cerberus.DocumentationExamplesTest do
   import Cerberus
   import Cerberus.Browser
 
+  alias Cerberus.TestSupport.SharedBrowserSession
+
+  setup_all do
+    {owner_pid, browser_session} = SharedBrowserSession.start!()
+
+    on_exit(fn ->
+      SharedBrowserSession.stop(owner_pid)
+    end)
+
+    {:ok, shared_browser_session: browser_session}
+  end
+
   for driver <- [:phoenix, :browser] do
-    test "quickstart counter flow from docs works across auto and browser (#{driver})" do
+    test "quickstart counter flow from docs works across auto and browser (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/articles")
       |> assert_has(text("Articles", exact: true))
       |> click(link("Counter"))
       |> assert_has(text("Count: 0", exact: true))
     end
 
-    test "form plus path flow from docs works across auto and browser (#{driver})" do
+    test "form plus path flow from docs works across auto and browser (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/search")
       |> fill_in(label("Search term"), "Aragorn")
       |> submit(button("Run Search"))
@@ -24,9 +36,9 @@ defmodule Cerberus.DocumentationExamplesTest do
       |> assert_has(text("Search query: Aragorn", exact: true))
     end
 
-    test "scoped navigation flow from docs works across auto and browser (#{driver})" do
+    test "scoped navigation flow from docs works across auto and browser (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/scoped")
       |> within(css("#secondary-panel"), fn scoped ->
         scoped
@@ -36,10 +48,10 @@ defmodule Cerberus.DocumentationExamplesTest do
       |> assert_path("/search")
     end
 
-    test "multi-user and multi-tab flow from docs preserves isolation semantics (#{driver})" do
+    test "multi-user and multi-tab flow from docs preserves isolation semantics (#{driver})", context do
       primary =
         unquote(driver)
-        |> session()
+        |> driver_session(context)
         |> visit("/session/user/alice")
         |> assert_has(text("Session user: alice", exact: true))
 
@@ -50,7 +62,7 @@ defmodule Cerberus.DocumentationExamplesTest do
         |> assert_has(text("Session user: alice", exact: true))
 
       unquote(driver)
-      |> session()
+      |> isolated_driver_session(context)
       |> visit("/session/user")
       |> assert_has(text("Session user: unset", exact: true))
       |> refute_has(text("Session user: alice", exact: true))
@@ -64,10 +76,10 @@ defmodule Cerberus.DocumentationExamplesTest do
     |> assert_has(text("Title loaded async"), timeout: 500)
   end
 
-  test "browser extension snippet from docs works" do
+  test "browser extension snippet from docs works", context do
     session =
       :browser
-      |> session()
+      |> driver_session(context)
       |> visit("/browser/extensions")
       |> type("hello", selector: "#keyboard-input")
       |> press("Enter", selector: "#press-input")
@@ -79,4 +91,8 @@ defmodule Cerberus.DocumentationExamplesTest do
     |> assert_has(text("Press result: submitted", exact: true))
     |> assert_has(text("Dialog result: cancelled", exact: true))
   end
+
+  defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)
+  defp isolated_driver_session(:browser, _context), do: session(:browser)
+  defp isolated_driver_session(driver, context), do: driver_session(driver, context)
 end

@@ -2,6 +2,7 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
   use ExUnit.Case, async: true
 
   alias Cerberus.Driver.Browser.Runtime
+  alias Cerberus.Fixtures.Endpoint
 
   setup do
     browser_config = Application.get_env(:cerberus, :browser, [])
@@ -74,6 +75,36 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
                firefox_webdriver_url: "http://override-firefox:4444"
              ) ==
                "http://override-firefox:4444"
+    end
+  end
+
+  describe "resolve_base_url/1" do
+    test "prefers explicit base_url option over configured values" do
+      assert Runtime.resolve_base_url(base_url: "http://session-override:7777") == "http://session-override:7777"
+    end
+
+    test "falls back to endpoint url when :base_url is unset" do
+      previous_base_url = Application.get_env(:cerberus, :base_url)
+      previous_endpoint = Application.get_env(:cerberus, :endpoint)
+
+      on_exit(fn ->
+        if is_nil(previous_base_url) do
+          Application.delete_env(:cerberus, :base_url)
+        else
+          Application.put_env(:cerberus, :base_url, previous_base_url)
+        end
+
+        if is_nil(previous_endpoint) do
+          Application.delete_env(:cerberus, :endpoint)
+        else
+          Application.put_env(:cerberus, :endpoint, previous_endpoint)
+        end
+      end)
+
+      Application.delete_env(:cerberus, :base_url)
+      Application.put_env(:cerberus, :endpoint, Endpoint)
+
+      assert Runtime.resolve_base_url([]) == Endpoint.url()
     end
   end
 

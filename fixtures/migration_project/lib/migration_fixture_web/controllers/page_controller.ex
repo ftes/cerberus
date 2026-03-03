@@ -28,7 +28,7 @@ defmodule MigrationFixtureWeb.PageController do
       <form action=\"/search/results\" method=\"get\">
         <label for=\"search_q\">Search term</label>
         <input id=\"search_q\" name=\"q\" type=\"text\" value=\"\" />
-        <button type=\"submit\">Run Search</button>
+        <button type=\"submit\" name=\"source\" value=\"search_button\">Run Search</button>
       </form>
       """
     )
@@ -36,12 +36,14 @@ defmodule MigrationFixtureWeb.PageController do
 
   def search_results(conn, params) do
     query = params["q"] || ""
+    source = params["source"] || ""
 
     html(
       conn,
       """
       <h1>Search Results</h1>
       <p>Search query: #{query}</p>
+      <p>Submit source: #{source}</p>
       """
     )
   end
@@ -152,13 +154,14 @@ defmodule MigrationFixtureWeb.PageController do
   end
 
   def checkbox_save(conn, params) do
-    items =
+    case_result =
       case Map.get(params, "items", []) do
         values when is_list(values) -> values
         value when is_binary(value) -> [value]
         _ -> []
       end
-      |> Enum.reject(&(&1 in ["", "false"]))
+
+    items = Enum.reject(case_result, &(&1 in ["", "false"]))
 
     selected =
       case items do

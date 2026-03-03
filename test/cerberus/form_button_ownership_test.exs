@@ -7,11 +7,22 @@ defmodule Cerberus.FormButtonOwnershipTest do
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.Static, as: StaticSession
+  alias Cerberus.TestSupport.SharedBrowserSession
+
+  setup_all do
+    {owner_pid, browser_session} = SharedBrowserSession.start!()
+
+    on_exit(fn ->
+      SharedBrowserSession.stop(owner_pid)
+    end)
+
+    {:ok, shared_browser_session: browser_session}
+  end
 
   for driver <- [:phoenix, :browser] do
-    test "non-submit controls do not clear active form values before submit (#{driver})" do
+    test "non-submit controls do not clear active form values before submit (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> then(fn session ->
         reset_locator = Cerberus.Locator.normalize(text: "Reset")
         save_locator = Cerberus.Locator.normalize(text: "Save Owner Form")
@@ -33,9 +44,9 @@ defmodule Cerberus.FormButtonOwnershipTest do
       end)
     end
 
-    test "owner-form submit includes button payload across drivers (#{driver})" do
+    test "owner-form submit includes button payload across drivers (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/owner-form")
       |> fill_in("Name", "Aragorn")
       |> submit(text: "Save Owner Form")
@@ -43,9 +54,9 @@ defmodule Cerberus.FormButtonOwnershipTest do
       |> assert_has(text: "form-button: save-owner-form", exact: true)
     end
 
-    test "submit clears active form values for subsequent submits (#{driver})" do
+    test "submit clears active form values for subsequent submits (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/owner-form")
       |> fill_in("Name", "Aragorn")
       |> submit(text: "Save Owner Form")
@@ -55,10 +66,10 @@ defmodule Cerberus.FormButtonOwnershipTest do
       |> assert_has(text: "form-button: save-owner-form", exact: true)
     end
 
-    test "button formaction submit follows redirect and preserves button payload (#{driver})" do
+    test "button formaction submit follows redirect and preserves button payload (#{driver})", context do
       session =
         unquote(driver)
-        |> session()
+        |> driver_session(context)
         |> visit("/owner-form")
         |> fill_in("Name", "Aragorn")
         |> submit(text: "Save Owner Form Redirect")
@@ -124,4 +135,6 @@ defmodule Cerberus.FormButtonOwnershipTest do
   defp submit_for_session(%BrowserSession{} = session, locator, opts) do
     BrowserSession.submit(session, locator, opts)
   end
+
+  defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)
 end

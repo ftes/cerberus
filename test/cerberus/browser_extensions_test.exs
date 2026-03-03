@@ -255,9 +255,13 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     error =
       assert_raise AssertionError, fn ->
-        with_dialog(session, fn dialog_session ->
-          dialog_session
-        end)
+        with_dialog(
+          session,
+          fn dialog_session ->
+            dialog_session
+          end,
+          timeout: 25
+        )
       end
 
     assert error.message =~

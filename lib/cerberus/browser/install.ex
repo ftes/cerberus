@@ -21,18 +21,26 @@ defmodule Cerberus.Browser.Install do
           {:version, String.t()}
           | {:firefox_version, String.t()}
           | {:geckodriver_version, String.t()}
+          | {:stable_link_dir, String.t()}
           | {:command_runner, (String.t(), [String.t()], keyword() -> {String.t(), non_neg_integer()})}
 
   @type env_map :: %{required(String.t()) => String.t()}
   @command_runner_override_key {__MODULE__, :command_runner_override}
+  @stable_link_dir_override_key {__MODULE__, :stable_link_dir_override}
 
   @spec install(browser(), [install_opt()]) :: {:ok, install_payload()} | {:error, String.t()}
   def install(browser, opts \\ []) when browser in [:chrome, :firefox] and is_list(opts) do
     with {:ok, script_path} <- installer_script_path(browser),
          {:ok, key_values} <- run_script(script_path, script_args(browser, opts), command_runner(opts)) do
       case parse_payload(browser, key_values) do
-        {:ok, payload} -> {:ok, payload}
-        {:error, reason} -> {:error, reason}
+        {:ok, payload} ->
+          case ensure_stable_symlinks(payload, opts) do
+            :ok -> {:ok, payload}
+            {:error, reason} -> {:error, reason}
+          end
+
+        {:error, reason} ->
+          {:error, reason}
       end
     end
   end
@@ -101,6 +109,18 @@ defmodule Cerberus.Browser.Install do
     :ok
   end
 
+  @doc false
+  @spec put_stable_link_dir(String.t() | nil) :: :ok
+  def put_stable_link_dir(dir) when is_binary(dir) do
+    Process.put(@stable_link_dir_override_key, dir)
+    :ok
+  end
+
+  def put_stable_link_dir(nil) do
+    Process.delete(@stable_link_dir_override_key)
+    :ok
+  end
+
   defp normalize_payload_for_json(payload) do
     %{
       browser: payload.browser,
@@ -125,6 +145,62 @@ defmodule Cerberus.Browser.Install do
     Keyword.get(opts, :command_runner) ||
       Process.get(@command_runner_override_key) ||
       Application.get_env(:cerberus, :install_command_runner, &System.cmd/3)
+  end
+
+  defp stable_link_dir(opts) do
+    Keyword.get(opts, :stable_link_dir) ||
+      Process.get(@stable_link_dir_override_key) ||
+      Application.get_env(:cerberus, :install_stable_link_dir, "tmp")
+  end
+
+  defp ensure_stable_symlinks(%{browser: browser, binaries: binaries}, opts)
+       when browser in [:chrome, :firefox] and is_map(binaries) do
+    stable_link_dir = stable_link_dir(opts)
+
+    case File.mkdir_p(stable_link_dir) do
+      :ok ->
+        browser
+        |> stable_link_targets(binaries, stable_link_dir)
+        |> Enum.reduce_while(:ok, fn {link_path, target_path}, :ok ->
+          case replace_stable_symlink(link_path, target_path) do
+            :ok -> {:cont, :ok}
+            {:error, reason} -> {:halt, {:error, reason}}
+          end
+        end)
+
+      {:error, reason, _path} ->
+        {:error, "failed to create stable link dir #{stable_link_dir}: #{:file.format_error(reason)}"}
+    end
+  end
+
+  defp stable_link_targets(:chrome, binaries, stable_link_dir) do
+    [
+      {Path.join(stable_link_dir, "chrome-current"), binaries.chrome_binary},
+      {Path.join(stable_link_dir, "chromedriver-current"), binaries.chromedriver_binary}
+    ]
+  end
+
+  defp stable_link_targets(:firefox, binaries, stable_link_dir) do
+    [
+      {Path.join(stable_link_dir, "firefox-current"), binaries.firefox_binary},
+      {Path.join(stable_link_dir, "geckodriver-current"), binaries.geckodriver_binary}
+    ]
+  end
+
+  defp replace_stable_symlink(link_path, target_path) when is_binary(link_path) and is_binary(target_path) do
+    expanded_link = Path.expand(link_path)
+    expanded_target = Path.expand(target_path)
+
+    _ = File.rm_rf(expanded_link)
+
+    case File.ln_s(expanded_target, expanded_link) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        {:error,
+         "failed to create stable browser symlink #{expanded_link} -> #{expanded_target}: #{:file.format_error(reason)}"}
+    end
   end
 
   defp run_script(script_path, args, command_runner) when is_list(args) and is_function(command_runner, 3) do

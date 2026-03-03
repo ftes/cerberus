@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   import ExUnit.CaptureIO
 
@@ -439,6 +439,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     assert output =~ "Mode: write"
   end
 
+  @tag :slow
   test "can run against committed nested Phoenix fixture project tests", %{tmp_dir: tmp_dir} do
     fixture_dir = "fixtures/migration_project"
     project_copy = Path.join(tmp_dir, "migration_project")
@@ -471,7 +472,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     refute rewritten_support_feature_case =~ "import PhoenixTest"
   end
 
-  @tag timeout: 180_000
+  @tag :slow
   test "runs full sample suite before migration and applies migration task", %{tmp_dir: tmp_dir} do
     fixture_dir = "fixtures/migration_project"
     work_dir = Path.join(tmp_dir, "work")

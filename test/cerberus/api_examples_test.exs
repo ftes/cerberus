@@ -39,7 +39,7 @@ defmodule Cerberus.ApiExamplesTest do
           unquote(driver)
           |> driver_session(context)
           |> visit("/articles")
-          |> assert_has(text: "DOES NOT EXIST", exact: true)
+          |> assert_has([text: "DOES NOT EXIST", exact: true], timeout: 0)
         end
 
       assert error.message =~ "assert_has failed"

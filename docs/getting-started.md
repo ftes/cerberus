@@ -288,15 +288,7 @@ eval "$(mix cerberus.install.chrome --format shell)"
 eval "$(mix cerberus.install.firefox --format shell)"
 ```
 
-Then configure Cerberus browser binaries once:
-
-```elixir
-config :cerberus, :browser,
-  chrome_binary: System.fetch_env!("CHROME"),
-  chromedriver_binary: System.fetch_env!("CHROMEDRIVER"),
-  firefox_binary: System.fetch_env!("FIREFOX"),
-  geckodriver_binary: System.fetch_env!("GECKODRIVER")
-```
+Cerberus also writes stable local links on install (`tmp/chrome-current`, `tmp/chromedriver-current`, `tmp/firefox-current`, `tmp/geckodriver-current`), so local managed browser runs work without extra binary-path config.
 
 ## Step 10: Remote WebDriver Mode
 

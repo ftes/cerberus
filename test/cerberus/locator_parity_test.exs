@@ -279,6 +279,7 @@ defmodule Cerberus.LocatorParityTest do
     {:ok, browser_session: session(:browser), upload_path: upload_path}
   end
 
+  @tag :slow
   test "rich snippet locator corpus stays in static/browser parity", context do
     cases = parity_cases(context.upload_path)
 

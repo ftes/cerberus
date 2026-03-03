@@ -12,7 +12,7 @@ defmodule Cerberus.RemoteWebdriverBehaviorTest do
         reset_browser_runtime!()
 
         {container_id, webdriver_url} = selenium_runtime()
-        base_url_config = Application.get_env(:cerberus, :base_url)
+        base_url_config = Runtime.resolve_base_url([])
         session_opts = session_opts(webdriver_url, container_id, base_url_config)
 
         on_exit(fn ->
