@@ -3,19 +3,33 @@ defmodule Cerberus.ParityMismatchFixtureTest do
 
   import Cerberus
 
+  alias Cerberus.TestSupport.SharedBrowserSession
+
+  setup_all do
+    {owner_pid, browser_session} = SharedBrowserSession.start!()
+
+    on_exit(fn ->
+      SharedBrowserSession.stop(owner_pid)
+    end)
+
+    {:ok, shared_browser_session: browser_session}
+  end
+
   for driver <- [:phoenix, :browser] do
-    test "parity static mismatch fixture is reachable in static and browser drivers (#{driver})" do
+    test "parity static mismatch fixture is reachable in static and browser drivers (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/oracle/mismatch")
       |> assert_has(text: "Oracle mismatch static fixture marker", exact: true)
     end
 
-    test "parity live mismatch fixture is reachable in live and browser drivers (#{driver})" do
+    test "parity live mismatch fixture is reachable in live and browser drivers (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/live/oracle/mismatch")
       |> assert_has(text: "Oracle mismatch live fixture marker", exact: true)
     end
   end
+
+  defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)
 end

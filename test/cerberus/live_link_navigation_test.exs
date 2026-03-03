@@ -4,10 +4,22 @@ defmodule Cerberus.LiveLinkNavigationTest do
   import Cerberus
   import Phoenix.ConnTest, only: [build_conn: 0]
 
+  alias Cerberus.TestSupport.SharedBrowserSession
+
+  setup_all do
+    {owner_pid, browser_session} = SharedBrowserSession.start!()
+
+    on_exit(fn ->
+      SharedBrowserSession.stop(owner_pid)
+    end)
+
+    {:ok, shared_browser_session: browser_session}
+  end
+
   for driver <- [:phoenix, :browser] do
-    test "click_link handles live navigate, patch, and non-live transitions (#{driver})" do
+    test "click_link handles live navigate, patch, and non-live transitions (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/live/redirects")
       |> click_link(link("Navigate link", exact: true))
       |> assert_path("/live/counter")
@@ -21,9 +33,9 @@ defmodule Cerberus.LiveLinkNavigationTest do
       |> assert_has(text("Main page", exact: true))
     end
 
-    test "click_link follows navigation that redirects back with flash (#{driver})" do
+    test "click_link follows navigation that redirects back with flash (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/live/redirects")
       |> click_link(link("Navigate (and redirect back) link", exact: true))
       |> assert_path("/live/redirects")
@@ -63,4 +75,6 @@ defmodule Cerberus.LiveLinkNavigationTest do
       updated_session
     end)
   end
+
+  defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)
 end

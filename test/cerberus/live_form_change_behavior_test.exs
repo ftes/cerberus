@@ -3,19 +3,31 @@ defmodule Cerberus.LiveFormChangeBehaviorTest do
 
   import Cerberus
 
+  alias Cerberus.TestSupport.SharedBrowserSession
+
+  setup_all do
+    {owner_pid, browser_session} = SharedBrowserSession.start!()
+
+    on_exit(fn ->
+      SharedBrowserSession.stop(owner_pid)
+    end)
+
+    {:ok, shared_browser_session: browser_session}
+  end
+
   for driver <- [:phoenix, :browser] do
-    test "fill_in emits _target for phx-change events (#{driver})" do
+    test "fill_in emits _target for phx-change events (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/live/form-change")
       |> fill_in("Email", "frodo@example.com")
       |> assert_has(text("_target: [email]", exact: true))
       |> assert_has(text("email: frodo@example.com", exact: true))
     end
 
-    test "fill_in does not trigger server-side change when form has no phx-change (#{driver})" do
+    test "fill_in does not trigger server-side change when form has no phx-change (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/live/form-change")
       |> within(css("#no-phx-change-form"), fn scoped ->
         fill_in(scoped, "Name (no phx-change)", "Aragorn")
@@ -23,9 +35,9 @@ defmodule Cerberus.LiveFormChangeBehaviorTest do
       |> assert_has(text("No change value: unchanged", exact: true))
     end
 
-    test "active form ordering preserves hidden defaults across sequential fill_in (#{driver})" do
+    test "active form ordering preserves hidden defaults across sequential fill_in (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/live/form-change")
       |> within(css("#changes-hidden-input-form"), fn scoped ->
         scoped
@@ -37,13 +49,15 @@ defmodule Cerberus.LiveFormChangeBehaviorTest do
       |> assert_has(text("hidden_race: hobbit", exact: true))
     end
 
-    test "fill_in matches wrapped nested label text in live and browser drivers (#{driver})" do
+    test "fill_in matches wrapped nested label text in live and browser drivers (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/live/form-change")
       |> fill_in("Nickname *", "Strider")
       |> assert_has(text("_target: [nickname]", exact: true))
       |> assert_has(text("nickname: Strider", exact: true))
     end
   end
+
+  defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)
 end

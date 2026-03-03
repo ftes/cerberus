@@ -3,6 +3,18 @@ defmodule Cerberus.LiveUploadBehaviorTest do
 
   import Cerberus
 
+  alias Cerberus.TestSupport.SharedBrowserSession
+
+  setup_all do
+    {owner_pid, browser_session} = SharedBrowserSession.start!()
+
+    on_exit(fn ->
+      SharedBrowserSession.stop(owner_pid)
+    end)
+
+    {:ok, shared_browser_session: browser_session}
+  end
+
   test "upload keeps active form unset and raises translated upload errors" do
     jpg = upload_fixture_path("elixir.jpg")
     png = upload_fixture_path("phoenix.png")
@@ -45,11 +57,11 @@ defmodule Cerberus.LiveUploadBehaviorTest do
   end
 
   for driver <- [:phoenix, :browser] do
-    test "upload triggers phx-change validations on file selection (#{driver})" do
+    test "upload triggers phx-change validations on file selection (#{driver})", context do
       jpg = upload_fixture_path("elixir.jpg")
 
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/live/uploads")
       |> within(css("#upload-change-form"), fn scoped ->
         upload(scoped, "Avatar", jpg)
@@ -57,11 +69,11 @@ defmodule Cerberus.LiveUploadBehaviorTest do
       |> assert_has(text("phx-change triggered on file selection", exact: true))
     end
 
-    test "upload supports testid locators on live file inputs (#{driver})" do
+    test "upload supports testid locators on live file inputs (#{driver})", context do
       jpg = upload_fixture_path("elixir.jpg")
 
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/live/uploads")
       |> within(css("#upload-change-form"), fn scoped ->
         upload(scoped, testid("live-upload-change-avatar"), jpg)
@@ -69,11 +81,11 @@ defmodule Cerberus.LiveUploadBehaviorTest do
       |> assert_has(text("phx-change triggered on file selection", exact: true))
     end
 
-    test "upload follows redirects from progress callbacks (#{driver})" do
+    test "upload follows redirects from progress callbacks (#{driver})", context do
       jpg = upload_fixture_path("elixir.jpg")
 
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/live/uploads")
       |> within(css("#upload-redirect-form"), fn scoped ->
         upload(scoped, "Redirect Avatar", jpg)
@@ -85,4 +97,6 @@ defmodule Cerberus.LiveUploadBehaviorTest do
   defp upload_fixture_path(file_name) do
     "test/support/files/#{file_name}"
   end
+
+  defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)
 end
