@@ -24,6 +24,7 @@ defmodule Cerberus.Browser.Install do
           | {:command_runner, (String.t(), [String.t()], keyword() -> {String.t(), non_neg_integer()})}
 
   @type env_map :: %{required(String.t()) => String.t()}
+  @command_runner_override_key {__MODULE__, :command_runner_override}
 
   @spec install(browser(), [install_opt()]) :: {:ok, install_payload()} | {:error, String.t()}
   def install(browser, opts \\ []) when browser in [:chrome, :firefox] and is_list(opts) do
@@ -88,6 +89,18 @@ defmodule Cerberus.Browser.Install do
     |> JSON.encode!()
   end
 
+  @doc false
+  @spec put_command_runner((String.t(), [String.t()], keyword() -> {String.t(), non_neg_integer()}) | nil) :: :ok
+  def put_command_runner(command_runner) when is_function(command_runner, 3) do
+    Process.put(@command_runner_override_key, command_runner)
+    :ok
+  end
+
+  def put_command_runner(nil) do
+    Process.delete(@command_runner_override_key)
+    :ok
+  end
+
   defp normalize_payload_for_json(payload) do
     %{
       browser: payload.browser,
@@ -109,7 +122,9 @@ defmodule Cerberus.Browser.Install do
   end
 
   defp command_runner(opts) do
-    Keyword.get(opts, :command_runner) || Application.get_env(:cerberus, :install_command_runner, &System.cmd/3)
+    Keyword.get(opts, :command_runner) ||
+      Process.get(@command_runner_override_key) ||
+      Application.get_env(:cerberus, :install_command_runner, &System.cmd/3)
   end
 
   defp run_script(script_path, args, command_runner) when is_list(args) and is_function(command_runner, 3) do

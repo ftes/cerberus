@@ -1,32 +1,25 @@
 defmodule Cerberus.ProfilingTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   import Cerberus
   import ExUnit.CaptureIO
 
   alias Cerberus.Profiling
 
-  @env_name "CERBERUS_PROFILE"
-
   setup do
-    previous = System.get_env(@env_name)
     Profiling.clear()
+    Profiling.put_enabled_override(nil)
 
     on_exit(fn ->
       Profiling.clear()
-
-      if is_nil(previous) do
-        System.delete_env(@env_name)
-      else
-        System.put_env(@env_name, previous)
-      end
+      Profiling.put_enabled_override(nil)
     end)
 
     :ok
   end
 
   test "measure/2 records aggregated samples when profiling is enabled" do
-    System.put_env(@env_name, "1")
+    Profiling.put_enabled_override(true)
 
     Profiling.measure(:sample_bucket, fn -> Process.sleep(5) end)
     Profiling.measure(:sample_bucket, fn -> :ok end)
@@ -36,13 +29,13 @@ defmodule Cerberus.ProfilingTest do
   end
 
   test "measure/2 does not record samples when profiling is disabled" do
-    System.put_env(@env_name, "0")
+    Profiling.put_enabled_override(false)
     Profiling.measure(:sample_bucket, fn -> :ok end)
     assert Profiling.snapshot() == []
   end
 
   test "driver operations publish profiling buckets" do
-    System.put_env(@env_name, "1")
+    Profiling.put_enabled_override(true)
 
     _session =
       session()
@@ -58,7 +51,7 @@ defmodule Cerberus.ProfilingTest do
   end
 
   test "dump_summary/1 prints aggregated rows" do
-    System.put_env(@env_name, "1")
+    Profiling.put_enabled_override(true)
 
     Profiling.measure(:summary_bucket, fn -> :ok end)
 

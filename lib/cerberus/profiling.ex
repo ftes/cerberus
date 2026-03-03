@@ -5,6 +5,7 @@ defmodule Cerberus.Profiling do
   @owner_name __MODULE__.Owner
   @env_name "CERBERUS_PROFILE"
   @false_values ["", "0", "false", "off", "no"]
+  @enabled_override_key {__MODULE__, :enabled_override}
 
   @type bucket :: term()
   @type sample :: %{
@@ -16,11 +17,29 @@ defmodule Cerberus.Profiling do
 
   @spec enabled?() :: boolean()
   def enabled? do
-    @env_name
-    |> System.get_env("")
-    |> String.trim()
-    |> String.downcase()
-    |> then(&(&1 not in @false_values))
+    case Process.get(@enabled_override_key) do
+      enabled? when is_boolean(enabled?) ->
+        enabled?
+
+      _ ->
+        @env_name
+        |> System.get_env("")
+        |> String.trim()
+        |> String.downcase()
+        |> then(&(&1 not in @false_values))
+    end
+  end
+
+  @doc false
+  @spec put_enabled_override(boolean() | nil) :: :ok
+  def put_enabled_override(enabled?) when is_boolean(enabled?) do
+    Process.put(@enabled_override_key, enabled?)
+    :ok
+  end
+
+  def put_enabled_override(nil) do
+    Process.delete(@enabled_override_key)
+    :ok
   end
 
   @spec measure(bucket(), (-> result)) :: result when result: var

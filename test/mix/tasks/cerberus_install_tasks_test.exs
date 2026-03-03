@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.Cerberus.InstallTasksTest do
-  use ExUnit.Case, async: false
+  use ExUnit.Case, async: true
 
   import ExUnit.CaptureIO
 
@@ -9,14 +9,10 @@ defmodule Mix.Tasks.Cerberus.InstallTasksTest do
   @firefox_task "cerberus.install.firefox"
 
   setup do
-    previous_runner = Application.get_env(:cerberus, :install_command_runner)
+    Install.put_command_runner(nil)
 
     on_exit(fn ->
-      if previous_runner do
-        Application.put_env(:cerberus, :install_command_runner, previous_runner)
-      else
-        Application.delete_env(:cerberus, :install_command_runner)
-      end
+      Install.put_command_runner(nil)
     end)
 
     :ok
@@ -31,7 +27,7 @@ defmodule Mix.Tasks.Cerberus.InstallTasksTest do
     chromedriver_version=146.0.7680.31
     """
 
-    Application.put_env(:cerberus, :install_command_runner, fn script, args, _opts ->
+    Install.put_command_runner(fn script, args, _opts ->
       send(self(), {:runner_invocation, script, args})
       {install_output, 0}
     end)
@@ -66,7 +62,7 @@ defmodule Mix.Tasks.Cerberus.InstallTasksTest do
     geckodriver_version=0.36.0
     """
 
-    Application.put_env(:cerberus, :install_command_runner, fn _script, args, _opts ->
+    Install.put_command_runner(fn _script, args, _opts ->
       send(self(), {:runner_args, args})
       {install_output, 0}
     end)
@@ -96,7 +92,7 @@ defmodule Mix.Tasks.Cerberus.InstallTasksTest do
   end
 
   test "mix cerberus.install.chrome rejects unsupported format" do
-    Application.put_env(:cerberus, :install_command_runner, fn _script, _args, _opts ->
+    Install.put_command_runner(fn _script, _args, _opts ->
       flunk("runner should not be called on option validation failure")
     end)
 

@@ -12,27 +12,15 @@ defmodule Cerberus.RemoteWebdriverBehaviorTest do
         reset_browser_runtime!()
 
         {container_id, webdriver_url} = selenium_runtime()
-        browser_config = Application.get_env(:cerberus, :browser, [])
         base_url_config = Application.get_env(:cerberus, :base_url)
-
-        Application.put_env(
-          :cerberus,
-          :browser,
-          Keyword.merge(browser_config, webdriver_url: webdriver_url, chromedriver_binary: "/missing/chromedriver")
-        )
-
-        if container_id != nil do
-          Application.put_env(:cerberus, :base_url, container_reachable_base_url(base_url_config))
-        end
+        session_opts = session_opts(webdriver_url, container_id, base_url_config)
 
         on_exit(fn ->
-          Application.put_env(:cerberus, :browser, browser_config)
-          Application.put_env(:cerberus, :base_url, base_url_config)
           if container_id != nil, do: _ = docker_rm_force(container_id)
           reset_browser_runtime!()
         end)
 
-        {:ok, webdriver_url: webdriver_url}
+        {:ok, webdriver_url: webdriver_url, session_opts: session_opts}
 
       reason ->
         {:ok, skip: reason}
@@ -42,8 +30,10 @@ defmodule Cerberus.RemoteWebdriverBehaviorTest do
   test "connects through webdriver_url to a containerized remote browser", context do
     case context[:skip] do
       nil ->
+        session_opts = Map.fetch!(context, :session_opts)
+
         :browser
-        |> session()
+        |> session(session_opts)
         |> visit("/articles")
         |> assert_has(text("Articles", exact: true))
 
@@ -100,6 +90,16 @@ defmodule Cerberus.RemoteWebdriverBehaviorTest do
 
       _ ->
         start_selenium_container!()
+    end
+  end
+
+  defp session_opts(webdriver_url, container_id, base_url_config) do
+    opts = [browser: [webdriver_url: webdriver_url, chromedriver_binary: "/missing/chromedriver"]]
+
+    if container_id == nil do
+      opts
+    else
+      Keyword.put(opts, :base_url, container_reachable_base_url(base_url_config))
     end
   end
 
