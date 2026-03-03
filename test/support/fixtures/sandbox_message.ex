@@ -2,6 +2,8 @@ defmodule Cerberus.Fixtures.SandboxMessage do
   @moduledoc false
   use Ecto.Schema
 
+  @type t :: %__MODULE__{}
+
   schema "sandbox_messages" do
     field(:body, :string)
     timestamps(type: :utc_datetime_usec)
