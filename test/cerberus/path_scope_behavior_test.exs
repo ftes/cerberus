@@ -3,10 +3,23 @@ defmodule Cerberus.PathScopeBehaviorTest do
 
   import Cerberus
 
+  @shared_browser_session_boot_timeout_ms 30_000
+  @shared_browser_session_stop_timeout_ms 5_000
+
+  setup_all do
+    {owner_pid, browser_session} = start_shared_browser_session!()
+
+    on_exit(fn ->
+      stop_shared_browser_session(owner_pid)
+    end)
+
+    {:ok, shared_browser_session: browser_session}
+  end
+
   for driver <- [:phoenix, :browser] do
-    test "within scopes static operations and assertions across static and browser (#{driver})" do
+    test "within scopes static operations and assertions across static and browser (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/scoped")
       |> within(css("#secondary-panel"), fn scoped ->
         scoped
@@ -19,9 +32,9 @@ defmodule Cerberus.PathScopeBehaviorTest do
       |> assert_has(text("Search", exact: true))
     end
 
-    test "path assertions with query options are consistent in static and browser drivers (#{driver})" do
+    test "path assertions with query options are consistent in static and browser drivers (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/search")
       |> fill_in(label("Search term"), "phoenix")
       |> submit(button("Run Search"))
@@ -29,9 +42,9 @@ defmodule Cerberus.PathScopeBehaviorTest do
       |> refute_path("/search/results", query: %{q: "elixir"})
     end
 
-    test "within scopes live duplicate button clicks consistently in live and browser (#{driver})" do
+    test "within scopes live duplicate button clicks consistently in live and browser (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/live/selector-edge")
       |> within(css("#secondary-actions"), fn scoped ->
         click(scoped, button("Apply"))
@@ -43,9 +56,9 @@ defmodule Cerberus.PathScopeBehaviorTest do
       end)
     end
 
-    test "path assertions track live patch query transitions across drivers (#{driver})" do
+    test "path assertions track live patch query transitions across drivers (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/live/redirects")
       |> click(button("Patch link"))
       |> assert_path("/live/redirects", query: [details: "true", foo: "bar"])
@@ -53,9 +66,9 @@ defmodule Cerberus.PathScopeBehaviorTest do
       |> refute_path("/live/counter")
     end
 
-    test "within accepts locator inputs across static and browser (#{driver})" do
+    test "within accepts locator inputs across static and browser (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/scoped")
       |> within(css("#secondary-panel"), fn scoped ->
         scoped
@@ -66,13 +79,64 @@ defmodule Cerberus.PathScopeBehaviorTest do
       |> assert_has(text("Search", exact: true))
     end
 
-    test "scoped assert_has/refute_has accept binary and regex text shorthand (#{driver})" do
+    test "scoped assert_has/refute_has accept binary and regex text shorthand (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/scoped")
       |> assert_has(css("#secondary-panel"), "Status: secondary")
       |> assert_has(css("#secondary-panel"), ~r/Status:\s+secondary/)
       |> refute_has(css("#secondary-panel"), "Status: primary")
     end
+  end
+
+  defp driver_session(:phoenix, _context), do: session(:phoenix)
+  defp driver_session(:browser, context), do: context.shared_browser_session
+
+  defp start_shared_browser_session! do
+    parent = self()
+
+    owner_pid =
+      spawn_link(fn ->
+        try do
+          browser_session = session(:browser)
+          send(parent, {:shared_browser_session_ready, self(), browser_session})
+
+          receive do
+            :stop -> :ok
+          end
+        rescue
+          error ->
+            send(parent, {:shared_browser_session_failed, self(), error, __STACKTRACE__})
+        end
+      end)
+
+    receive do
+      {:shared_browser_session_ready, ^owner_pid, browser_session} ->
+        {owner_pid, browser_session}
+
+      {:shared_browser_session_failed, ^owner_pid, error, stacktrace} ->
+        reraise(error, stacktrace)
+    after
+      @shared_browser_session_boot_timeout_ms ->
+        Process.exit(owner_pid, :kill)
+
+        raise "timed out starting shared browser session after #{@shared_browser_session_boot_timeout_ms}ms"
+    end
+  end
+
+  defp stop_shared_browser_session(owner_pid) when is_pid(owner_pid) do
+    if Process.alive?(owner_pid) do
+      ref = Process.monitor(owner_pid)
+      send(owner_pid, :stop)
+
+      receive do
+        {:DOWN, ^ref, :process, ^owner_pid, _reason} -> :ok
+      after
+        @shared_browser_session_stop_timeout_ms ->
+          Process.exit(owner_pid, :kill)
+      end
+    end
+
+    :ok
   end
 end

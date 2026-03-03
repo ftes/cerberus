@@ -5,10 +5,23 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
 
   alias ExUnit.AssertionError
 
+  @shared_browser_session_boot_timeout_ms 30_000
+  @shared_browser_session_stop_timeout_ms 5_000
+
+  setup_all do
+    {owner_pid, browser_session} = start_shared_browser_session!()
+
+    on_exit(fn ->
+      stop_shared_browser_session(owner_pid)
+    end)
+
+    {:ok, shared_browser_session: browser_session}
+  end
+
   for driver <- [:phoenix, :browser] do
-    test "phx-trigger-action submits to static endpoint after phx-submit (#{driver})" do
+    test "phx-trigger-action submits to static endpoint after phx-submit (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/live/trigger-action")
       |> fill_in("Trigger action", "engage")
       |> submit(text: "Submit Trigger Form")
@@ -16,18 +29,18 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
       |> assert_has(text("method: POST", exact: true))
     end
 
-    test "phx-trigger-action can be triggered from outside the form (#{driver})" do
+    test "phx-trigger-action can be triggered from outside the form (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/live/trigger-action")
       |> click_button(text: "Trigger from elsewhere")
       |> assert_path("/trigger-action/result")
       |> assert_has(text("method: POST", exact: true))
     end
 
-    test "phx-trigger-action is ignored when click event redirects or navigates (#{driver})" do
+    test "phx-trigger-action is ignored when click event redirects or navigates (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/live/trigger-action")
       |> click_button(text: "Redirect and trigger action")
       |> assert_path("/live/counter")
@@ -38,9 +51,9 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
       |> assert_has(text("Counter", exact: true))
     end
 
-    test "dynamically rendered forms can trigger action submit (#{driver})" do
+    test "dynamically rendered forms can trigger action submit (#{driver})", context do
       unquote(driver)
-      |> session()
+      |> driver_session(context)
       |> visit("/live/trigger-action")
       |> click_button(text: "Show Dynamic Form")
       |> fill_in("Message", "dynamic")
@@ -98,5 +111,56 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
       |> visit("/live/trigger-action")
       |> click_button(text: "Trigger multiple")
     end
+  end
+
+  defp driver_session(:phoenix, _context), do: session(:phoenix)
+  defp driver_session(:browser, context), do: context.shared_browser_session
+
+  defp start_shared_browser_session! do
+    parent = self()
+
+    owner_pid =
+      spawn_link(fn ->
+        try do
+          browser_session = session(:browser)
+          send(parent, {:shared_browser_session_ready, self(), browser_session})
+
+          receive do
+            :stop -> :ok
+          end
+        rescue
+          error ->
+            send(parent, {:shared_browser_session_failed, self(), error, __STACKTRACE__})
+        end
+      end)
+
+    receive do
+      {:shared_browser_session_ready, ^owner_pid, browser_session} ->
+        {owner_pid, browser_session}
+
+      {:shared_browser_session_failed, ^owner_pid, error, stacktrace} ->
+        reraise(error, stacktrace)
+    after
+      @shared_browser_session_boot_timeout_ms ->
+        Process.exit(owner_pid, :kill)
+
+        raise "timed out starting shared browser session after #{@shared_browser_session_boot_timeout_ms}ms"
+    end
+  end
+
+  defp stop_shared_browser_session(owner_pid) when is_pid(owner_pid) do
+    if Process.alive?(owner_pid) do
+      ref = Process.monitor(owner_pid)
+      send(owner_pid, :stop)
+
+      receive do
+        {:DOWN, ^ref, :process, ^owner_pid, _reason} -> :ok
+      after
+        @shared_browser_session_stop_timeout_ms ->
+          Process.exit(owner_pid, :kill)
+      end
+    end
+
+    :ok
   end
 end
