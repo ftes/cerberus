@@ -436,8 +436,9 @@ defmodule Cerberus do
   @spec visit(arg, String.t(), keyword()) :: arg when arg: var
   def visit(session, path, opts \\ []) when is_binary(path) do
     driver = driver_module_for_session!(session)
+    bucket_driver = profiling_bucket_driver_kind!(session)
 
-    Profiling.measure({:driver_operation, driver, :visit}, fn ->
+    Profiling.measure({:driver_operation, bucket_driver, :visit}, fn ->
       driver.visit(session, path, opts)
     end)
   end
@@ -720,8 +721,9 @@ defmodule Cerberus do
 
   defp run_path_assertion!(session, op, expected, opts, timeout) when op in [:assert_path, :refute_path] do
     driver = driver_module_for_session!(session)
+    bucket_driver = profiling_bucket_driver_kind!(session)
 
-    Profiling.measure({:driver_operation, driver, op}, fn ->
+    Profiling.measure({:driver_operation, bucket_driver, op}, fn ->
       driver.run_path_assertion(session, expected, opts, timeout, op)
     end)
   end
@@ -735,6 +737,10 @@ defmodule Cerberus do
     driver = driver_module_for_session!(session)
     apply(driver, operation, [session | args])
   end
+
+  defp profiling_bucket_driver_kind!(%StaticSession{}), do: :static
+  defp profiling_bucket_driver_kind!(%LiveSession{}), do: :live
+  defp profiling_bucket_driver_kind!(%BrowserSession{}), do: :browser
 
   defp locator_input_term?(value) when is_binary(value) or is_struct(value, Regex), do: true
   defp locator_input_term?(%Locator{}), do: true
