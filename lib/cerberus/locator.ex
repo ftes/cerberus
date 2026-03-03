@@ -71,6 +71,44 @@ defmodule Cerberus.Locator do
     %__MODULE__{kind: :testid, value: value, opts: normalized_opts}
   end
 
+  @spec role(String.t() | atom(), keyword()) :: t()
+  def role(role, opts \\ []) when (is_binary(role) or is_atom(role)) and is_list(opts) do
+    [role: role, name: Keyword.get(opts, :name)]
+    |> maybe_put_opt(opts, :exact)
+    |> maybe_put_opt(opts, :selector)
+    |> maybe_put_opt(opts, :has)
+    |> normalize()
+  end
+
+  @spec closest(input(), keyword()) :: t()
+  def closest(locator, opts) when is_list(opts) do
+    from_locator_input =
+      case Keyword.fetch(opts, :from) do
+        {:ok, value} -> value
+        :error -> raise ArgumentError, "closest/2 expects :from locator option"
+      end
+
+    case Keyword.keys(opts) -- [:from] do
+      [] ->
+        :ok
+
+      extra ->
+        raise ArgumentError, "closest/2 supports only :from option, got: #{inspect(extra)}"
+    end
+
+    from_locator = normalize(from_locator_input)
+
+    if Keyword.has_key?(from_locator.opts, :from) do
+      raise ArgumentError, "closest/2 does not support nested :from locators"
+    end
+
+    put_from(locator, from_locator)
+  end
+
+  def closest(_locator, _opts) do
+    raise ArgumentError, "closest/2 expects keyword options"
+  end
+
   @spec compose_and(input(), input()) :: t()
   def compose_and(left, right) do
     compose(:and, left, right)
@@ -635,6 +673,13 @@ defmodule Cerberus.Locator do
     raise InvalidLocatorError,
       locator: original,
       message: "invalid locator #{inspect(original)}; unsupported locator kind #{inspect(kind)}"
+  end
+
+  defp maybe_put_opt(locator, opts, key) do
+    case Keyword.fetch(opts, key) do
+      {:ok, value} -> Keyword.put(locator, key, value)
+      :error -> locator
+    end
   end
 
   defp normalize_leaf_opts(opts, original) when is_list(opts) do

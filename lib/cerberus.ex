@@ -36,14 +36,11 @@ defmodule Cerberus do
   alias Cerberus.OpenBrowser
   alias Cerberus.Options
   alias Cerberus.Path
-  alias Cerberus.Phoenix.LiveViewTimeout
   alias Cerberus.Profiling
   alias Cerberus.Session
   alias Ecto.Adapters.SQL.Sandbox, as: EctoSandbox
-  alias ExUnit.AssertionError
   alias Phoenix.Ecto.SQL.Sandbox, as: PhoenixSandbox
 
-  @type driver_kind :: :static | :live | :browser
   @type locator_input :: Locator.input()
   @type scope_locator_input :: Locator.input()
   @locator_kind_keys [:text, :label, :link, :button, :placeholder, :title, :alt, :role, :css, :testid, :and, :or]
@@ -100,31 +97,37 @@ defmodule Cerberus do
   """
   @spec session(:browser, Options.session_browser_opts()) :: Session.t()
   def session(:browser, opts) when is_list(opts) do
-    opts
-    |> Options.validate_session_browser!()
-    |> BrowserSession.new_session()
+    new_browser_session(opts)
   end
 
   @spec session(:chrome, Options.session_browser_opts()) :: Session.t()
   def session(:chrome, opts) when is_list(opts) do
-    opts
-    |> Options.validate_session_browser!()
-    |> Keyword.put(:browser_name, :chrome)
-    |> BrowserSession.new_session()
+    new_browser_session(opts, :chrome)
   end
 
   @spec session(:firefox, Options.session_browser_opts()) :: Session.t()
   def session(:firefox, opts) when is_list(opts) do
-    opts
-    |> Options.validate_session_browser!()
-    |> Keyword.put(:browser_name, :firefox)
-    |> BrowserSession.new_session()
+    new_browser_session(opts, :firefox)
   end
 
   def session(driver, opts) when is_atom(driver) and is_list(opts) do
     raise ArgumentError,
           "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser|:chrome|:firefox) for browser"
   end
+
+  defp new_browser_session(opts, browser_name \\ nil) when is_list(opts) do
+    opts =
+      opts
+      |> Options.validate_session_browser!()
+      |> maybe_put_browser_name(browser_name)
+
+    BrowserSession.new_session(opts)
+  end
+
+  defp maybe_put_browser_name(opts, nil), do: opts
+
+  defp maybe_put_browser_name(opts, browser_name) when is_atom(browser_name),
+    do: Keyword.put(opts, :browser_name, browser_name)
 
   @doc """
   Returns the encoded SQL sandbox user-agent marker for an ExUnit test context.
@@ -344,11 +347,7 @@ defmodule Cerberus do
 
   @spec role(String.t() | atom(), keyword()) :: Locator.t()
   def role(role, opts) when (is_binary(role) or is_atom(role)) and is_list(opts) do
-    [role: role, name: Keyword.get(opts, :name)]
-    |> maybe_put_locator_opt(opts, :exact)
-    |> maybe_put_locator_opt(opts, :selector)
-    |> maybe_put_locator_opt(opts, :has)
-    |> Locator.normalize()
+    Locator.role(role, opts)
   end
 
   @spec role(locator_input(), String.t() | atom()) :: Locator.t()
@@ -413,33 +412,7 @@ defmodule Cerberus do
       within(session, closest(~l".fieldset"c, from: ~l"textbox:Email"r), &assert_has(&1, ~l"can't be blank"))
   """
   @spec closest(locator_input(), keyword()) :: Locator.t()
-  def closest(locator, opts) when is_list(opts) do
-    from_locator_input =
-      case Keyword.fetch(opts, :from) do
-        {:ok, value} -> value
-        :error -> raise ArgumentError, "closest/2 expects :from locator option"
-      end
-
-    case Keyword.keys(opts) -- [:from] do
-      [] ->
-        :ok
-
-      extra ->
-        raise ArgumentError, "closest/2 supports only :from option, got: #{inspect(extra)}"
-    end
-
-    from_locator = Locator.normalize(from_locator_input)
-
-    if Keyword.has_key?(from_locator.opts, :from) do
-      raise ArgumentError, "closest/2 does not support nested :from locators"
-    end
-
-    Locator.put_from(locator, from_locator)
-  end
-
-  def closest(_locator, _opts) do
-    raise ArgumentError, "closest/2 expects keyword options"
-  end
+  def closest(locator, opts), do: Locator.closest(locator, opts)
 
   @doc """
   Builds a locator using `~l`.
@@ -462,8 +435,10 @@ defmodule Cerberus do
 
   @spec visit(arg, String.t(), keyword()) :: arg when arg: var
   def visit(session, path, opts \\ []) when is_binary(path) do
-    Profiling.measure({:driver_operation, driver_kind(session), :visit}, fn ->
-      driver_module_for_session!(session).visit(session, path, opts)
+    driver = driver_module_for_session!(session)
+
+    Profiling.measure({:driver_operation, driver, :visit}, fn ->
+      driver.visit(session, path, opts)
     end)
   end
 
@@ -506,7 +481,7 @@ defmodule Cerberus do
     opts = Options.validate_path!(opts, "assert_path/3")
     {validated_timeout, opts} = Keyword.pop(opts, :timeout, 0)
     timeout = resolve_path_timeout(session, call_has_timeout, validated_timeout)
-    run_path_assertion!(session, expected, opts, timeout, :assert_path)
+    run_path_assertion!(session, :assert_path, expected, opts, timeout)
   end
 
   @spec refute_path(arg, String.t() | Regex.t(), Options.path_opts()) :: arg when arg: var
@@ -515,7 +490,7 @@ defmodule Cerberus do
     opts = Options.validate_path!(opts, "refute_path/3")
     {validated_timeout, opts} = Keyword.pop(opts, :timeout, 0)
     timeout = resolve_path_timeout(session, call_has_timeout, validated_timeout)
-    run_path_assertion!(session, expected, opts, timeout, :refute_path)
+    run_path_assertion!(session, :refute_path, expected, opts, timeout)
   end
 
   @spec click(arg, locator_input()) :: arg when arg: var
@@ -743,58 +718,22 @@ defmodule Cerberus do
           "unsupported session #{inspect(session)}; expected a Cerberus session"
   end
 
-  defp run_path_assertion!(%BrowserSession{} = session, expected, opts, timeout, op)
-       when op in [:assert_path, :refute_path] do
+  defp run_path_assertion!(session, op, expected, opts, timeout) when op in [:assert_path, :refute_path] do
     driver = driver_module_for_session!(session)
-    driver_opts = Keyword.put(opts, :timeout, timeout)
 
-    Profiling.measure({:driver_operation, :browser, op}, fn ->
-      run_driver_path_assertion!(driver, op, session, expected, driver_opts)
+    Profiling.measure({:driver_operation, driver, op}, fn ->
+      driver.run_path_assertion(session, expected, opts, timeout, op)
     end)
-  end
-
-  defp run_path_assertion!(session, expected, opts, timeout, op) when op in [:assert_path, :refute_path] do
-    driver_opts = Keyword.put(opts, :timeout, timeout)
-
-    Profiling.measure({:driver_operation, driver_kind(session), op}, fn ->
-      LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
-        timed_driver = driver_module_for_session!(timed_session)
-        run_driver_path_assertion!(timed_driver, op, timed_session, expected, driver_opts)
-      end)
-    end)
-  end
-
-  defp run_driver_path_assertion!(driver, op, session, expected, driver_opts) do
-    case apply(driver, op, [session, expected, driver_opts]) do
-      {:ok, updated_session, _observed} ->
-        updated_session
-
-      {:error, _failed_session, observed, _reason} ->
-        raise AssertionError, message: format_path_error(Atom.to_string(op), observed)
-    end
   end
 
   defp resolve_path_timeout(_session, true, validated_timeout), do: validated_timeout
-  defp resolve_path_timeout(%LiveSession{assert_timeout_ms: timeout}, false, _validated_timeout), do: timeout
 
-  defp resolve_path_timeout(%BrowserSession{assert_timeout_ms: timeout}, false, _validated_timeout), do: timeout
-
-  defp resolve_path_timeout(_session, false, _validated_timeout), do: 0
-
-  defp driver_kind(%StaticSession{}), do: :static
-  defp driver_kind(%LiveSession{}), do: :live
-  defp driver_kind(%BrowserSession{}), do: :browser
+  defp resolve_path_timeout(session, false, _validated_timeout),
+    do: driver_module_for_session!(session).default_assert_timeout_ms(session)
 
   defp dispatch_tab_operation!(session, operation, args \\ []) when operation in [:open_tab, :switch_tab, :close_tab] do
     driver = driver_module_for_session!(session)
     apply(driver, operation, [session | args])
-  end
-
-  defp maybe_put_locator_opt(locator, opts, key) do
-    case Keyword.fetch(opts, key) do
-      {:ok, value} -> Keyword.put(locator, key, value)
-      :error -> locator
-    end
   end
 
   defp locator_input_term?(value) when is_binary(value) or is_struct(value, Regex), do: true
@@ -839,19 +778,5 @@ defmodule Cerberus do
     EctoSandbox.stop_owner(checkout_pid)
   catch
     :exit, {:noproc, _} -> :ok
-  end
-
-  defp format_path_error(op, observed) do
-    """
-    #{op} failed: expected path assertion did not hold
-    actual_path: #{inspect(observed.path)}
-    expected_path: #{inspect(observed.expected)}
-    expected_query: #{inspect(observed.query)}
-    scope: #{inspect(observed.scope)}
-    exact: #{inspect(observed.exact)}
-    timeout: #{inspect(observed.timeout)}
-    path_match?: #{inspect(observed.path_match?)}
-    query_match?: #{inspect(observed.query_match?)}
-    """
   end
 end

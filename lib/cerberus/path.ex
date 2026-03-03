@@ -93,6 +93,21 @@ defmodule Cerberus.Path do
     end)
   end
 
+  @spec format_assertion_error(String.t(), map()) :: String.t()
+  def format_assertion_error(op, observed) when is_binary(op) and is_map(observed) do
+    """
+    #{op} failed: expected path assertion did not hold
+    actual_path: #{inspect(observed.path)}
+    expected_path: #{inspect(observed.expected)}
+    expected_query: #{inspect(observed.query)}
+    scope: #{inspect(observed.scope)}
+    exact: #{inspect(observed.exact)}
+    timeout: #{inspect(observed.timeout)}
+    path_match?: #{inspect(observed.path_match?)}
+    query_match?: #{inspect(observed.query_match?)}
+    """
+  end
+
   defp decode_query(nil), do: %{}
   defp decode_query(""), do: %{}
   defp decode_query(query), do: URI.decode_query(query)

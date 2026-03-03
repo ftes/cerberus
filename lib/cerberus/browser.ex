@@ -22,6 +22,12 @@ defmodule Cerberus.Browser do
           same_site: String.t() | nil,
           session: boolean()
         }
+  @type_args_error "Browser.type/3 expects text as a string and options as a keyword list"
+  @press_args_error "Browser.press/3 expects key as a string and options as a keyword list"
+  @drag_args_error "Browser.drag/4 expects source and target selectors as strings and options as a keyword list"
+  @with_dialog_args_error "Browser.with_dialog/3 expects a callback with arity 1 and options as a keyword list"
+  @with_popup_args_error "Browser.with_popup/4 expects trigger callback arity 1, callback arity 2, and options as a keyword list"
+  @add_cookie_args_error "Browser.add_cookie/4 expects cookie name and value strings and options as a keyword list"
 
   @spec screenshot(session, String.t() | keyword()) :: session when session: var
   def screenshot(session, opts \\ [])
@@ -44,69 +50,63 @@ defmodule Cerberus.Browser do
   @spec type(session, String.t(), Options.browser_type_opts()) :: session when session: var
   def type(session, text, opts \\ [])
 
-  def type(%BrowserSession{} = session, text, opts) when is_binary(text) and is_list(opts) do
-    opts = Options.validate_browser_type!(opts)
-    Extensions.type(session, text, opts)
-  end
-
-  def type(session, _text, opts) when is_list(opts), do: Assertions.unsupported(session, :type, opts)
-
-  def type(_session, _text, _opts) do
-    raise ArgumentError, "Browser.type/3 expects text as a string and options as a keyword list"
+  def type(session, text, opts) do
+    browser_only(session, :type, opts, @type_args_error, &Options.validate_browser_type!/1, fn browser_session,
+                                                                                               validated_opts ->
+      if is_binary(text) do
+        {:ok, Extensions.type(browser_session, text, validated_opts)}
+      else
+        :invalid_args
+      end
+    end)
   end
 
   @spec press(session, String.t(), Options.browser_press_opts()) :: session when session: var
   def press(session, key, opts \\ [])
 
-  def press(%BrowserSession{} = session, key, opts) when is_binary(key) and is_list(opts) do
-    opts = Options.validate_browser_press!(opts)
-    Extensions.press(session, key, opts)
-  end
-
-  def press(session, _key, opts) when is_list(opts), do: Assertions.unsupported(session, :press, opts)
-
-  def press(_session, _key, _opts) do
-    raise ArgumentError, "Browser.press/3 expects key as a string and options as a keyword list"
+  def press(session, key, opts) do
+    browser_only(session, :press, opts, @press_args_error, &Options.validate_browser_press!/1, fn browser_session,
+                                                                                                  validated_opts ->
+      if is_binary(key) do
+        {:ok, Extensions.press(browser_session, key, validated_opts)}
+      else
+        :invalid_args
+      end
+    end)
   end
 
   @spec drag(session, String.t(), String.t(), Options.browser_drag_opts()) :: session when session: var
   def drag(session, source_selector, target_selector, opts \\ [])
 
-  def drag(%BrowserSession{} = session, source_selector, target_selector, opts)
-      when is_binary(source_selector) and is_binary(target_selector) and is_list(opts) do
-    opts = Options.validate_browser_drag!(opts)
-    Extensions.drag(session, source_selector, target_selector, opts)
-  end
-
-  def drag(%BrowserSession{}, _source_selector, _target_selector, opts) when is_list(opts) do
-    raise ArgumentError,
-          "Browser.drag/4 expects source and target selectors as strings and options as a keyword list"
-  end
-
-  def drag(session, _source_selector, _target_selector, opts) when is_list(opts),
-    do: Assertions.unsupported(session, :drag, opts)
-
-  def drag(_session, _source_selector, _target_selector, _opts) do
-    raise ArgumentError,
-          "Browser.drag/4 expects source and target selectors as strings and options as a keyword list"
+  def drag(session, source_selector, target_selector, opts) do
+    browser_only(session, :drag, opts, @drag_args_error, &Options.validate_browser_drag!/1, fn browser_session,
+                                                                                               validated_opts ->
+      if is_binary(source_selector) and is_binary(target_selector) do
+        {:ok, Extensions.drag(browser_session, source_selector, target_selector, validated_opts)}
+      else
+        :invalid_args
+      end
+    end)
   end
 
   @spec with_dialog(session, (session -> term()), Options.browser_with_dialog_opts()) :: session when session: var
   def with_dialog(session, action, opts \\ [])
 
-  def with_dialog(%BrowserSession{} = session, action, opts) when is_function(action, 1) and is_list(opts) do
-    opts = Options.validate_browser_with_dialog!(opts)
-    Extensions.with_dialog(session, action, opts)
-  end
-
-  def with_dialog(%BrowserSession{}, _action, opts) when is_list(opts) do
-    raise ArgumentError, "Browser.with_dialog/3 expects a callback with arity 1 and options as a keyword list"
-  end
-
-  def with_dialog(session, _action, opts) when is_list(opts), do: Assertions.unsupported(session, :with_dialog, opts)
-
-  def with_dialog(_session, _action, _opts) do
-    raise ArgumentError, "Browser.with_dialog/3 expects a callback with arity 1 and options as a keyword list"
+  def with_dialog(session, action, opts) do
+    browser_only(
+      session,
+      :with_dialog,
+      opts,
+      @with_dialog_args_error,
+      &Options.validate_browser_with_dialog!/1,
+      fn browser_session, validated_opts ->
+        if is_function(action, 1) do
+          {:ok, Extensions.with_dialog(browser_session, action, validated_opts)}
+        else
+          :invalid_args
+        end
+      end
+    )
   end
 
   @spec with_popup(
@@ -118,40 +118,41 @@ defmodule Cerberus.Browser do
         when session: var
   def with_popup(session, trigger_fun, callback_fun, opts \\ [])
 
-  def with_popup(%BrowserSession{} = session, trigger_fun, callback_fun, opts)
-      when is_function(trigger_fun, 1) and is_function(callback_fun, 2) and is_list(opts) do
-    opts = Options.validate_browser_with_popup!(opts)
-    Extensions.with_popup(session, trigger_fun, callback_fun, opts)
-  end
-
-  def with_popup(%BrowserSession{}, _trigger_fun, _callback_fun, opts) when is_list(opts) do
-    raise ArgumentError,
-          "Browser.with_popup/4 expects trigger callback arity 1, callback arity 2, and options as a keyword list"
-  end
-
-  def with_popup(session, _trigger_fun, _callback_fun, opts) when is_list(opts),
-    do: Assertions.unsupported(session, :with_popup, opts)
-
-  def with_popup(_session, _trigger_fun, _callback_fun, _opts) do
-    raise ArgumentError,
-          "Browser.with_popup/4 expects trigger callback arity 1, callback arity 2, and options as a keyword list"
+  def with_popup(session, trigger_fun, callback_fun, opts) do
+    browser_only(
+      session,
+      :with_popup,
+      opts,
+      @with_popup_args_error,
+      &Options.validate_browser_with_popup!/1,
+      fn browser_session, validated_opts ->
+        if is_function(trigger_fun, 1) and is_function(callback_fun, 2) do
+          {:ok, Extensions.with_popup(browser_session, trigger_fun, callback_fun, validated_opts)}
+        else
+          :invalid_args
+        end
+      end
+    )
   end
 
   @spec evaluate_js(Session.t(), String.t()) :: term()
-  def evaluate_js(%BrowserSession{} = session, expression) when is_binary(expression) do
-    tap(session, &Extensions.evaluate_js(&1, expression))
+  def evaluate_js(session, expression) do
+    case evaluate_js_value(session, expression) do
+      {:ok, value} -> value
+      {:unsupported, unsupported_session} -> Assertions.unsupported(unsupported_session, :evaluate_js)
+    end
   end
-
-  def evaluate_js(session, _expression), do: Assertions.unsupported(session, :evaluate_js)
 
   @spec evaluate_js(Session.t(), String.t(), (term() -> term())) :: Session.t()
-  def evaluate_js(%BrowserSession{} = session, expression, callback)
-      when is_binary(expression) and is_function(callback, 1) do
-    tap(session, &(&1 |> Extensions.evaluate_js(expression) |> callback.()))
-  end
+  def evaluate_js(session, expression, callback) when is_function(callback, 1) do
+    case evaluate_js_value(session, expression) do
+      {:ok, value} ->
+        callback.(value)
+        session
 
-  def evaluate_js(session, _expression, callback) when is_function(callback, 1) do
-    Assertions.unsupported(session, :evaluate_js)
+      {:unsupported, unsupported_session} ->
+        Assertions.unsupported(unsupported_session, :evaluate_js)
+    end
   end
 
   def evaluate_js(_session, _expression, _callback) do
@@ -173,11 +174,46 @@ defmodule Cerberus.Browser do
   @spec add_cookie(session, String.t(), String.t(), Options.browser_add_cookie_opts()) :: session when session: var
   def add_cookie(session, name, value, opts \\ [])
 
-  def add_cookie(%BrowserSession{} = session, name, value, opts)
-      when is_binary(name) and is_binary(value) and is_list(opts) do
-    opts = Options.validate_browser_add_cookie!(opts)
-    Extensions.add_cookie(session, name, value, opts)
+  def add_cookie(session, name, value, opts) do
+    browser_only(
+      session,
+      :add_cookie,
+      opts,
+      @add_cookie_args_error,
+      &Options.validate_browser_add_cookie!/1,
+      fn browser_session, validated_opts ->
+        if is_binary(name) and is_binary(value) do
+          {:ok, Extensions.add_cookie(browser_session, name, value, validated_opts)}
+        else
+          :invalid_args
+        end
+      end
+    )
   end
 
-  def add_cookie(session, _name, _value, _opts), do: Assertions.unsupported(session, :add_cookie)
+  defp evaluate_js_value(%BrowserSession{} = session, expression) when is_binary(expression) do
+    {:ok, Extensions.evaluate_js(session, expression)}
+  end
+
+  defp evaluate_js_value(session, _expression), do: {:unsupported, session}
+
+  defp browser_only(session, op, opts, invalid_args_message, validator, fun)
+       when is_list(opts) and is_function(validator, 1) and is_function(fun, 2) do
+    case session do
+      %BrowserSession{} = browser_session ->
+        validated_opts = validator.(opts)
+
+        case fun.(browser_session, validated_opts) do
+          {:ok, result} -> result
+          :invalid_args -> raise ArgumentError, invalid_args_message
+        end
+
+      _other ->
+        Assertions.unsupported(session, op, opts)
+    end
+  end
+
+  defp browser_only(_session, _op, _opts, invalid_args_message, _validator, _fun) do
+    raise ArgumentError, invalid_args_message
+  end
 end

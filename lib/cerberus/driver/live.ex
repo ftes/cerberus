@@ -14,11 +14,13 @@ defmodule Cerberus.Driver.Live do
   alias Cerberus.OpenBrowser
   alias Cerberus.Phoenix.Conn
   alias Cerberus.Phoenix.LiveViewHTML
+  alias Cerberus.Phoenix.LiveViewTimeout
   alias Cerberus.Query
   alias Cerberus.Session
   alias Cerberus.Session.Config, as: SessionConfig
   alias Cerberus.Session.LastResult
   alias Cerberus.UploadFile
+  alias ExUnit.AssertionError
   alias Phoenix.LiveViewTest.TreeDOM
   alias Phoenix.LiveViewTest.View
 
@@ -515,6 +517,19 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
+  def default_assert_timeout_ms(%__MODULE__{} = session), do: session.assert_timeout_ms
+
+  @impl true
+  def run_path_assertion(%__MODULE__{} = session, expected, opts, timeout, op) when op in [:assert_path, :refute_path] do
+    driver_opts = Keyword.put(opts, :timeout, timeout)
+
+    LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
+      timed_driver = path_assertion_driver_for_session!(timed_session)
+      run_path_assertion_operation!(timed_driver, timed_session, expected, driver_opts, op)
+    end)
+  end
+
+  @impl true
   def assert_path(%__MODULE__{} = session, expected, opts) when is_binary(expected) or is_struct(expected, Regex) do
     observed = build_path_observed(session, expected, opts)
 
@@ -551,6 +566,20 @@ defmodule Cerberus.Driver.Live do
       query_match?: Cerberus.Path.query_matches?(actual_path, Keyword.get(opts, :query))
     }
   end
+
+  defp run_path_assertion_operation!(driver, session, expected, driver_opts, op) do
+    case apply(driver, op, [session, expected, driver_opts]) do
+      {:ok, updated_session, _observed} ->
+        updated_session
+
+      {:error, _failed_session, observed, _reason} ->
+        raise AssertionError,
+          message: Cerberus.Path.format_assertion_error(Atom.to_string(op), observed)
+    end
+  end
+
+  defp path_assertion_driver_for_session!(%__MODULE__{}), do: __MODULE__
+  defp path_assertion_driver_for_session!(%StaticSession{}), do: StaticSession
 
   defp click_live_button(session, %{dispatch_change: true} = button) do
     click_live_dispatch_change_button(session, button)
@@ -1037,7 +1066,7 @@ defmodule Cerberus.Driver.Live do
         selector
 
       {:error, reason} ->
-        raise ExUnit.AssertionError, message: "within/3 failed: #{reason}"
+        raise AssertionError, message: "within/3 failed: #{reason}"
     end
   end
 

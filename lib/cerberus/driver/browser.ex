@@ -20,6 +20,7 @@ defmodule Cerberus.Driver.Browser do
   alias Cerberus.Session.Config, as: SessionConfig
   alias Cerberus.Session.LastResult
   alias Cerberus.UploadFile
+  alias ExUnit.AssertionError
 
   @default_ready_timeout_ms 1_500
   @default_ready_quiet_ms 40
@@ -285,7 +286,7 @@ defmodule Cerberus.Driver.Browser do
           scope
 
         {:error, reason} ->
-          raise ExUnit.AssertionError, message: "within/3 failed: #{reason}"
+          raise AssertionError, message: "within/3 failed: #{reason}"
       end
 
     scoped_session = Session.with_scope(session, resolved_scope)
@@ -308,6 +309,23 @@ defmodule Cerberus.Driver.Browser do
   @impl true
   def refute_path(%__MODULE__{} = session, expected, opts) when is_binary(expected) or is_struct(expected, Regex) do
     run_path_assertion(session, expected, opts, :refute_path)
+  end
+
+  @impl true
+  def default_assert_timeout_ms(%__MODULE__{} = session), do: session.assert_timeout_ms
+
+  @impl true
+  def run_path_assertion(%__MODULE__{} = session, expected, opts, timeout, op) when op in [:assert_path, :refute_path] do
+    driver_opts = Keyword.put(opts, :timeout, timeout)
+
+    case apply(__MODULE__, op, [session, expected, driver_opts]) do
+      {:ok, updated_session, _observed} ->
+        updated_session
+
+      {:error, _failed_session, observed, _reason} ->
+        raise AssertionError,
+          message: Cerberus.Path.format_assertion_error(Atom.to_string(op), observed)
+    end
   end
 
   @doc false
