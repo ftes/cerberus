@@ -7,7 +7,7 @@ defmodule Cerberus.BrowserExtensionsTest do
   alias Cerberus.Driver.Browser.UserContextProcess
   alias ExUnit.AssertionError
 
-  test "browser-only APIs are explicit unsupported on static and live sessions (except assert_download)" do
+  test "browser-only APIs are explicit unsupported on static and live sessions" do
     static = visit(session(), "/articles")
 
     static_error =
@@ -149,6 +149,10 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     assert_raise ArgumentError, ~r/Browser.with_popup\/4 invalid options/, fn ->
       with_popup(session, fn scoped -> scoped end, fn _main, _popup -> :ok end, timeout: 0)
+    end
+
+    assert_raise ArgumentError, ~r/assert_download\/3 invalid options/, fn ->
+      assert_download(session, "report.txt", timeout: 0)
     end
 
     assert_raise ArgumentError, ~r/Browser.add_cookie\/4 invalid options/, fn ->
@@ -341,6 +345,29 @@ defmodule Cerberus.BrowserExtensionsTest do
       |> click(link("Download Report"))
 
     assert_download(session, "report.txt")
+  end
+
+  for driver <- [:phoenix, :browser] do
+    test "assert_download waits for delayed live redirect to static download response (#{driver})" do
+      session =
+        unquote(driver)
+        |> session()
+        |> visit("/live/counter")
+        |> click(button("Delayed Download"))
+
+      assert_download(session, "report.txt", timeout: 1_500)
+    end
+  end
+
+  test "assert_download fails on active live routes before download navigation" do
+    session = visit(session(), "/live/counter")
+
+    error =
+      assert_raise AssertionError, fn ->
+        assert_download(session, "report.txt", timeout: 25)
+      end
+
+    assert error.message =~ "assert_download/3 timed out waiting for live download redirect"
   end
 
   test "assert_download reports observed filenames for static/live responses" do

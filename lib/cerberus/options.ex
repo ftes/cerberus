@@ -273,7 +273,7 @@ defmodule Cerberus.Options do
           timeout: non_neg_integer()
         ]
 
-  @type browser_assert_download_opts :: [
+  @type assert_download_opts :: [
           timeout: pos_integer()
         ]
 
@@ -516,7 +516,7 @@ defmodule Cerberus.Options do
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."]
   ]
 
-  @browser_assert_download_opts_schema [
+  @assert_download_opts_schema [
     timeout: [type: :pos_integer, default: 1_500, doc: "Wait timeout in milliseconds for download detection."]
   ]
 
@@ -572,8 +572,8 @@ defmodule Cerberus.Options do
   @spec browser_drag_schema() :: keyword()
   def browser_drag_schema, do: @browser_drag_opts_schema
 
-  @spec browser_assert_download_schema() :: keyword()
-  def browser_assert_download_schema, do: @browser_assert_download_opts_schema
+  @spec assert_download_schema() :: keyword()
+  def assert_download_schema, do: @assert_download_opts_schema
 
   @spec browser_assert_dialog_schema() :: keyword()
   def browser_assert_dialog_schema, do: @browser_assert_dialog_opts_schema
@@ -711,9 +711,9 @@ defmodule Cerberus.Options do
     validate!(opts, @browser_drag_opts_schema, "Browser.drag/4")
   end
 
-  @spec validate_browser_assert_download!(keyword()) :: browser_assert_download_opts()
-  def validate_browser_assert_download!(opts) do
-    validate!(opts, @browser_assert_download_opts_schema, "Browser.assert_download/3")
+  @spec validate_assert_download!(keyword()) :: assert_download_opts()
+  def validate_assert_download!(opts) do
+    validate!(opts, @assert_download_opts_schema, "assert_download/3")
   end
 
   @spec validate_browser_assert_dialog!(keyword()) :: browser_assert_dialog_opts()

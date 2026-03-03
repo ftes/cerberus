@@ -20,6 +20,17 @@ defmodule Cerberus.Fixtures.CounterPageLive do
   end
 
   @impl true
+  def handle_event("delayed_download", _params, socket) do
+    Process.send_after(self(), :delayed_download_redirect, 40)
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info(:delayed_download_redirect, socket) do
+    {:noreply, redirect(socket, to: "/browser/download/report")}
+  end
+
+  @impl true
   def render(assigns) do
     ~H"""
     <main>
@@ -29,6 +40,7 @@ defmodule Cerberus.Fixtures.CounterPageLive do
       <p id="connect-timezone">connect timezone: <%= @timezone %></p>
       <a href="/articles" data-testid="counter-articles-link">Articles</a>
       <a href="/browser/download/report" data-testid="counter-download-link">Download Report</a>
+      <button phx-click="delayed_download" data-testid="counter-delayed-download-button">Delayed Download</button>
       <button phx-click="increment" data-testid="counter-increment-button">Increment</button>
     </main>
     """

@@ -4,6 +4,7 @@ defmodule Cerberus.Driver.Static do
   @behaviour Cerberus.Driver
 
   alias Cerberus.Driver.Browser, as: BrowserSession
+  alias Cerberus.Driver.DownloadAssertion
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.LocatorOps
   alias Cerberus.Driver.Static.FormData
@@ -336,6 +337,11 @@ defmodule Cerberus.Driver.Static do
       {:error, reason} ->
         {:error, session, observed, reason}
     end
+  end
+
+  @impl true
+  def assert_download(%__MODULE__{} = session, filename, opts) when is_binary(filename) and is_list(opts) do
+    DownloadAssertion.assert_from_conn!(session, filename)
   end
 
   @impl true

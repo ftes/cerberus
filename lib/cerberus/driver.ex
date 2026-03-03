@@ -21,6 +21,7 @@ defmodule Cerberus.Driver do
   @type upload_opts :: Options.upload_opts()
   @type submit_opts :: Options.submit_opts()
   @type assert_opts :: Options.assert_opts()
+  @type assert_download_opts :: Options.assert_download_opts()
   @type path_opts :: Options.path_opts()
   @type within_callback :: (Session.t() -> Session.t())
   @type path_operation :: :assert_path | :refute_path
@@ -44,6 +45,7 @@ defmodule Cerberus.Driver do
   @callback submit(session_t(), Locator.t(), submit_opts()) :: op_ok() | op_error()
   @callback assert_has(session_t(), Locator.t(), assert_opts()) :: op_ok() | op_error()
   @callback refute_has(session_t(), Locator.t(), assert_opts()) :: op_ok() | op_error()
+  @callback assert_download(session_t(), String.t(), assert_download_opts()) :: session_t()
   @callback default_assert_timeout_ms(session_t()) :: non_neg_integer()
   @callback run_path_assertion(session_t(), String.t() | Regex.t(), path_opts(), non_neg_integer(), path_operation()) ::
               session_t()

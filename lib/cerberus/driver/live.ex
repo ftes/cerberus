@@ -6,6 +6,7 @@ defmodule Cerberus.Driver.Live do
   import Phoenix.LiveViewTest, only: [element: 2, render: 1, render_click: 1]
 
   alias Cerberus.Driver.Browser, as: BrowserSession
+  alias Cerberus.Driver.DownloadAssertion
   alias Cerberus.Driver.Live.FormData
   alias Cerberus.Driver.LocatorOps
   alias Cerberus.Driver.Static, as: StaticSession
@@ -514,6 +515,29 @@ defmodule Cerberus.Driver.Live do
       {:error, reason} ->
         {:error, session, observed, reason}
     end
+  end
+
+  @impl true
+  def assert_download(%__MODULE__{} = session, filename, opts) when is_binary(filename) and is_list(opts) do
+    case route_kind(session) do
+      :live ->
+        timeout_ms = Keyword.fetch!(opts, :timeout)
+
+        session
+        |> LiveViewTimeout.with_timeout(timeout_ms, &download_redirect_target!/1)
+        |> DownloadAssertion.assert_from_conn!(filename)
+
+      :static ->
+        DownloadAssertion.assert_from_conn!(session, filename)
+    end
+  end
+
+  defp download_redirect_target!(%StaticSession{} = timed_session), do: timed_session
+  defp download_redirect_target!(%__MODULE__{view: nil} = timed_session), do: timed_session
+
+  defp download_redirect_target!(_timed_session) do
+    raise AssertionError,
+      message: "assert_download/3 timed out waiting for live download redirect to a static response"
   end
 
   @impl true

@@ -494,6 +494,35 @@ defmodule Cerberus do
     run_path_assertion!(session, :refute_path, expected, opts, timeout)
   end
 
+  @doc """
+  Asserts a file download by suggested filename across drivers.
+
+  Typical flow is sequential:
+
+      session
+      |> click(link("Download Report"))
+      |> assert_download("report.txt")
+
+  Browser driver waits on BiDi download events. Static/live drivers assert on
+  the current response `content-disposition` headers.
+  """
+  @spec assert_download(arg, String.t(), Options.assert_download_opts()) :: arg when arg: var
+  def assert_download(session, filename, opts \\ [])
+
+  def assert_download(session, filename, opts) when is_binary(filename) and is_list(opts) do
+    validated_opts = Options.validate_assert_download!(opts)
+    driver = driver_module_for_session!(session)
+    bucket_driver = profiling_bucket_driver_kind!(session)
+
+    Profiling.measure({:driver_operation, bucket_driver, :assert_download}, fn ->
+      driver.assert_download(session, filename, validated_opts)
+    end)
+  end
+
+  def assert_download(_session, _filename, _opts) do
+    raise ArgumentError, "assert_download/3 expects a filename string and options as a keyword list"
+  end
+
   @spec click(arg, locator_input()) :: arg when arg: var
   def click(session, locator), do: click(session, locator, [])
 

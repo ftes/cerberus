@@ -127,7 +127,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  @spec assert_download(BrowserSession.t(), String.t(), Options.browser_assert_download_opts()) :: BrowserSession.t()
+  @spec assert_download(BrowserSession.t(), String.t(), Options.assert_download_opts()) :: BrowserSession.t()
   def assert_download(%BrowserSession{} = session, filename, opts \\ []) when is_binary(filename) and is_list(opts) do
     filename = non_empty_text!(filename, "assert_download/3 filename")
     timeout_ms = download_timeout_ms(opts)
@@ -358,7 +358,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
   end
 
   @doc false
-  @spec download_timeout_ms(Options.browser_assert_download_opts()) :: pos_integer()
+  @spec download_timeout_ms(Options.assert_download_opts()) :: pos_integer()
   def download_timeout_ms(opts) when is_list(opts) do
     case Keyword.get(opts, :timeout, @default_download_timeout_ms) do
       timeout when is_integer(timeout) and timeout > 0 ->

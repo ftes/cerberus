@@ -170,7 +170,7 @@ main =
 
 > #### Warning
 >
-> Most `Cerberus.Browser.*` helpers are intentionally browser-only and raise explicit unsupported-operation assertions on non-browser sessions. `Browser.assert_download/3` also supports static/live sessions by checking `content-disposition` headers on the current response.
+> `Cerberus.Browser.*` helpers are intentionally browser-only and raise explicit unsupported-operation assertions on non-browser sessions.
 > Cross-origin iframe DOM access is still blocked by browser same-origin policy; use provider-level or parent-page assertions for those flows.
 
 ## Locator Quick Look

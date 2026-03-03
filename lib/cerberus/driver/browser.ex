@@ -7,6 +7,7 @@ defmodule Cerberus.Driver.Browser do
   alias Cerberus.Driver.Browser.BiDi
   alias Cerberus.Driver.Browser.Config
   alias Cerberus.Driver.Browser.Expressions
+  alias Cerberus.Driver.Browser.Extensions
   alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.Driver.LocatorOps
@@ -450,6 +451,11 @@ defmodule Cerberus.Driver.Browser do
       {:error, reason, observed} ->
         {:error, session, observed, reason}
     end
+  end
+
+  @impl true
+  def assert_download(%__MODULE__{} = session, filename, opts) when is_binary(filename) and is_list(opts) do
+    Extensions.assert_download(session, filename, opts)
   end
 
   defp do_resolved_click(session, state, expected, opts) do
