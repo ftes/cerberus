@@ -40,7 +40,6 @@ defmodule Cerberus do
   alias Cerberus.Phoenix.LiveViewTimeout
   alias Cerberus.Profiling
   alias Cerberus.Session
-  alias Cerberus.Session.LastResult
   alias Ecto.Adapters.SQL.Sandbox, as: EctoSandbox
   alias ExUnit.AssertionError
   alias Phoenix.Ecto.SQL.Sandbox, as: PhoenixSandbox
@@ -576,14 +575,7 @@ defmodule Cerberus do
     opts = Options.validate_path!(opts, "assert_path/3")
     {validated_timeout, opts} = Keyword.pop(opts, :timeout, 0)
     timeout = resolve_path_timeout(session, call_has_timeout, validated_timeout)
-
-    case session do
-      %BrowserSession{} ->
-        run_browser_path_assertion!(session, expected, opts, timeout, :assert_path)
-
-      _other ->
-        run_non_browser_path_assertion(session, expected, opts, timeout, :assert_path)
-    end
+    run_path_assertion!(session, expected, opts, timeout, :assert_path)
   end
 
   @spec refute_path(arg, String.t() | Regex.t(), Options.path_opts()) :: arg when arg: var
@@ -592,14 +584,7 @@ defmodule Cerberus do
     opts = Options.validate_path!(opts, "refute_path/3")
     {validated_timeout, opts} = Keyword.pop(opts, :timeout, 0)
     timeout = resolve_path_timeout(session, call_has_timeout, validated_timeout)
-
-    case session do
-      %BrowserSession{} ->
-        run_browser_path_assertion!(session, expected, opts, timeout, :refute_path)
-
-      _other ->
-        run_non_browser_path_assertion(session, expected, opts, timeout, :refute_path)
-    end
+    run_path_assertion!(session, expected, opts, timeout, :refute_path)
   end
 
   @spec click(arg, locator_input()) :: arg when arg: var
@@ -906,67 +891,35 @@ defmodule Cerberus do
 
   defp simple_id_selector?(scope), do: String.match?(scope, ~r/^#[A-Za-z_][A-Za-z0-9_-]*$/)
 
-  defp update_last_result(%{last_result: _} = session, op, observed) do
-    %{session | last_result: LastResult.new(op, observed, session)}
+  defp run_path_assertion!(%BrowserSession{} = session, expected, opts, timeout, op)
+       when op in [:assert_path, :refute_path] do
+    driver = driver_module_for_session!(session)
+    driver_opts = Keyword.put(opts, :timeout, timeout)
+
+    Profiling.measure({:driver_operation, :browser, op}, fn ->
+      run_driver_path_assertion!(driver, op, session, expected, driver_opts)
+    end)
   end
 
-  defp update_last_result(session, _op, _observed), do: session
+  defp run_path_assertion!(session, expected, opts, timeout, op) when op in [:assert_path, :refute_path] do
+    driver_opts = Keyword.put(opts, :timeout, timeout)
 
-  defp run_browser_path_assertion!(session, expected, opts, timeout, op) when op in [:assert_path, :refute_path] do
-    browser_opts = Keyword.put(opts, :timeout, timeout)
-    run_fun = if op == :assert_path, do: &BrowserSession.assert_path/3, else: &BrowserSession.refute_path/3
-
-    result =
-      Profiling.measure({:driver_operation, :browser, op}, fn ->
-        run_fun.(session, expected, browser_opts)
-      end)
-
-    case result do
-      {:ok, timed_session, observed} ->
-        update_last_result(timed_session, op, observed)
-
-      {:error, _failed_session, observed, _reason} ->
-        raise AssertionError, message: format_path_error(Atom.to_string(op), observed)
-    end
-  end
-
-  defp run_non_browser_path_assertion(session, expected, opts, timeout, op) when op in [:assert_path, :refute_path] do
     Profiling.measure({:driver_operation, driver_kind(session), op}, fn ->
       LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
-        finalize_non_browser_path_assertion(timed_session, expected, opts, timeout, op)
+        timed_driver = driver_module_for_session!(timed_session)
+        run_driver_path_assertion!(timed_driver, op, timed_session, expected, driver_opts)
       end)
     end)
   end
 
-  defp finalize_non_browser_path_assertion(timed_session, expected, opts, timeout, op)
-       when op in [:assert_path, :refute_path] do
-    observed = build_path_observed(timed_session, expected, opts, timeout)
-    matches? = observed.path_match? and observed.query_match?
-    should_pass? = if op == :assert_path, do: matches?, else: not matches?
+  defp run_driver_path_assertion!(driver, op, session, expected, driver_opts) do
+    case apply(driver, op, [session, expected, driver_opts]) do
+      {:ok, updated_session, _observed} ->
+        updated_session
 
-    if should_pass? do
-      update_last_result(timed_session, op, observed)
-    else
-      raise AssertionError, message: format_path_error(Atom.to_string(op), observed)
+      {:error, _failed_session, observed, _reason} ->
+        raise AssertionError, message: format_path_error(Atom.to_string(op), observed)
     end
-  end
-
-  defp build_path_observed(session, expected, opts, timeout) do
-    refreshed_session = refresh_path_assertion_session(session)
-    actual_path = current_path(refreshed_session)
-    path_match? = Path.match_path?(actual_path, expected, exact: Keyword.fetch!(opts, :exact))
-    query_match? = Path.query_matches?(actual_path, Keyword.get(opts, :query))
-
-    %{
-      path: actual_path,
-      scope: Session.scope(refreshed_session),
-      expected: expected,
-      query: Path.normalize_expected_query(Keyword.get(opts, :query)),
-      exact: Keyword.fetch!(opts, :exact),
-      timeout: timeout,
-      path_match?: path_match?,
-      query_match?: query_match?
-    }
   end
 
   defp resolve_path_timeout(_session, true, validated_timeout), do: validated_timeout
@@ -975,9 +928,6 @@ defmodule Cerberus do
   defp resolve_path_timeout(%BrowserSession{assert_timeout_ms: timeout}, false, _validated_timeout), do: timeout
 
   defp resolve_path_timeout(_session, false, _validated_timeout), do: 0
-
-  defp refresh_path_assertion_session(%BrowserSession{} = session), do: BrowserSession.refresh_path(session)
-  defp refresh_path_assertion_session(session), do: session
 
   defp driver_kind(%StaticSession{}), do: :static
   defp driver_kind(%LiveSession{}), do: :live

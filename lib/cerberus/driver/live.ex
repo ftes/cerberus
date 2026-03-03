@@ -474,6 +474,44 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
+  @impl true
+  def assert_path(%__MODULE__{} = session, expected, opts) when is_binary(expected) or is_struct(expected, Regex) do
+    observed = build_path_observed(session, expected, opts)
+
+    if observed.path_match? and observed.query_match? do
+      {:ok, update_last_result(session, :assert_path, observed), observed}
+    else
+      {:error, session, observed, "expected path assertion did not hold"}
+    end
+  end
+
+  @impl true
+  def refute_path(%__MODULE__{} = session, expected, opts) when is_binary(expected) or is_struct(expected, Regex) do
+    observed = build_path_observed(session, expected, opts)
+
+    if observed.path_match? and observed.query_match? do
+      {:error, session, observed, "expected path assertion did not hold"}
+    else
+      {:ok, update_last_result(session, :refute_path, observed), observed}
+    end
+  end
+
+  defp build_path_observed(session, expected, opts) do
+    actual_path = Session.current_path(session)
+    exact = Keyword.fetch!(opts, :exact)
+
+    %{
+      path: actual_path,
+      scope: Session.scope(session),
+      expected: expected,
+      query: Cerberus.Path.normalize_expected_query(Keyword.get(opts, :query)),
+      exact: exact,
+      timeout: Keyword.get(opts, :timeout, 0),
+      path_match?: Cerberus.Path.match_path?(actual_path, expected, exact: exact),
+      query_match?: Cerberus.Path.query_matches?(actual_path, Keyword.get(opts, :query))
+    }
+  end
+
   defp click_live_button(session, %{dispatch_change: true} = button) do
     click_live_dispatch_change_button(session, button)
   end

@@ -21,6 +21,7 @@ defmodule Cerberus.Driver do
   @type upload_opts :: Options.upload_opts()
   @type submit_opts :: Options.submit_opts()
   @type assert_opts :: Options.assert_opts()
+  @type path_opts :: Options.path_opts()
 
   @callback new_session(keyword()) :: session_t()
   @callback open_browser(session_t(), (String.t() -> any())) :: session_t()
@@ -37,4 +38,6 @@ defmodule Cerberus.Driver do
   @callback submit(session_t(), Locator.t(), submit_opts()) :: op_ok() | op_error()
   @callback assert_has(session_t(), Locator.t(), assert_opts()) :: op_ok() | op_error()
   @callback refute_has(session_t(), Locator.t(), assert_opts()) :: op_ok() | op_error()
+  @callback assert_path(session_t(), String.t() | Regex.t(), path_opts()) :: op_ok() | op_error()
+  @callback refute_path(session_t(), String.t() | Regex.t(), path_opts()) :: op_ok() | op_error()
 end

@@ -271,6 +271,7 @@ defmodule Cerberus.Driver.Browser do
   @doc false
   @spec assert_path(t(), String.t() | Regex.t(), Options.path_opts()) ::
           {:ok, t(), map()} | {:error, t(), map(), String.t()}
+  @impl true
   def assert_path(%__MODULE__{} = session, expected, opts) when is_binary(expected) or is_struct(expected, Regex) do
     run_path_assertion(session, expected, opts, :assert_path)
   end
@@ -278,6 +279,7 @@ defmodule Cerberus.Driver.Browser do
   @doc false
   @spec refute_path(t(), String.t() | Regex.t(), Options.path_opts()) ::
           {:ok, t(), map()} | {:error, t(), map(), String.t()}
+  @impl true
   def refute_path(%__MODULE__{} = session, expected, opts) when is_binary(expected) or is_struct(expected, Regex) do
     run_path_assertion(session, expected, opts, :refute_path)
   end
