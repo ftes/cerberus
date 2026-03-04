@@ -75,6 +75,7 @@ Prefer user-facing selectors first:
 - labels for form actions (`fill_in(label("Email"), "...")`)
 - role + accessible name for controls (`~l"button:Save"r`)
 - visible text for assertions (`assert_has(~l"Saved"e)`)
+- regex values are supported for text-like locators and role names, but cannot be combined with `exact: true|false`
 
 Use `testid(...)` when text/role is ambiguous, and CSS for structural targeting only.
 

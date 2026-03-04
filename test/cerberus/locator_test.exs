@@ -15,6 +15,32 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :text, value: ^regex} = Locator.normalize(regex)
   end
 
+  test "rejects exact option when text-like locator value is regex" do
+    assert_raise InvalidLocatorError, ~r/:exact cannot be combined with regex :text locators/, fn ->
+      Locator.normalize(text: ~r/Saved/, exact: true)
+    end
+
+    assert_raise InvalidLocatorError, ~r/:exact cannot be combined with regex :button locators/, fn ->
+      button(~r/Save/, exact: false)
+    end
+  end
+
+  test "rejects exact option when role locator name is regex" do
+    assert_raise InvalidLocatorError, ~r/:exact cannot be combined with regex :role locators/, fn ->
+      Locator.normalize(role: :button, name: ~r/Save/, exact: true)
+    end
+  end
+
+  test "rejects exact option when normalizing regex struct locators" do
+    assert_raise InvalidLocatorError, ~r/:exact cannot be combined with regex :text locators/, fn ->
+      Locator.normalize(%Locator{kind: :text, value: ~r/Saved/, opts: [exact: true]})
+    end
+
+    assert_raise InvalidLocatorError, ~r/:exact cannot be combined with regex :role locators/, fn ->
+      Locator.normalize(%Locator{kind: :role, value: ~r/Save/, opts: [role: "button", exact: false]})
+    end
+  end
+
   test "normalizes keyword text locator" do
     assert %Locator{kind: :text, value: "Saved"} = Locator.normalize(text: "Saved")
   end

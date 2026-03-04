@@ -106,6 +106,7 @@ Rules:
 - `e` and `i` are mutually exclusive
 - plain text `~l` locators require either `e` or `i`
 - `r` requires `ROLE:NAME`
+- regex values are supported for text-like locators and role names, but cannot be combined with `exact: true|false`
 
 ## Browser-Only Extensions
 
