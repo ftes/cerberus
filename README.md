@@ -38,15 +38,15 @@ mix cerberus.install.chrome
 ```elixir
 import Cerberus
 
-flow = fn s ->
-  s
-  |> visit("/live/counter")
-  |> click(~l"button:Increment"r)
-  |> assert_has(~l"Count: 1")
-end
+session
+|> visit("/live/counter")
+|> click(~l"button:Increment"r)
+|> assert_has(~l"Count: 1"e)
 
-flow.(session())          # non-browser mode: static/live auto-detection
-flow.(session(:browser))  # browser mode: real Chrome execution
+session(:browser) # chrome
+|> visit("/live/counter")
+|> evaluate_js("prompt('Hey!')")
+|> screenshot()
 ```
 
 For progressive, step-by-step examples (scopes, forms, tabs, browser extensions), see [Getting Started](docs/getting-started.md).
@@ -73,7 +73,7 @@ possible candidates:
 ## Locator Quick Look
 
 Prefer user-facing selectors first:
-- labels for form actions (`fill_in("Email", "...")`)
+- labels for form actions (`fill_in(label("Email"), "...")`)
 - role + accessible name for controls (`~l"button:Save"r`)
 - visible text for assertions (`assert_has(~l"Saved"e)`)
 

@@ -24,7 +24,7 @@ defmodule Cerberus.LiveUploadBehaviorTest do
       |> session()
       |> visit("/live/uploads")
       |> within(css("#upload-change-form"), fn scoped ->
-        upload(scoped, "Avatar", jpg)
+        upload(scoped, label("Avatar"), jpg)
       end)
 
     assert %{active_form: nil} = session.form_data
@@ -33,7 +33,7 @@ defmodule Cerberus.LiveUploadBehaviorTest do
       session
       |> visit("/live/uploads")
       |> within(css("#full-form"), fn scoped ->
-        upload(scoped, "Avatar", png)
+        upload(scoped, label("Avatar"), png)
       end)
     end
 
@@ -42,8 +42,8 @@ defmodule Cerberus.LiveUploadBehaviorTest do
       |> visit("/live/uploads")
       |> within(css("#full-form"), fn scoped ->
         scoped
-        |> upload("Avatar", jpg)
-        |> upload("Avatar", jpg)
+        |> upload(label("Avatar"), jpg)
+        |> upload(label("Avatar"), jpg)
       end)
     end
 
@@ -51,7 +51,7 @@ defmodule Cerberus.LiveUploadBehaviorTest do
       session
       |> visit("/live/uploads")
       |> within(css("#tiny-upload-form"), fn scoped ->
-        upload(scoped, "Tiny", jpg)
+        upload(scoped, label("Tiny"), jpg)
       end)
     end
   end
@@ -64,7 +64,7 @@ defmodule Cerberus.LiveUploadBehaviorTest do
       |> driver_session(context)
       |> visit("/live/uploads")
       |> within(css("#upload-change-form"), fn scoped ->
-        upload(scoped, "Avatar", jpg)
+        upload(scoped, label("Avatar"), jpg)
       end)
       |> assert_has(text("phx-change triggered on file selection", exact: true))
     end
@@ -88,7 +88,7 @@ defmodule Cerberus.LiveUploadBehaviorTest do
       |> driver_session(context)
       |> visit("/live/uploads")
       |> within(css("#upload-redirect-form"), fn scoped ->
-        upload(scoped, "Redirect Avatar", jpg)
+        upload(scoped, label("Redirect Avatar"), jpg)
       end)
       |> assert_path("/live/async_page_2")
     end

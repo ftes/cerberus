@@ -233,11 +233,20 @@ defmodule Cerberus.Locator do
   @spec sigil(String.t(), charlist()) :: t()
   def sigil(value, modifiers) when is_binary(value) and is_list(modifiers) do
     sigil_opts = parse_sigil_modifiers!(value, modifiers)
+    ensure_text_sigil_mode!(sigil_opts, value, modifiers)
     base_locator = sigil_base_locator!(sigil_opts, value, modifiers)
     opts = Keyword.merge(base_locator.opts, sigil_locator_opts(base_locator.kind, sigil_opts.exact))
 
     %{base_locator | opts: opts}
   end
+
+  defp ensure_text_sigil_mode!(%{kind: :text, exact: :unset}, value, modifiers) do
+    raise InvalidLocatorError,
+      locator: {:l, value, modifiers},
+      message: "invalid locator sigil ~l: text locators require e or i modifier, e.g. ~l\"Saved\"e"
+  end
+
+  defp ensure_text_sigil_mode!(_sigil_opts, _value, _modifiers), do: :ok
 
   defp sigil_base_locator!(%{kind: :text}, value, _modifiers), do: %__MODULE__{kind: :text, value: value}
 

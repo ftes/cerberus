@@ -21,7 +21,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/controls")
-      |> select("Race", option: "Dwarf")
+      |> select(label("Race"), option: "Dwarf")
       |> submit(text("Save Controls"))
       |> assert_has(text("race: dwarf", exact: true))
     end
@@ -52,8 +52,8 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/controls")
-      |> select("Race 2", option: "Elf")
-      |> select("Race 2", option: "Dwarf")
+      |> select(label("Race 2"), option: "Elf")
+      |> select(label("Race 2"), option: "Dwarf")
       |> submit(text("Save Controls"))
       |> assert_has(text("race_2: [dwarf]", exact: true))
     end
@@ -62,7 +62,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/controls")
-      |> select("Race 2", option: ["Elf", "Dwarf"])
+      |> select(label("Race 2"), option: ["Elf", "Dwarf"])
       |> submit(text("Save Controls"))
       |> assert_has(text("race_2: [elf,dwarf]", exact: true))
     end
@@ -80,7 +80,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/controls")
-      |> choose("Email Choice")
+      |> choose(label("Email Choice"))
       |> submit(text("Save Controls"))
       |> assert_has(text("contact: email", exact: true))
     end
@@ -90,7 +90,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/controls")
-        |> select("Race", option: "Disabled Race")
+        |> select(label("Race"), option: "Disabled Race")
       end
     end
 
@@ -98,7 +98,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/controls")
-      |> select("Race", option: "Elf")
+      |> select(label("Race"), option: "Elf")
       |> assert_has(text("_target: [race]", exact: true))
       |> assert_has(text("race: elf", exact: true))
     end
@@ -145,7 +145,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/controls")
-      |> choose("Phone Choice")
+      |> choose(label("Phone Choice"))
       |> assert_has(text("contact: phone", exact: true))
     end
 
@@ -153,9 +153,9 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/controls")
-      |> select("Race 2", option: "Elf")
+      |> select(label("Race 2"), option: "Elf")
       |> assert_has(text("race_2: [elf]", exact: true))
-      |> select("Race 2", option: "Dwarf")
+      |> select(label("Race 2"), option: "Dwarf")
       |> assert_has(text("race_2: [dwarf]", exact: true))
     end
 
@@ -163,7 +163,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/controls")
-      |> select("Race 2", option: ["Elf", "Dwarf"])
+      |> select(label("Race 2"), option: ["Elf", "Dwarf"])
       |> assert_has(text("race_2: [elf,dwarf]", exact: true))
     end
 

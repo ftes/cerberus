@@ -45,7 +45,7 @@ defmodule Cerberus.CurrentPathTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/search")
-        |> fill_in("Search term", "phoenix")
+        |> fill_in(label("Search term"), "phoenix")
         |> submit(text: "Run Search")
 
       assert session.current_path == "/search/results?q=phoenix"

@@ -49,7 +49,7 @@ session()
 ```elixir
 session()
 |> visit("/search")
-|> fill_in("Search term", "Aragorn")
+|> fill_in(label("Search term"), "Aragorn")
 |> submit(~l"button:Run Search"r)
 |> assert_path("/search/results", query: %{q: "Aragorn"})
 |> assert_has(~l"Search query: Aragorn"e)
@@ -70,13 +70,13 @@ end)
 
 `within/3` expects locator input (`~l"#panel"c`, `~l"button:Open"r`, `~l"search-input"t`, etc.). Browser locator scopes can switch into same-origin iframes.
 
-Scoped text assertions also support plain-string shorthand:
+Scoped text assertions use explicit locator arguments:
 
 ```elixir
 session()
 |> visit("/scoped")
-|> assert_has(~l"#secondary-panel"c, "Status: secondary")
-|> refute_has(~l"#secondary-panel"c, "Status: primary")
+|> assert_has(~l"#secondary-panel"c, ~l"Status: secondary"e)
+|> refute_has(~l"#secondary-panel"c, ~l"Status: primary"e)
 ```
 
 Scoped assertion overloads use explicit scope and locator arguments:
@@ -98,8 +98,8 @@ Examples:
 ```elixir
 session()
 |> visit("/settings")
-|> fill_in("Email", "alice@example.com")
-|> check("Receive updates")
+|> fill_in(label("Email"), "alice@example.com")
+|> check(label("Receive updates"))
 |> click(~l"button:Save"r)
 |> assert_has(~l"Settings saved"e)
 ```
@@ -111,7 +111,7 @@ session()
 |> visit("/checkout")
 |> within(~l"#shipping-address"c, fn scoped ->
   scoped
-  |> fill_in("City", "Berlin")
+  |> fill_in(label("City"), "Berlin")
   |> click(~l"button:Save"r)
 end)
 ```
@@ -126,7 +126,6 @@ session()
 ```
 
 Locator sigil quick look:
-- `~l"Save"` text
 - `~l"Save"e` exact text
 - `~l"Save"i` inexact text
 - `~l"button:Save"r` role form (`ROLE:NAME`)
@@ -135,6 +134,7 @@ Locator sigil quick look:
 - `~l"save-button"t` testid form (`exact: true` default)
 - at most one kind modifier (`r`, `c`, `a`, or `t`)
 - `e` and `i` are mutually exclusive
+- plain text `~l` locators require either `e` or `i`
 - `r` requires `ROLE:NAME`
 
 ## Match Count And Position Filters
@@ -158,8 +158,8 @@ Example:
 ```elixir
 session() # or session(conn)
 |> visit("/live/selector-edge")
-|> fill_in("Name", "primary", first: true, count: 2)
-|> fill_in("Name", "secondary", last: true, count: 2)
+|> fill_in(label("Name"), "primary", first: true, count: 2)
+|> fill_in(label("Name"), "secondary", last: true, count: 2)
 ```
 
 ## Advanced Locator Composition (Optional)
@@ -186,7 +186,7 @@ session()
 ```elixir
 session()
 |> visit("/field-wrapper-errors")
-|> assert_has(closest(~l".fieldset"c, from: ~l"textbox:Email"r), ~l"can't be blank")
+|> assert_has(closest(~l".fieldset"c, from: ~l"textbox:Email"r), ~l"can't be blank"e)
 ```
 
 ## Step 5: Multi-User + Multi-Tab
@@ -214,7 +214,7 @@ session()
 ```elixir
 session()
 |> visit("/live/async_page")
-|> assert_has(~l"Title loaded async")
+|> assert_has(~l"Title loaded async"e)
 ```
 
 > #### Tip
@@ -254,7 +254,7 @@ session(:browser,
   browser: [viewport: {390, 844}]
 )
 |> visit("/live/counter")
-|> assert_has(~l"Count: 1")
+|> assert_has(~l"Count: 1"e)
 ```
 
 Use this when one test needs different browser characteristics (for example mobile viewport) without changing global config.

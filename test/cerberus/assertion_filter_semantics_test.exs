@@ -41,7 +41,7 @@ defmodule Cerberus.AssertionFilterSemanticsTest do
                      unquote(driver)
                      |> driver_session(context)
                      |> visit("/articles")
-                     |> assert_has("Articles", with: "Articles")
+                     |> assert_has(text("Articles"), with: "Articles")
                    end
     end
 
@@ -52,7 +52,7 @@ defmodule Cerberus.AssertionFilterSemanticsTest do
                      unquote(driver)
                      |> driver_session(context)
                      |> visit("/articles")
-                     |> refute_has("Articles", with: "Articles")
+                     |> refute_has(text("Articles"), with: "Articles")
                    end
     end
   end

@@ -31,17 +31,18 @@ defmodule Cerberus.LocatorTest do
     end
   end
 
-  test "~l normalizes to text locators" do
-    assert %Locator{kind: :text, value: "Saved"} = ~l"Saved"
-  end
-
-  test "sigil and non-sigil locators normalize identically" do
-    assert Locator.normalize(~l"Saved") == Locator.normalize("Saved")
+  test "~l text locators require explicit exactness mode" do
+    assert_raise InvalidLocatorError, ~r/require e or i modifier/, fn ->
+      ~l"Saved"
+    end
   end
 
   test "~l supports exact/inexact modifiers" do
     assert %Locator{kind: :text, value: "Saved", opts: [exact: true]} = ~l"Saved"e
     assert %Locator{kind: :text, value: "Saved", opts: [exact: false]} = ~l"Saved"i
+
+    assert Locator.normalize(~l"Saved"e) == Locator.normalize(text: "Saved", exact: true)
+    assert Locator.normalize(~l"Saved"i) == Locator.normalize(text: "Saved", exact: false)
   end
 
   test "~l supports role modifier using ROLE:NAME syntax" do

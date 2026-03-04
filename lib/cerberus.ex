@@ -654,7 +654,7 @@ defmodule Cerberus do
 
   Example:
 
-      within(session, closest(~l".fieldset"c, from: ~l"textbox:Email"r), &assert_has(&1, ~l"can't be blank"))
+      within(session, closest(~l".fieldset"c, from: ~l"textbox:Email"r), &assert_has(&1, ~l"can't be blank"e))
   """
   @spec closest(locator_input(), keyword()) :: Locator.t()
   def closest(locator, opts), do: Locator.closest(locator, opts)
@@ -663,7 +663,6 @@ defmodule Cerberus do
   Builds a locator using `~l`.
 
   Supported forms:
-  - `~l"text"` text locator
   - `~l"text"e` exact text
   - `~l"text"i` inexact text
   - `~l"ROLE:NAME"r` role locator form
@@ -674,6 +673,7 @@ defmodule Cerberus do
   Rules:
   - use at most one locator-kind modifier (`r`, `c`, `a`, or `t`)
   - `e` and `i` are mutually exclusive
+  - plain text `~l` locators require either `e` or `i`
   - `r` requires `ROLE:NAME` input
   """
   @spec sigil_l(String.t(), charlist()) :: Locator.t()
@@ -720,7 +720,7 @@ defmodule Cerberus do
   For scoped assertions without entering a `within/3` callback, you can also use scoped assertion overloads:
 
       session
-      |> assert_has(closest(~l".fieldset"c, from: ~l"textbox:Email"r), ~l"can't be blank")
+      |> assert_has(closest(~l".fieldset"c, from: ~l"textbox:Email"r), ~l"can't be blank"e)
 
   Browser note: when locator-based `within/3` matches an `<iframe>`, Cerberus switches
   the query root to that iframe document. Only same-origin iframes are supported.
@@ -863,11 +863,12 @@ defmodule Cerberus do
   @doc """
   Fills a form field matched by `locator`.
 
-  Use plain string/regex label shorthand as the first option, for example:
-  `fill_in(session, "Search term", "Aragorn")`.
+  Bare string/regex shorthand is not supported.
 
-  Helper locators like `label(...)`, `role(...)`, `placeholder(...)`, `title(...)`,
-  `aria_label(...)`, `testid(...)`, and `css(...)` are also supported.
+  Use explicit locators like `label(...)`, `role(...)`, `placeholder(...)`,
+  `title(...)`, `aria_label(...)`, `testid(...)`, `css(...)`, or explicit text sigils
+  (`~l"..."e` / `~l"..."i`).
+
   Sigil examples: `fill_in(session, ~l"#search_q"c, "Aragorn")`,
   `fill_in(session, ~l"search-input"t, "Aragorn")`.
 
@@ -883,10 +884,11 @@ defmodule Cerberus do
   @doc """
   Uploads a file into a matched file input.
 
-  Use plain string/regex label shorthand as the first option, for example:
-  `upload(session, "Avatar", "/tmp/avatar.jpg")`.
+  Bare string/regex shorthand is not supported.
 
-  Helper locators like `label(...)`, `testid(...)`, and `css(...)` are also supported.
+  Use explicit locators like `label(...)`, `testid(...)`, `css(...)`, or explicit
+  text sigils (`~l"..."e` / `~l"..."i`).
+
   Sigil examples: `upload(session, ~l"#avatar"c, "/tmp/avatar.jpg")`,
   `upload(session, ~l"avatar-upload"t, "/tmp/avatar.jpg")`.
 
@@ -932,8 +934,7 @@ defmodule Cerberus do
   @doc """
   Selects option text in a `<select>` field matched by `locator`.
 
-  Use plain string/regex label shorthand as the first option, for example:
-  `select(session, "Race", option: "Elf")`.
+  Bare string/regex shorthand is not supported.
 
   For multi-select fields, pass the full desired selection on every call
   (`option: ["Elf", "Dwarf"]`). Each `select/3` call replaces the selection
@@ -959,10 +960,11 @@ defmodule Cerberus do
   @doc """
   Chooses a radio input matched by `locator`.
 
-  Use plain string/regex label shorthand as the first option, for example:
-  `choose(session, "Email Choice")`.
+  Bare string/regex shorthand is not supported.
 
-  Helper locators like `label(...)`, `testid(...)`, and `css(...)` are also supported.
+  Use explicit locators like `label(...)`, `testid(...)`, `css(...)`, or explicit
+  text sigils (`~l"..."e` / `~l"..."i`).
+
   Sigil examples: `choose(session, ~l"#contact_email"c)`,
   `choose(session, ~l"contact-email"t)`.
   """
@@ -984,10 +986,11 @@ defmodule Cerberus do
   @doc """
   Checks a checkbox matched by `locator`.
 
-  Use plain string/regex label shorthand as the first option, for example:
-  `check(session, "Subscribe to newsletter")`.
+  Bare string/regex shorthand is not supported.
 
-  Helper locators like `label(...)`, `testid(...)`, and `css(...)` are also supported.
+  Use explicit locators like `label(...)`, `testid(...)`, `css(...)`, or explicit
+  text sigils (`~l"..."e` / `~l"..."i`).
+
   Sigil examples: `check(session, ~l"#subscribe"c)`,
   `check(session, ~l"subscribe-checkbox"t)`.
   """
@@ -1009,10 +1012,11 @@ defmodule Cerberus do
   @doc """
   Unchecks a checkbox matched by `locator`.
 
-  Use plain string/regex label shorthand as the first option, for example:
-  `uncheck(session, "Subscribe to newsletter")`.
+  Bare string/regex shorthand is not supported.
 
-  Helper locators like `label(...)`, `testid(...)`, and `css(...)` are also supported.
+  Use explicit locators like `label(...)`, `testid(...)`, `css(...)`, or explicit
+  text sigils (`~l"..."e` / `~l"..."i`).
+
   Sigil examples: `uncheck(session, ~l"#subscribe"c)`,
   `uncheck(session, ~l"subscribe-checkbox"t)`.
   """
@@ -1035,13 +1039,13 @@ defmodule Cerberus do
   Asserts that content matched by `locator` exists.
 
   Unscoped:
-  `assert_has(session, ~l"Articles")`
+  `assert_has(session, ~l"Articles"e)`
 
   Scoped:
-  `assert_has(session, ~l"#secondary-panel"c, "Status: secondary")`
+  `assert_has(session, ~l"#secondary-panel"c, ~l"Status: secondary"e)`
 
   In the scoped form, the second argument is a `scope_locator` and the third
-  argument is a `locator`. Passing a binary/regex `locator` uses text-locator shorthand.
+  argument is a `locator`.
   """
   @spec assert_has(arg, locator_input()) :: arg when arg: var
   def assert_has(session, locator), do: assert_has(session, locator, [])
@@ -1080,13 +1084,13 @@ defmodule Cerberus do
   Refutes that content matched by `locator` exists.
 
   Unscoped:
-  `refute_has(session, ~l"500 Internal Server Error")`
+  `refute_has(session, ~l"500 Internal Server Error"e)`
 
   Scoped:
-  `refute_has(session, ~l"#secondary-panel"c, "Status: primary")`
+  `refute_has(session, ~l"#secondary-panel"c, ~l"Status: primary"e)`
 
   In the scoped form, the second argument is a `scope_locator` and the third
-  argument is a `locator`. Passing a binary/regex `locator` uses text-locator shorthand.
+  argument is a `locator`.
   """
   @spec refute_has(arg, locator_input()) :: arg when arg: var
   def refute_has(session, locator), do: refute_has(session, locator, [])

@@ -79,13 +79,13 @@ defmodule Cerberus.PathScopeBehaviorTest do
       |> assert_has(text("Search", exact: true))
     end
 
-    test "scoped assert_has/refute_has accept binary and regex text shorthand (#{driver})", context do
+    test "scoped assert_has/refute_has accept explicit text and regex locators (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/scoped")
-      |> assert_has(css("#secondary-panel"), "Status: secondary")
-      |> assert_has(css("#secondary-panel"), ~r/Status:\s+secondary/)
-      |> refute_has(css("#secondary-panel"), "Status: primary")
+      |> assert_has(css("#secondary-panel"), text("Status: secondary"))
+      |> assert_has(css("#secondary-panel"), text(~r/Status:\s+secondary/))
+      |> refute_has(css("#secondary-panel"), text("Status: primary"))
     end
   end
 

@@ -20,7 +20,7 @@ defmodule Cerberus.CheckboxArrayBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/checkbox-array")
-      |> check("Two")
+      |> check(label("Two"))
       |> assert_has(text("Selected Items: one,two", exact: true))
     end
 
@@ -37,7 +37,7 @@ defmodule Cerberus.CheckboxArrayBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/checkbox-array")
-      |> uncheck("One")
+      |> uncheck(label("One"))
       |> assert_has(text("Selected Items: None", exact: true))
     end
 
@@ -45,7 +45,7 @@ defmodule Cerberus.CheckboxArrayBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/checkbox-array")
-      |> check("Two")
+      |> check(label("Two"))
       |> submit(text("Save Items"))
       |> assert_has(text("Selected Items: one,two", exact: true))
     end
@@ -64,7 +64,7 @@ defmodule Cerberus.CheckboxArrayBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/checkbox-array")
-      |> uncheck("One")
+      |> uncheck(label("One"))
       |> submit(text("Save Items"))
       |> assert_has(text("Selected Items: None", exact: true))
     end

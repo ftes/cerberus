@@ -20,7 +20,7 @@ defmodule Cerberus.LiveFormChangeBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/form-change")
-      |> fill_in("Email", "frodo@example.com")
+      |> fill_in(label("Email"), "frodo@example.com")
       |> assert_has(text("_target: [email]", exact: true))
       |> assert_has(text("email: frodo@example.com", exact: true))
     end
@@ -30,7 +30,7 @@ defmodule Cerberus.LiveFormChangeBehaviorTest do
       |> driver_session(context)
       |> visit("/live/form-change")
       |> within(css("#no-phx-change-form"), fn scoped ->
-        fill_in(scoped, "Name (no phx-change)", "Aragorn")
+        fill_in(scoped, label("Name (no phx-change)"), "Aragorn")
       end)
       |> assert_has(text("No change value: unchanged", exact: true))
     end
@@ -41,8 +41,8 @@ defmodule Cerberus.LiveFormChangeBehaviorTest do
       |> visit("/live/form-change")
       |> within(css("#changes-hidden-input-form"), fn scoped ->
         scoped
-        |> fill_in("Name for hidden", "Frodo")
-        |> fill_in("Email for hidden", "frodo@example.com")
+        |> fill_in(label("Name for hidden"), "Frodo")
+        |> fill_in(label("Email for hidden"), "frodo@example.com")
       end)
       |> assert_has(text("name: Frodo", exact: true))
       |> assert_has(text("email: frodo@example.com", exact: true))
@@ -53,7 +53,7 @@ defmodule Cerberus.LiveFormChangeBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/form-change")
-      |> fill_in("Nickname *", "Strider")
+      |> fill_in(label("Nickname *"), "Strider")
       |> assert_has(text("_target: [nickname]", exact: true))
       |> assert_has(text("nickname: Strider", exact: true))
     end

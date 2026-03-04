@@ -76,6 +76,55 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   @canonical_text_assertions [:assert_has, :refute_has]
   @canonical_labeled_value_keys %{fill_in: :with}
   @local_import_trigger_calls Enum.uniq([:session | @rewritable_direct_calls ++ @rewritable_assertions_calls])
+  @explicit_locator_calls [
+    :assert_has,
+    :refute_has,
+    :click,
+    :click_link,
+    :click_button,
+    :fill_in,
+    :select,
+    :choose,
+    :check,
+    :uncheck,
+    :submit,
+    :upload
+  ]
+  @locator_helper_funs [
+    :text,
+    :label,
+    :link,
+    :button,
+    :placeholder,
+    :title,
+    :alt,
+    :aria_label,
+    :css,
+    :testid,
+    :role,
+    :and_,
+    :or_,
+    :not_,
+    :has,
+    :has_not,
+    :closest
+  ]
+  @locator_kind_keys [
+    :text,
+    :label,
+    :link,
+    :button,
+    :placeholder,
+    :title,
+    :alt,
+    :aria_label,
+    :css,
+    :testid,
+    :role,
+    :and,
+    :or,
+    :not
+  ]
 
   defmodule RewriteState do
     @moduledoc false
@@ -766,7 +815,8 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
         [
           fn acc -> canonicalize_text_assertion_args(fun, acc) end,
           fn acc -> canonicalize_labeled_value_call_args(fun, acc) end,
-          fn acc -> canonicalize_scope_locator_args(fun, acc, scope_builder) end
+          fn acc -> canonicalize_scope_locator_args(fun, acc, scope_builder) end,
+          fn acc -> canonicalize_explicit_locator_args(fun, acc) end
         ],
         {args, false},
         fn transform, {acc, changed?} ->
@@ -825,6 +875,135 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   end
 
   defp canonicalize_scope_locator_args(_fun, _args, _scope_builder), do: :no_change
+
+  @spec canonicalize_explicit_locator_args(atom(), [Macro.t()]) :: canonicalize_result()
+  defp canonicalize_explicit_locator_args(fun, args) when fun in @explicit_locator_calls do
+    case locator_arg_indexes_for(fun, args) do
+      [] ->
+        :no_change
+
+      indexes ->
+        {updated_args, changed?} =
+          Enum.reduce(indexes, {args, false}, &reduce_locator_arg_index/2)
+
+        if changed?, do: {:ok, updated_args}, else: :no_change
+    end
+  end
+
+  defp canonicalize_explicit_locator_args(_fun, _args), do: :no_change
+
+  @spec reduce_locator_arg_index(non_neg_integer(), {[Macro.t()], boolean()}) :: {[Macro.t()], boolean()}
+  defp reduce_locator_arg_index(index, {args, changed?}) do
+    case locatorized_arg_at(args, index) do
+      {:ok, updated_args} -> {updated_args, true}
+      :no_change -> {args, changed?}
+    end
+  end
+
+  @spec locator_arg_indexes_for(atom(), [Macro.t()]) :: [non_neg_integer()]
+  defp locator_arg_indexes_for(:fill_in, [_, _]), do: [0]
+  defp locator_arg_indexes_for(:fill_in, [_, _, third]), do: if(keyword_ast?(third), do: [0], else: [1])
+  defp locator_arg_indexes_for(:fill_in, [_, _, _, _]), do: [1]
+
+  defp locator_arg_indexes_for(:upload, [_, _]), do: [0]
+  defp locator_arg_indexes_for(:upload, [_, _, third]), do: if(keyword_ast?(third), do: [0], else: [1])
+  defp locator_arg_indexes_for(:upload, [_, _, _, _]), do: [1]
+
+  defp locator_arg_indexes_for(fun, [_, _, third]) when fun in [:assert_has, :refute_has, :click] do
+    if keyword_ast?(third), do: [1], else: [2]
+  end
+
+  defp locator_arg_indexes_for(fun, [_, _, _, _]) when fun in [:assert_has, :refute_has, :click], do: [2]
+  defp locator_arg_indexes_for(fun, [_]) when fun in @explicit_locator_calls, do: [0]
+  defp locator_arg_indexes_for(fun, [_, _]) when fun in @explicit_locator_calls, do: [1]
+  defp locator_arg_indexes_for(fun, [_, _, _]) when fun in @explicit_locator_calls, do: [1]
+  defp locator_arg_indexes_for(_fun, _args), do: []
+
+  @spec locatorized_arg_at([Macro.t()], non_neg_integer()) :: {:ok, [Macro.t()]} | :no_change
+  defp locatorized_arg_at(args, index) when is_list(args) and is_integer(index) and index >= 0 do
+    case Enum.fetch(args, index) do
+      {:ok, arg} ->
+        case explicit_locator_ast(arg) do
+          {:ok, locator_ast} ->
+            {:ok, List.replace_at(args, index, locator_ast)}
+
+          :no_change ->
+            :no_change
+        end
+
+      :error ->
+        :no_change
+    end
+  end
+
+  @spec explicit_locator_ast(Macro.t()) :: {:ok, Macro.t()} | :no_change
+  defp explicit_locator_ast(arg) do
+    cond do
+      locator_expression_ast?(arg) ->
+        :no_change
+
+      binary_literal_ast?(arg) ->
+        {:ok, text_sigil_i_ast(binary_literal_value(arg))}
+
+      regex_literal_ast?(arg) ->
+        {:ok, [text: arg]}
+
+      keyword_ast?(arg) ->
+        :no_change
+
+      true ->
+        {:ok, [text: arg]}
+    end
+  end
+
+  @spec locator_expression_ast?(Macro.t()) :: boolean()
+  defp locator_expression_ast?({:__block__, _meta, [value]}), do: locator_expression_ast?(value)
+  defp locator_expression_ast?({:sigil_l, _meta, [_body, _mods]}), do: true
+
+  defp locator_expression_ast?({fun, _meta, args}) when is_atom(fun) and is_list(args) and fun in @locator_helper_funs,
+    do: true
+
+  defp locator_expression_ast?({{:., _dot_meta, [_module_ast, fun]}, _meta, args})
+       when is_atom(fun) and is_list(args) and fun in @locator_helper_funs, do: true
+
+  defp locator_expression_ast?(value) when is_list(value) do
+    keyword_ast?(value) and locator_keyword_ast?(value)
+  end
+
+  defp locator_expression_ast?(%{} = value) do
+    value
+    |> Map.keys()
+    |> Enum.any?(fn key ->
+      case atom_literal(key) do
+        {:ok, key_atom} -> key_atom in @locator_kind_keys
+        :error -> false
+      end
+    end)
+  end
+
+  defp locator_expression_ast?(_value), do: false
+
+  @spec locator_keyword_ast?(keyword()) :: boolean()
+  defp locator_keyword_ast?(keyword_ast) when is_list(keyword_ast) do
+    keyword_ast
+    |> normalize_keyword_ast()
+    |> Keyword.keys()
+    |> Enum.any?(&(&1 in @locator_kind_keys))
+  end
+
+  @spec binary_literal_value(Macro.t()) :: String.t()
+  defp binary_literal_value({:__block__, _meta, [value]}) when is_binary(value), do: value
+  defp binary_literal_value(value) when is_binary(value), do: value
+
+  @spec text_sigil_i_ast(String.t()) :: Macro.t()
+  defp text_sigil_i_ast(value) when is_binary(value) do
+    {:sigil_l, [delimiter: "\""], [{:<<>>, [], [value]}, ~c"i"]}
+  end
+
+  @spec regex_literal_ast?(Macro.t()) :: boolean()
+  defp regex_literal_ast?({:sigil_r, _meta, [_body, _mods]}), do: true
+  defp regex_literal_ast?({:__block__, _meta, [value]}), do: regex_literal_ast?(value)
+  defp regex_literal_ast?(_value), do: false
 
   @spec canonicalize_assertion_scope_args([Macro.t()], (Macro.t() -> Macro.t())) :: canonicalize_result()
   defp canonicalize_assertion_scope_args(args, scope_builder) when is_function(scope_builder, 1) do

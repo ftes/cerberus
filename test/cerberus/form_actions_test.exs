@@ -23,7 +23,7 @@ defmodule Cerberus.FormActionsTest do
       |> click_link(text: "Articles")
       |> assert_has(text: "Articles", exact: true)
       |> visit("/search")
-      |> fill_in("Search term", "phoenix")
+      |> fill_in(label("Search term"), "phoenix")
       |> submit(text: "Run Search")
       |> assert_has(text: "Search query: phoenix", exact: true)
     end
@@ -32,7 +32,7 @@ defmodule Cerberus.FormActionsTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/search")
-      |> fill_in("Search term *", "compat")
+      |> fill_in(label("Search term *"), "compat")
       |> submit()
       |> assert_has(text: "Nested search query: compat", exact: true)
     end
@@ -51,7 +51,7 @@ defmodule Cerberus.FormActionsTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/search")
-      |> fill_in("Search term *", "phoenix")
+      |> fill_in(label("Search term *"), "phoenix")
       |> submit(text: "Run Nested Search")
       |> assert_has(text: "Nested search query: phoenix", exact: true)
     end
@@ -81,7 +81,7 @@ defmodule Cerberus.FormActionsTest do
           unquote(driver)
           |> driver_session(context)
           |> visit("/search")
-          |> fill_in("Definitely Missing Field", "x")
+          |> fill_in(label("Definitely Missing Field"), "x")
         end
 
       assert fill_error.message =~ "possible candidates:"
@@ -118,7 +118,7 @@ defmodule Cerberus.FormActionsTest do
       :phoenix
       |> session()
       |> visit("/live/counter")
-      |> fill_in("Search term", "x")
+      |> fill_in(label("Search term"), "x")
     end
 
     assert_raise ExUnit.AssertionError, ~r/no submit button matched locator/, fn ->
