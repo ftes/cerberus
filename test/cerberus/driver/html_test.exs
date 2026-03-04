@@ -102,4 +102,28 @@ defmodule Cerberus.HtmlTest do
     assert {:ok, %{text: "Save"}} = Html.find_submit_button(doc, "Save", exact: true)
     assert %{"profile[name]" => "Aragorn"} = Html.form_defaults(doc, ~s(form[id="profile-form"]))
   end
+
+  test "checkbox_unchecked_value finds hidden default for boolean checkboxes" do
+    html = """
+    <main>
+      <form id="document-form">
+        <input type="hidden" name="custom_document[retain_across_projects?]" value="false" />
+        <label for="retain_flag">Retain document across projects?</label>
+        <input
+          id="retain_flag"
+          type="checkbox"
+          name="custom_document[retain_across_projects?]"
+          value="true"
+          checked
+        />
+      </form>
+    </main>
+    """
+
+    assert Html.checkbox_unchecked_value(
+             html,
+             ~s(form[id="document-form"]),
+             "custom_document[retain_across_projects?]"
+           ) == "false"
+  end
 end

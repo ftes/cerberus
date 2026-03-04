@@ -23,6 +23,7 @@ defmodule Cerberus.Driver.Live do
   alias Cerberus.Session.LastResult
   alias Cerberus.UploadFile
   alias ExUnit.AssertionError
+  alias Phoenix.LiveView.Utils
   alias Phoenix.LiveViewTest.TreeDOM
   alias Phoenix.LiveViewTest.View
 
@@ -193,7 +194,12 @@ defmodule Cerberus.Driver.Live do
   end
 
   @doc false
-  @spec follow_redirect(Session.t(), String.t()) :: Session.t()
+  @spec follow_redirect(
+          Session.t(),
+          String.t()
+          | {String.t(), map() | nil}
+          | %{required(:to) => String.t(), optional(atom()) => term()}
+        ) :: Session.t()
   def follow_redirect(%__MODULE__{} = session, to) when is_binary(to) do
     visit(session, to, [])
   end
@@ -2823,7 +2829,7 @@ defmodule Cerberus.Driver.Live do
   defp maybe_put_flash_cookie(conn, endpoint, flash) do
     token =
       if is_map(flash) do
-        Phoenix.LiveView.Utils.sign_flash(endpoint, flash)
+        Utils.sign_flash(endpoint, flash)
       else
         flash
       end

@@ -195,6 +195,29 @@ defmodule Cerberus.Html do
     end
   end
 
+  @spec checkbox_unchecked_value(String.t() | LazyHTML.t(), String.t(), String.t(), String.t() | nil) ::
+          String.t() | nil
+  def checkbox_unchecked_value(html_or_doc, form_selector, field_name, scope \\ nil)
+
+  def checkbox_unchecked_value(%LazyHTML{} = lazy_html, form_selector, field_name, scope)
+      when is_binary(form_selector) and is_binary(field_name) do
+    with true <- form_selector != "",
+         true <- field_name != "",
+         form_node when not is_nil(form_node) <- form_node_from_selector(lazy_html, form_selector, scope) do
+      form_hidden_input_value(lazy_html, form_node, field_name)
+    else
+      _ -> nil
+    end
+  end
+
+  def checkbox_unchecked_value(html, form_selector, field_name, scope)
+      when is_binary(html) and is_binary(form_selector) and is_binary(field_name) do
+    case parse_document(html) do
+      {:ok, lazy_html} -> checkbox_unchecked_value(lazy_html, form_selector, field_name, scope)
+      _ -> nil
+    end
+  end
+
   @spec find_submit_button(
           String.t() | LazyHTML.t(),
           String.t() | Regex.t(),
@@ -1745,6 +1768,43 @@ defmodule Cerberus.Html do
     node
     |> safe_query("input[name],textarea[name],select[name]")
     |> Enum.reject(&disabled?/1)
+  end
+
+  defp form_hidden_input_value(root_node, form_node, field_name) do
+    case form_node |> hidden_inputs_with_name(field_name) |> Enum.find_value(&hidden_input_value/1) do
+      nil ->
+        case attr(form_node, "id") do
+          form_id when is_binary(form_id) and form_id != "" ->
+            root_node
+            |> owner_hidden_inputs(form_id, field_name)
+            |> Enum.find_value(&hidden_input_value/1)
+
+          _ ->
+            nil
+        end
+
+      value ->
+        value
+    end
+  end
+
+  defp hidden_inputs_with_name(node, field_name) do
+    selector = ~s|input[type="hidden"][name="#{css_attr_escape(field_name)}"]:not([disabled])|
+    safe_query(node, selector)
+  end
+
+  defp owner_hidden_inputs(root_node, form_id, field_name) do
+    selector =
+      ~s|input[type="hidden"][form="#{css_attr_escape(form_id)}"][name="#{css_attr_escape(field_name)}"]:not([disabled])|
+
+    safe_query(root_node, selector)
+  end
+
+  defp hidden_input_value(node) do
+    case attr(node, "value") do
+      value when is_binary(value) -> value
+      _ -> ""
+    end
   end
 
   defp maybe_append_owner_controls(controls, root_node, form_node) do

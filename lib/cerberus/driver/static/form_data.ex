@@ -88,6 +88,7 @@ defmodule Cerberus.Driver.Static.FormData do
     active = pruned_params_for_form(session, field.form, field[:form_selector])
     current = Map.get(active, name, Map.get(defaults, name))
     input_value = field[:input_value] || "on"
+    hidden_unchecked_value = checkbox_hidden_unchecked_value(session, field)
 
     if String.ends_with?(name, "[]") do
       current_list = checkbox_value_list(current)
@@ -101,7 +102,7 @@ defmodule Cerberus.Driver.Static.FormData do
       if checked? do
         input_value
       else
-        checkbox_unchecked_value(defaults, name, input_value)
+        checkbox_unchecked_value(defaults, name, input_value, hidden_unchecked_value)
       end
     end
   end
@@ -179,11 +180,23 @@ defmodule Cerberus.Driver.Static.FormData do
     end
   end
 
-  defp checkbox_unchecked_value(defaults, name, input_value) do
-    case Map.get(defaults, name) do
-      ^input_value -> ""
-      nil -> ""
-      other -> other
+  defp checkbox_unchecked_value(defaults, name, input_value, hidden_unchecked_value) do
+    if is_binary(hidden_unchecked_value) do
+      hidden_unchecked_value
+    else
+      case Map.get(defaults, name) do
+        ^input_value -> ""
+        nil -> ""
+        other -> other
+      end
+    end
+  end
+
+  defp checkbox_hidden_unchecked_value(session, field) do
+    form_selector = field[:form_selector]
+
+    if is_binary(form_selector) and form_selector != "" do
+      Html.checkbox_unchecked_value(session.html, form_selector, field.name, Session.scope(session))
     end
   end
 
