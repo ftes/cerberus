@@ -189,17 +189,6 @@ defmodule Cerberus.Browser do
   end
 
   @doc """
-  Evaluates JavaScript in the active page and returns the decoded result value.
-  """
-  @spec evaluate_js(Session.t(), String.t()) :: term()
-  def evaluate_js(session, expression) do
-    case evaluate_js_value(session, expression) do
-      {:ok, value} -> value
-      {:unsupported, unsupported_session} -> Assertions.unsupported(unsupported_session, :evaluate_js)
-    end
-  end
-
-  @doc """
   Evaluates JavaScript and passes the result to `callback`, returning the original session.
   """
   @spec evaluate_js(Session.t(), String.t(), (term() -> term())) :: Session.t()

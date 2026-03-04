@@ -19,13 +19,6 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     live = visit(session(), "/live/counter")
 
-    live_error =
-      assert_raise AssertionError, fn ->
-        evaluate_js(live, "(() => 2 + 2)()")
-      end
-
-    assert live_error.message =~ "evaluate_js is not implemented for :live driver"
-
     live_callback_error =
       assert_raise AssertionError, fn ->
         evaluate_js(live, "(() => 2 + 2)()", fn _value -> :ok end)
@@ -63,7 +56,7 @@ defmodule Cerberus.BrowserExtensionsTest do
       |> type("hello browser", selector: "#keyboard-input")
       |> press("Enter", selector: "#press-input")
 
-    evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), 10)")
+    evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), 10)", fn _ -> :ok end)
     session = assert_dialog(session, text("Delete item?", exact: true))
 
     assert File.exists?(path)
@@ -338,6 +331,29 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_has(session, text("Dialog result: cancelled", exact: true))
   end
 
+  test "click action completes when clicked target opens a blocking prompt dialog" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+      |> click(button("Open Prompt Dialog", exact: true))
+
+    assert_has(session, text("Prompt result: cancelled", exact: true))
+  end
+
+  test "assertion operations complete when a blocking prompt dialog is already open" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+
+    trigger_prompt_dialog(session)
+    Process.sleep(50)
+
+    session = assert_has(session, text("Browser Extensions", exact: true), timeout: 500)
+    assert_has(session, text("Prompt result: cancelled", exact: true))
+  end
+
   test "assert_download matches download emitted before assertion call and keeps events non-consuming" do
     session =
       :browser
@@ -355,7 +371,7 @@ defmodule Cerberus.BrowserExtensionsTest do
       |> session()
       |> visit("/browser/extensions")
 
-    evaluate_js(session, "setTimeout(() => document.getElementById('download-report')?.click(), 30)")
+    evaluate_js(session, "setTimeout(() => document.getElementById('download-report')?.click(), 30)", fn _ -> :ok end)
     assert_download(session, "report.txt", timeout: 500)
   end
 
@@ -490,6 +506,14 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   defp trigger_confirm_dialog(session, delay_ms \\ 0) when is_integer(delay_ms) and delay_ms >= 0 do
-    evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), #{delay_ms})")
+    evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), #{delay_ms})", fn _ ->
+      :ok
+    end)
+  end
+
+  defp trigger_prompt_dialog(session, delay_ms \\ 0) when is_integer(delay_ms) and delay_ms >= 0 do
+    evaluate_js(session, "setTimeout(() => document.getElementById('prompt-dialog')?.click(), #{delay_ms})", fn _ ->
+      :ok
+    end)
   end
 end

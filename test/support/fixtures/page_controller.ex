@@ -485,6 +485,8 @@ defmodule Cerberus.Fixtures.PageController do
             <h2>Dialog</h2>
             <button id="confirm-dialog" type="button">Open Confirm Dialog</button>
             <p id="dialog-result">Dialog result: pending</p>
+            <button id="prompt-dialog" type="button">Open Prompt Dialog</button>
+            <p id="prompt-result">Prompt result: pending</p>
           </section>
 
           <section>
@@ -519,6 +521,8 @@ defmodule Cerberus.Fixtures.PageController do
             const pressResult = document.getElementById("press-result");
             const dialogButton = document.getElementById("confirm-dialog");
             const dialogResult = document.getElementById("dialog-result");
+            const promptButton = document.getElementById("prompt-dialog");
+            const promptResult = document.getElementById("prompt-result");
             const dragSource = document.getElementById("drag-source");
             const dropTarget = document.getElementById("drop-target");
             const dragResult = document.getElementById("drag-result");
@@ -541,6 +545,13 @@ defmodule Cerberus.Fixtures.PageController do
               dialogResult.textContent = accepted
                 ? "Dialog result: confirmed"
                 : "Dialog result: cancelled";
+            });
+
+            promptButton.addEventListener("click", () => {
+              const value = window.prompt("Type value");
+              promptResult.textContent = value === null
+                ? "Prompt result: cancelled"
+                : "Prompt result: " + value;
             });
 
             dragSource.addEventListener("dragstart", (event) => {

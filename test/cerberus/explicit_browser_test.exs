@@ -33,7 +33,7 @@ defmodule Cerberus.ExplicitBrowserTest do
         |> visit("/articles")
 
       started_at = System.monotonic_time(:millisecond)
-      assert 2 == Cerberus.Browser.evaluate_js(session, "1 + 1")
+      assert session == Cerberus.Browser.evaluate_js(session, "1 + 1", &assert(&1 == 2))
       elapsed_ms = System.monotonic_time(:millisecond) - started_at
 
       assert elapsed_ms >= 100

@@ -234,7 +234,7 @@ session =
   |> type("hello", selector: "#keyboard-input")
   |> press("Enter", selector: "#press-input")
 
-evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), 10)")
+evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), 10)", fn _ -> :ok end)
 
 session =
   session

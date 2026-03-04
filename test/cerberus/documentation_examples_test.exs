@@ -84,12 +84,30 @@ defmodule Cerberus.DocumentationExamplesTest do
       |> type("hello", selector: "#keyboard-input")
       |> press("Enter", selector: "#press-input")
 
-    evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), 10)")
+    evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), 10)", fn _ ->
+      :ok
+    end)
+
     session = assert_dialog(session, text("Delete item?", exact: true))
 
     session
     |> assert_has(text("Press result: submitted", exact: true))
     |> assert_has(text("Dialog result: cancelled", exact: true))
+  end
+
+  @tag :tmp_dir
+  test "browser prompt snippet from docs works with callback chaining", %{tmp_dir: tmp_dir} = context do
+    screenshot_path = Path.join(tmp_dir, "prompt-snippet.png")
+
+    session =
+      :browser
+      |> driver_session(context)
+      |> visit("/live/counter")
+      |> evaluate_js("prompt('Hey!')", fn _result -> :ok end)
+      |> screenshot(path: screenshot_path)
+
+    assert session.current_path == "/live/counter"
+    assert File.exists?(screenshot_path)
   end
 
   defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)

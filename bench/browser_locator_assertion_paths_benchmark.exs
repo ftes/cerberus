@@ -140,10 +140,11 @@ defmodule Cerberus.Bench.BrowserLocatorAssertionPaths do
       })()
       """
 
-    case evaluate_js(session, expression) do
-      true -> session
-      other -> raise "failed to inject benchmark DOM: #{inspect(other)}"
-    end
+    evaluate_js(session, expression, fn value ->
+      if value != true do
+        raise "failed to inject benchmark DOM: #{inspect(value)}"
+      end
+    end)
   end
 
   defp time_scenario(session, run_scenario, iterations, warmup) do
