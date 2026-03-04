@@ -20,17 +20,17 @@
 | --- | --- |
 | Visit page | `visit(session, "/articles")` |
 | Click link/button | `click(session, ~l"link:Counter"r)` |
-| Fill input | `fill_in(session, "Search term", "Aragorn")` |
-| Select option | `select(session, "Race", option: "Elf")` |
-| Choose radio | `choose(session, "Email Choice")` |
-| Check checkbox | `check(session, "Accept Terms")` |
-| Uncheck checkbox | `uncheck(session, "Receive updates")` |
-| Upload file | `upload(session, "Avatar", "/tmp/avatar.jpg")` |
+| Fill input | `fill_in(session, label("Search term"), "Aragorn")` |
+| Select option | `select(session, label("Race"), option: "Elf")` |
+| Choose radio | `choose(session, label("Email Choice"))` |
+| Check checkbox | `check(session, label("Accept Terms"))` |
+| Uncheck checkbox | `uncheck(session, label("Receive updates"))` |
+| Upload file | `upload(session, label("Avatar"), "/tmp/avatar.jpg")` |
 | Submit form | `submit(session, ~l"button:Run Search"r)` |
 | Assert text present | `assert_has(session, ~l"Articles"e)` |
 | Assert text absent | `refute_has(session, ~l"Error"e)` |
-| Assert scoped text | `assert_has(session, ~l"#secondary-panel"c, "Status: secondary")` |
-| Refute scoped text | `refute_has(session, ~l"#secondary-panel"c, "Status: primary")` |
+| Assert scoped text | `assert_has(session, ~l"#secondary-panel"c, ~l"Status: secondary"e)` |
+| Refute scoped text | `refute_has(session, ~l"#secondary-panel"c, ~l"Status: primary"e)` |
 | Assert path/query | `assert_path(session, "/search/results", query: %{q: "Aragorn"}, timeout: 500)` |
 | Scope to subtree | `within(session, ~l"#secondary-panel"c, fn s -> ... end)` |
 
@@ -58,11 +58,11 @@ Default strategy:
 
 | Goal | Preferred locator | Example |
 | --- | --- | --- |
-| Fill a text input | label text | `fill_in(session, "Email", "alice@example.com")` |
+| Fill a text input | label text | `fill_in(session, label("Email"), "alice@example.com")` |
 | Click a button | role + name | `click(session, ~l"button:Save"r)` |
 | Click a link | role + name | `click(session, ~l"link:Billing"r)` |
 | Assert rendered content | visible text | `assert_has(session, ~l"Settings saved"e)` |
-| Operate inside repeated UI | scope + same locators | `within(session, ~l"#shipping-address"c, fn s -> fill_in(s, "City", "Berlin") end)` |
+| Operate inside repeated UI | scope + same locators | `within(session, ~l"#shipping-address"c, fn s -> fill_in(s, label("City"), "Berlin") end)` |
 | Disambiguate duplicate controls | `testid` | `click(session, testid("apply-secondary-button"))` |
 
 ### Supported role aliases
@@ -92,7 +92,6 @@ Default strategy:
 
 | Locator | Meaning |
 | --- | --- |
-| `~l"Save"` | text locator |
 | `~l"Save"e` | exact text |
 | `~l"Save"i` | inexact text |
 | `~l"button:Save"r` | role-style locator |
@@ -104,6 +103,7 @@ Default strategy:
 Rules:
 - at most one kind modifier (`r`, `c`, `a`, or `t`)
 - `e` and `i` are mutually exclusive
+- plain text `~l` locators require either `e` or `i`
 - `r` requires `ROLE:NAME`
 
 ## Browser-Only Extensions
@@ -118,9 +118,9 @@ Use `Cerberus.Browser` only with `session(:browser)`.
 | Drag and drop | `Browser.drag(session, "#drag-source", "#drop-target")` |
 | Dialog assert + dismiss | `Browser.assert_dialog(session, ~l"Delete item?"e)` |
 | Dialog assert + confirm | `Browser.assert_dialog(session, ~l"Delete item?"e, accept: true)` |
-| Popup capture | `Browser.with_popup(session, fn main -> click(main, ~l"button:Open Popup"r) end, fn main, popup -> assert_path(popup, "/browser/popup/destination") end)` |
-| Popup same-tab fallback | `assert_path(visit(session(:browser, browser: [popup_mode: :same_tab]), "/browser/popup/auto"), "/browser/popup/destination", timeout: 1500)` |
-| Assert download (browser/static/live) | `assert_download(click(session, ~l"link:Download Report"r), "report.txt")` |
+| Popup capture | `session` \|> `Browser.with_popup(fn main -> click(main, ~l"button:Open Popup"r) end, fn _main, popup -> assert_path(popup, "/browser/popup/destination") end)` |
+| Popup same-tab fallback | `session(:browser, browser: [popup_mode: :same_tab])` \|> `visit("/browser/popup/auto")` \|> `assert_path("/browser/popup/destination", timeout: 1500)` |
+| Assert download (browser/static/live) | `session` \|> `click(~l"link:Download Report"r)` \|> `assert_download("report.txt")` |
 | Evaluate JS | `Browser.evaluate_js(session, "(() => 42)()")` |
 | Evaluate JS with assertion callback | `Browser.evaluate_js(session, "(() => 42)()", fn value -> assert value == 42 end)` |
 | Cookie lookup | `Browser.cookie(session, "_my_cookie")` |
