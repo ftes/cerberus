@@ -77,6 +77,8 @@ defmodule Cerberus.PasswordAuthFlowTest do
       |> click(~l"Create live"i)
       |> assert_path("/auth/live/dashboard")
       |> assert_has(text("Live dashboard for: #{email}", exact: true))
+      |> submit(button("Log out"))
+      |> assert_path("/auth/live/users/log_in")
     end
   end
 
