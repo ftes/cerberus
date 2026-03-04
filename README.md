@@ -7,23 +7,15 @@
 
 ![Cerberus hero artwork](docs/hero.avif)
 
-Cerberus is an experimental Phoenix testing library with one API across:
-- non-browser Phoenix mode with static/live auto-detection and switching,
-- browser mode for Chrome and Firefox via WebDriver BiDi.
+Ship Phoenix feature tests fast without losing browser truth.
 
-Minimal API: You control your tests. Easily run single tests/describe blocks/entire modules in one or more browsers.
+Cerberus is vertically integrated. Think of it as
+- Phoenix-aware test APIs (PhoenixTest / PhoenixTest.Playwright)
+- plus lower-level browser drivers (Capybara + Cuprite / Playwright).
 
-## Performance Highlight
-
-Live (non-browser) assertions are optimized for large pages:
-- `assert_has` / `refute_has` in live mode read from LiveViewTest's internal patched DOM tree,
-- they avoid the previous `render(view)` -> HTML string -> LazyHTML re-parse loop on each assertion,
-- matcher semantics stay in Cerberus so locators/matching remain consistent across drivers.
-
-Browser assertions/path checks use an in-browser wait loop as the fast path:
-- assertion/path polling happens inside browser JS (not Elixir-side polling),
-- Cerberus adds a bounded transient retry wrapper when BiDi eval hits navigation/context-reset races,
-- retries keep the original timeout budget semantics while reducing flaky transition failures.
+Why integrate?
+1. You can easily switch from non-browser tests (fast!) to browser tests when you add JS hooks.
+2. We can guarantee correctness: Phoenix driver behaviour is tested against real browser behaviour.
 
 ## 30-Second Start
 ```ex
@@ -32,7 +24,7 @@ Browser assertions/path checks use an in-browser wait loop as the fast path:
 ```
 
 ```bash
-mix cerberus.install.chrome
+sh> mix cerberus.install.chrome
 ```
 
 ```elixir
@@ -40,8 +32,8 @@ import Cerberus
 
 session
 |> visit("/live/counter")
-|> click(~l"button:Increment"r)
-|> assert_has(~l"Count: 1"e)
+|> click(~l"button:Increment"r) # role locator
+|> assert_has(~l"Count: 1"e) # e = exact text match
 
 session(:browser, headless: false, slow_mo: 500) # open chrome
 |> visit("/live/counter")
@@ -72,11 +64,12 @@ possible candidates:
 
 ## Locators
 
-Prefer user-facing selectors first:
-- labels for form actions (`fill_in(label("Email"), "...")`)
-- role + accessible name for controls (`~l"button:Save"r`)
-- visible text for assertions (`assert_has(~l"Saved"e)`)
-- regex values are supported for text-like locators and role names, but cannot be combined with `exact: true|false`
+A locator is the way Cerberus finds elements or text in the UI.
+
+Use composable locator functions when matching needs structure (`label`, `button`, `text`, `has`, `and_`, `closest`, ...).
+Use `~l` sigil shorthand for common one-liners:
+- `~l"Save"e` means exact text match (`e` = exact)
+- `~l"button:Save"r` means role + accessible name
 
 Use `testid(...)` when text/role is ambiguous, and CSS for structural targeting only.
 
@@ -99,10 +92,23 @@ session(:browser, show_browser: true, slow_mo: 500) # 3) human: watch live inter
 
 ## Browser Tests
 
-Browser-specific configuration and runtime setup live in [Browser Support Policy](docs/browser-support-policy.md):
-- per-test browser overrides
-- browser defaults and option precedence
-- local/remote runtime setup and install tasks
+Start in Phoenix mode (static/live) for fast feedback, then switch to browser mode when you add JS-dependent behavior (custom snippets, dialogs, drag/drop, popup flows). In many tests this is just changing `session()` to `session(:browser)`.
+
+Install Chrome with:
+
+```bash
+mix cerberus.install.chrome
+```
+
+That task is simple to run in CI setup steps too.
+
+Most tests only need `session(:browser)`; deeper runtime/config details are documented in [Browser Support Policy](docs/browser-support-policy.md).
+
+## Performance
+
+- Non-browser Phoenix mode is the fast lane for most feature tests.
+- Browser assertions/path checks run polling in browser JS and include bounded retry handling for navigation/context-reset races.
+- Browser-mode throughput is in the same class as Playwright-style real-browser E2E (both pay real browser/runtime costs), while Cerberus keeps one API across both lanes.
 
 ## Learn More
 
@@ -110,7 +116,6 @@ Browser-specific configuration and runtime setup live in [Browser Support Policy
 - [Browser Support Policy](docs/browser-support-policy.md)
 - [Cheat Sheet](docs/cheatsheet.md)
 - [Architecture and Driver Model](docs/architecture.md)
-- [Browser Support Policy](docs/browser-support-policy.md)
 
 ## Migration Task
 

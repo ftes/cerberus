@@ -7,15 +7,15 @@ Internally, Phoenix mode dispatches between static and live execution backends.
 
 ```mermaid
 flowchart LR
-  A[Public API\nCerberus] --> B[Assertions + Locator Normalization]
-  B --> C[Driver Dispatch]
-  C --> D[Static Driver\nConnTest]
-  C --> E[Live Driver\nLiveViewTest]
-  C --> F[Browser Driver\nWebDriver BiDi]
-  D --> G[HTML Semantics\nCerberus.Html]
+  A["Public API<br/>Cerberus"] --> B["Assertions + Locator Normalization"]
+  B --> C["Driver Dispatch"]
+  C --> D["Static Driver<br/>ConnTest"]
+  C --> E["Live Driver<br/>LiveViewTest"]
+  C --> F["Browser Driver<br/>WebDriver BiDi"]
+  D --> G["HTML Semantics<br/>Cerberus.Html"]
   E --> G
-  E --> H[LiveView Semantics\nCerberus.Phoenix.LiveViewHTML]
-  F --> I[Browser Runtime\nShared worker + per-test context]
+  E --> H["LiveView Semantics<br/>Cerberus.Phoenix.LiveViewHTML"]
+  F --> I["Browser Runtime<br/>Shared worker + per-test context"]
 ```
 
 ## Why this shape?
