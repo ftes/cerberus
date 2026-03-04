@@ -91,14 +91,9 @@ session
 |> open_browser() # 1) human debugging: open rendered HTML in your local browser
 
 session
-|> open_browser(fn path ->
-  File.cp!(path, "tmp/debug/articles.html")
-end) # 2) snapshot artifact: keep/share HTML for human or AI review
-
-session
 |> render_html(fn lazy_html ->
   IO.inspect(LazyHTML.query(lazy_html, "h1"))
-end) # 3) in-process DOM access for AI/tooling workflows
+end) # 2) in-process DOM access for AI/tooling workflows
 ```
 
 ## Browser Tests

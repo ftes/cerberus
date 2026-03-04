@@ -235,9 +235,7 @@ defmodule Cerberus do
   @spec open_browser(arg) :: arg when arg: var
   def open_browser(session), do: open_browser(session, &OpenBrowser.open_with_system_cmd/1)
 
-  @doc """
-  Same as `open_browser/1`, but allows injecting a custom open callback.
-  """
+  @doc false
   @spec open_browser(arg, (String.t() -> term())) :: arg when arg: var
   def open_browser(session, open_fun) when is_function(open_fun, 1) do
     driver_module_for_session!(session).open_browser(session, open_fun)
