@@ -35,6 +35,9 @@ session
 |> click(~l"button:Increment"r) # role locator
 |> assert_has(~l"Count: 1"e) # e = exact text match
 
+
+import Cerberus.Browser
+
 session(:browser, headless: false, slow_mo: 500) # open chrome
 |> visit("/live/counter")
 |> evaluate_js("prompt('Hey!')")
