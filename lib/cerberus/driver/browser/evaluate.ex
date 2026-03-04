@@ -76,15 +76,12 @@ defmodule Cerberus.Driver.Browser.Evaluate do
   defp evaluate_task_crash(reason), do: {:error, "evaluate task crashed", %{reason: Exception.format_exit(reason)}}
 
   defp maybe_unblock_dialog(user_context_pid, tab_id, wait_ms, bidi_opts) when wait_ms > 0 do
-    case UserContextProcess.await_dialog_open(user_context_pid, wait_ms, tab_id) do
-      {:ok, %{} = dialog} ->
+    case UserContextProcess.active_dialog(user_context_pid, tab_id) do
+      %{} = dialog ->
         accept_dialog(dialog, tab_id, bidi_opts)
 
-      {:error, :timeout, _events} ->
+      _ ->
         :ok
-
-      {:error, reason, details} ->
-        {:error, "failed while waiting for dialog events: #{reason}", details}
     end
   end
 
