@@ -394,7 +394,11 @@ defmodule Cerberus.LocatorParityTest do
       },
       %{name: "fill_in role spinbutton locator", expect: :ok, run: &fill_in(&1, role(:spinbutton, name: "Age"), "42")},
       %{name: "fill_in css locator", expect: :ok, run: &fill_in(&1, css("#search_q"), "cerberus")},
-      %{name: "fill_in regex label shorthand", expect: :ok, run: &fill_in(&1, ~r/Search term/, "regex value")},
+      %{
+        name: "fill_in explicit regex text locator",
+        expect: :ok,
+        run: &fill_in(&1, text(~r/Search term/), "regex value")
+      },
       %{
         name: "fill_in explicit text locator",
         expect: :ok,
