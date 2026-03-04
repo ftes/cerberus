@@ -856,10 +856,10 @@ defmodule Cerberus do
   end
 
   @doc """
-  Submits the first submit-capable button in scope.
+  Submits the active form (the most recently interacted form field).
   """
   @spec submit(arg) :: arg when arg: var
-  def submit(session), do: submit(session, button(""), [])
+  def submit(session), do: Assertions.submit(session)
 
   @doc """
   Submits a matched submit-capable control using default options.

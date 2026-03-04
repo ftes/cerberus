@@ -28,13 +28,22 @@ defmodule Cerberus.FormActionsTest do
       |> assert_has(text: "Search query: phoenix", exact: true)
     end
 
-    test "submit/1 submits the first submit-capable control in scope (#{driver})", context do
+    test "submit/1 submits the active form (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/search")
-      |> fill_in("Search term", "compat")
+      |> fill_in("Search term *", "compat")
       |> submit()
-      |> assert_has(text: "Search query: compat", exact: true)
+      |> assert_has(text: "Nested search query: compat", exact: true)
+    end
+
+    test "submit/1 fails when no active form exists (#{driver})", context do
+      assert_raise ExUnit.AssertionError, ~r/requires an active form/, fn ->
+        unquote(driver)
+        |> driver_session(context)
+        |> visit("/search")
+        |> submit()
+      end
     end
 
     test "fill_in matches wrapped labels with nested inline text across static and browser drivers (#{driver})",

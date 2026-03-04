@@ -6,11 +6,21 @@ defmodule Cerberus.Driver.Static.FormData do
 
   @spec put_form_value(map(), String.t() | nil, String.t(), term()) :: map()
   def put_form_value(form_data, form, name, value) do
+    put_form_value(form_data, form, nil, name, value)
+  end
+
+  @spec put_form_value(map(), String.t() | nil, String.t() | nil, String.t(), term()) :: map()
+  def put_form_value(form_data, form, form_selector, name, value) do
     %{active_form: active_form, values: values} = normalize_form_data(form_data)
-    key = form_key(form, active_form)
+    key = form_key(form, form_selector, active_form)
     form_values = Map.get(values, key, %{})
     next_values = Map.put(values, key, Map.put(form_values, name, value))
-    %{active_form: key, values: next_values}
+
+    %{
+      active_form: key,
+      active_form_selector: submit_form_selector(%{form: form, form_selector: form_selector}),
+      values: next_values
+    }
   end
 
   @spec submit_form_selector(map()) :: String.t() | nil
@@ -33,10 +43,23 @@ defmodule Cerberus.Driver.Static.FormData do
   end
 
   @spec clear_submitted_form(map(), String.t() | nil) :: map()
-  def clear_submitted_form(form_data, form) do
+  def clear_submitted_form(form_data, form), do: clear_submitted_form(form_data, form, nil)
+
+  @spec clear_submitted_form(map(), String.t() | nil, String.t() | nil) :: map()
+  def clear_submitted_form(form_data, form, form_selector) do
     %{active_form: active_form, values: values} = normalize_form_data(form_data)
-    key = form_key(form, active_form)
-    %{active_form: nil, values: Map.delete(values, key)}
+    key = form_key(form, form_selector, active_form)
+    %{active_form: nil, active_form_selector: nil, values: Map.delete(values, key)}
+  end
+
+  @spec active_form_selector(map()) :: String.t() | nil
+  def active_form_selector(form_data) do
+    %{active_form: active_form} = normalized = normalize_form_data(form_data)
+
+    case Map.get(normalized, :active_form_selector) do
+      selector when is_binary(selector) and selector != "" -> selector
+      _ -> selector_from_key(active_form)
+    end
   end
 
   @spec toggled_checkbox_value(struct(), map(), boolean()) :: term()
@@ -104,14 +127,14 @@ defmodule Cerberus.Driver.Static.FormData do
   end
 
   defp pruned_params_for_form(session, form, form_selector) do
-    active = params_for_form(session.form_data, form)
+    active = params_for_form(session.form_data, form, form_selector)
     keep = form_field_name_allowlist(session, form_selector)
     prune_form_params(active, keep)
   end
 
-  defp params_for_form(form_data, form) do
+  defp params_for_form(form_data, form, form_selector) do
     %{active_form: active_form, values: values} = normalize_form_data(form_data)
-    key = form_key(form, active_form)
+    key = form_key(form, form_selector, active_form)
     Map.get(values, key, %{})
   end
 
@@ -145,17 +168,28 @@ defmodule Cerberus.Driver.Static.FormData do
     end
   end
 
-  defp normalize_form_data(%{active_form: _active_form, values: values} = data) when is_map(values), do: data
-
-  defp normalize_form_data(values) when is_map(values) do
-    %{active_form: "__default__", values: %{"__default__" => values}}
+  defp normalize_form_data(%{active_form: active_form, values: values} = data) when is_map(values) do
+    selector = Map.get(data, :active_form_selector) || selector_from_key(active_form)
+    Map.put(data, :active_form_selector, selector)
   end
 
-  defp normalize_form_data(_), do: %{active_form: nil, values: %{}}
+  defp normalize_form_data(values) when is_map(values) do
+    %{active_form: "__default__", active_form_selector: nil, values: %{"__default__" => values}}
+  end
 
-  defp form_key(form, _active_form) when is_binary(form) and form != "", do: "form:" <> form
-  defp form_key(_form, active_form) when is_binary(active_form), do: active_form
-  defp form_key(_form, _active_form), do: "__default__"
+  defp normalize_form_data(_), do: %{active_form: nil, active_form_selector: nil, values: %{}}
+
+  defp form_key(form, _form_selector, _active_form) when is_binary(form) and form != "", do: "form:" <> form
+
+  defp form_key(_form, form_selector, _active_form) when is_binary(form_selector) and form_selector != "",
+    do: "selector:" <> form_selector
+
+  defp form_key(_form, _form_selector, active_form) when is_binary(active_form), do: active_form
+  defp form_key(_form, _form_selector, _active_form), do: "__default__"
+
+  defp selector_from_key("form:" <> form_id), do: ~s(form[id="#{form_id}"])
+  defp selector_from_key("selector:" <> selector) when selector != "", do: selector
+  defp selector_from_key(_), do: nil
 
   defp button_payload(button) do
     case {button.button_name, button.button_value} do

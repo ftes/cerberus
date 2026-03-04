@@ -42,7 +42,7 @@ defmodule Cerberus.Driver.Live do
             assert_timeout_ms: 0,
             view: nil,
             html: "",
-            form_data: %{active_form: nil, values: %{}},
+            form_data: %{active_form: nil, active_form_selector: nil, values: %{}},
             scope: nil,
             current_path: nil,
             last_result: nil
@@ -228,7 +228,10 @@ defmodule Cerberus.Driver.Live do
       :static ->
         case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
           {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
-            updated = %{session | form_data: FormData.put_form_value(session.form_data, field.form, name, value)}
+            updated = %{
+              session
+              | form_data: FormData.put_form_value(session.form_data, field.form, field.form_selector, name, value)
+            }
 
             observed = %{
               action: :fill_in,
@@ -304,7 +307,11 @@ defmodule Cerberus.Driver.Live do
         case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
           {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
             value = FormData.toggled_checkbox_value(session, field, true)
-            updated = %{session | form_data: FormData.put_form_value(session.form_data, field.form, name, value)}
+
+            updated = %{
+              session
+              | form_data: FormData.put_form_value(session.form_data, field.form, field.form_selector, name, value)
+            }
 
             observed = %{
               action: :check,
@@ -359,7 +366,11 @@ defmodule Cerberus.Driver.Live do
         case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
           {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
             value = FormData.toggled_checkbox_value(session, field, false)
-            updated = %{session | form_data: FormData.put_form_value(session.form_data, field.form, name, value)}
+
+            updated = %{
+              session
+              | form_data: FormData.put_form_value(session.form_data, field.form, field.form_selector, name, value)
+            }
 
             observed = %{
               action: :uncheck,
@@ -474,6 +485,23 @@ defmodule Cerberus.Driver.Live do
 
             {:error, session, observed, "no submit button matched locator"}
         end
+    end
+  end
+
+  @impl true
+  def submit_active_form(%__MODULE__{} = session, _opts) do
+    session = with_latest_html(session)
+
+    case active_form_submit_button(session) do
+      {:ok, button} ->
+        case route_kind(session) do
+          :live -> do_live_submit(session, button)
+          :static -> do_submit(session, button)
+        end
+
+      {:error, reason} ->
+        observed = %{action: :submit, path: session.current_path, transition: session_transition(session)}
+        {:error, session, observed, reason}
     end
   end
 
@@ -1239,6 +1267,36 @@ defmodule Cerberus.Driver.Live do
     Html.assertion_values(session.html, match_by, :any, Session.scope(session))
   end
 
+  defp active_form_submit_button(session) do
+    case FormData.active_form_selector(session.form_data) do
+      selector when is_binary(selector) and selector != "" ->
+        selector
+        |> find_active_form_submit_button(session)
+        |> normalize_active_submit_button_result()
+
+      _ ->
+        no_active_form_submit_error()
+    end
+  end
+
+  defp find_active_form_submit_button(selector, session) when is_binary(selector) do
+    match_opts = [match_by: :button, selector: selector <> " button"]
+    finder = submit_button_finder(route_kind(session))
+    finder.(session.html, "", match_opts, Session.scope(session))
+  end
+
+  defp normalize_active_submit_button_result({:ok, button}), do: {:ok, button}
+
+  defp normalize_active_submit_button_result(:error),
+    do: {:error, "submit/1 could not find a submit button in the active form"}
+
+  defp submit_button_finder(:live), do: &LiveViewHTML.find_submit_button/4
+  defp submit_button_finder(:static), do: &Html.find_submit_button/4
+
+  defp no_active_form_submit_error do
+    {:error, "submit/1 requires an active form; call fill_in/select/choose/check/uncheck/upload first"}
+  end
+
   defp locator_match_opts(%Locator{opts: locator_opts}, opts) do
     Keyword.merge(locator_opts, opts)
   end
@@ -1520,7 +1578,7 @@ defmodule Cerberus.Driver.Live do
         transition: transition
       }
 
-      cleared_form_data = FormData.clear_submitted_form(session.form_data, button.form)
+      cleared_form_data = FormData.clear_submitted_form(session.form_data, button.form, button.form_selector)
       {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
     else
       observed = %{
@@ -1583,7 +1641,7 @@ defmodule Cerberus.Driver.Live do
           transition: transition
         }
 
-        cleared_form_data = FormData.clear_submitted_form(session.form_data, button.form)
+        cleared_form_data = FormData.clear_submitted_form(session.form_data, button.form, button.form_selector)
         {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
 
       {:error, failed_session, reason, details} ->
@@ -1611,7 +1669,7 @@ defmodule Cerberus.Driver.Live do
           transition: transition
         }
 
-        cleared_form_data = FormData.clear_submitted_form(session.form_data, button.form)
+        cleared_form_data = FormData.clear_submitted_form(session.form_data, button.form, button.form_selector)
         {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
 
       {:error, failed_session, reason, details} ->
@@ -1650,7 +1708,7 @@ defmodule Cerberus.Driver.Live do
           transition: transition
         }
 
-        cleared_form_data = FormData.clear_submitted_form(session.form_data, button.form)
+        cleared_form_data = FormData.clear_submitted_form(session.form_data, button.form, button.form_selector)
         {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
 
       {:error, failed_session, reason, details} ->
@@ -1698,7 +1756,7 @@ defmodule Cerberus.Driver.Live do
       transition: transition
     }
 
-    cleared_form_data = FormData.clear_submitted_form(session.form_data, button.form)
+    cleared_form_data = FormData.clear_submitted_form(session.form_data, button.form, button.form_selector)
     {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
   end
 
@@ -1708,7 +1766,11 @@ defmodule Cerberus.Driver.Live do
         case Html.select_values(session.html, field, option, opts, Session.scope(session)) do
           {:ok, %{values: values, multiple?: multiple?}} ->
             value = FormData.select_value_for_update(session, field, option, values, multiple?, :static)
-            updated = %{session | form_data: FormData.put_form_value(session.form_data, field.form, name, value)}
+
+            updated = %{
+              session
+              | form_data: FormData.put_form_value(session.form_data, field.form, field.form_selector, name, value)
+            }
 
             observed = %{
               action: :select,
@@ -1766,7 +1828,11 @@ defmodule Cerberus.Driver.Live do
     case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
       {:ok, %{name: name, input_type: "radio"} = field} when is_binary(name) and name != "" ->
         value = field[:input_value] || "on"
-        updated = %{session | form_data: FormData.put_form_value(session.form_data, field.form, name, value)}
+
+        updated = %{
+          session
+          | form_data: FormData.put_form_value(session.form_data, field.form, field.form_selector, name, value)
+        }
 
         observed = %{
           action: :choose,
@@ -1812,7 +1878,11 @@ defmodule Cerberus.Driver.Live do
       {:ok, %{name: name, input_type: "file"} = field} when is_binary(name) and name != "" ->
         file = UploadFile.read!(path)
         value = FormData.upload_value_for_update(session, field, file, path, :static)
-        updated = %{session | form_data: FormData.put_form_value(session.form_data, field.form, name, value)}
+
+        updated = %{
+          session
+          | form_data: FormData.put_form_value(session.form_data, field.form, field.form_selector, name, value)
+        }
 
         observed = %{
           action: :upload,
@@ -1868,7 +1938,7 @@ defmodule Cerberus.Driver.Live do
          {:ok, %{values: values, multiple?: multiple?}} <-
            Html.select_values(session.html, field, option, opts, Session.scope(session)) do
       value = FormData.select_value_for_update(session, field, option, values, multiple?, :live)
-      form_data = FormData.put_form_value(session.form_data, field.form, field.name, value)
+      form_data = FormData.put_form_value(session.form_data, field.form, field.form_selector, field.name, value)
       updated = %{session | form_data: form_data}
       handle_live_select_change(session, updated, field, option, value)
     else
@@ -1881,7 +1951,7 @@ defmodule Cerberus.Driver.Live do
     case find_live_radio_field(session, expected, opts) do
       {:ok, field} ->
         value = field[:input_value] || "on"
-        form_data = FormData.put_form_value(session.form_data, field.form, field.name, value)
+        form_data = FormData.put_form_value(session.form_data, field.form, field.form_selector, field.name, value)
         updated = %{session | form_data: form_data}
         handle_live_choose_change(session, updated, field, value)
 
@@ -2006,7 +2076,7 @@ defmodule Cerberus.Driver.Live do
   defp do_live_fill_in(session, expected, value, opts) do
     case LiveViewHTML.find_form_field(session.html, expected, opts, Session.scope(session)) do
       {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
-        form_data = FormData.put_form_value(session.form_data, field.form, name, value)
+        form_data = FormData.put_form_value(session.form_data, field.form, field.form_selector, name, value)
         updated = %{session | form_data: form_data}
 
         case maybe_trigger_live_change(updated, field) do
@@ -2086,7 +2156,7 @@ defmodule Cerberus.Driver.Live do
 
   defp apply_live_checkbox_change(session, field, checked?, op) do
     value = FormData.toggled_checkbox_value(session, field, checked?)
-    form_data = FormData.put_form_value(session.form_data, field.form, field.name, value)
+    form_data = FormData.put_form_value(session.form_data, field.form, field.form_selector, field.name, value)
     updated = %{session | form_data: form_data}
 
     case maybe_trigger_live_change(updated, field) do
@@ -2289,7 +2359,7 @@ defmodule Cerberus.Driver.Live do
 
     case follow_form_request(session, method, action, params) do
       {:ok, updated, _transition} ->
-        cleared_form_data = FormData.clear_submitted_form(session.form_data, form[:form])
+        cleared_form_data = FormData.clear_submitted_form(session.form_data, form[:form], form[:form_selector])
         {:ok, %{updated | form_data: cleared_form_data}}
 
       {:error, _failed_session, reason, details} ->

@@ -29,6 +29,16 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
       |> assert_has(text("method: POST", exact: true))
     end
 
+    test "submit/1 uses the active live form without an explicit button locator (#{driver})", context do
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/live/trigger-action")
+      |> fill_in("Trigger action", "engage")
+      |> submit()
+      |> assert_path("/trigger-action/result")
+      |> assert_has(text("method: POST", exact: true))
+    end
+
     test "phx-trigger-action can be triggered from outside the form (#{driver})", context do
       unquote(driver)
       |> driver_session(context)

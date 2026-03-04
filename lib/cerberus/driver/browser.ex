@@ -71,6 +71,7 @@ defmodule Cerberus.Driver.Browser do
           ready_quiet_ms: pos_integer(),
           browser_context_defaults: browser_context_defaults(),
           sandbox_metadata: String.t() | nil,
+          active_form_selector: String.t() | nil,
           scope: Session.scope_value(),
           current_path: String.t() | nil,
           last_result: Session.last_result()
@@ -85,6 +86,7 @@ defmodule Cerberus.Driver.Browser do
             ready_quiet_ms: @default_ready_quiet_ms,
             browser_context_defaults: @empty_browser_context_defaults,
             sandbox_metadata: nil,
+            active_form_selector: nil,
             scope: nil,
             current_path: nil,
             last_result: nil
@@ -141,6 +143,7 @@ defmodule Cerberus.Driver.Browser do
         %{
           session
           | tab_id: tab_id,
+            active_form_selector: nil,
             scope: nil,
             current_path: nil
         }
@@ -182,6 +185,7 @@ defmodule Cerberus.Driver.Browser do
           %{
             session
             | tab_id: next_tab_id,
+              active_form_selector: nil,
               scope: nil,
               current_path: nil
           }
@@ -422,6 +426,28 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @impl true
+  def submit_active_form(%__MODULE__{} = session, _opts) do
+    state = state!(session)
+
+    case state.active_form_selector do
+      selector when is_binary(selector) and selector != "" ->
+        case do_resolved_submit(session, state, "", match_by: :button, scope_selector: selector) do
+          {:error, failed_session, observed, "no submit button matched locator"} ->
+            {:error, failed_session, observed, "submit/1 could not find a submit button in the active form"}
+
+          other ->
+            other
+        end
+
+      _ ->
+        observed = %{action: :submit, path: state.current_path}
+
+        {:error, session, observed,
+         "submit/1 requires an active form; call fill_in/select/choose/check/uncheck/upload first"}
+    end
+  end
+
+  @impl true
   def assert_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
     state = state!(session)
     timeout_ms = assertion_timeout_ms(opts)
@@ -641,7 +667,7 @@ defmodule Cerberus.Driver.Browser do
     Map.merge(
       %{
         op: Atom.to_string(op),
-        scopeSelector: Session.scope(state),
+        scopeSelector: action_scope_selector(state, opts),
         selector: Keyword.get(opts, :selector),
         locator: action_locator_payload(opts),
         expected: text_expectation_payload(expected),
@@ -668,6 +694,21 @@ defmodule Cerberus.Driver.Browser do
       },
       extra_payload
     )
+  end
+
+  defp action_scope_selector(state, opts) do
+    scope = Session.scope(state)
+
+    case Keyword.get(opts, :scope_selector) do
+      selector when is_binary(selector) and selector != "" ->
+        case scope do
+          %{} = scope_map -> Map.put(scope_map, :selector, selector)
+          _ -> selector
+        end
+
+      _ ->
+        scope
+    end
   end
 
   defp no_action_target_error(:click, opts), do: no_clickable_error(Keyword.get(opts, :kind, :any))
@@ -757,7 +798,7 @@ defmodule Cerberus.Driver.Browser do
         |> action_result_path(state.current_path)
         |> ready_path(readiness)
 
-      next_state = %{state | current_path: path}
+      next_state = %{state | current_path: path, active_form_selector: nil}
 
       observed = %{
         action: :click,
@@ -801,7 +842,7 @@ defmodule Cerberus.Driver.Browser do
 
   defp fill_in_result(session, state, field, value, result) when is_map(result) do
     path = action_result_path(result, state.current_path)
-    next_state = %{state | current_path: path}
+    next_state = %{state | current_path: path, active_form_selector: target_form_selector(field, state)}
 
     observed = %{
       action: :fill_in,
@@ -815,7 +856,7 @@ defmodule Cerberus.Driver.Browser do
 
   defp select_result(session, state, field, option, result) when is_map(result) do
     path = action_result_path(result, state.current_path)
-    next_state = %{state | current_path: path}
+    next_state = %{state | current_path: path, active_form_selector: target_form_selector(field, state)}
 
     observed = %{
       action: :select,
@@ -830,7 +871,7 @@ defmodule Cerberus.Driver.Browser do
 
   defp choose_result(session, state, field, result) when is_map(result) do
     path = action_result_path(result, state.current_path)
-    next_state = %{state | current_path: path}
+    next_state = %{state | current_path: path, active_form_selector: target_form_selector(field, state)}
 
     observed = %{
       action: :choose,
@@ -844,7 +885,7 @@ defmodule Cerberus.Driver.Browser do
 
   defp checkbox_result(session, state, field, checked?, op, result) when is_map(result) do
     path = action_result_path(result, state.current_path)
-    next_state = %{state | current_path: path}
+    next_state = %{state | current_path: path, active_form_selector: target_form_selector(field, state)}
 
     observed = %{
       action: op,
@@ -858,7 +899,7 @@ defmodule Cerberus.Driver.Browser do
 
   defp upload_result(session, state, field, file_name, result) when is_map(result) do
     path = action_result_path(result, state.current_path)
-    next_state = %{state | current_path: path}
+    next_state = %{state | current_path: path, active_form_selector: target_form_selector(field, state)}
 
     observed = %{
       action: :upload,
@@ -868,6 +909,13 @@ defmodule Cerberus.Driver.Browser do
     }
 
     {:ok, update_session(session, next_state, :upload, observed), observed}
+  end
+
+  defp target_form_selector(target, state) when is_map(target) do
+    case Map.get(target, "formSelector") do
+      selector when is_binary(selector) and selector != "" -> selector
+      _ -> state.active_form_selector
+    end
   end
 
   defp maybe_await_ready_result(session, state, result, opts, fallback_observed, on_success)
@@ -1403,6 +1451,7 @@ defmodule Cerberus.Driver.Browser do
         ready_quiet_ms: state.ready_quiet_ms,
         browser_context_defaults: state.browser_context_defaults,
         sandbox_metadata: state.sandbox_metadata,
+        active_form_selector: state.active_form_selector,
         scope: session.scope,
         current_path: state.current_path,
         last_result: LastResult.new(op, observed, session)

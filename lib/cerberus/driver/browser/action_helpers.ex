@@ -3,15 +3,68 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAction && window.__cerberusAction.__version === 9) return;
+    if (window.__cerberusAction && window.__cerberusAction.__version === 10) return;
 
     const helper = {};
-    helper.__version = 9;
+    helper.__version = 10;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
       if (!normalizeWs) return source;
       return source.replace(/\\s+/g, " ").trim();
+    };
+
+    helper.cssEscape = (value) => {
+      const source = String(value || "");
+
+      if (typeof CSS !== "undefined" && CSS && typeof CSS.escape === "function") {
+        return CSS.escape(source);
+      }
+
+      return source.replace(/\\\\/g, "\\\\\\\\").replace(/"/g, "\\\\22 ");
+    };
+
+    helper.uniqueSelector = (element) => {
+      if (!element || element.nodeType !== 1) return null;
+
+      const parts = [];
+      let node = element;
+
+      while (node && node.nodeType === 1) {
+        const tag = (node.tagName || "").toLowerCase();
+        if (!tag) break;
+
+        const id = typeof node.getAttribute === "function" ? node.getAttribute("id") : null;
+        if (id) {
+          parts.unshift(`${tag}[id="${helper.cssEscape(id)}"]`);
+          break;
+        }
+
+        let index = 1;
+        let sibling = node;
+
+        while (sibling && sibling.previousElementSibling) {
+          sibling = sibling.previousElementSibling;
+          if ((sibling.tagName || "").toLowerCase() === tag) index += 1;
+        }
+
+        parts.unshift(`${tag}:nth-of-type(${index})`);
+        node = node.parentElement;
+      }
+
+      return parts.length > 0 ? parts.join(" > ") : null;
+    };
+
+    helper.formSelector = (element) => {
+      if (!element) return "";
+
+      const form = element.form || (typeof element.closest === "function" ? element.closest("form") : null);
+      if (!form) return "";
+
+      const id = typeof form.getAttribute === "function" ? form.getAttribute("id") : "";
+      if (id) return `form[id="${helper.cssEscape(id)}"]`;
+
+      return helper.uniqueSelector(form) || "";
     };
 
     helper.currentPath = () => window.location.pathname + window.location.search;
@@ -503,6 +556,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
                   title: element.getAttribute("title") || "",
                   alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt],[role='img'][alt]"),
                   testid: element.getAttribute("data-testid") || "",
+                  formSelector: helper.formSelector(element),
                   href: element.getAttribute("href") || "",
                   resolvedHref: element.href || "",
                   checked: false,
@@ -527,6 +581,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
                   alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt]"),
                   testid: element.getAttribute("data-testid") || "",
                   type: (element.getAttribute("type") || "submit").toLowerCase(),
+                  formSelector: helper.formSelector(element),
                   checked: false,
                   disabled: element.disabled === true,
                   readonly: element.readOnly === true || element.hasAttribute("readonly"),
@@ -560,6 +615,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
               alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt]"),
               testid: element.getAttribute("data-testid") || "",
               type,
+              formSelector: helper.formSelector(element),
               checked: false,
               disabled: element.disabled === true,
               readonly: element.readOnly === true || element.hasAttribute("readonly"),
@@ -620,6 +676,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
               placeholder: element.getAttribute("placeholder") || "",
               title: element.getAttribute("title") || "",
               testid: element.getAttribute("data-testid") || "",
+              formSelector: helper.formSelector(element),
               checked: element.checked === true,
               selected:
                 tag === "select"
@@ -647,6 +704,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
             placeholder: element.getAttribute("placeholder") || "",
             title: element.getAttribute("title") || "",
             testid: element.getAttribute("data-testid") || "",
+            formSelector: helper.formSelector(element),
             checked: element.checked === true,
             selected: element.checked === true,
             disabled: element.disabled === true,
@@ -808,6 +866,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           title: (element.getAttribute("title") || ""),
           alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt],[role='img'][alt]"),
           testid: (element.getAttribute("data-testid") || ""),
+          formSelector: helper.formSelector(element),
           checked: element.checked === true,
           selected:
             tag === "select"

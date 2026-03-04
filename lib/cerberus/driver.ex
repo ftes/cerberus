@@ -43,6 +43,7 @@ defmodule Cerberus.Driver do
   @callback check(session_t(), Locator.t(), check_opts()) :: op_ok() | op_error()
   @callback uncheck(session_t(), Locator.t(), check_opts()) :: op_ok() | op_error()
   @callback upload(session_t(), Locator.t(), upload_path(), upload_opts()) :: op_ok() | op_error()
+  @callback submit_active_form(session_t(), submit_opts()) :: op_ok() | op_error()
   @callback submit(session_t(), Locator.t(), submit_opts()) :: op_ok() | op_error()
   @callback assert_has(session_t(), Locator.t(), assert_opts()) :: op_ok() | op_error()
   @callback refute_has(session_t(), Locator.t(), assert_opts()) :: op_ok() | op_error()

@@ -142,6 +142,21 @@ defmodule Cerberus.Assertions do
     raise ArgumentError, "upload/4 expects a non-empty path string and keyword options"
   end
 
+  @spec submit(arg) :: arg when arg: var
+  def submit(session) do
+    driver = driver_module_for_session!(session)
+    result = profile_driver_operation(session, :submit, fn -> driver.submit_active_form(session, []) end)
+
+    case result do
+      {:ok, session, _observed} ->
+        session
+
+      {:error, failed_session, observed, reason} ->
+        raise AssertionError,
+          message: format_error("submit", "active_form", [], reason, observed, failed_session)
+    end
+  end
+
   @spec submit(arg, Driver.locator_input(), Driver.submit_opts()) :: arg when arg: var
   def submit(session, locator_input, opts \\ []) do
     {locator, opts} = normalize_submit_locator(locator_input, opts)
