@@ -8,12 +8,29 @@ defmodule Cerberus.Options do
 
   @type click_kind :: :any | :link | :button
   @type locator_match_by :: :text | :label | :link | :button | :placeholder | :title | :alt | :aria_label | :testid
+  @type role_locator_name :: String.t() | Regex.t() | nil
+  @type locator_nested_input :: Cerberus.Locator.input()
   @type visibility_filter :: boolean() | :any
   @type fill_in_value :: String.t() | integer() | float() | boolean()
   @type select_value :: String.t() | [String.t()]
   @type between_filter :: {non_neg_integer(), non_neg_integer()} | Range.t() | nil
   @type text_match_opts :: [exact: boolean(), normalize_ws: boolean()]
   @type selector_filter_opts :: [selector: String.t() | nil]
+  @type locator_leaf_opts :: [
+          exact: boolean(),
+          selector: String.t() | nil,
+          has: locator_nested_input() | nil,
+          has_not: locator_nested_input() | nil,
+          from: locator_nested_input() | nil
+        ]
+  @type role_locator_opts :: [
+          name: role_locator_name(),
+          exact: boolean(),
+          selector: String.t() | nil,
+          has: locator_nested_input() | nil,
+          has_not: locator_nested_input() | nil
+        ]
+  @type closest_opts :: [from: locator_nested_input()]
   @type state_filter_opts :: [
           checked: boolean() | nil,
           disabled: boolean() | nil,
@@ -51,6 +68,8 @@ defmodule Cerberus.Options do
           has_not: Cerberus.Locator.t() | nil
         ]
   @type path_match_opts :: [exact: boolean()]
+  @type visit_opts :: []
+  @type reload_opts :: visit_opts()
   @type session_common_opts :: [
           endpoint: module(),
           conn: Plug.Conn.t() | nil,

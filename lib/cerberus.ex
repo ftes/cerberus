@@ -275,7 +275,7 @@ defmodule Cerberus do
   - `text(value, opts)` for a leaf locator
   - `text(locator, value)` to compose with an existing locator
   """
-  @spec text(String.t() | Regex.t(), keyword()) :: Locator.t()
+  @spec text(String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def text(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     Locator.leaf(:text, value, opts)
   end
@@ -288,7 +288,7 @@ defmodule Cerberus do
   @doc """
   Composes a text constraint into an existing locator with locator options.
   """
-  @spec text(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
+  @spec text(locator_input(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def text(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     and_(locator, text(value, opts))
   end
@@ -306,7 +306,7 @@ defmodule Cerberus do
   - `link(value, opts)` for a leaf locator
   - `link(locator, value)` to compose with an existing locator
   """
-  @spec link(String.t() | Regex.t(), keyword()) :: Locator.t()
+  @spec link(String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def link(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     Locator.leaf(:link, value, opts)
   end
@@ -319,7 +319,7 @@ defmodule Cerberus do
   @doc """
   Composes a link constraint into an existing locator with locator options.
   """
-  @spec link(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
+  @spec link(locator_input(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def link(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     and_(locator, link(value, opts))
   end
@@ -337,7 +337,7 @@ defmodule Cerberus do
   - `button(value, opts)` for a leaf locator
   - `button(locator, value)` to compose with an existing locator
   """
-  @spec button(String.t() | Regex.t(), keyword()) :: Locator.t()
+  @spec button(String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def button(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     Locator.leaf(:button, value, opts)
   end
@@ -350,7 +350,7 @@ defmodule Cerberus do
   @doc """
   Composes a button constraint into an existing locator with locator options.
   """
-  @spec button(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
+  @spec button(locator_input(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def button(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     and_(locator, button(value, opts))
   end
@@ -368,7 +368,7 @@ defmodule Cerberus do
   - `label(value, opts)` for a leaf locator
   - `label(locator, value)` to compose with an existing locator
   """
-  @spec label(String.t() | Regex.t(), keyword()) :: Locator.t()
+  @spec label(String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def label(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     Locator.leaf(:label, value, opts)
   end
@@ -381,7 +381,7 @@ defmodule Cerberus do
   @doc """
   Composes a label constraint into an existing locator with locator options.
   """
-  @spec label(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
+  @spec label(locator_input(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def label(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     and_(locator, label(value, opts))
   end
@@ -399,7 +399,7 @@ defmodule Cerberus do
   - `placeholder(value, opts)` for a leaf locator
   - `placeholder(locator, value)` to compose with an existing locator
   """
-  @spec placeholder(String.t() | Regex.t(), keyword()) :: Locator.t()
+  @spec placeholder(String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def placeholder(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     Locator.leaf(:placeholder, value, opts)
   end
@@ -412,7 +412,7 @@ defmodule Cerberus do
   @doc """
   Composes a placeholder constraint into an existing locator with locator options.
   """
-  @spec placeholder(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
+  @spec placeholder(locator_input(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def placeholder(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     and_(locator, placeholder(value, opts))
   end
@@ -430,7 +430,7 @@ defmodule Cerberus do
   - `title(value, opts)` for a leaf locator
   - `title(locator, value)` to compose with an existing locator
   """
-  @spec title(String.t() | Regex.t(), keyword()) :: Locator.t()
+  @spec title(String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def title(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     Locator.leaf(:title, value, opts)
   end
@@ -443,7 +443,7 @@ defmodule Cerberus do
   @doc """
   Composes a title constraint into an existing locator with locator options.
   """
-  @spec title(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
+  @spec title(locator_input(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def title(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     and_(locator, title(value, opts))
   end
@@ -461,7 +461,7 @@ defmodule Cerberus do
   - `alt(value, opts)` for a leaf locator
   - `alt(locator, value)` to compose with an existing locator
   """
-  @spec alt(String.t() | Regex.t(), keyword()) :: Locator.t()
+  @spec alt(String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def alt(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     Locator.leaf(:alt, value, opts)
   end
@@ -474,7 +474,7 @@ defmodule Cerberus do
   @doc """
   Composes an alt-text constraint into an existing locator with locator options.
   """
-  @spec alt(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
+  @spec alt(locator_input(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def alt(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     and_(locator, alt(value, opts))
   end
@@ -492,7 +492,7 @@ defmodule Cerberus do
   - `aria_label(value, opts)` for a leaf locator
   - `aria_label(locator, value)` to compose with an existing locator
   """
-  @spec aria_label(String.t() | Regex.t(), keyword()) :: Locator.t()
+  @spec aria_label(String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def aria_label(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     Locator.leaf(:aria_label, value, opts)
   end
@@ -505,7 +505,7 @@ defmodule Cerberus do
   @doc """
   Composes an `aria-label` constraint into an existing locator with locator options.
   """
-  @spec aria_label(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
+  @spec aria_label(locator_input(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def aria_label(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     and_(locator, aria_label(value, opts))
   end
@@ -523,7 +523,7 @@ defmodule Cerberus do
   - `css(value, opts)` for a leaf locator
   - `css(locator, value)` to compose with an existing locator
   """
-  @spec css(String.t(), keyword()) :: Locator.t()
+  @spec css(String.t(), Options.locator_leaf_opts()) :: Locator.t()
   def css(value, opts) when is_binary(value) and is_list(opts) do
     Locator.leaf(:css, value, opts)
   end
@@ -536,7 +536,7 @@ defmodule Cerberus do
   @doc """
   Composes a CSS constraint into an existing locator with locator options.
   """
-  @spec css(locator_input(), String.t(), keyword()) :: Locator.t()
+  @spec css(locator_input(), String.t(), Options.locator_leaf_opts()) :: Locator.t()
   def css(locator, value, opts) when is_binary(value) and is_list(opts) do
     and_(locator, css(value, opts))
   end
@@ -554,7 +554,7 @@ defmodule Cerberus do
   - `role(role_name, opts)` for a leaf locator
   - `role(locator, role_name)` to compose with an existing locator
   """
-  @spec role(String.t() | atom(), keyword()) :: Locator.t()
+  @spec role(String.t() | atom(), Options.role_locator_opts()) :: Locator.t()
   def role(role, opts) when (is_binary(role) or is_atom(role)) and is_list(opts) do
     Locator.role(role, opts)
   end
@@ -567,7 +567,7 @@ defmodule Cerberus do
   @doc """
   Composes a role constraint into an existing locator with locator options.
   """
-  @spec role(locator_input(), String.t() | atom(), keyword()) :: Locator.t()
+  @spec role(locator_input(), String.t() | atom(), Options.role_locator_opts()) :: Locator.t()
   def role(locator, role_name, opts) when (is_binary(role_name) or is_atom(role_name)) and is_list(opts) do
     and_(locator, role(role_name, opts))
   end
@@ -585,7 +585,7 @@ defmodule Cerberus do
   - `testid(value, opts)` for a leaf locator
   - `testid(locator, value)` to compose with an existing locator
   """
-  @spec testid(String.t(), keyword()) :: Locator.t()
+  @spec testid(String.t(), Options.locator_leaf_opts()) :: Locator.t()
   def testid(value, opts) when is_binary(value) and is_list(opts) do
     Locator.leaf(:testid, value, opts)
   end
@@ -598,7 +598,7 @@ defmodule Cerberus do
   @doc """
   Composes a test-id constraint into an existing locator with locator options.
   """
-  @spec testid(locator_input(), String.t(), keyword()) :: Locator.t()
+  @spec testid(locator_input(), String.t(), Options.locator_leaf_opts()) :: Locator.t()
   def testid(locator, value, opts) when is_binary(value) and is_list(opts) do
     and_(locator, testid(value, opts))
   end
@@ -654,7 +654,7 @@ defmodule Cerberus do
 
       within(session, closest(~l".fieldset"c, from: ~l"textbox:Email"r), &assert_has(&1, ~l"can't be blank"e))
   """
-  @spec closest(locator_input(), keyword()) :: Locator.t()
+  @spec closest(locator_input(), Options.closest_opts()) :: Locator.t()
   def closest(locator, opts), do: Locator.closest(locator, opts)
 
   @doc """
@@ -680,7 +680,7 @@ defmodule Cerberus do
   @doc """
   Visits `path` and returns the updated session.
   """
-  @spec visit(arg, String.t(), keyword()) :: arg when arg: var
+  @spec visit(arg, String.t(), Options.visit_opts()) :: arg when arg: var
   def visit(session, path, opts \\ []) when is_binary(path) do
     driver = driver_module_for_session!(session)
     bucket_driver = profiling_bucket_driver_kind!(session)
@@ -693,7 +693,7 @@ defmodule Cerberus do
   @doc """
   Reloads the current path, defaulting to `/` when the session has no current path.
   """
-  @spec reload_page(arg, keyword()) :: arg when arg: var
+  @spec reload_page(arg, Options.reload_opts()) :: arg when arg: var
   def reload_page(session, opts \\ []) do
     visit(session, current_path(session) || "/", opts)
   end

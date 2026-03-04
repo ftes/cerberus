@@ -45,7 +45,7 @@ defmodule Cerberus.Browser do
 
   #{@screenshot_options_doc}
   """
-  @spec screenshot(session, String.t() | keyword()) :: session when session: var
+  @spec screenshot(session, String.t() | Options.screenshot_opts()) :: session when session: var
   def screenshot(session, opts \\ [])
 
   @spec screenshot(arg, String.t() | Options.screenshot_opts()) :: arg when arg: var

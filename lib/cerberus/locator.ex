@@ -11,6 +11,7 @@ defmodule Cerberus.Locator do
   """
 
   alias Cerberus.InvalidLocatorError
+  alias Cerberus.Options
 
   @enforce_keys [:kind, :value]
   defstruct [:kind, :value, opts: []]
@@ -66,7 +67,7 @@ defmodule Cerberus.Locator do
 
   def normalize(locator), do: raise(InvalidLocatorError, locator: locator)
 
-  @spec leaf(leaf_kind(), String.t() | Regex.t(), keyword()) :: t()
+  @spec leaf(leaf_kind(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: t()
   def leaf(kind, value, opts \\ [])
 
   def leaf(kind, value, opts) when kind in [:text, :label, :link, :button, :placeholder, :title, :alt, :aria_label] do
@@ -92,7 +93,7 @@ defmodule Cerberus.Locator do
     %__MODULE__{kind: :testid, value: value, opts: normalized_opts}
   end
 
-  @spec role(String.t() | atom(), keyword()) :: t()
+  @spec role(String.t() | atom(), Options.role_locator_opts()) :: t()
   def role(role, opts \\ []) when (is_binary(role) or is_atom(role)) and is_list(opts) do
     [role: role, name: Keyword.get(opts, :name)]
     |> maybe_put_opt(opts, :exact)
@@ -102,7 +103,7 @@ defmodule Cerberus.Locator do
     |> normalize()
   end
 
-  @spec closest(input(), keyword()) :: t()
+  @spec closest(input(), Options.closest_opts()) :: t()
   def closest(locator, opts) when is_list(opts) do
     from_locator_input =
       case Keyword.fetch(opts, :from) do
