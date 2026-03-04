@@ -89,6 +89,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     :submit,
     :upload
   ]
+  @label_locator_variable_calls [:fill_in, :select, :choose, :check, :uncheck, :upload]
   @locator_helper_funs [
     :text,
     :label,
@@ -811,7 +812,8 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
           fn acc -> canonicalize_text_assertion_args(fun, acc) end,
           fn acc -> canonicalize_labeled_value_call_args(fun, acc) end,
           fn acc -> canonicalize_scope_locator_args(fun, acc, scope_builder) end,
-          fn acc -> canonicalize_explicit_locator_args(fun, acc) end
+          fn acc -> canonicalize_explicit_locator_args(fun, acc) end,
+          fn acc -> canonicalize_label_variable_locator_args(fun, acc) end
         ],
         {args, false},
         fn transform, {acc, changed?} ->
@@ -886,6 +888,34 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   end
 
   defp canonicalize_explicit_locator_args(_fun, _args), do: :no_change
+
+  @spec canonicalize_label_variable_locator_args(atom(), [Macro.t()]) :: canonicalize_result()
+  defp canonicalize_label_variable_locator_args(fun, args) when fun in @label_locator_variable_calls do
+    case locator_arg_indexes_for(fun, args) do
+      [] ->
+        :no_change
+
+      indexes ->
+        {updated_args, changed?} =
+          Enum.reduce(indexes, {args, false}, fn index, {acc_args, acc_changed?} ->
+            case Enum.fetch(acc_args, index) do
+              {:ok, arg} ->
+                if bare_variable_ast?(arg) and not locator_expression_ast?(arg) do
+                  {List.replace_at(acc_args, index, label_call_ast(arg)), true}
+                else
+                  {acc_args, acc_changed?}
+                end
+
+              :error ->
+                {acc_args, acc_changed?}
+            end
+          end)
+
+        if changed?, do: {:ok, updated_args}, else: :no_change
+    end
+  end
+
+  defp canonicalize_label_variable_locator_args(_fun, _args), do: :no_change
 
   @spec reduce_locator_arg_index(non_neg_integer(), {[Macro.t()], boolean()}) :: {[Macro.t()], boolean()}
   defp reduce_locator_arg_index(index, {args, changed?}) do
@@ -977,6 +1007,15 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   end
 
   defp locator_expression_ast?(_value), do: false
+
+  @spec bare_variable_ast?(Macro.t()) :: boolean()
+  defp bare_variable_ast?({name, meta, context})
+       when is_atom(name) and is_list(meta) and (is_atom(context) or is_nil(context)), do: true
+
+  defp bare_variable_ast?(_value), do: false
+
+  @spec label_call_ast(Macro.t()) :: Macro.t()
+  defp label_call_ast(value), do: {:label, [], [value]}
 
   @spec locator_keyword_ast?(keyword()) :: boolean()
   defp locator_keyword_ast?(keyword_ast) when is_list(keyword_ast) do

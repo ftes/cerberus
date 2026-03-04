@@ -394,6 +394,39 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     assert rewritten =~ ~r/\|> assert_has\(\s*css\("body"\),\s*~l"Search query: phoenix"i/s
   end
 
+  test "write mode wraps choose locator variables with label/1", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_choose_variable_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleChooseVariableTest do
+        import PhoenixTest
+
+        test "example", %{conn: conn} do
+          conn
+          |> visit("/choose")
+          |> choose_contact("Phone")
+        end
+
+        defp choose_contact(session, choice_label) do
+          choose(session, choice_label)
+        end
+      end
+      """
+    )
+
+    _output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ "choose(session, label(choice_label))"
+  end
+
   test "write mode does not rewrite unrelated select/submit calls", %{tmp_dir: tmp_dir} do
     file = Path.join(tmp_dir, "sample_non_phoenix_select_submit_test.exs")
 
@@ -570,9 +603,9 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
     assert rewritten_static =~ "import Cerberus"
     assert rewritten_feature_case =~ "|> session()"
-    assert rewritten_feature_case =~ ~r/\|> assert_has\(\s*css\("h1"\),\s*text: expected/s
+    assert rewritten_feature_case =~ ~r/\|> assert_has\(\s*css\("h1"\),\s*expected/s
     assert rewritten_form_fill =~ ~s{Cerberus.fill_in(session, ~l"Search term"i, value)}
-    assert rewritten_form_fill =~ ~s{Cerberus.assert_has(session, Cerberus.css("body"), text: expected)}
+    assert rewritten_form_fill =~ ~s{Cerberus.assert_has(session, Cerberus.css("body"), expected)}
     assert rewritten_support_feature_case =~ "import Cerberus"
     refute rewritten_support_feature_case =~ "import PhoenixTest"
   end
