@@ -77,8 +77,8 @@ defmodule Cerberus.Driver.Browser.Extensions do
     accept? = Keyword.get(opts, :accept, false)
     prompt_text = Keyword.get(opts, :prompt_text)
     dialog = await_open_dialog!(session, locator, timeout_ms)
-    handle_dialog_prompt!(session, timeout_ms, accept?, prompt_text, "assert_dialog/3")
     assert_dialog_text_match!(locator, dialog)
+    maybe_handle_assert_dialog_prompt!(session, timeout_ms, accept?, prompt_text, dialog)
     session
   end
 
@@ -141,7 +141,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
   def evaluate_js(%BrowserSession{} = session, expression) when is_binary(expression) do
     timeout_ms = @default_evaluate_timeout_ms
 
-    case Evaluate.with_prompt_unblock(
+    case Evaluate.with_dialog_unblock(
            session.user_context_pid,
            session.tab_id,
            expression,
@@ -228,7 +228,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   defp evaluate_json(session, expression, timeout_ms) do
     with {:ok, result} <-
-           Evaluate.with_prompt_unblock(
+           Evaluate.with_dialog_unblock(
              session.user_context_pid,
              session.tab_id,
              expression,
@@ -392,12 +392,63 @@ defmodule Cerberus.Driver.Browser.Extensions do
         dialog
 
       {:error, :timeout, events} ->
-        raise_dialog_timeout!(locator, events)
+        handle_dialog_timeout!(locator, events)
 
       {:error, reason, details} ->
         raise AssertionError,
           message: "assert_dialog/3 failed while waiting for dialog: #{reason} (#{inspect(details)})"
     end
+  end
+
+  defp handle_dialog_timeout!(locator, events) do
+    case matching_observed_dialog(events, locator) do
+      {:ok, %{} = dialog} ->
+        Map.put(dialog, "autoHandled", true)
+
+      :error ->
+        case latest_observed_dialog(events) do
+          {:ok, %{} = dialog} ->
+            observed_message = Map.get(dialog, "message", "")
+
+            raise AssertionError,
+              message:
+                "assert_dialog/3 expected #{expected_dialog_text(locator)} but observed #{inspect(observed_message)}"
+
+          :error ->
+            raise_dialog_timeout!(locator, events)
+        end
+    end
+  end
+
+  defp matching_observed_dialog(events, locator) when is_list(events) do
+    events
+    |> Enum.filter(&match?(%{"method" => "browsingContext.userPromptOpened"}, &1))
+    |> Enum.reverse()
+    |> Enum.find(&dialog_matches_locator?(&1, locator))
+    |> case do
+      %{} = dialog -> {:ok, dialog}
+      _ -> :error
+    end
+  end
+
+  defp matching_observed_dialog(_events, _locator), do: :error
+
+  defp latest_observed_dialog(events) when is_list(events) do
+    events
+    |> Enum.filter(&match?(%{"method" => "browsingContext.userPromptOpened"}, &1))
+    |> List.last()
+    |> case do
+      %{} = dialog -> {:ok, dialog}
+      _ -> :error
+    end
+  end
+
+  defp latest_observed_dialog(_events), do: :error
+
+  defp dialog_matches_locator?(dialog, %Locator{value: expected, opts: locator_opts}) when is_map(dialog) do
+    actual = dialog["message"] || ""
+    match_opts = Keyword.take(locator_opts, [:exact, :normalize_ws])
+    Query.match_text?(actual, expected, match_opts)
   end
 
   defp raise_dialog_timeout!(locator, events) when is_list(events) do
@@ -458,6 +509,31 @@ defmodule Cerberus.Driver.Browser.Extensions do
         raise ArgumentError, "#{operation_name} failed to handle prompt: #{reason} (#{inspect(details)})"
     end
   end
+
+  defp maybe_handle_assert_dialog_prompt!(session, timeout_ms, accept?, prompt_text, dialog) do
+    if auto_handled_dialog?(dialog) do
+      ensure_auto_handled_dialog_compatible_options!(accept?, prompt_text)
+    else
+      handle_dialog_prompt!(session, timeout_ms, accept?, prompt_text, "assert_dialog/3")
+    end
+  end
+
+  defp auto_handled_dialog?(%{"autoHandled" => true}), do: true
+  defp auto_handled_dialog?(_dialog), do: false
+
+  defp ensure_auto_handled_dialog_compatible_options!(true, _prompt_text) do
+    raise AssertionError,
+      message:
+        "assert_dialog/3 matched a dialog that was already auto-handled as dismissed; cannot apply accept: true after closure"
+  end
+
+  defp ensure_auto_handled_dialog_compatible_options!(_accept?, prompt_text) when is_binary(prompt_text) do
+    raise AssertionError,
+      message:
+        "assert_dialog/3 matched a dialog that was already auto-handled as dismissed; cannot apply prompt_text after closure"
+  end
+
+  defp ensure_auto_handled_dialog_compatible_options!(_accept?, _prompt_text), do: :ok
 
   defp poll_action_task(_action_task, {:ok, _} = action_outcome), do: action_outcome
   defp poll_action_task(action_task, :pending), do: Task.yield(action_task, 0) || :pending

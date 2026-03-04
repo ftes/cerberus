@@ -1031,7 +1031,7 @@ defmodule Cerberus.Driver.Browser do
   defp eval_json(state, expression, timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
     evaluate_result =
       Profiling.measure({:browser_wait, :evaluate_with_timeout}, fn ->
-        Evaluate.with_prompt_unblock(
+        Evaluate.with_dialog_unblock(
           state.user_context_pid,
           state.tab_id,
           expression,

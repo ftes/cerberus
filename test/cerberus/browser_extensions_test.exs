@@ -341,6 +341,17 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_has(session, text("Prompt result: cancelled", exact: true))
   end
 
+  test "click action completes when clicked target opens a blocking confirm dialog" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+      |> click(button("Open Confirm Dialog", exact: true))
+
+    assert_dialog(session, text("Delete item?", exact: true))
+    assert_has(session, text("Dialog result: cancelled", exact: true))
+  end
+
   test "assertion operations complete when a blocking prompt dialog is already open" do
     session =
       :browser
@@ -352,6 +363,19 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     session = assert_has(session, text("Browser Extensions", exact: true), timeout: 500)
     assert_has(session, text("Prompt result: cancelled", exact: true))
+  end
+
+  test "assertion operations complete when a blocking alert dialog is already open" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+
+    trigger_alert_dialog(session)
+    Process.sleep(50)
+
+    session = assert_has(session, text("Browser Extensions", exact: true), timeout: 500)
+    assert_has(session, text("Alert result: acknowledged", exact: true))
   end
 
   test "assert_download matches download emitted before assertion call and keeps events non-consuming" do
@@ -486,12 +510,33 @@ defmodule Cerberus.BrowserExtensionsTest do
       |> session()
       |> visit("/browser/extensions")
 
-    trigger_confirm_dialog(session)
-    Process.sleep(25)
+    trigger_confirm_dialog(session, 30)
 
     assert_dialog(session, text("Delete item?", exact: true), accept: true)
 
     assert_has(session, text("Dialog result: confirmed", exact: true))
+  end
+
+  test "assert_dialog supports prompt dialogs with explicit prompt_text" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+
+    trigger_prompt_dialog(session, 30)
+    assert_dialog(session, text("Type value", exact: true), accept: true, prompt_text: "42")
+    assert_has(session, text("Prompt result: 42", exact: true))
+  end
+
+  test "assert_dialog supports alert dialogs" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+
+    trigger_alert_dialog(session, 30)
+    assert_dialog(session, text("Heads up!", exact: true))
+    assert_has(session, text("Alert result: acknowledged", exact: true))
   end
 
   test "assert_dialog validates prompt_text requires accept: true" do
@@ -513,6 +558,12 @@ defmodule Cerberus.BrowserExtensionsTest do
 
   defp trigger_prompt_dialog(session, delay_ms \\ 0) when is_integer(delay_ms) and delay_ms >= 0 do
     evaluate_js(session, "setTimeout(() => document.getElementById('prompt-dialog')?.click(), #{delay_ms})", fn _ ->
+      :ok
+    end)
+  end
+
+  defp trigger_alert_dialog(session, delay_ms \\ 0) when is_integer(delay_ms) and delay_ms >= 0 do
+    evaluate_js(session, "setTimeout(() => document.getElementById('alert-dialog')?.click(), #{delay_ms})", fn _ ->
       :ok
     end)
   end

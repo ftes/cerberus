@@ -8,8 +8,8 @@ defmodule Cerberus.Driver.Browser.Evaluate do
   @default_dialog_timeout_ms 1_500
   @poll_ms 25
 
-  @spec with_prompt_unblock(pid(), String.t(), String.t(), pos_integer(), keyword()) :: Types.bidi_response()
-  def with_prompt_unblock(user_context_pid, tab_id, expression, timeout_ms, bidi_opts)
+  @spec with_dialog_unblock(pid(), String.t(), String.t(), pos_integer(), keyword()) :: Types.bidi_response()
+  def with_dialog_unblock(user_context_pid, tab_id, expression, timeout_ms, bidi_opts)
       when is_pid(user_context_pid) and is_binary(tab_id) and is_binary(expression) and is_integer(timeout_ms) and
              timeout_ms > 0 and is_list(bidi_opts) do
     task =
@@ -46,12 +46,12 @@ defmodule Cerberus.Driver.Browser.Evaluate do
     if wait_ms == 0 do
       shutdown_or_timeout(task, timeout_ms)
     else
-      continue_after_prompt_wait(task, user_context_pid, tab_id, deadline, timeout_ms, bidi_opts, wait_ms)
+      continue_after_dialog_wait(task, user_context_pid, tab_id, deadline, timeout_ms, bidi_opts, wait_ms)
     end
   end
 
-  defp continue_after_prompt_wait(task, user_context_pid, tab_id, deadline, timeout_ms, bidi_opts, wait_ms) do
-    case maybe_unblock_prompt(user_context_pid, tab_id, wait_ms, bidi_opts) do
+  defp continue_after_dialog_wait(task, user_context_pid, tab_id, deadline, timeout_ms, bidi_opts, wait_ms) do
+    case maybe_unblock_dialog(user_context_pid, tab_id, wait_ms, bidi_opts) do
       :ok ->
         await_result(task, user_context_pid, tab_id, deadline, timeout_ms, bidi_opts)
 
@@ -75,13 +75,10 @@ defmodule Cerberus.Driver.Browser.Evaluate do
 
   defp evaluate_task_crash(reason), do: {:error, "evaluate task crashed", %{reason: Exception.format_exit(reason)}}
 
-  defp maybe_unblock_prompt(user_context_pid, tab_id, wait_ms, bidi_opts) when wait_ms > 0 do
+  defp maybe_unblock_dialog(user_context_pid, tab_id, wait_ms, bidi_opts) when wait_ms > 0 do
     case UserContextProcess.await_dialog_open(user_context_pid, wait_ms, tab_id) do
-      {:ok, %{"type" => "prompt"}} ->
-        dismiss_prompt(tab_id, bidi_opts)
-
-      {:ok, _dialog} ->
-        :ok
+      {:ok, %{} = dialog} ->
+        dismiss_dialog(dialog, tab_id, bidi_opts)
 
       {:error, :timeout, _events} ->
         :ok
@@ -91,7 +88,17 @@ defmodule Cerberus.Driver.Browser.Evaluate do
     end
   end
 
-  defp dismiss_prompt(tab_id, bidi_opts) do
+  defp dismiss_dialog(dialog, tab_id, bidi_opts) do
+    dialog_type = dialog["type"]
+
+    if dialog_type in ["alert", "confirm", "prompt"] do
+      do_dismiss_dialog(tab_id, bidi_opts)
+    else
+      :ok
+    end
+  end
+
+  defp do_dismiss_dialog(tab_id, bidi_opts) do
     params = %{"context" => tab_id, "accept" => false}
     opts = Keyword.put(bidi_opts, :timeout, @default_dialog_timeout_ms)
 
@@ -103,7 +110,7 @@ defmodule Cerberus.Driver.Browser.Evaluate do
         :ok
 
       {:error, reason, details} ->
-        {:error, "failed to handle prompt: #{reason}", details}
+        {:error, "failed to handle dialog: #{reason}", details}
     end
   end
 
