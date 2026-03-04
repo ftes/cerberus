@@ -75,7 +75,6 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   @rewritable_assertions_calls [:assert_has, :refute_has, :assert_path, :refute_path]
   @canonical_text_assertions [:assert_has, :refute_has]
   @canonical_labeled_value_keys %{fill_in: :with}
-  @local_import_trigger_calls Enum.uniq([:session | @rewritable_direct_calls ++ @rewritable_assertions_calls])
   @explicit_locator_calls [
     :assert_has,
     :refute_has,
@@ -771,7 +770,11 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     {_body, needed?} =
       Macro.prewalk(body, false, fn
         {fun, _meta, args} = node, needed when is_atom(fun) and is_list(args) ->
-          {node, needed or fun in @local_import_trigger_calls}
+          import_needed_for_call? =
+            fun == :session or
+              match?({:ok, _updated_args}, canonicalize_call_args(fun, args, &build_local_css_scope/1))
+
+          {node, needed or import_needed_for_call?}
 
         node, needed ->
           {node, needed}
@@ -952,7 +955,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
         :no_change
 
       true ->
-        {:ok, [text: arg]}
+        :no_change
     end
   end
 

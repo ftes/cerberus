@@ -386,6 +386,39 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     assert rewritten =~ ~r/\|> assert_has\(\s*css\("body"\),\s*~l"Search query: phoenix"i/s
   end
 
+  test "write mode does not rewrite unrelated select/submit calls", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_non_phoenix_select_submit_test.exs")
+
+    original = """
+    defmodule SampleNonPhoenixSelectSubmitTest do
+      use ExUnit.Case, async: true
+
+      alias MyApp.Timecards
+
+      test "keeps non-phoenix calls untouched" do
+        _query = select([pra], count(pra.id))
+        tc = :timecard
+        project = :project
+        _result = Timecards.submit(tc, project)
+      end
+    end
+    """
+
+    File.write!(file, original)
+
+    _output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten == original
+    refute rewritten =~ "import Cerberus"
+    refute rewritten =~ "text:"
+  end
+
   test "reports warnings for unsupported migration patterns", %{tmp_dir: tmp_dir} do
     file = Path.join(tmp_dir, "sample_warning_test.exs")
 
