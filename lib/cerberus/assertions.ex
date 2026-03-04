@@ -208,7 +208,7 @@ defmodule Cerberus.Assertions do
       when is_assert_locator_input(locator_input) and is_list(call_opts) do
     call_has_timeout = Keyword.has_key?(call_opts, :timeout)
     {locator, call_opts} = normalize_assert_locator(locator_input, call_opts)
-    validated_opts = Options.validate_assert!(call_opts, "assert_has/3")
+    validated_opts = call_opts |> Options.validate_assert!("assert_has/3") |> prune_nil_match_by_opt()
     {validated_timeout, driver_opts} = Keyword.pop(validated_opts, :timeout, 0)
     timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
     message_opts = Keyword.put(driver_opts, :timeout, timeout)
@@ -228,7 +228,7 @@ defmodule Cerberus.Assertions do
       when is_assert_locator_input(locator_input) and is_list(call_opts) do
     call_has_timeout = Keyword.has_key?(call_opts, :timeout)
     {locator, call_opts} = normalize_assert_locator(locator_input, call_opts)
-    validated_opts = Options.validate_assert!(call_opts, "refute_has/3")
+    validated_opts = call_opts |> Options.validate_assert!("refute_has/3") |> prune_nil_match_by_opt()
     {validated_timeout, driver_opts} = Keyword.pop(validated_opts, :timeout, 0)
     timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
     message_opts = Keyword.put(driver_opts, :timeout, timeout)
@@ -529,6 +529,14 @@ defmodule Cerberus.Assertions do
   defp merge_locator_selector_opts(%Locator{opts: locator_opts}, opts) when is_list(locator_opts) do
     selector_opt = Keyword.take(locator_opts, [:selector])
     Keyword.merge(selector_opt, opts)
+  end
+
+  defp prune_nil_match_by_opt(opts) do
+    if Keyword.get(opts, :match_by) == nil do
+      Keyword.delete(opts, :match_by)
+    else
+      opts
+    end
   end
 
   defp put_match_by(opts, value) when is_list(opts) do

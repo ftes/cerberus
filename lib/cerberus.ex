@@ -8,7 +8,7 @@ defmodule Cerberus do
 
   Technical guarantees:
   - Public operations accept and return `Cerberus.Session` structs.
-  - Locator-based operations keep `session` first and support explicit scoped forms.
+  - Locator-based operations keep `session` first and support locator composition forms.
   - Path and assertion operations resolve timeout defaults per driver.
   - Profiling buckets are emitted per operation and driver kind.
   """
@@ -715,10 +715,7 @@ defmodule Cerberus do
   Use `closest/2` when scope should resolve to the nearest matching ancestor
   around a nested element (for example, a field wrapper around a label).
 
-  For scoped assertions without entering a `within/3` callback, you can also use scoped assertion overloads:
-
-      session
-      |> assert_has(closest(~l".fieldset"c, from: ~l"textbox:Email"r), ~l"can't be blank"e)
+  Use `within/3` when you need explicit scope boundaries for mixed operations.
 
   Browser note: when locator-based `within/3` matches an `<iframe>`, Cerberus switches
   the query root to that iframe document. Only same-origin iframes are supported.
@@ -1039,43 +1036,46 @@ defmodule Cerberus do
   Unscoped:
   `assert_has(session, ~l"Articles"e)`
 
-  Scoped:
-  `assert_has(session, ~l"#secondary-panel"c, ~l"Status: secondary"e)`
+  Two-locator form (text locator + match-by locator):
+  `assert_has(session, css("a"), text("Counter", exact: true))`
 
-  In the scoped form, the second argument is a `scope_locator` and the third
-  argument is a `locator`.
+  For explicit scope boundaries, use `within/3`.
   """
   @spec assert_has(arg, locator_input()) :: arg when arg: var
   def assert_has(session, locator), do: assert_has(session, locator, [])
 
   @doc """
-  Asserts content exists, supporting unscoped and scoped forms.
+  Asserts content exists, supporting:
+  - single-locator assertions
+  - two-locator assertions that combine one text locator with one match-by locator
 
   ## Options
 
   #{@assert_options_doc}
   """
-  @spec assert_has(arg, scope_locator_input(), locator_input() | Options.assert_opts()) :: arg when arg: var
-  def assert_has(session, scope_locator_or_locator, locator_or_opts) do
+  @spec assert_has(arg, locator_input(), locator_input() | Options.assert_opts()) :: arg when arg: var
+  def assert_has(session, locator_or_left, locator_or_opts) do
     if locator_input_term?(locator_or_opts) do
-      assert_has(session, scope_locator_or_locator, locator_or_opts, [])
+      {locator, merged_opts} =
+        merge_assertion_locators!(locator_or_left, locator_or_opts, "assert_has/3")
+
+      Assertions.assert_has(session, locator, merged_opts)
     else
-      Assertions.assert_has(session, scope_locator_or_locator, locator_or_opts)
+      Assertions.assert_has(session, locator_or_left, locator_or_opts)
     end
   end
 
   @doc """
-  Asserts content exists within `scope_locator`.
+  Asserts content exists for a two-locator combination with explicit options.
 
   ## Options
 
   #{@assert_options_doc}
   """
-  @spec assert_has(arg, scope_locator_input(), locator_input(), Options.assert_opts()) :: arg when arg: var
-  def assert_has(session, scope_locator, locator, opts) when is_list(opts) do
-    within(session, scope_locator, fn scoped ->
-      Assertions.assert_has(scoped, locator, opts)
-    end)
+  @spec assert_has(arg, locator_input(), locator_input(), Options.assert_opts()) :: arg when arg: var
+  def assert_has(session, left_locator, right_locator, opts) when is_list(opts) do
+    {locator, merged_opts} = merge_assertion_locators!(left_locator, right_locator, "assert_has/4")
+    Assertions.assert_has(session, locator, Keyword.merge(opts, merged_opts))
   end
 
   @doc """
@@ -1084,43 +1084,46 @@ defmodule Cerberus do
   Unscoped:
   `refute_has(session, ~l"500 Internal Server Error"e)`
 
-  Scoped:
-  `refute_has(session, ~l"#secondary-panel"c, ~l"Status: primary"e)`
+  Two-locator form (text locator + match-by locator):
+  `refute_has(session, css("button"), text("Dangerous", exact: true))`
 
-  In the scoped form, the second argument is a `scope_locator` and the third
-  argument is a `locator`.
+  For explicit scope boundaries, use `within/3`.
   """
   @spec refute_has(arg, locator_input()) :: arg when arg: var
   def refute_has(session, locator), do: refute_has(session, locator, [])
 
   @doc """
-  Refutes content exists, supporting unscoped and scoped forms.
+  Refutes content exists, supporting:
+  - single-locator assertions
+  - two-locator assertions that combine one text locator with one match-by locator
 
   ## Options
 
   #{@assert_options_doc}
   """
-  @spec refute_has(arg, scope_locator_input(), locator_input() | Options.assert_opts()) :: arg when arg: var
-  def refute_has(session, scope_locator_or_locator, locator_or_opts) do
+  @spec refute_has(arg, locator_input(), locator_input() | Options.assert_opts()) :: arg when arg: var
+  def refute_has(session, locator_or_left, locator_or_opts) do
     if locator_input_term?(locator_or_opts) do
-      refute_has(session, scope_locator_or_locator, locator_or_opts, [])
+      {locator, merged_opts} =
+        merge_assertion_locators!(locator_or_left, locator_or_opts, "refute_has/3")
+
+      Assertions.refute_has(session, locator, merged_opts)
     else
-      Assertions.refute_has(session, scope_locator_or_locator, locator_or_opts)
+      Assertions.refute_has(session, locator_or_left, locator_or_opts)
     end
   end
 
   @doc """
-  Refutes content exists within `scope_locator`.
+  Refutes content for a two-locator combination with explicit options.
 
   ## Options
 
   #{@assert_options_doc}
   """
-  @spec refute_has(arg, scope_locator_input(), locator_input(), Options.assert_opts()) :: arg when arg: var
-  def refute_has(session, scope_locator, locator, opts) when is_list(opts) do
-    within(session, scope_locator, fn scoped ->
-      Assertions.refute_has(scoped, locator, opts)
-    end)
+  @spec refute_has(arg, locator_input(), locator_input(), Options.assert_opts()) :: arg when arg: var
+  def refute_has(session, left_locator, right_locator, opts) when is_list(opts) do
+    {locator, merged_opts} = merge_assertion_locators!(left_locator, right_locator, "refute_has/4")
+    Assertions.refute_has(session, locator, Keyword.merge(opts, merged_opts))
   end
 
   defp driver_module_for_session!(%StaticSession{}), do: StaticSession
@@ -1168,6 +1171,55 @@ defmodule Cerberus do
   end
 
   defp locator_input_term?(_value), do: false
+
+  defp merge_assertion_locators!(left, right, op_name) do
+    left = Locator.normalize(left)
+    right = Locator.normalize(right)
+
+    case merge_assertion_locators(left, right) do
+      {:ok, locator_with_opts} ->
+        locator_with_opts
+
+      :error ->
+        raise ArgumentError,
+              "#{op_name} two-locator form expects one text locator and one match-by locator (label/link/button/placeholder/title/alt/aria_label/testid/role/css(\"a\"|\"a[href]\"|\"button\")); use within/3 for scoped assertions"
+    end
+  end
+
+  defp merge_assertion_locators(left, right) do
+    case merge_assertion_pair(left, right) do
+      {:ok, locator} -> {:ok, locator}
+      :error -> merge_assertion_pair(right, left)
+    end
+  end
+
+  defp merge_assertion_pair(%Locator{kind: :text, value: value, opts: text_opts}, match_by_locator) do
+    case assertion_match_by(match_by_locator) do
+      {:ok, match_by} -> {:ok, {%Locator{kind: :text, value: value, opts: text_opts}, [match_by: match_by]}}
+      _ -> :error
+    end
+  end
+
+  defp merge_assertion_pair(_left, _right), do: :error
+
+  defp assertion_match_by(%Locator{kind: :role} = locator) do
+    resolved = Locator.resolved_kind(locator)
+    assertion_match_by(%Locator{kind: resolved, value: locator.value, opts: locator.opts})
+  end
+
+  defp assertion_match_by(%Locator{kind: kind})
+       when kind in [:label, :link, :button, :placeholder, :title, :alt, :aria_label, :testid], do: {:ok, kind}
+
+  defp assertion_match_by(%Locator{kind: :css, value: selector}) when is_binary(selector) do
+    case String.trim(selector) do
+      "a" -> {:ok, :link}
+      "a[href]" -> {:ok, :link}
+      "button" -> {:ok, :button}
+      _ -> :error
+    end
+  end
+
+  defp assertion_match_by(_locator), do: :error
 
   defp locator_kind_key?(key) when is_atom(key), do: key in @locator_kind_keys
   defp locator_kind_key?(key) when is_binary(key), do: key in @locator_kind_string_keys
