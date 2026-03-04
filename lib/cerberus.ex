@@ -1,31 +1,16 @@
 defmodule Cerberus do
   @moduledoc """
-  Session-first test API for non-browser Phoenix mode and browser execution.
+  Public session-first facade for Cerberus drivers.
 
-  Architecture contract (ADR-0001 + ADR-0002):
-  - The public API is driver-agnostic and session-first.
-  - All public operations take a `Cerberus.Session` and return a `Cerberus.Session`.
-  - `locator` is the first argument after `session` for locator-based operations.
-  - Browser unwrap payloads are exposed as `Cerberus.Browser.Native` handles, not raw internals.
-  - v0 does not expose a public located-element pipeline type.
+  This module validates option schemas, normalizes locator inputs, and dispatches
+  operations to static/live/browser session implementations while preserving a
+  consistent API shape.
 
-  Browser assertion/path operations use in-browser wait loops as the fast path.
-  Cerberus applies bounded transient eval retries to smooth navigation/context-reset races.
-
-  Locator sigil quick look:
-
-      ~l"Save"          # text
-      ~l"Save"e         # exact text
-      ~l"Save"i         # inexact text
-      ~l"button:Save"r  # role form (ROLE:NAME)
-      ~l"#save"c        # css
-      ~l"save-btn"t     # testid (defaults exact: true)
-
-  Locator composition quick look:
-
-      button("Run Search") |> testid("submit-secondary-button")     # AND (same element)
-      or_(css("#primary"), css("#secondary"))                       # OR (union)
-      button("Run Search") |> has(testid("submit-secondary-marker")) # nesting (descendant)
+  Technical guarantees:
+  - Public operations accept and return `Cerberus.Session` structs.
+  - Locator-based operations keep `session` first and support explicit scoped forms.
+  - Path and assertion operations resolve timeout defaults per driver.
+  - Profiling buckets are emitted per operation and driver kind.
   """
 
   alias Cerberus.Assertions
@@ -43,7 +28,21 @@ defmodule Cerberus do
 
   @type locator_input :: Locator.input()
   @type scope_locator_input :: Locator.input()
-  @locator_kind_keys [:text, :label, :link, :button, :placeholder, :title, :alt, :role, :css, :testid, :and, :or]
+  @locator_kind_keys [
+    :text,
+    :label,
+    :link,
+    :button,
+    :placeholder,
+    :title,
+    :alt,
+    :aria_label,
+    :role,
+    :css,
+    :testid,
+    :and,
+    :or
+  ]
   @locator_kind_string_keys Enum.map(@locator_kind_keys, &Atom.to_string/1)
   @session_common_options_doc NimbleOptions.docs(Options.session_common_schema())
   @session_browser_options_doc NimbleOptions.docs(Options.session_browser_schema())
@@ -482,6 +481,37 @@ defmodule Cerberus do
   end
 
   @doc """
+  Builds an `aria-label` locator.
+  """
+  @spec aria_label(String.t() | Regex.t()) :: Locator.t()
+  def aria_label(value) when is_binary(value) or is_struct(value, Regex), do: aria_label(value, [])
+
+  @doc """
+  Builds or composes an `aria-label` locator.
+
+  Supported forms:
+  - `aria_label(value, opts)` for a leaf locator
+  - `aria_label(locator, value)` to compose with an existing locator
+  """
+  @spec aria_label(String.t() | Regex.t(), keyword()) :: Locator.t()
+  def aria_label(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
+    Locator.leaf(:aria_label, value, opts)
+  end
+
+  @spec aria_label(locator_input(), String.t() | Regex.t()) :: Locator.t()
+  def aria_label(locator, value) when is_binary(value) or is_struct(value, Regex) do
+    and_(locator, aria_label(value))
+  end
+
+  @doc """
+  Composes an `aria-label` constraint into an existing locator with locator options.
+  """
+  @spec aria_label(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
+  def aria_label(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
+    and_(locator, aria_label(value, opts))
+  end
+
+  @doc """
   Builds a CSS locator.
   """
   @spec css(String.t()) :: Locator.t()
@@ -619,10 +649,11 @@ defmodule Cerberus do
   - `~l"text"i` inexact text
   - `~l"ROLE:NAME"r` role locator form
   - `~l"selector"c` CSS locator form
+  - `~l"text"a` `aria-label` locator form
   - `~l"test-id"t` testid locator form (defaults to exact matching)
 
   Rules:
-  - use at most one locator-kind modifier (`r`, `c`, or `t`)
+  - use at most one locator-kind modifier (`r`, `c`, `a`, or `t`)
   - `e` and `i` are mutually exclusive
   - `r` requires `ROLE:NAME` input
   """
@@ -817,7 +848,7 @@ defmodule Cerberus do
   `fill_in(session, "Search term", "Aragorn")`.
 
   Helper locators like `label(...)`, `role(...)`, `placeholder(...)`, `title(...)`,
-  `testid(...)`, and `css(...)` are also supported.
+  `aria_label(...)`, `testid(...)`, and `css(...)` are also supported.
   Sigil examples: `fill_in(session, ~l"#search_q"c, "Aragorn")`,
   `fill_in(session, ~l"search-input"t, "Aragorn")`.
 
