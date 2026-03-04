@@ -19,13 +19,28 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
       assert Runtime.headless?([], []) == true
     end
 
-    test "show_browser=true disables headless by default" do
-      assert Runtime.headless?([], show_browser: true) == false
+    test "headless=false disables headless mode" do
+      assert Runtime.headless?([], headless: false) == false
     end
 
-    test "explicit headless option overrides show_browser" do
-      assert Runtime.headless?([headless: true], show_browser: true) == true
-      assert Runtime.headless?([headless: false], show_browser: false) == false
+    test "explicit headless option overrides merged config" do
+      assert Runtime.headless?([headless: true], headless: false) == true
+      assert Runtime.headless?([headless: false], headless: true) == false
+    end
+  end
+
+  describe "slow_mo_ms/1" do
+    test "defaults to zero and supports top-level/session overrides" do
+      Application.put_env(:cerberus, :browser, slow_mo: 40)
+
+      assert Runtime.slow_mo_ms([]) == 40
+      assert Runtime.slow_mo_ms(slow_mo: 120) == 120
+    end
+
+    test "supports nested browser overrides" do
+      Application.put_env(:cerberus, :browser, slow_mo: 40)
+
+      assert Runtime.slow_mo_ms(browser: [slow_mo: 75]) == 75
     end
   end
 

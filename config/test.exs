@@ -23,7 +23,7 @@ config :cerberus, Repo,
 
 config :cerberus,
   browser: [
-    show_browser: System.get_env("SHOW_BROWSER", "false") == "true",
+    headless: String.downcase(System.get_env("HEADLESS", "true")) not in ["0", "false", "no", "off"],
     chrome_args: ["--disable-setuid-sandbox", "--disable-dev-shm-usage"]
   ],
   endpoint: Endpoint,

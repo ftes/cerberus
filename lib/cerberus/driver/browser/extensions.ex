@@ -3,6 +3,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Browser.BiDi
+  alias Cerberus.Driver.Browser.Evaluate
   alias Cerberus.Driver.Browser.Types
   alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.Locator
@@ -13,6 +14,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
   @default_dialog_timeout_ms 1_500
   @default_popup_timeout_ms 1_500
   @default_download_timeout_ms 1_500
+  @default_evaluate_timeout_ms 10_000
   @popup_task_poll_ms 10
 
   @spec type(BrowserSession.t(), String.t(), Options.browser_type_opts()) :: BrowserSession.t()
@@ -137,7 +139,15 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   @spec evaluate_js(BrowserSession.t(), String.t()) :: term()
   def evaluate_js(%BrowserSession{} = session, expression) when is_binary(expression) do
-    case UserContextProcess.evaluate(session.user_context_pid, expression, session.tab_id) do
+    timeout_ms = @default_evaluate_timeout_ms
+
+    case Evaluate.with_prompt_unblock(
+           session.user_context_pid,
+           session.tab_id,
+           expression,
+           timeout_ms,
+           bidi_opts(session)
+         ) do
       {:ok, %{"result" => result}} ->
         decode_remote_value(result)
 
@@ -218,11 +228,12 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   defp evaluate_json(session, expression, timeout_ms) do
     with {:ok, result} <-
-           UserContextProcess.evaluate_with_timeout(
+           Evaluate.with_prompt_unblock(
              session.user_context_pid,
+             session.tab_id,
              expression,
              max(timeout_ms, 1),
-             session.tab_id
+             bidi_opts(session)
            ),
          {:ok, json} <- decode_remote_json(result) do
       {:ok, json}
@@ -663,6 +674,10 @@ defmodule Cerberus.Driver.Browser.Extensions do
     raise AssertionError,
       message:
         "assert_download/3 timed out waiting for #{inspect(expected_filename)}; observed downloads: #{inspect(observed_filenames)}"
+  end
+
+  defp bidi_opts(%BrowserSession{bidi_opts: bidi_opts, browser_name: browser_name}) when is_list(bidi_opts) do
+    Keyword.put_new(bidi_opts, :browser_name, browser_name)
   end
 
   defp bidi_opts(%BrowserSession{browser_name: browser_name}), do: [browser_name: browser_name]

@@ -18,7 +18,7 @@ Firefox lanes are available for explicit manual/targeted runs.
 
 - Cerberus uses one shared browser runtime process and one shared BiDi connection per test invocation.
 - Browser isolation is done through per-session `userContext` and per-tab `browsingContext`.
-- Runtime launch settings are invocation-level, including browser selection, headed/headless mode, WebDriver endpoint, binary paths, and driver args.
+- Runtime launch settings are invocation-level, including browser selection, headless mode, slow-motion pacing, WebDriver endpoint, binary paths, and driver args.
 - If you need different runtime launch settings, run separate test invocations.
 
 ## Popup Lifecycle Support

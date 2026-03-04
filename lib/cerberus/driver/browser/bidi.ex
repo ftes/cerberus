@@ -39,14 +39,16 @@ defmodule Cerberus.Driver.Browser.BiDi do
         :error -> default_command_timeout_ms(opts)
       end
 
+    slow_mo_ms = slow_mo_ms(opts)
+
     message =
       if pid == __MODULE__ do
-        {:command, method, params, timeout, opts}
+        {:command, method, params, timeout, slow_mo_ms, opts}
       else
         {:command, method, params, timeout}
       end
 
-    GenServer.call(pid, message, timeout + 1_000)
+    GenServer.call(pid, message, timeout + 1_000 + slow_mo_ms)
   end
 
   @spec close(GenServer.server()) :: :ok
@@ -82,8 +84,10 @@ defmodule Cerberus.Driver.Browser.BiDi do
     {:reply, :ok, state}
   end
 
-  def handle_call({:command, method, params, timeout, opts}, from, state) do
+  def handle_call({:command, method, params, timeout, slow_mo_ms, opts}, from, state) do
     browser_name = Runtime.browser_name(opts)
+
+    maybe_sleep_for_slow_mo(slow_mo_ms)
 
     with {:ok, web_socket_url} <- Runtime.web_socket_url(opts),
          {:ok, socket} <- BiDiSocket.ensure_connected(browser_name, web_socket_url),
@@ -291,6 +295,10 @@ defmodule Cerberus.Driver.Browser.BiDi do
     |> normalize_non_negative_integer(@default_command_timeout_ms)
   end
 
+  defp slow_mo_ms(opts) when is_list(opts) do
+    Runtime.slow_mo_ms(opts)
+  end
+
   defp merged_browser_opts(opts) do
     :cerberus
     |> Application.get_env(:browser, [])
@@ -299,4 +307,10 @@ defmodule Cerberus.Driver.Browser.BiDi do
 
   defp normalize_non_negative_integer(value, _default) when is_integer(value) and value >= 0, do: value
   defp normalize_non_negative_integer(_value, default), do: default
+
+  defp maybe_sleep_for_slow_mo(delay_ms) when is_integer(delay_ms) and delay_ms > 0 do
+    Process.sleep(delay_ms)
+  end
+
+  defp maybe_sleep_for_slow_mo(_delay_ms), do: :ok
 end

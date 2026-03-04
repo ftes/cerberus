@@ -6,6 +6,7 @@ defmodule Cerberus.Driver.Browser do
   alias Cerberus.Browser.Native, as: BrowserNative
   alias Cerberus.Driver.Browser.BiDi
   alias Cerberus.Driver.Browser.Config
+  alias Cerberus.Driver.Browser.Evaluate
   alias Cerberus.Driver.Browser.Expressions
   alias Cerberus.Driver.Browser.Extensions
   alias Cerberus.Driver.Browser.Runtime
@@ -65,6 +66,7 @@ defmodule Cerberus.Driver.Browser do
           user_context_pid: pid(),
           tab_id: String.t(),
           browser_name: :chrome | :firefox,
+          bidi_opts: keyword(),
           base_url: String.t(),
           assert_timeout_ms: non_neg_integer(),
           ready_timeout_ms: pos_integer(),
@@ -80,6 +82,7 @@ defmodule Cerberus.Driver.Browser do
   defstruct user_context_pid: nil,
             tab_id: nil,
             browser_name: :chrome,
+            bidi_opts: [],
             base_url: nil,
             assert_timeout_ms: 0,
             ready_timeout_ms: @default_ready_timeout_ms,
@@ -96,6 +99,7 @@ defmodule Cerberus.Driver.Browser do
     owner = self()
     context_defaults = browser_context_defaults(opts)
     browser_name = Runtime.browser_name(opts)
+    session_bidi_opts = session_bidi_opts(opts, browser_name)
     ensure_popup_mode_supported!(browser_name, context_defaults.popup_mode)
 
     start_opts =
@@ -125,6 +129,7 @@ defmodule Cerberus.Driver.Browser do
       user_context_pid: user_context_pid,
       tab_id: tab_id,
       browser_name: browser_name,
+      bidi_opts: session_bidi_opts,
       base_url: base_url,
       assert_timeout_ms:
         SessionConfig.assert_timeout_from_opts!(opts, SessionConfig.live_browser_assert_timeout_default_ms()),
@@ -1026,7 +1031,13 @@ defmodule Cerberus.Driver.Browser do
   defp eval_json(state, expression, timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
     evaluate_result =
       Profiling.measure({:browser_wait, :evaluate_with_timeout}, fn ->
-        UserContextProcess.evaluate_with_timeout(state.user_context_pid, expression, timeout_ms, state.tab_id)
+        Evaluate.with_prompt_unblock(
+          state.user_context_pid,
+          state.tab_id,
+          expression,
+          timeout_ms,
+          bidi_opts(state)
+        )
       end)
 
     with {:ok, result} <- evaluate_result,
@@ -1519,6 +1530,10 @@ defmodule Cerberus.Driver.Browser do
     BiDi.command("browsingContext.captureScreenshot", params, bidi_opts)
   end
 
+  defp bidi_opts(%{bidi_opts: bidi_opts, browser_name: browser_name}) when is_list(bidi_opts) do
+    Keyword.put_new(bidi_opts, :browser_name, browser_name)
+  end
+
   defp bidi_opts(%{browser_name: browser_name}), do: [browser_name: browser_name]
 
   defp maybe_full_page_origin(params, true), do: Map.put(params, "origin", "document")
@@ -1552,6 +1567,14 @@ defmodule Cerberus.Driver.Browser do
       supervisor_pid ->
         DynamicSupervisor.start_child(supervisor_pid, {UserContextProcess, opts})
     end
+  end
+
+  defp session_bidi_opts(opts, browser_name) when is_list(opts) and is_atom(browser_name) do
+    opts
+    |> Keyword.delete(:owner)
+    |> Keyword.delete(:browser_context_defaults)
+    |> Keyword.delete(:browser_name)
+    |> Keyword.put(:browser_name, browser_name)
   end
 
   @doc false

@@ -24,4 +24,19 @@ defmodule Cerberus.ExplicitBrowserTest do
       end)
     end
   end
+
+  for driver <- [:chrome] do
+    test "slow_mo delays browser command dispatch (#{driver})" do
+      session =
+        unquote(driver)
+        |> session(slow_mo: 120)
+        |> visit("/articles")
+
+      started_at = System.monotonic_time(:millisecond)
+      assert 2 == Cerberus.Browser.evaluate_js(session, "1 + 1")
+      elapsed_ms = System.monotonic_time(:millisecond) - started_at
+
+      assert elapsed_ms >= 100
+    end
+  end
 end

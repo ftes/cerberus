@@ -10,7 +10,8 @@
 | Default project lane policy | Chrome-first (CI and regular local runs) |
 | Live/browser assertion timeout default | `500ms` (override with `session(assert_timeout_ms: 300)`) |
 | Browser ready timeout default | `session(:browser, ready_timeout_ms: 2200)` |
-| Global headed mode | `config :cerberus, :browser, show_browser: true` |
+| Global headed mode | `config :cerberus, :browser, headless: false` |
+| Global slow motion | `config :cerberus, :browser, slow_mo: 120` |
 | Global remote runtime | `config :cerberus, :browser, webdriver_url: "http://127.0.0.1:4444"` |
 | Global screenshot defaults | `config :cerberus, :browser, screenshot_full_page: false, screenshot_artifact_dir: "tmp/screenshots"` |
 

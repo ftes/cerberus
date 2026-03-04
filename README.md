@@ -43,14 +43,14 @@ session
 |> click(~l"button:Increment"r)
 |> assert_has(~l"Count: 1"e)
 
-session(:browser, show_browser: true) # open chrome
+session(:browser, headless: false, slow_mo: 500) # open chrome
 |> visit("/live/counter")
-|> evaluate_js("prompt('Hey!')")
+|> evaluate_js("prompt('Hey!')", fn _result -> :ok end)
 ```
 
 For progressive, step-by-step examples (scopes, forms, tabs, browser extensions), see [Getting Started](docs/getting-started.md).
 
-## Failure Diagnostics
+## Helpful errors
 
 When an action/assertion misses, Cerberus includes likely alternatives.
 
@@ -69,7 +69,7 @@ possible candidates:
   - "Run Nested Search"
 ```
 
-## Locator Quick Look
+## Locators
 
 Prefer user-facing selectors first:
 - labels for form actions (`fill_in(label("Email"), "...")`)

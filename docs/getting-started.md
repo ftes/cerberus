@@ -328,10 +328,16 @@ For regular project runs, use Chrome-first invocations unless you are explicitly
 
 ```elixir
 config :cerberus, :browser,
-  show_browser: true
+  headless: false
 ```
 
-`show_browser: true` runs headed by default.
-If both are set, `headless` takes precedence over `show_browser`.
+`headless: false` runs headed mode.
 
-Runtime launch settings (for example `show_browser`, `headless`, browser binaries, driver binaries, `webdriver_url`, `chrome_webdriver_url`, and `firefox_webdriver_url`) are runtime-level and should be configured globally per test invocation, not per test.
+`slow_mo` adds a fixed delay (in milliseconds) before each browser BiDi command:
+
+```elixir
+config :cerberus, :browser,
+  slow_mo: 120
+```
+
+Runtime launch settings (for example `headless`, `slow_mo`, browser binaries, driver binaries, `webdriver_url`, `chrome_webdriver_url`, and `firefox_webdriver_url`) are runtime-level and should be configured globally per test invocation, not per test.

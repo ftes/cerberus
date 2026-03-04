@@ -7,6 +7,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   @default_browser_name :chrome
   @default_runtime_http_timeout_ms 5_000
+  @default_slow_mo_ms 0
   @default_chrome_startup_retries 1
   @default_startup_log_tail_bytes 8_192
   @default_startup_log_tail_lines 40
@@ -884,6 +885,16 @@ defmodule Cerberus.Driver.Browser.Runtime do
   end
 
   @doc false
+  @spec slow_mo_ms(keyword()) :: non_neg_integer()
+  def slow_mo_ms(opts) when is_list(opts) do
+    browser_opts = browser_opts(opts)
+
+    opts
+    |> Keyword.get(:slow_mo, browser_opts[:slow_mo])
+    |> normalize_non_neg_integer(@default_slow_mo_ms)
+  end
+
+  @doc false
   @spec remote_webdriver_url(keyword()) :: String.t() | nil
   def remote_webdriver_url(opts) when is_list(opts) do
     browser_name = browser_name(opts)
@@ -1003,8 +1014,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
   @doc false
   @spec headless?(keyword(), keyword()) :: boolean()
   def headless?(opts, merged) do
-    show_browser? = Keyword.get(opts, :show_browser, Keyword.get(merged, :show_browser, false))
-    Keyword.get(opts, :headless, Keyword.get(merged, :headless, not show_browser?))
+    Keyword.get(opts, :headless, Keyword.get(merged, :headless, true))
   end
 
   defp chrome_binary!(opts, merged) do

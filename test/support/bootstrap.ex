@@ -127,7 +127,8 @@ defmodule Cerberus.TestSupport.Bootstrap do
       Enum.reject(
         [
           browser_name: :chrome,
-          show_browser: truthy_env?("SHOW_BROWSER"),
+          headless: boolean_env("HEADLESS"),
+          slow_mo: non_neg_integer_env("SLOW_MO"),
           chrome_args: ["--disable-setuid-sandbox", "--disable-dev-shm-usage"],
           chrome_webdriver_url: chrome_webdriver_url,
           webdriver_url: chrome_webdriver_url || non_empty_env("WEBDRIVER_URL"),
@@ -150,13 +151,30 @@ defmodule Cerberus.TestSupport.Bootstrap do
     end
   end
 
-  defp truthy_env?(key) do
-    case String.downcase(System.get_env(key, "false")) do
-      "1" -> true
-      "true" -> true
-      "yes" -> true
-      "on" -> true
-      _ -> false
+  defp falsy_env?(value) when value in ["0", "false", "no", "off"], do: true
+  defp falsy_env?(_value), do: false
+
+  defp boolean_env(key) do
+    case System.get_env(key) do
+      nil ->
+        nil
+
+      value when is_binary(value) ->
+        normalized = value |> String.trim() |> String.downcase()
+        not falsy_env?(normalized)
+    end
+  end
+
+  defp non_neg_integer_env(key) do
+    case System.get_env(key) do
+      value when is_binary(value) ->
+        case Integer.parse(String.trim(value)) do
+          {number, ""} when number >= 0 -> number
+          _ -> nil
+        end
+
+      _ ->
+        nil
     end
   end
 end
