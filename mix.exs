@@ -1,10 +1,13 @@
 defmodule Cerberus.MixProject do
   use Mix.Project
 
+  @version "0.1.2"
+  @source_url "https://github.com/ftes/cerberus"
+
   def project do
     [
       app: :cerberus,
-      version: "0.1.2",
+      version: @version,
       elixir: "~> 1.19",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -86,9 +89,9 @@ defmodule Cerberus.MixProject do
         ],
         Reference: ["docs/cheatsheet.md"]
       ],
-      source_url: "https://github.com/ftes/cerberus",
-      source_ref: "main",
-      homepage_url: "https://github.com/ftes/cerberus",
+      source_url: @source_url,
+      source_ref: "v#{@version}",
+      homepage_url: @source_url,
       assets: %{"docs" => "docs"},
       logo: "docs/icon.png",
       before_closing_body_tag: &before_closing_body_tag/1
@@ -138,7 +141,7 @@ defmodule Cerberus.MixProject do
     [
       licenses: ["MIT"],
       links: %{
-        "GitHub" => "https://github.com/ftes/cerberus"
+        "GitHub" => @source_url
       },
       files: ~w(lib bin mix.exs README* LICENSE*)
     ]
