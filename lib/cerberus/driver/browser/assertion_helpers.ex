@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAssert && window.__cerberusAssert.__version === 6) return;
+    if (window.__cerberusAssert && window.__cerberusAssert.__version === 7) return;
 
     const helper = {};
-    helper.__version = 6;
+    helper.__version = 7;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -124,6 +124,8 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           return "input[placeholder],textarea[placeholder],select[placeholder]";
         case "title":
           return "[title]";
+        case "aria_label":
+          return "[aria-label]";
         case "alt":
           return "[alt],img[alt],input[type='image'][alt],[role='img'][alt],button,a[href]";
         case "testid":
@@ -278,6 +280,8 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           break;
         case "title":
           break;
+        case "aria_label":
+          break;
         case "alt":
           break;
         case "testid":
@@ -300,6 +304,9 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           break;
         case "title":
           source = element.getAttribute("title") || "";
+          break;
+        case "aria_label":
+          source = element.getAttribute("aria-label") || "";
           break;
         case "testid":
           source = element.getAttribute("data-testid") || "";

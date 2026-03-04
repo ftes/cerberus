@@ -61,6 +61,10 @@ defmodule Cerberus.Driver.LocatorOps do
     {expected, Keyword.put(opts, :match_by, :alt)}
   end
 
+  defp clickable_shape(opts, %Locator{kind: :aria_label, value: expected}) do
+    {expected, Keyword.put(opts, :match_by, :aria_label)}
+  end
+
   defp clickable_shape(opts, %Locator{kind: :testid, value: expected}) do
     normalized_opts =
       opts
@@ -88,6 +92,10 @@ defmodule Cerberus.Driver.LocatorOps do
 
   defp form_shape(opts, %Locator{kind: :title, value: expected}) do
     {expected, Keyword.put(opts, :match_by, :title)}
+  end
+
+  defp form_shape(opts, %Locator{kind: :aria_label, value: expected}) do
+    {expected, Keyword.put(opts, :match_by, :aria_label)}
   end
 
   defp form_shape(opts, %Locator{kind: :testid, value: expected}) do

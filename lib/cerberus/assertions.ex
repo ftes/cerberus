@@ -479,7 +479,7 @@ defmodule Cerberus.Assertions do
   end
 
   defp normalize_assert_locator_kind(%Locator{kind: kind, value: value} = locator, _locator_input, opts)
-       when kind in [:label, :link, :button, :placeholder, :title, :alt] do
+       when kind in [:label, :link, :button, :placeholder, :title, :alt, :aria_label] do
     {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, kind)}, opts}
   end
 

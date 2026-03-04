@@ -171,25 +171,30 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       |> assert_path("/search/nested/results", query: [nested_q: "gondor"])
     end
 
-    test "placeholder/title/alt helpers behave consistently in static and browser (#{driver})", context do
+    test "placeholder/title/alt/aria_label helpers behave consistently in static and browser (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/articles")
       |> assert_has(title("Articles heading", exact: true))
+      |> assert_has(aria_label("Articles heading aria", exact: true))
       |> assert_has(alt("Articles hero image", exact: true))
       |> visit("/search")
+      |> assert_has(aria_label("Search heading aria", exact: true))
       |> assert_has(testid("search-title"))
-      |> fill_in(placeholder("Search by term"), "boromir")
-      |> submit(title("Run search button", exact: true))
+      |> assert_has(placeholder("Search by term", exact: true))
+      |> fill_in(aria_label("Search term aria"), "boromir")
+      |> submit(aria_label("Run search aria", exact: true))
       |> assert_has(text("Search query: boromir", exact: true))
     end
 
-    test "placeholder/title/testid helpers behave consistently in live and browser (#{driver})", context do
+    test "placeholder/title/testid/aria_label helpers behave consistently in live and browser (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/form-change")
       |> assert_has(title("Live name input", exact: true))
-      |> fill_in(placeholder("Live name"), "Eowyn")
+      |> assert_has(placeholder("Live name", exact: true))
+      |> assert_has(aria_label("Live name aria", exact: true))
+      |> fill_in(aria_label("Live name aria"), "Eowyn")
       |> assert_has(testid("live-change-name"))
       |> assert_has(text("name: Eowyn", exact: true))
     end

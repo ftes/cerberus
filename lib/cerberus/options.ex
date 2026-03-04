@@ -7,7 +7,7 @@ defmodule Cerberus.Options do
   """
 
   @type click_kind :: :any | :link | :button
-  @type locator_match_by :: :text | :label | :link | :button | :placeholder | :title | :alt | :testid
+  @type locator_match_by :: :text | :label | :link | :button | :placeholder | :title | :alt | :aria_label | :testid
   @type visibility_filter :: boolean() | :any
   @type fill_in_value :: String.t() | integer() | float() | boolean()
   @type select_value :: String.t() | [String.t()]

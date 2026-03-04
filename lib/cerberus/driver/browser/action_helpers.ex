@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAction && window.__cerberusAction.__version === 10) return;
+    if (window.__cerberusAction && window.__cerberusAction.__version === 11) return;
 
     const helper = {};
-    helper.__version = 10;
+    helper.__version = 11;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -554,6 +554,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
                   index,
                   text: helper.normalize(element.textContent, true),
                   title: element.getAttribute("title") || "",
+                  ariaLabel: element.getAttribute("aria-label") || "",
                   alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt],[role='img'][alt]"),
                   testid: element.getAttribute("data-testid") || "",
                   formSelector: helper.formSelector(element),
@@ -578,6 +579,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
                   index,
                   text: helper.normalize(element.textContent, true),
                   title: element.getAttribute("title") || "",
+                  ariaLabel: element.getAttribute("aria-label") || "",
                   alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt]"),
                   testid: element.getAttribute("data-testid") || "",
                   type: (element.getAttribute("type") || "submit").toLowerCase(),
@@ -612,6 +614,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
               index,
               text: helper.normalize(element.textContent, true),
               title: element.getAttribute("title") || "",
+              ariaLabel: element.getAttribute("aria-label") || "",
               alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt]"),
               testid: element.getAttribute("data-testid") || "",
               type,
@@ -675,6 +678,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
               label: helper.labelForControl(labels, element),
               placeholder: element.getAttribute("placeholder") || "",
               title: element.getAttribute("title") || "",
+              ariaLabel: element.getAttribute("aria-label") || "",
               testid: element.getAttribute("data-testid") || "",
               formSelector: helper.formSelector(element),
               checked: element.checked === true,
@@ -703,6 +707,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
             label: labels.get(element.id || "") || "",
             placeholder: element.getAttribute("placeholder") || "",
             title: element.getAttribute("title") || "",
+            ariaLabel: element.getAttribute("aria-label") || "",
             testid: element.getAttribute("data-testid") || "",
             formSelector: helper.formSelector(element),
             checked: element.checked === true,
@@ -720,6 +725,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         switch (matchBy) {
           case "title":
             return candidate.title || "";
+          case "aria_label":
+            return candidate.ariaLabel || "";
           case "alt":
             return candidate.alt || "";
           case "testid":
@@ -734,6 +741,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           return candidate.placeholder || "";
         case "title":
           return candidate.title || "";
+        case "aria_label":
+          return candidate.ariaLabel || "";
         case "testid":
           return candidate.testid || "";
         default:
@@ -778,6 +787,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           return "input[placeholder],textarea[placeholder],select[placeholder]";
         case "title":
           return "[title]";
+        case "aria_label":
+          return "[aria-label]";
         case "alt":
           return "[alt],img[alt],input[type='image'][alt],[role='img'][alt],button,a[href]";
         case "testid":
@@ -801,6 +812,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
             return candidate.kind === "button" ? candidate.text || "" : null;
           case "title":
             return candidate.title || "";
+          case "aria_label":
+            return candidate.ariaLabel || "";
           case "alt":
             return candidate.alt || "";
           case "testid":
@@ -818,6 +831,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           return candidate.placeholder || "";
         case "title":
           return candidate.title || "";
+        case "aria_label":
+          return candidate.ariaLabel || "";
         case "testid":
           return candidate.testid || "";
         default:
@@ -864,6 +879,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           label: helper.labelForElement(element),
           placeholder: (element.getAttribute("placeholder") || ""),
           title: (element.getAttribute("title") || ""),
+          ariaLabel: (element.getAttribute("aria-label") || ""),
           alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt],[role='img'][alt]"),
           testid: (element.getAttribute("data-testid") || ""),
           formSelector: helper.formSelector(element),

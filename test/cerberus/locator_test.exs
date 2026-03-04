@@ -58,6 +58,11 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :css, value: "#search_q"} = ~l"#search_q"c
   end
 
+  test "~l supports aria-label modifier" do
+    assert %Locator{kind: :aria_label, value: "Run search"} = ~l"Run search"a
+    assert %Locator{kind: :aria_label, value: "Run search", opts: [exact: true]} = ~l"Run search"ae
+  end
+
   test "~l supports testid modifier with default exact matching" do
     assert %Locator{kind: :testid, value: "search-input", opts: [exact: true]} = ~l"search-input"t
     assert %Locator{kind: :testid, value: "search-input", opts: [exact: true]} = ~l"search-input"te
@@ -89,6 +94,7 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :placeholder, value: "Search"} = Locator.normalize(placeholder: "Search")
     assert %Locator{kind: :title, value: "Main Heading"} = Locator.normalize(title: "Main Heading")
     assert %Locator{kind: :alt, value: "Hero image"} = Locator.normalize(alt: "Hero image")
+    assert %Locator{kind: :aria_label, value: "Search field"} = Locator.normalize(aria_label: "Search field")
     assert %Locator{kind: :css, value: "#save"} = Locator.normalize(css: "#save")
     assert %Locator{kind: :testid, value: "submit-btn"} = Locator.normalize(testid: "submit-btn")
   end

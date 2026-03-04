@@ -241,6 +241,7 @@ defmodule Cerberus.Html do
               selected: false,
               checked: false,
               title: attr(node, "title") || "",
+              aria_label: attr(node, "aria-label") || "",
               testid: attr(node, "data-testid") || ""
             }
           end,
@@ -273,6 +274,7 @@ defmodule Cerberus.Html do
               selected: false,
               checked: false,
               title: attr(node, "title") || "",
+              aria_label: attr(node, "aria-label") || "",
               testid: attr(node, "data-testid") || "",
               button_name: attr(node, "name"),
               button_value: attr(node, "value")
@@ -489,6 +491,7 @@ defmodule Cerberus.Html do
   defp within_locator_match_value(_root_node, node, %Locator{kind: :label}), do: node_text(node)
   defp within_locator_match_value(_root_node, node, %Locator{kind: :placeholder}), do: attr(node, "placeholder") || ""
   defp within_locator_match_value(_root_node, node, %Locator{kind: :title}), do: attr(node, "title") || ""
+  defp within_locator_match_value(_root_node, node, %Locator{kind: :aria_label}), do: attr(node, "aria-label") || ""
   defp within_locator_match_value(root_node, node, %Locator{kind: :alt}), do: node_alt_text(root_node, node)
   defp within_locator_match_value(_root_node, node, %Locator{kind: :testid}), do: attr(node, "data-testid") || ""
   defp within_locator_match_value(_root_node, _node, _locator), do: nil
@@ -505,6 +508,7 @@ defmodule Cerberus.Html do
     do: "input[placeholder],textarea[placeholder],select[placeholder]"
 
   defp within_query_selector(%Locator{kind: :title}), do: "[title]"
+  defp within_query_selector(%Locator{kind: :aria_label}), do: "[aria-label]"
 
   defp within_query_selector(%Locator{kind: :alt}),
     do: "[alt],img[alt],input[type='image'][alt],[role='img'][alt],button,a[href]"
@@ -784,31 +788,40 @@ defmodule Cerberus.Html do
   end
 
   defp build_submit_button_by_locator(button_node, form_meta, locator, _opts, root_node, selector) do
+    if submit_button_by_locator_candidate?(root_node, button_node, locator, selector) do
+      submit_button_map(button_node, form_meta, root_node)
+    end
+  end
+
+  defp submit_button_by_locator_candidate?(root_node, button_node, locator, selector) do
     type = attr(button_node, "type") || "submit"
 
-    if type in ["submit", ""] and
-         node_matches_selector?(root_node, button_node, selector) and
-         locator_matches_action_node?(root_node, button_node, locator, :submit_button) do
-      action = attr(button_node, "formaction") || form_meta.action
-      method = attr(button_node, "formmethod") || form_meta.method
+    type in ["submit", ""] and
+      node_matches_selector?(root_node, button_node, selector) and
+      locator_matches_action_node?(root_node, button_node, locator, :submit_button)
+  end
 
-      %{
-        text: node_text(button_node),
-        title: attr(button_node, "title") || "",
-        alt: button_alt_text(button_node, root_node),
-        testid: attr(button_node, "data-testid") || "",
-        disabled: disabled?(button_node),
-        readonly: readonly?(button_node),
-        selected: false,
-        checked: false,
-        action: action,
-        method: method,
-        form: form_meta.form,
-        form_selector: form_meta.form_selector,
-        button_name: attr(button_node, "name"),
-        button_value: attr(button_node, "value")
-      }
-    end
+  defp submit_button_map(button_node, form_meta, root_node) do
+    action = attr(button_node, "formaction") || form_meta.action
+    method = attr(button_node, "formmethod") || form_meta.method
+
+    %{
+      text: node_text(button_node),
+      title: attr(button_node, "title") || "",
+      aria_label: attr(button_node, "aria-label") || "",
+      alt: button_alt_text(button_node, root_node),
+      testid: attr(button_node, "data-testid") || "",
+      disabled: disabled?(button_node),
+      readonly: readonly?(button_node),
+      selected: false,
+      checked: false,
+      action: action,
+      method: method,
+      form: form_meta.form,
+      form_selector: form_meta.form_selector,
+      button_name: attr(button_node, "name"),
+      button_value: attr(button_node, "value")
+    }
   end
 
   defp maybe_link_by_locator(root_node, node, lazy_html, locator, selector) do
@@ -824,6 +837,7 @@ defmodule Cerberus.Html do
             selected: false,
             checked: false,
             title: attr(node, "title") || "",
+            aria_label: attr(node, "aria-label") || "",
             alt: node_alt_text(root_node, node),
             testid: attr(node, "data-testid") || ""
           },
@@ -849,6 +863,7 @@ defmodule Cerberus.Html do
             selected: false,
             checked: false,
             title: attr(node, "title") || "",
+            aria_label: attr(node, "aria-label") || "",
             alt: button_alt_text(node, root_node),
             testid: attr(node, "data-testid") || "",
             button_name: attr(node, "name"),
@@ -898,7 +913,7 @@ defmodule Cerberus.Html do
         |> safe_query("label")
         |> Enum.flat_map(&maybe_form_field_match_list(&1, root_node, expected, opts, selector))
 
-      kind when kind in [:placeholder, :title, :testid] ->
+      kind when kind in [:placeholder, :title, :aria_label, :testid] ->
         find_form_field_by_control_attr(root_node, expected, opts, selector, kind)
 
       _ ->
@@ -969,6 +984,7 @@ defmodule Cerberus.Html do
       input_type: input_type,
       placeholder: attr(field_node, "placeholder") || "",
       title: attr(field_node, "title") || "",
+      aria_label: attr(field_node, "aria-label") || "",
       testid: attr(field_node, "data-testid") || "",
       input_value: input_value(field_node, input_type),
       input_checked: checked?(field_node),
@@ -1063,6 +1079,7 @@ defmodule Cerberus.Html do
 
   defp action_locator_match_value(_root_node, node, :placeholder, _context), do: attr(node, "placeholder") || ""
   defp action_locator_match_value(_root_node, node, :title, _context), do: attr(node, "title") || ""
+  defp action_locator_match_value(_root_node, node, :aria_label, _context), do: attr(node, "aria-label") || ""
   defp action_locator_match_value(_root_node, node, :testid, _context), do: attr(node, "data-testid") || ""
 
   defp action_locator_match_value(root_node, node, :alt, :link), do: node_alt_text(root_node, node)
@@ -1214,6 +1231,7 @@ defmodule Cerberus.Html do
     do: attr_from_attrs(attrs, "placeholder")
 
   defp assertion_value_for(_tag, attrs, _children, :alt), do: attr_from_attrs(attrs, "alt")
+  defp assertion_value_for(_tag, attrs, _children, :aria_label), do: attr_from_attrs(attrs, "aria-label")
   defp assertion_value_for(_tag, attrs, _children, :testid), do: attr_from_attrs(attrs, "data-testid")
   defp assertion_value_for(_tag, _attrs, _children, _match_by), do: nil
 
@@ -1323,31 +1341,23 @@ defmodule Cerberus.Html do
     end
   end
 
-  defp link_match_value(root_node, node, match_by) do
-    case match_by do
-      :text -> node_text(node)
-      :link -> node_text(node)
-      :title -> attr(node, "title") || ""
-      :testid -> attr(node, "data-testid") || ""
-      :alt -> node_alt_text(root_node, node)
-      _ -> node_text(node)
-    end
-  end
+  defp link_match_value(root_node, node, :alt), do: node_alt_text(root_node, node)
+  defp link_match_value(_root_node, node, match_by) when match_by in [:text, :link], do: node_text(node)
+  defp link_match_value(_root_node, node, match_by), do: action_match_attr_value(node, match_by, node_text(node))
 
-  defp button_match_value(root_node, node, match_by) do
-    case match_by do
-      :text -> node_text(node)
-      :button -> node_text(node)
-      :title -> attr(node, "title") || ""
-      :testid -> attr(node, "data-testid") || ""
-      :alt -> button_alt_text(node, root_node)
-      _ -> node_text(node)
-    end
-  end
+  defp button_match_value(root_node, node, :alt), do: button_alt_text(node, root_node)
+  defp button_match_value(_root_node, node, match_by) when match_by in [:text, :button], do: node_text(node)
+  defp button_match_value(_root_node, node, match_by), do: action_match_attr_value(node, match_by, node_text(node))
 
   defp field_match_value(_root_node, field_node, :placeholder), do: attr(field_node, "placeholder") || ""
   defp field_match_value(_root_node, field_node, :title), do: attr(field_node, "title") || ""
+  defp field_match_value(_root_node, field_node, :aria_label), do: attr(field_node, "aria-label") || ""
   defp field_match_value(_root_node, field_node, :testid), do: attr(field_node, "data-testid") || ""
+
+  defp action_match_attr_value(node, :title, _fallback), do: attr(node, "title") || ""
+  defp action_match_attr_value(node, :aria_label, _fallback), do: attr(node, "aria-label") || ""
+  defp action_match_attr_value(node, :testid, _fallback), do: attr(node, "data-testid") || ""
+  defp action_match_attr_value(_node, _match_by, fallback), do: fallback
 
   defp field_label_for_node(root_node, field_node) do
     id = attr(field_node, "id")
@@ -1474,6 +1484,7 @@ defmodule Cerberus.Html do
        form: form,
        placeholder: attr(node, "placeholder"),
        title: attr(node, "title"),
+       aria_label: attr(node, "aria-label"),
        testid: attr(node, "data-testid"),
        node: node,
        selector: field_selector(root_node, %{id: id, name: name, node: node})
@@ -1837,7 +1848,7 @@ defmodule Cerberus.Html do
 
   defp match_by_opt(opts, default \\ :text) do
     case Keyword.get(opts, :match_by) do
-      value when value in [:label, :link, :button, :placeholder, :title, :alt, :testid] -> value
+      value when value in [:label, :link, :button, :placeholder, :title, :alt, :aria_label, :testid] -> value
       _ -> default
     end
   end

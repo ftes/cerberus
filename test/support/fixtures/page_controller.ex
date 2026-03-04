@@ -17,7 +17,7 @@ defmodule Cerberus.Fixtures.PageController do
       </head>
       <body>
         <main>
-          <h1 data-testid="articles-title" title="Articles heading">Articles</h1>
+          <h1 data-testid="articles-title" title="Articles heading" aria-label="Articles heading aria">Articles</h1>
           <p>This is an articles index page</p>
           <img
             src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
@@ -25,7 +25,7 @@ defmodule Cerberus.Fixtures.PageController do
             title="Hero image"
           />
           <p style="display:none">Hidden helper text</p>
-          <a href="/live/counter" data-testid="articles-counter-link">Counter</a>
+          <a href="/live/counter" data-testid="articles-counter-link" aria-label="Counter link aria">Counter</a>
         </main>
       </body>
     </html>
@@ -174,7 +174,7 @@ defmodule Cerberus.Fixtures.PageController do
       </head>
       <body>
         <main>
-          <h1 data-testid="search-title" title="Search heading">Search</h1>
+          <h1 data-testid="search-title" title="Search heading" aria-label="Search heading aria">Search</h1>
           <a href="/articles">Articles</a>
           <form action="/search/results" method="get">
             <label for="search_q">Search term</label>
@@ -185,9 +185,10 @@ defmodule Cerberus.Fixtures.PageController do
               value=""
               placeholder="Search by term"
               title="Search input"
+              aria-label="Search term aria"
               data-testid="search-input"
             />
-            <button type="submit" title="Run search button" data-testid="search-submit">Run Search</button>
+            <button type="submit" title="Run search button" aria-label="Run search aria" data-testid="search-submit">Run Search</button>
           </form>
 
           <form action="/search/nested/results" method="get">

@@ -165,6 +165,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   defp live_clickable_locator_value(_root_node, node, :text), do: node_text(node)
   defp live_clickable_locator_value(_root_node, node, :button), do: node_text(node)
   defp live_clickable_locator_value(_root_node, node, :title), do: attr(node, "title") || ""
+  defp live_clickable_locator_value(_root_node, node, :aria_label), do: attr(node, "aria-label") || ""
   defp live_clickable_locator_value(_root_node, node, :testid), do: attr(node, "data-testid") || ""
   defp live_clickable_locator_value(root_node, node, :alt), do: button_alt_text(node, root_node)
   defp live_clickable_locator_value(_root_node, _node, :link), do: nil
@@ -182,13 +183,16 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
 
   defp live_clickable_match_value(root_node, node, opts) do
     case match_by_opt(opts) do
-      :button -> node_text(node)
-      :title -> attr(node, "title") || ""
-      :testid -> attr(node, "data-testid") || ""
       :alt -> button_alt_text(node, root_node)
-      _ -> node_text(node)
+      :button -> node_text(node)
+      other -> clickable_attr_match_value(node, other, node_text(node))
     end
   end
+
+  defp clickable_attr_match_value(node, :title, _fallback), do: attr(node, "title") || ""
+  defp clickable_attr_match_value(node, :aria_label, _fallback), do: attr(node, "aria-label") || ""
+  defp clickable_attr_match_value(node, :testid, _fallback), do: attr(node, "data-testid") || ""
+  defp clickable_attr_match_value(_node, _match_by, fallback), do: fallback
 
   defp form_field_live_flags(lazy_html, field, scope) do
     defaults = %{input_phx_change: false, form_phx_change: false}
@@ -337,6 +341,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     %{
       text: text,
       title: attr(node, "title") || "",
+      aria_label: attr(node, "aria-label") || "",
       testid: attr(node, "data-testid") || "",
       disabled: phx_boolean_attr?(attr(node, "disabled")),
       readonly: phx_boolean_attr?(attr(node, "readonly")),
@@ -427,6 +432,10 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
 
   defp match_selector_for(node, :title) do
     attr_selector("button", "title", attr(node, "title"))
+  end
+
+  defp match_selector_for(node, :aria_label) do
+    attr_selector("button", "aria-label", attr(node, "aria-label"))
   end
 
   defp match_selector_for(_node, _match_by), do: nil
@@ -582,7 +591,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
 
   defp match_by_opt(opts) do
     case Keyword.get(opts, :match_by) do
-      value when value in [:button, :title, :testid, :alt] -> value
+      value when value in [:button, :title, :aria_label, :testid, :alt] -> value
       _ -> :text
     end
   end

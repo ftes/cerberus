@@ -893,6 +893,7 @@ defmodule Cerberus.Driver.Live do
       [
         attr_selector("button", "data-testid", Map.get(button, :testid)),
         attr_selector("button", "title", Map.get(button, :title)),
+        attr_selector("button", "aria-label", Map.get(button, :aria_label)),
         attr_selector("button", "name", Map.get(button, :button_name)),
         attr_selector("button", "value", Map.get(button, :button_value)),
         attr_selector("button", "form", Map.get(button, :form))
@@ -906,6 +907,7 @@ defmodule Cerberus.Driver.Live do
       [
         attr_selector("a", "data-testid", Map.get(link, :testid)),
         attr_selector("a", "title", Map.get(link, :title)),
+        attr_selector("a", "aria-label", Map.get(link, :aria_label)),
         attr_selector("a", "href", Map.get(link, :href))
       ],
       &(is_binary(&1) and &1 != "")

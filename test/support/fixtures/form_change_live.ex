@@ -57,6 +57,7 @@ defmodule Cerberus.Fixtures.FormChangeLive do
           value={@name}
           placeholder="Live name"
           title="Live name input"
+          aria-label="Live name aria"
           data-testid="live-change-name"
         />
 

@@ -131,8 +131,9 @@ Locator sigil quick look:
 - `~l"Save"i` inexact text
 - `~l"button:Save"r` role form (`ROLE:NAME`)
 - `~l"button[type='submit']"c` css form
+- `~l"Run search"a` aria-label form
 - `~l"save-button"t` testid form (`exact: true` default)
-- at most one kind modifier (`r`, `c`, or `t`)
+- at most one kind modifier (`r`, `c`, `a`, or `t`)
 - `e` and `i` are mutually exclusive
 - `r` requires `ROLE:NAME`
 
