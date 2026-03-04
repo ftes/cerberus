@@ -4,6 +4,7 @@ defmodule Cerberus.Driver.Static do
   @behaviour Cerberus.Driver
 
   alias Cerberus.Driver.Browser, as: BrowserSession
+  alias Cerberus.Driver.CandidateScope
   alias Cerberus.Driver.DownloadAssertion
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.LocatorOps
@@ -536,18 +537,22 @@ defmodule Cerberus.Driver.Static do
   defp no_clickable_error(_kind), do: "no clickable element matched locator"
 
   defp click_candidate_values(session, match_opts, kind) do
-    scope = Session.scope(session)
+    scope = CandidateScope.click_scope(match_opts, Session.scope(session))
     match_by = Keyword.get(match_opts, :match_by, :text)
+    css_scoped_text? = CandidateScope.css_scoped_text_candidates?(match_opts)
 
     values =
-      case {kind, match_by} do
-        {:link, :text} ->
+      case {css_scoped_text?, kind, match_by} do
+        {true, _, :text} ->
+          Html.assertion_values(session.html, :text, :any, scope)
+
+        {false, :link, :text} ->
           Html.assertion_values(session.html, :link, :any, scope)
 
-        {:button, :text} ->
+        {false, :button, :text} ->
           Html.assertion_values(session.html, :button, :any, scope)
 
-        {:any, :text} ->
+        {false, :any, :text} ->
           Html.assertion_values(session.html, :link, :any, scope) ++
             Html.assertion_values(session.html, :button, :any, scope)
 

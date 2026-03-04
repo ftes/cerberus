@@ -569,6 +569,36 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
               )
             );
 
+      const clickables =
+        kind === "any"
+          ? helper
+              .queryWithinRoots(roots, "[phx-click]", selector)
+              .filter((element) => {
+                const tag = (element.tagName || "").toLowerCase();
+                return tag !== "a" && tag !== "button";
+              })
+              .map((element, index) =>
+                helper.attachElement(
+                  {
+                    kind: "clickable",
+                    index,
+                    tag: (element.tagName || "").toLowerCase(),
+                    text: helper.normalize(element.textContent, true),
+                    title: element.getAttribute("title") || "",
+                    ariaLabel: element.getAttribute("aria-label") || "",
+                    alt: "",
+                    testid: element.getAttribute("data-testid") || "",
+                    formSelector: helper.formSelector(element),
+                    checked: false,
+                    disabled: element.disabled === true || element.hasAttribute("disabled"),
+                    readonly: element.readOnly === true || element.hasAttribute("readonly"),
+                    selected: false
+                  },
+                  element
+                )
+              )
+          : [];
+
       const buttons =
         kind === "link"
           ? []
@@ -593,7 +623,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
               )
             );
 
-      return links.concat(buttons);
+      return links.concat(clickables).concat(buttons);
     };
 
     helper.submitCandidates = (roots, selector) => {
@@ -798,6 +828,40 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       }
 
       return values;
+    };
+
+    helper.firstCssSelector = (locator) => {
+      if (!locator || typeof locator !== "object") return null;
+
+      const kind = String(locator.kind || "").toLowerCase();
+      if (kind === "css" && typeof locator.value === "string" && locator.value.trim() !== "") {
+        return locator.value;
+      }
+
+      const members = Array.isArray(locator.members)
+        ? locator.members
+        : (Array.isArray(locator.value) ? locator.value : null);
+
+      if (kind === "and" && Array.isArray(members)) {
+        for (const member of members) {
+          const selector = helper.firstCssSelector(member);
+          if (selector) return selector;
+        }
+      }
+
+      return null;
+    };
+
+    helper.previewCandidates = (candidates, locator, op) => {
+      if (!Array.isArray(candidates) || !locator || (op !== "click" && op !== "submit")) {
+        return candidates;
+      }
+
+      const selector = helper.firstCssSelector(locator);
+      if (!selector) return candidates;
+
+      const scoped = candidates.filter((candidate) => candidate && candidate.__el && helper.matchesSelector(candidate.__el, selector));
+      return scoped.length > 0 ? scoped : candidates;
     };
 
     helper.querySelectorForLocator = (locator) => {
@@ -1061,7 +1125,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         return matchText(value);
       });
 
-      const candidateValues = helper.previewValues(stateMatched, op, matchBy);
+      const previewCandidates = helper.previewCandidates(stateMatched, locator, op);
+      const candidateValues = helper.previewValues(previewCandidates, op, matchBy);
       const matchedValues = helper.previewValues(matched, op, matchBy);
 
       if (!helper.countSatisfiesFilters(matched.length, filters)) {
@@ -1081,7 +1146,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           reason: "no elements matched locator",
           matchCount: 0,
           candidateValues,
-          candidateCount: stateMatched.length,
+          candidateCount: previewCandidates.length,
           path: window.location.pathname + window.location.search
         };
       }
@@ -1369,7 +1434,9 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         }
       }
 
-      if (target.kind !== "button" && target.kind !== "link") return fail("click_target_failed");
+      if (target.kind !== "button" && target.kind !== "link" && target.kind !== "clickable") {
+        return fail("click_target_failed");
+      }
 
       try {
         element.click();

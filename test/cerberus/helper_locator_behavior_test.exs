@@ -93,6 +93,44 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       |> assert_has(text("Selected: secondary", exact: true))
     end
 
+    test "click supports non-button phx-click elements in live views (#{driver})", context do
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/live/selector-edge")
+      |> assert_has(and_(css("td"), ~l"Engine - create account to join 'codename'"i))
+      |> click(and_(css("td"), ~l"Engine - create account to join 'codename'"i))
+      |> assert_has(text("Selected: secondary", exact: true))
+    end
+
+    test "click candidate hints are scoped by css members in composed locators (#{driver})", context do
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          unquote(driver)
+          |> driver_session(context)
+          |> visit("/live/selector-edge")
+          |> click(and_(css("td"), ~l"Definitely Missing Row Text"i), timeout: 0)
+        end
+
+      assert error.message =~ "possible candidates:"
+      assert error.message =~ "Engine - create account to join 'codename'"
+      refute error.message =~ "Articles"
+    end
+
+    test "click candidate hints are scoped by css members on static routes (#{driver})", context do
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          unquote(driver)
+          |> driver_session(context)
+          |> visit("/search")
+          |> click(and_(css("button"), ~l"Definitely Missing Button Text"i), timeout: 0)
+        end
+
+      assert error.message =~ "possible candidates:"
+      assert error.message =~ "Run Search"
+      assert error.message =~ "Run Nested Search"
+      refute error.message =~ "Articles"
+    end
+
     test "testid helper works across drivers for assertions and form actions (#{driver})", context do
       unquote(driver)
       |> driver_session(context)

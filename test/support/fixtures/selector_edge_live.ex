@@ -54,6 +54,18 @@ defmodule Cerberus.Fixtures.SelectorEdgeLive do
         <button phx-click="select_primary" role="tab">Tab Primary</button>
         <button phx-click="select_secondary" role="menuitem">Menu Secondary</button>
       </section>
+
+      <section id="table-actions">
+        <table>
+          <tbody>
+            <tr>
+              <td phx-click="select_secondary" phx-value-id="email-status-changed">
+                Engine - create account to join 'codename'
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
     </main>
     """
   end

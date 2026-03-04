@@ -3,9 +3,10 @@ defmodule Cerberus.Driver.Live do
 
   @behaviour Cerberus.Driver
 
-  import Phoenix.LiveViewTest, only: [element: 2, render: 1, render_click: 1]
+  import Phoenix.LiveViewTest, only: [element: 2, element: 3, render: 1, render_click: 1]
 
   alias Cerberus.Driver.Browser, as: BrowserSession
+  alias Cerberus.Driver.CandidateScope
   alias Cerberus.Driver.DownloadAssertion
   alias Cerberus.Driver.Live.FormData
   alias Cerberus.Driver.LocatorOps
@@ -954,7 +955,13 @@ defmodule Cerberus.Driver.Live do
         element(view, scoped_selector(selector, scope))
 
       _ ->
-        raise ArgumentError, "live button click requires a resolvable selector"
+        case {live_button_tag_selector(button), Map.get(button, :text)} do
+          {selector, text} when is_binary(selector) and selector != "" and is_binary(text) and text != "" ->
+            element(view, scoped_selector(selector, scope), text)
+
+          _ ->
+            raise ArgumentError, "live button click requires a resolvable selector"
+        end
     end
   end
 
@@ -973,17 +980,26 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp live_button_selector(button) when is_map(button) do
+    tag = live_button_tag_selector(button)
+
     Enum.find(
       [
-        attr_selector("button", "data-testid", Map.get(button, :testid)),
-        attr_selector("button", "title", Map.get(button, :title)),
-        attr_selector("button", "aria-label", Map.get(button, :aria_label)),
-        attr_selector("button", "name", Map.get(button, :button_name)),
-        attr_selector("button", "value", Map.get(button, :button_value)),
-        attr_selector("button", "form", Map.get(button, :form))
+        attr_selector(tag, "data-testid", Map.get(button, :testid)),
+        attr_selector(tag, "title", Map.get(button, :title)),
+        attr_selector(tag, "aria-label", Map.get(button, :aria_label)),
+        attr_selector(tag, "name", Map.get(button, :button_name)),
+        attr_selector(tag, "value", Map.get(button, :button_value)),
+        attr_selector(tag, "form", Map.get(button, :form))
       ],
       &(is_binary(&1) and &1 != "")
     )
+  end
+
+  defp live_button_tag_selector(button) when is_map(button) do
+    case Map.get(button, :tag, "button") do
+      tag when is_binary(tag) and tag != "" -> tag
+      _ -> "button"
+    end
   end
 
   defp live_link_selector(link) when is_map(link) do
@@ -1321,18 +1337,22 @@ defmodule Cerberus.Driver.Live do
   defp no_clickable_error(_kind), do: "no clickable element matched locator"
 
   defp click_candidate_values(session, match_opts, kind) do
-    scope = Session.scope(session)
+    scope = CandidateScope.click_scope(match_opts, Session.scope(session))
     match_by = Keyword.get(match_opts, :match_by, :text)
+    css_scoped_text? = CandidateScope.css_scoped_text_candidates?(match_opts)
 
     values =
-      case {kind, match_by} do
-        {:link, :text} ->
+      case {css_scoped_text?, kind, match_by} do
+        {true, _, :text} ->
+          Html.assertion_values(session.html, :text, :any, scope)
+
+        {false, :link, :text} ->
           Html.assertion_values(session.html, :link, :any, scope)
 
-        {:button, :text} ->
+        {false, :button, :text} ->
           Html.assertion_values(session.html, :button, :any, scope)
 
-        {:any, :text} ->
+        {false, :any, :text} ->
           Html.assertion_values(session.html, :link, :any, scope) ++
             Html.assertion_values(session.html, :button, :any, scope)
 
