@@ -56,7 +56,8 @@ defmodule Cerberus.BrowserIframeLimitationsTest do
             const iframe = document.getElementById("cross-origin-frame");
             return iframe.contentWindow.document.body.innerText;
           })()
-          """
+          """,
+          fn _result -> :ok end
         )
       end
 
