@@ -96,6 +96,13 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
+  def render_html(%__MODULE__{} = session, callback) when is_function(callback, 1) do
+    html = snapshot_html(session)
+    _ = callback.(LazyHTML.from_document(html))
+    session
+  end
+
+  @impl true
   def unwrap(%__MODULE__{view: nil}, _fun) do
     raise ArgumentError, "unwrap/2 requires an active LiveView; visit a live route first"
   end

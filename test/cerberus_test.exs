@@ -372,6 +372,22 @@ defmodule CerberusTest do
     File.rm(path)
   end
 
+  test "render_html yields a LazyHTML snapshot for static sessions" do
+    session =
+      session()
+      |> visit("/articles")
+      |> render_html(fn lazy_html ->
+        send(self(), {:render_html_snapshot, lazy_html, Cerberus.Html.texts(lazy_html, :any, nil)})
+      end)
+
+    assert session.current_path == "/articles"
+
+    assert_receive {:render_html_snapshot, %LazyHTML{} = lazy_html, texts}
+    assert is_list(texts)
+    assert Enum.any?(texts, &String.contains?(&1, "Articles"))
+    assert Enum.count(LazyHTML.query(lazy_html, "h1")) >= 1
+  end
+
   test "open_browser creates an HTML snapshot for live sessions" do
     session =
       session()
@@ -385,6 +401,22 @@ defmodule CerberusTest do
     assert File.exists?(path)
     assert File.read!(path) =~ "Count: 0"
     File.rm(path)
+  end
+
+  test "render_html yields a LazyHTML snapshot for live sessions" do
+    session =
+      session()
+      |> visit("/live/counter")
+      |> render_html(fn lazy_html ->
+        send(self(), {:render_html_snapshot, lazy_html, Cerberus.Html.texts(lazy_html, :any, nil)})
+      end)
+
+    assert session.current_path == "/live/counter"
+
+    assert_receive {:render_html_snapshot, %LazyHTML{} = lazy_html, texts}
+    assert is_list(texts)
+    assert Enum.any?(texts, &String.contains?(&1, "Count: 0"))
+    assert Enum.count(LazyHTML.query(lazy_html, "body")) == 1
   end
 
   test "select and choose work for static and live sessions" do
@@ -574,6 +606,23 @@ defmodule CerberusTest do
     File.rm(path)
   end
 
+  test "render_html yields a LazyHTML snapshot for browser sessions" do
+    session =
+      :browser
+      |> session()
+      |> visit("/articles")
+      |> render_html(fn lazy_html ->
+        send(self(), {:render_html_snapshot, lazy_html, Cerberus.Html.texts(lazy_html, :any, nil)})
+      end)
+
+    assert session.current_path == "/articles"
+
+    assert_receive {:render_html_snapshot, %LazyHTML{} = lazy_html, texts}
+    assert is_list(texts)
+    assert Enum.any?(texts, &String.contains?(&1, "Articles"))
+    assert Enum.count(LazyHTML.query(lazy_html, "h1")) >= 1
+  end
+
   test "unwrap rejects invalid callback arity" do
     assert_raise ArgumentError, ~r/callback with arity 1/, fn ->
       session()
@@ -601,6 +650,14 @@ defmodule CerberusTest do
       session()
       |> visit("/articles")
       |> open_browser(fn -> :ok end)
+    end
+  end
+
+  test "render_html rejects invalid callback arity" do
+    assert_raise ArgumentError, ~r/callback with arity 1/, fn ->
+      session()
+      |> visit("/articles")
+      |> render_html(fn -> :ok end)
     end
   end
 

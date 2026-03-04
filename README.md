@@ -226,6 +226,26 @@ Most tests switch modes by changing only the first session line:
  |> assert_has(~l"Count: 1")
 ```
 
+## Debugging Snapshots
+
+Use `open_browser/1` for human debugging in a real browser tab:
+
+```elixir
+session()
+|> visit("/articles")
+|> open_browser()
+```
+
+Use `render_html/2` when you want in-process DOM inspection (for example, from AI tooling):
+
+```elixir
+session()
+|> visit("/articles")
+|> render_html(fn lazy_html ->
+  IO.inspect(LazyHTML.query(lazy_html, "h1"))
+end)
+```
+
 ## Per-Test Browser Overrides
 
 You can override browser defaults in one test by passing session opts:

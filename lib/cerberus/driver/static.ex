@@ -88,6 +88,13 @@ defmodule Cerberus.Driver.Static do
   end
 
   @impl true
+  def render_html(%__MODULE__{} = session, callback) when is_function(callback, 1) do
+    html = snapshot_html(session)
+    _ = callback.(LazyHTML.from_document(html))
+    session
+  end
+
+  @impl true
   def unwrap(%__MODULE__{} = session, fun) when is_function(fun, 1) do
     session.conn
     |> Conn.ensure_conn()

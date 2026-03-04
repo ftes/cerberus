@@ -194,19 +194,17 @@ defmodule Cerberus.Driver.Browser do
 
   @impl true
   def open_browser(%__MODULE__{} = session, open_fun) when is_function(open_fun, 1) do
-    state = state!(session)
+    {state, html, url} = html_snapshot!(session)
+    path = OpenBrowser.write_snapshot!(html, snapshot_base_url(state.base_url, url))
+    _ = open_fun.(path)
+    session
+  end
 
-    case eval_json_transient_read(state, Expressions.browser_html()) do
-      {:ok, payload} ->
-        html = Map.get(payload, "html", "")
-        url = Map.get(payload, "url")
-        path = OpenBrowser.write_snapshot!(html, snapshot_base_url(state.base_url, url))
-        _ = open_fun.(path)
-        session
-
-      {:error, reason, details} ->
-        raise ArgumentError, "failed to collect browser HTML snapshot: #{reason} (#{inspect(details)})"
-    end
+  @impl true
+  def render_html(%__MODULE__{} = session, callback) when is_function(callback, 1) do
+    {_state, html, _url} = html_snapshot!(session)
+    _ = callback.(LazyHTML.from_document(html))
+    session
   end
 
   @impl true
@@ -1423,6 +1421,18 @@ defmodule Cerberus.Driver.Browser do
     else
       base_uri = URI.parse(base_url)
       base_uri |> URI.merge(path_or_url) |> to_string()
+    end
+  end
+
+  defp html_snapshot!(%__MODULE__{} = session) do
+    state = state!(session)
+
+    case eval_json_transient_read(state, Expressions.browser_html()) do
+      {:ok, payload} ->
+        {state, Map.get(payload, "html", ""), Map.get(payload, "url")}
+
+      {:error, reason, details} ->
+        raise ArgumentError, "failed to collect browser HTML snapshot: #{reason} (#{inspect(details)})"
     end
   end
 

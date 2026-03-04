@@ -31,6 +31,7 @@ defmodule Cerberus.Driver do
   @callback switch_tab(session_t(), Session.t()) :: Session.t()
   @callback close_tab(session_t()) :: session_t()
   @callback open_browser(session_t(), (String.t() -> any())) :: session_t()
+  @callback render_html(session_t(), (LazyHTML.t() -> any())) :: session_t()
   @callback unwrap(session_t(), (term() -> term())) :: session_t()
   @callback within(session_t(), Locator.t(), within_callback()) :: Session.t()
   @callback visit(session_t(), String.t(), keyword()) :: session_t()
