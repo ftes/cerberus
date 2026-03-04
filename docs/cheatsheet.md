@@ -116,11 +116,11 @@ Use `Cerberus.Browser` only with `session(:browser)`.
 | Type keys | `Browser.type(session, "hello", selector: "#input")` |
 | Press key | `Browser.press(session, "Enter", selector: "#input")` |
 | Drag and drop | `Browser.drag(session, "#drag-source", "#drop-target")` |
-| Dialog assert + dismiss | `session |> Browser.assert_dialog(~l"Delete item?"e)` |
-| Dialog assert + confirm | `session |> Browser.assert_dialog(~l"Delete item?"e, accept: true)` |
+| Dialog assert + dismiss | `Browser.assert_dialog(session, ~l"Delete item?"e)` |
+| Dialog assert + confirm | `Browser.assert_dialog(session, ~l"Delete item?"e, accept: true)` |
 | Popup capture | `Browser.with_popup(session, fn main -> click(main, ~l"button:Open Popup"r) end, fn main, popup -> assert_path(popup, "/browser/popup/destination") end)` |
-| Popup same-tab fallback | `session(:browser, browser: [popup_mode: :same_tab]) |> visit("/browser/popup/auto") |> assert_path("/browser/popup/destination", timeout: 1500)` |
-| Assert download (browser/static/live) | `session |> click(~l"link:Download Report"r) |> assert_download("report.txt")` |
+| Popup same-tab fallback | `assert_path(visit(session(:browser, browser: [popup_mode: :same_tab]), "/browser/popup/auto"), "/browser/popup/destination", timeout: 1500)` |
+| Assert download (browser/static/live) | `assert_download(click(session, ~l"link:Download Report"r), "report.txt")` |
 | Evaluate JS | `Browser.evaluate_js(session, "(() => 42)()")` |
 | Evaluate JS with assertion callback | `Browser.evaluate_js(session, "(() => 42)()", fn value -> assert value == 42 end)` |
 | Cookie lookup | `Browser.cookie(session, "_my_cookie")` |
