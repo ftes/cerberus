@@ -128,8 +128,8 @@ defmodule Cerberus.Phoenix.LiveViewTimeout do
   defp apply_redirect(session, _redirect_tuple), do: session
 
   defp check_for_redirect(session, action, fetch_redirect_info) when is_function(action) do
-    path = fetch_redirect_path(fetch_redirect_info.(session))
-    session |> Live.follow_redirect(path) |> then(action)
+    redirect_info = fetch_redirect_info.(session)
+    session |> Live.follow_redirect(normalize_redirect_info(redirect_info)) |> then(action)
   end
 
   defp handle_browser_messages_until(session, deadline, action) do
@@ -161,11 +161,16 @@ defmodule Cerberus.Phoenix.LiveViewTimeout do
       retry_fun.(session)
   end
 
-  defp fetch_redirect_path({path, _flash}) when is_binary(path), do: path
-  defp fetch_redirect_path(path) when is_binary(path), do: path
-  defp fetch_redirect_path(_other), do: "/"
+  defp normalize_redirect_info({path, flash}) when is_binary(path), do: %{kind: :redirect, to: path, flash: flash}
+
+  defp normalize_redirect_info(path) when is_binary(path), do: path
+  defp normalize_redirect_info(%{to: path} = info) when is_binary(path), do: info
+  defp normalize_redirect_info(_other), do: "/"
 
   defp via_assert_redirect(session) do
-    Phoenix.LiveViewTest.assert_redirect(session.view)
+    case Phoenix.LiveViewTest.assert_redirect(session.view) do
+      {path, flash} -> %{kind: :redirect, to: path, flash: flash}
+      path -> path
+    end
   end
 end

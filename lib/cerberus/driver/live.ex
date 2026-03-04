@@ -88,12 +88,21 @@ defmodule Cerberus.Driver.Live do
   def close_tab(%__MODULE__{} = session), do: session
 
   @impl true
-  def open_browser(%__MODULE__{view: view} = session, open_fun) when is_function(open_fun, 1) and not is_nil(view) do
-    _ = Phoenix.LiveViewTest.open_browser(view, open_fun)
-    session
+  def open_browser(%__MODULE__{view: %{pid: pid} = view} = session, open_fun)
+      when is_function(open_fun, 1) and is_pid(pid) do
+    if Process.alive?(pid) do
+      _ = Phoenix.LiveViewTest.open_browser(view, open_fun)
+      session
+    else
+      open_browser_snapshot(session, open_fun)
+    end
   end
 
   def open_browser(%__MODULE__{} = session, open_fun) when is_function(open_fun, 1) do
+    open_browser_snapshot(session, open_fun)
+  end
+
+  defp open_browser_snapshot(%__MODULE__{} = session, open_fun) when is_function(open_fun, 1) do
     html = snapshot_html(session)
     path = OpenBrowser.write_snapshot!(html, endpoint_url(session.endpoint), session.endpoint)
     _ = open_fun.(path)
@@ -186,6 +195,26 @@ defmodule Cerberus.Driver.Live do
   @spec follow_redirect(Session.t(), String.t()) :: Session.t()
   def follow_redirect(%__MODULE__{} = session, to) when is_binary(to) do
     visit(session, to, [])
+  end
+
+  def follow_redirect(%__MODULE__{} = session, {to, flash}) when is_binary(to) do
+    request_path = to_request_path(to, session.current_path)
+
+    conn =
+      session.conn
+      |> Conn.ensure_conn()
+      |> maybe_put_flash_cookie(session.endpoint, flash)
+      |> then(&Conn.follow_get(session.endpoint, &1, request_path))
+
+    session_from_conn(session, conn, request_path)
+  end
+
+  def follow_redirect(%__MODULE__{} = session, %{to: to, flash: flash}) when is_binary(to) do
+    follow_redirect(session, {to, flash})
+  end
+
+  def follow_redirect(%__MODULE__{} = session, %{to: to}) when is_binary(to) do
+    follow_redirect(session, to)
   end
 
   @impl true
@@ -2744,6 +2773,19 @@ defmodule Cerberus.Driver.Live do
   defp normalize_query_value(nil), do: ""
   defp normalize_query_value(value), do: to_string(value)
 
+  defp maybe_put_flash_cookie(conn, _endpoint, nil), do: conn
+
+  defp maybe_put_flash_cookie(conn, endpoint, flash) do
+    token =
+      if is_map(flash) do
+        Phoenix.LiveView.Utils.sign_flash(endpoint, flash)
+      else
+        flash
+      end
+
+    Phoenix.ConnTest.put_req_cookie(conn, "__phoenix_flash__", token)
+  end
+
   defp maybe_live_patch_path(nil, fallback_path), do: fallback_path
 
   defp maybe_live_patch_path(view, fallback_path) do
@@ -2753,11 +2795,15 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp read_patch_path(view) do
-    Phoenix.LiveViewTest.assert_patch(view, 0)
-  rescue
-    ArgumentError -> nil
+  defp read_patch_path(%{proxy: {ref, topic, _pid}}) when is_reference(ref) and is_binary(topic) do
+    receive do
+      {^ref, {:patch, ^topic, %{to: path}}} when is_binary(path) -> path
+    after
+      0 -> nil
+    end
   end
+
+  defp read_patch_path(_view), do: nil
 
   defp live_route?(%__MODULE__{view: view}) when not is_nil(view), do: true
   defp live_route?(%__MODULE__{}), do: false

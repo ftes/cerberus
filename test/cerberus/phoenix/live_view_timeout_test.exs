@@ -164,6 +164,24 @@ defmodule Cerberus.Phoenix.LiveViewTimeoutTest do
     assert_receive {:redirect_attempted, from_view: ^view_pid}
   end
 
+  test "raises when redirect fallback fetch does not provide a redirect" do
+    session = dummy_live_session("/live/counter")
+    view_pid = session.view.pid
+
+    action = fn %{view: %{pid: ^view_pid}} ->
+      Process.exit(view_pid, :kill)
+      DummyLiveView.render_html(view_pid)
+    end
+
+    fetch_redirect_info = fn _failed_session ->
+      raise ArgumentError, "no redirect available"
+    end
+
+    assert_raise ArgumentError, "no redirect available", fn ->
+      LiveViewTimeout.with_timeout(session, 1_000, action, fetch_redirect_info)
+    end
+  end
+
   defp dummy_live_session(path \\ "/live/counter") do
     {:ok, view_pid} = start_supervised(DummyLiveView)
 
