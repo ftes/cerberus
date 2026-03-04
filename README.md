@@ -173,6 +173,27 @@ main =
 > `Cerberus.Browser.*` helpers are intentionally browser-only and raise explicit unsupported-operation assertions on non-browser sessions.
 > Cross-origin iframe DOM access is still blocked by browser same-origin policy; use provider-level or parent-page assertions for those flows.
 
+## Failure Diagnostics
+
+When an action/assertion misses, Cerberus includes likely alternatives.
+
+```elixir
+session()
+|> visit("/search")
+|> submit(text: "Definitely Missing Submit")
+```
+
+```text
+submit failed: no submit button matched locator
+locator: [text: "Definitely Missing Submit"]
+...
+observed: %{..., candidate_values: ["Run Search", "Run Nested Search"]}
+
+possible candidates:
+  - "Run Search"
+  - "Run Nested Search"
+```
+
 ## Locator Quick Look
 
 How to choose locators:

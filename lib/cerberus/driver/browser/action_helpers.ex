@@ -683,6 +683,20 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       }
     };
 
+    helper.previewValues = (candidates, op, matchBy, limit = 8) => {
+      const values = [];
+
+      for (const candidate of candidates) {
+        const value = helper.normalize(helper.matchValue(candidate, op, matchBy), true);
+        if (!value || values.includes(value)) continue;
+
+        values.push(value);
+        if (values.length >= limit) break;
+      }
+
+      return values;
+    };
+
     helper.querySelectorForLocator = (locator) => {
       if (!locator || typeof locator !== "object") return "*";
 
@@ -906,9 +920,9 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       const locator = options.locator && typeof options.locator === "object" ? options.locator : null;
       const matchText = helper.buildTextMatcher(options.expected, exact, normalizeWs);
 
-      const matched = candidates.filter((candidate) => {
-        if (!helper.matchesStateFilters(candidate, options)) return false;
+      const stateMatched = candidates.filter((candidate) => helper.matchesStateFilters(candidate, options));
 
+      const matched = stateMatched.filter((candidate) => {
         if (locator) {
           return helper.matchesLocator(candidate, locator, op);
         }
@@ -917,11 +931,16 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         return matchText(value);
       });
 
+      const candidateValues = helper.previewValues(stateMatched, op, matchBy);
+      const matchedValues = helper.previewValues(matched, op, matchBy);
+
       if (!helper.countSatisfiesFilters(matched.length, filters)) {
         return {
           ok: false,
           reason: "matched element count did not satisfy count constraints",
           matchCount: matched.length,
+          candidateValues: matchedValues,
+          candidateCount: matched.length,
           path: window.location.pathname + window.location.search
         };
       }
@@ -931,6 +950,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           ok: false,
           reason: "no elements matched locator",
           matchCount: 0,
+          candidateValues,
+          candidateCount: stateMatched.length,
           path: window.location.pathname + window.location.search
         };
       }
@@ -941,6 +962,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           ok: false,
           reason: position.error,
           matchCount: matched.length,
+          candidateValues: matchedValues,
+          candidateCount: matched.length,
           path: window.location.pathname + window.location.search
         };
       }

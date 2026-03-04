@@ -13,5 +13,18 @@ defmodule Cerberus.CrossDriverTextTest do
       |> refute_has(text: "500 Internal Server Error")
       |> assert_has([text: "Hidden helper text"], visible: false)
     end
+
+    test "assert_has failure includes candidate hints (#{driver})" do
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          unquote(driver)
+          |> session()
+          |> visit("/articles")
+          |> assert_has(text: "Definitely Missing Text")
+        end
+
+      assert error.message =~ "possible candidates:"
+      assert error.message =~ "Articles"
+    end
   end
 end

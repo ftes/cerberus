@@ -54,6 +54,41 @@ defmodule Cerberus.FormActionsTest do
       |> click_button(text: "Increment")
       |> assert_has(text: "Count: 1", exact: true)
     end
+
+    test "action failures include possible candidate hints (#{driver})", context do
+      click_error =
+        assert_raise ExUnit.AssertionError, fn ->
+          unquote(driver)
+          |> driver_session(context)
+          |> visit("/search")
+          |> click_link(text: "Definitely Missing Link")
+        end
+
+      assert click_error.message =~ "possible candidates:"
+      assert click_error.message =~ "Articles"
+
+      fill_error =
+        assert_raise ExUnit.AssertionError, fn ->
+          unquote(driver)
+          |> driver_session(context)
+          |> visit("/search")
+          |> fill_in("Definitely Missing Field", "x")
+        end
+
+      assert fill_error.message =~ "possible candidates:"
+      assert fill_error.message =~ "Search term"
+
+      submit_error =
+        assert_raise ExUnit.AssertionError, fn ->
+          unquote(driver)
+          |> driver_session(context)
+          |> visit("/search")
+          |> submit(text: "Definitely Missing Submit")
+        end
+
+      assert submit_error.message =~ "possible candidates:"
+      assert submit_error.message =~ "Run Search"
+    end
   end
 
   test "live driver reports missing fields for fill_in and missing submit controls on counter page" do

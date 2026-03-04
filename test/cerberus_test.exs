@@ -385,7 +385,7 @@ defmodule CerberusTest do
     assert_receive {:render_html_snapshot, %LazyHTML{} = lazy_html, texts}
     assert is_list(texts)
     assert Enum.any?(texts, &String.contains?(&1, "Articles"))
-    assert Enum.count(LazyHTML.query(lazy_html, "h1")) >= 1
+    refute Enum.empty?(LazyHTML.query(lazy_html, "h1"))
   end
 
   test "open_browser creates an HTML snapshot for live sessions" do
@@ -620,7 +620,7 @@ defmodule CerberusTest do
     assert_receive {:render_html_snapshot, %LazyHTML{} = lazy_html, texts}
     assert is_list(texts)
     assert Enum.any?(texts, &String.contains?(&1, "Articles"))
-    assert Enum.count(LazyHTML.query(lazy_html, "h1")) >= 1
+    refute Enum.empty?(LazyHTML.query(lazy_html, "h1"))
   end
 
   test "unwrap rejects invalid callback arity" do

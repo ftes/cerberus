@@ -584,6 +584,8 @@ defmodule Cerberus.Driver.Browser do
       action: op,
       path: Map.get(result, "path", state.current_path),
       match_count: Map.get(result, "matchCount"),
+      candidate_count: Map.get(result, "candidateCount"),
+      candidate_values: Map.get(result, "candidateValues", []),
       reason: Map.get(result, "reason"),
       result: result
     }

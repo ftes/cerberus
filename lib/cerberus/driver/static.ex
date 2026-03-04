@@ -180,6 +180,7 @@ defmodule Cerberus.Driver.Static do
             observed = %{
               action: :click,
               path: session.current_path,
+              candidate_values: click_candidate_values(session, match_opts, kind),
               texts: Html.texts(session.html, :any, Session.scope(session)),
               transition: session_transition(session)
             }
@@ -212,7 +213,13 @@ defmodule Cerberus.Driver.Static do
         {:error, session, observed, "matched field does not include a name attribute"}
 
       :error ->
-        observed = %{action: :fill_in, path: session.current_path, transition: session_transition(session)}
+        observed = %{
+          action: :fill_in,
+          path: session.current_path,
+          candidate_values: field_candidate_values(session, match_opts),
+          transition: session_transition(session)
+        }
+
         {:error, session, observed, "no form field matched locator"}
     end
   end
@@ -271,7 +278,13 @@ defmodule Cerberus.Driver.Static do
         {:error, session, observed, "matched upload field does not include a name attribute"}
 
       :error ->
-        observed = %{action: :upload, path: session.current_path, transition: session_transition(session)}
+        observed = %{
+          action: :upload,
+          path: session.current_path,
+          candidate_values: field_candidate_values(session, match_opts),
+          transition: session_transition(session)
+        }
+
         {:error, session, observed, "no file input matched locator"}
     end
   rescue
@@ -289,7 +302,13 @@ defmodule Cerberus.Driver.Static do
         do_submit(session, button)
 
       :error ->
-        observed = %{action: :submit, path: session.current_path, transition: session_transition(session)}
+        observed = %{
+          action: :submit,
+          path: session.current_path,
+          candidate_values: submit_candidate_values(session, match_opts),
+          transition: session_transition(session)
+        }
+
         {:error, session, observed, "no submit button matched locator"}
     end
   end
@@ -446,6 +465,44 @@ defmodule Cerberus.Driver.Static do
   defp no_clickable_error(:link), do: "no link matched locator"
   defp no_clickable_error(:button), do: "no button matched locator"
   defp no_clickable_error(_kind), do: "no clickable element matched locator"
+
+  defp click_candidate_values(session, match_opts, kind) do
+    scope = Session.scope(session)
+    match_by = Keyword.get(match_opts, :match_by, :text)
+
+    values =
+      case {kind, match_by} do
+        {:link, :text} ->
+          Html.assertion_values(session.html, :link, :any, scope)
+
+        {:button, :text} ->
+          Html.assertion_values(session.html, :button, :any, scope)
+
+        {:any, :text} ->
+          Html.assertion_values(session.html, :link, :any, scope) ++
+            Html.assertion_values(session.html, :button, :any, scope)
+
+        _ ->
+          Html.assertion_values(session.html, match_by, :any, scope)
+      end
+
+    Enum.uniq(values)
+  end
+
+  defp field_candidate_values(session, match_opts) do
+    match_by = Keyword.get(match_opts, :match_by, :label)
+    Html.assertion_values(session.html, match_by, :any, Session.scope(session))
+  end
+
+  defp submit_candidate_values(session, match_opts) do
+    match_by =
+      case Keyword.get(match_opts, :match_by, :text) do
+        :text -> :button
+        other -> other
+      end
+
+    Html.assertion_values(session.html, match_by, :any, Session.scope(session))
+  end
 
   defp locator_match_opts(%Locator{opts: locator_opts}, opts) do
     Keyword.merge(locator_opts, opts)

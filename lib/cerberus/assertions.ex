@@ -259,7 +259,7 @@ defmodule Cerberus.Assertions do
     scope = Session.scope(session)
     current_path = session |> Session.current_path() |> Path.normalize()
 
-    """
+    base_message = """
     #{op} failed: #{reason}
     locator: #{inspect(locator)}
     opts: #{inspect(opts)}
@@ -268,6 +268,8 @@ defmodule Cerberus.Assertions do
     transition: #{inspect(transition)}
     observed: #{inspect(observed)}
     """
+
+    maybe_append_candidate_values(base_message, reason, observed)
   end
 
   @spec observed_transition(Session.observed()) :: Session.observed() | nil
@@ -276,6 +278,106 @@ defmodule Cerberus.Assertions do
   end
 
   defp observed_transition(_observed), do: nil
+
+  defp maybe_append_candidate_values(message, reason, observed) do
+    case candidate_values_for_error(reason, observed) do
+      [] ->
+        message
+
+      values ->
+        {shown, hidden_count} = values |> Enum.uniq() |> split_visible_candidates()
+
+        extra =
+          if hidden_count > 0 do
+            "\n  ... (#{hidden_count} more)"
+          else
+            ""
+          end
+
+        message <>
+          "\npossible candidates:" <>
+          Enum.map_join(shown, "", fn value -> "\n  - #{inspect(value)}" end) <> extra
+    end
+  end
+
+  defp candidate_values_for_error(reason, observed) when is_map(observed) and is_binary(reason) do
+    case preferred_candidate_values(observed) do
+      [] ->
+        fallback_candidate_values(reason, observed)
+
+      values ->
+        values
+    end
+  end
+
+  defp candidate_values_for_error(_reason, _observed), do: []
+
+  defp preferred_candidate_values(observed) when is_map(observed) do
+    observed_candidates = map_list_value(observed, :candidate_values)
+    result = map_value(observed, :result)
+
+    result_candidates =
+      map_list_value(result, :candidate_values) ++
+        map_list_value(result, :candidateValues)
+
+    if observed_candidates == [], do: result_candidates, else: observed_candidates
+  end
+
+  defp fallback_candidate_values(reason, observed) do
+    texts = map_list_value(observed, :texts)
+    matched = map_list_value(observed, :matched)
+
+    cond do
+      reason == "expected text not found" and texts != [] -> texts
+      reason == "unexpected matching text found" and matched != [] -> matched
+      String.contains?(reason, "count") and matched != [] -> matched
+      true -> []
+    end
+  end
+
+  defp split_visible_candidates(values) when is_list(values) do
+    shown =
+      values
+      |> Enum.map(&normalize_candidate_value/1)
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.take(8)
+
+    hidden_count = max(length(values) - length(shown), 0)
+    {shown, hidden_count}
+  end
+
+  defp normalize_candidate_value(value) when is_binary(value) do
+    value
+    |> String.replace(~r/\s+/, " ")
+    |> String.trim()
+    |> String.slice(0, 160)
+  end
+
+  defp normalize_candidate_value(value), do: inspect(value)
+
+  defp map_value(map, key) when is_map(map) and is_atom(key) do
+    string_key = Atom.to_string(key)
+
+    cond do
+      Map.has_key?(map, key) -> Map.get(map, key)
+      Map.has_key?(map, string_key) -> Map.get(map, string_key)
+      true -> nil
+    end
+  end
+
+  defp map_value(_map, _key), do: nil
+
+  defp map_list_value(map, key) do
+    case map_value(map, key) do
+      list when is_list(list) ->
+        list
+        |> Enum.map(&normalize_candidate_value/1)
+        |> Enum.reject(&(&1 == ""))
+
+      _ ->
+        []
+    end
+  end
 
   defp resolve_assert_timeout(_session, true, validated_timeout), do: validated_timeout
   defp resolve_assert_timeout(%LiveSession{assert_timeout_ms: timeout}, false, _validated_timeout), do: timeout
