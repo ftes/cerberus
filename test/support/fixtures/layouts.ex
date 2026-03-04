@@ -12,6 +12,7 @@ defmodule Cerberus.Fixtures.Layouts do
       <head>
         <meta charset="utf-8" />
         <meta name="csrf-token" content={Plug.CSRFProtection.get_csrf_token()} />
+        <link phx-track-static rel="stylesheet" href="/assets/app.css" />
         <script defer phx-track-static src="/phoenix.min.js"></script>
         <script defer phx-track-static src="/phoenix_live_view.min.js"></script>
         <script defer phx-track-static src="/assets/app.js"></script>

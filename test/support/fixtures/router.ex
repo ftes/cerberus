@@ -31,6 +31,7 @@ defmodule Cerberus.Fixtures.Router do
 
     get("/", PageController, :index)
     get("/articles", PageController, :articles)
+    get("/styled-snapshot", PageController, :styled_snapshot)
     get("/main", PageController, :main)
     get("/sandbox/messages", PageController, :sandbox_messages)
     get("/scoped", PageController, :scoped)
@@ -55,6 +56,12 @@ defmodule Cerberus.Fixtures.Router do
     get("/browser/iframe/same-origin", PageController, :iframe_same_origin)
     get("/browser/iframe/same-origin-target", PageController, :iframe_same_origin_target)
     get("/browser/iframe/target", PageController, :iframe_target)
+    get("/auth/static/users/register", AuthController, :static_register)
+    get("/auth/static/users/log_in", AuthController, :static_log_in)
+    get("/auth/static/dashboard", AuthController, :static_dashboard)
+    post("/auth/users/register", AuthController, :register)
+    post("/auth/users/log_in", AuthController, :log_in)
+    post("/auth/users/log_out", AuthController, :log_out)
     get("/session/user", PageController, :session_user)
     get("/session/user/:value", PageController, :set_session_user)
     get("/owner-form", PageController, :owner_form)
@@ -85,6 +92,9 @@ defmodule Cerberus.Fixtures.Router do
       live("/live/uploads", UploadLive)
       live("/live/nested", NestedLive)
       live("/live/oracle/mismatch", OracleMismatchLive)
+      live("/auth/live/users/register", AuthRegisterLive)
+      live("/auth/live/users/log_in", AuthLogInLive)
+      live("/auth/live/dashboard", AuthDashboardLive)
     end
   end
 end

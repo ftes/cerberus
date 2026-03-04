@@ -1,3 +1,4 @@
+alias Cerberus.Fixtures.AuthStore
 alias Cerberus.Fixtures.Endpoint
 alias Cerberus.Fixtures.Repo
 
@@ -8,6 +9,7 @@ ExUnit.start()
   Supervisor.start_link(
     [
       Repo,
+      AuthStore,
       {Phoenix.PubSub, name: Cerberus.Fixtures.PubSub},
       Cerberus.Driver.Browser.Supervisor
     ],
@@ -16,6 +18,7 @@ ExUnit.start()
   )
 
 Ecto.Adapters.SQL.Sandbox.mode(Repo, :manual)
+AuthStore.reset!()
 
 {:ok, _} = Endpoint.start_link()
 

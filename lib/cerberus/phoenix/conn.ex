@@ -147,7 +147,11 @@ defmodule Cerberus.Phoenix.Conn do
 
   defp preserve_headers(conn, headers) do
     Enum.reduce(headers, conn, fn {name, value}, acc ->
-      Plug.Conn.put_req_header(acc, name, value)
+      if String.downcase(name) == "cookie" do
+        acc
+      else
+        Plug.Conn.put_req_header(acc, name, value)
+      end
     end)
   end
 

@@ -32,6 +32,25 @@ defmodule Cerberus.Fixtures.PageController do
     """)
   end
 
+  def styled_snapshot(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Styled Snapshot</title>
+        <link rel="stylesheet" href="/assets/app.css" />
+        <script src="/assets/app.js"></script>
+      </head>
+      <body>
+        <main>
+          <h1>Styled Snapshot</h1>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
   def main(conn, _params) do
     custom_header = conn |> Plug.Conn.get_req_header("x-custom-header") |> List.first() |> Kernel.||("")
 

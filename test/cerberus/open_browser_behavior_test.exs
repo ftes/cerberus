@@ -37,6 +37,48 @@ defmodule Cerberus.OpenBrowserBehaviorTest do
         File.rm(path)
       end)
     end
+
+    test "open_browser rewrites stylesheet paths to local static assets and strips scripts (#{driver})",
+         context do
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/styled-snapshot")
+      |> open_browser(fn path ->
+        content = File.read!(path)
+        html = LazyHTML.from_document(content)
+        [css_href] = html |> LazyHTML.query("link[rel=stylesheet]") |> LazyHTML.attribute("href")
+
+        assert String.starts_with?(css_href, "file://")
+        css_path = String.replace_prefix(css_href, "file://", "")
+        assert css_path =~ "/cerberus/priv/static/assets/app.css"
+        assert File.exists?(css_path)
+
+        refute content =~ "<script"
+        File.rm(path)
+      end)
+    end
+  end
+
+  test "open_browser on live phoenix sessions keeps head stylesheet links via LiveViewTest delegation" do
+    :phoenix
+    |> session()
+    |> visit("/live/counter")
+    |> open_browser(fn path ->
+      content = File.read!(path)
+      html = LazyHTML.from_document(content)
+
+      [css_href] =
+        html
+        |> LazyHTML.query(~s(link[rel="stylesheet"][phx-track-static]))
+        |> LazyHTML.attribute("href")
+
+      assert String.starts_with?(css_href, "file://")
+      css_path = String.replace_prefix(css_href, "file://", "")
+      assert css_path =~ "/cerberus/priv/static/assets/app.css"
+      assert File.exists?(css_path)
+
+      File.rm(path)
+    end)
   end
 
   defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)
