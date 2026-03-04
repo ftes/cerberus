@@ -212,6 +212,36 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     refute rewritten =~ "click_button("
   end
 
+  test "write mode collapses scoped click aliases into single-locator click calls", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_scoped_click_aliases_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleScopedClickAliasesTest do
+        test "example", %{conn: conn} do
+          session = PhoenixTest.visit(conn, "/articles")
+          session = PhoenixTest.click_link(session, "#actions", "Counter")
+          PhoenixTest.click_button(session, "#actions", "Increment", timeout: 50)
+        end
+      end
+      """
+    )
+
+    _output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ ~s{Cerberus.click(session, Cerberus.link("#actions", "Counter"))}
+    assert rewritten =~ ~s{Cerberus.click(session, Cerberus.button("#actions", "Increment"), timeout: 50)}
+    refute rewritten =~ ~s{Cerberus.click(session, "#actions", "Counter")}
+    refute rewritten =~ ~s{Cerberus.click(session, "#actions", "Increment", timeout: 50)}
+  end
+
   test "write mode rewrites PhoenixTest.visit when first arg is not conn", %{tmp_dir: tmp_dir} do
     file = Path.join(tmp_dir, "sample_direct_visit_test.exs")
 

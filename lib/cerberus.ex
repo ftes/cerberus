@@ -28,23 +28,6 @@ defmodule Cerberus do
 
   @type locator_input :: Locator.input()
   @type scope_locator_input :: Locator.input()
-  @locator_kind_keys [
-    :text,
-    :label,
-    :link,
-    :button,
-    :placeholder,
-    :title,
-    :alt,
-    :aria_label,
-    :role,
-    :css,
-    :testid,
-    :and,
-    :or,
-    :not
-  ]
-  @locator_kind_string_keys Enum.map(@locator_kind_keys, &Atom.to_string/1)
   @session_common_options_doc NimbleOptions.docs(Options.session_common_schema())
   @session_browser_options_doc NimbleOptions.docs(Options.session_browser_schema())
   @path_options_doc NimbleOptions.docs(Options.path_schema())
@@ -800,35 +783,13 @@ defmodule Cerberus do
   @doc """
   Clicks a matched element.
 
-  Supported forms:
-  - `click(session, locator, opts)` for unscoped clicks
-  - `click(session, scope_locator, locator)` for scoped clicks
-
   ## Options
 
   #{@click_options_doc}
   """
-  @spec click(arg, scope_locator_input(), locator_input() | Options.click_opts()) :: arg when arg: var
-  def click(session, scope_locator_or_locator, locator_or_opts) do
-    if locator_input_term?(locator_or_opts) do
-      click(session, scope_locator_or_locator, locator_or_opts, [])
-    else
-      Assertions.click(session, scope_locator_or_locator, locator_or_opts)
-    end
-  end
-
-  @doc """
-  Clicks a locator within `scope_locator`.
-
-  ## Options
-
-  #{@click_options_doc}
-  """
-  @spec click(arg, scope_locator_input(), locator_input(), Options.click_opts()) :: arg when arg: var
-  def click(session, scope_locator, locator, opts) when is_list(opts) do
-    within(session, scope_locator, fn scoped ->
-      Assertions.click(scoped, locator, opts)
-    end)
+  @spec click(arg, locator_input(), Options.click_opts()) :: arg when arg: var
+  def click(session, locator, opts) when is_list(opts) do
+    Assertions.click(session, locator, opts)
   end
 
   @doc """
@@ -1089,24 +1050,6 @@ defmodule Cerberus do
   defp profiling_bucket_driver_kind!(%StaticSession{}), do: :static
   defp profiling_bucket_driver_kind!(%LiveSession{}), do: :live
   defp profiling_bucket_driver_kind!(%BrowserSession{}), do: :browser
-
-  defp locator_input_term?(value) when is_binary(value) or is_struct(value, Regex), do: true
-  defp locator_input_term?(%Locator{}), do: true
-  defp locator_input_term?(value) when is_map(value), do: true
-
-  defp locator_input_term?(value) when is_list(value) do
-    if Keyword.keyword?(value) do
-      Enum.any?(Keyword.keys(value), &locator_kind_key?/1)
-    else
-      false
-    end
-  end
-
-  defp locator_input_term?(_value), do: false
-
-  defp locator_kind_key?(key) when is_atom(key), do: key in @locator_kind_keys
-  defp locator_kind_key?(key) when is_binary(key), do: key in @locator_kind_string_keys
-  defp locator_kind_key?(_key), do: false
 
   defp checkout_ecto_repos(repo, context) do
     repos = List.wrap(repo)

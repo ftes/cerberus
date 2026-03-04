@@ -79,8 +79,6 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     :assert_has,
     :refute_has,
     :click,
-    :click_link,
-    :click_button,
     :fill_in,
     :select,
     :choose,
@@ -701,7 +699,16 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     scope_builder = &build_remote_css_scope(module_ast, &1)
     assertion_scope_builder = &build_remote_assertion_scope(module_ast, &1, &2)
 
-    case canonicalize_call_args(canonical_fun, fun, args, scope_builder, assertion_scope_builder) do
+    click_alias_scope_builder = &build_remote_click_alias_scope_locator(module_ast, &1, &2, &3)
+
+    case canonicalize_call_args(
+           canonical_fun,
+           fun,
+           args,
+           scope_builder,
+           assertion_scope_builder,
+           click_alias_scope_builder
+         ) do
       {:ok, updated_args} ->
         {{{:., dot_meta, [module_ast, canonical_fun]}, call_meta, updated_args}, true}
 
@@ -723,7 +730,8 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
            fun,
            args,
            &build_local_css_scope/1,
-           &build_local_assertion_scope/2
+           &build_local_assertion_scope/2,
+           &build_local_click_alias_scope_locator/3
          ) do
       {:ok, updated_args} ->
         {{canonical_fun, meta, updated_args}, true}
@@ -796,7 +804,8 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
                   fun,
                   args,
                   &build_local_css_scope/1,
-                  &build_local_assertion_scope/2
+                  &build_local_assertion_scope/2,
+                  &build_local_click_alias_scope_locator/3
                 )
               )
 
@@ -842,17 +851,20 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
           atom(),
           [Macro.t()],
           (Macro.t() -> Macro.t()),
-          (Macro.t(), Macro.t() -> Macro.t())
+          (Macro.t(), Macro.t() -> Macro.t()),
+          (atom(), Macro.t(), Macro.t() -> Macro.t())
         ) ::
           canonicalize_result()
-  defp canonicalize_call_args(fun, source_fun, args, scope_builder, assertion_scope_builder)
-       when is_function(scope_builder, 1) and is_function(assertion_scope_builder, 2) do
+  defp canonicalize_call_args(fun, source_fun, args, scope_builder, assertion_scope_builder, click_alias_scope_builder)
+       when is_function(scope_builder, 1) and is_function(assertion_scope_builder, 2) and
+              is_function(click_alias_scope_builder, 3) do
     {args, changed?} =
       Enum.reduce(
         [
           fn acc -> canonicalize_text_assertion_args(fun, acc) end,
           fn acc -> canonicalize_labeled_value_call_args(fun, acc) end,
           fn acc -> canonicalize_scope_locator_args(fun, acc, scope_builder, assertion_scope_builder) end,
+          fn acc -> canonicalize_click_alias_scope_args(fun, source_fun, acc, click_alias_scope_builder) end,
           fn acc -> canonicalize_explicit_locator_args(fun, source_fun, acc) end,
           fn acc -> canonicalize_label_variable_locator_args(fun, acc) end
         ],
@@ -927,6 +939,37 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
 
   defp canonicalize_scope_locator_args(_fun, _args, _scope_builder, _assertion_scope_builder), do: :no_change
 
+  @spec canonicalize_click_alias_scope_args(
+          atom(),
+          atom(),
+          [Macro.t()],
+          (atom(), Macro.t(), Macro.t() -> Macro.t())
+        ) ::
+          canonicalize_result()
+  defp canonicalize_click_alias_scope_args(:click, source_fun, args, builder)
+       when source_fun in [:click_link, :click_button] and is_function(builder, 3) do
+    case args do
+      [session, scope, locator] ->
+        if keyword_ast?(locator) do
+          :no_change
+        else
+          {:ok, [session, builder.(source_fun, scope, locator)]}
+        end
+
+      [session, scope, locator, opts] ->
+        if keyword_ast?(locator) or not keyword_ast?(opts) do
+          :no_change
+        else
+          {:ok, [session, builder.(source_fun, scope, locator), opts]}
+        end
+
+      _ ->
+        :no_change
+    end
+  end
+
+  defp canonicalize_click_alias_scope_args(_fun, _source_fun, _args, _builder), do: :no_change
+
   @spec canonicalize_explicit_locator_args(atom(), atom(), [Macro.t()]) :: canonicalize_result()
   defp canonicalize_explicit_locator_args(fun, source_fun, args) when fun in @explicit_locator_calls do
     case locator_arg_indexes_for(fun, args) do
@@ -999,11 +1042,11 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   defp locator_arg_indexes_for(:upload, [_, _, third]), do: if(keyword_ast?(third), do: [0], else: [1])
   defp locator_arg_indexes_for(:upload, [_, _, _, _]), do: [1]
 
-  defp locator_arg_indexes_for(fun, [_, _, third]) when fun in [:assert_has, :refute_has, :click] do
+  defp locator_arg_indexes_for(fun, [_, _, third]) when fun in [:assert_has, :refute_has] do
     if keyword_ast?(third), do: [1], else: [2]
   end
 
-  defp locator_arg_indexes_for(fun, [_, _, _, _]) when fun in [:assert_has, :refute_has, :click], do: [2]
+  defp locator_arg_indexes_for(fun, [_, _, _, _]) when fun in [:assert_has, :refute_has], do: [2]
   defp locator_arg_indexes_for(fun, [_]) when fun in @explicit_locator_calls, do: [0]
   defp locator_arg_indexes_for(fun, [_, _]) when fun in @explicit_locator_calls, do: [1]
   defp locator_arg_indexes_for(fun, [_, _, _]) when fun in @explicit_locator_calls, do: [1]
@@ -1230,6 +1273,11 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   defp build_local_assertion_scope(scope_ast, locator_ast),
     do: {:and_, [], [build_local_css_scope(scope_ast), locator_ast]}
 
+  @spec build_local_click_alias_scope_locator(atom(), Macro.t(), Macro.t()) :: Macro.t()
+  defp build_local_click_alias_scope_locator(source_fun, scope_ast, locator_ast) do
+    {click_alias_locator_fun(source_fun), [], [scope_ast, locator_ast]}
+  end
+
   @spec build_remote_css_scope(Macro.t(), Macro.t()) :: Macro.t()
   defp build_remote_css_scope(module_ast, scope_ast) do
     {{:., [], [module_ast, :css]}, [], [scope_ast]}
@@ -1240,6 +1288,15 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     css_ast = build_remote_css_scope(module_ast, scope_ast)
     {{:., [], [module_ast, :and_]}, [], [css_ast, locator_ast]}
   end
+
+  @spec build_remote_click_alias_scope_locator(Macro.t(), atom(), Macro.t(), Macro.t()) :: Macro.t()
+  defp build_remote_click_alias_scope_locator(module_ast, source_fun, scope_ast, locator_ast) do
+    {{:., [], [module_ast, click_alias_locator_fun(source_fun)]}, [], [scope_ast, locator_ast]}
+  end
+
+  @spec click_alias_locator_fun(atom()) :: atom()
+  defp click_alias_locator_fun(:click_link), do: :link
+  defp click_alias_locator_fun(:click_button), do: :button
 
   @spec split_text_assertion_args([Macro.t()]) :: split_args_result()
   defp split_text_assertion_args([session, maybe_opts]), do: {:ok, [session], maybe_opts, :none}
