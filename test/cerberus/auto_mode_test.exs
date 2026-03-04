@@ -12,14 +12,14 @@ defmodule Cerberus.AutoModeTest do
     |> visit("/articles")
     |> assert_has(text: "Articles", exact: true)
     |> visit("/live/counter")
-    |> click_button(text: "Increment")
+    |> click(text: "Increment")
     |> assert_has(text: "Count: 1", exact: true)
   end
 
   test "auto mode starts live and switches to static on non-live navigation" do
     session()
     |> visit("/live/counter")
-    |> click_link(text: "Articles")
+    |> click(text: "Articles")
     |> assert_has(text: "Articles", exact: true)
   end
 
@@ -27,7 +27,7 @@ defmodule Cerberus.AutoModeTest do
     session = visit(session(), "/live/redirects")
     assert match?(%Live{}, session)
 
-    session = click_button(session, button("Redirect to Articles", exact: true))
+    session = click(session, button("Redirect to Articles", exact: true))
     assert session.current_path == "/articles"
     assert match?(%Static{}, session)
     assert session.last_result.transition.reason == :live_redirect
@@ -37,7 +37,7 @@ defmodule Cerberus.AutoModeTest do
     session = visit(session, "/live/redirects")
     assert match?(%Live{}, session)
 
-    session = click_button(session, button("Hard Redirect to Articles", exact: true))
+    session = click(session, button("Hard Redirect to Articles", exact: true))
     assert session.current_path == "/articles"
     assert match?(%Static{}, session)
     assert session.last_result.transition.reason == :redirect
@@ -49,11 +49,11 @@ defmodule Cerberus.AutoModeTest do
     session = visit(session(:browser), "/articles")
     assert match?(%Browser{}, session)
 
-    session = click_link(session, text: "Counter")
+    session = click(session, text: "Counter")
     assert match?(%Browser{}, session)
     assert session.current_path == "/live/counter"
 
-    session = click_link(session, text: "Articles")
+    session = click(session, text: "Articles")
     assert match?(%Browser{}, session)
     assert session.current_path == "/articles"
   end
@@ -63,7 +63,7 @@ defmodule Cerberus.AutoModeTest do
       assert_raise ExUnit.AssertionError, fn ->
         session()
         |> visit("/articles")
-        |> click_link(text: "Counter")
+        |> click(text: "Counter")
         |> assert_has(text: "no such text", exact: true)
       end
 

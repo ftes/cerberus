@@ -832,30 +832,6 @@ defmodule Cerberus do
   end
 
   @doc """
-  Clicks a locator constrained to link elements.
-
-  ## Options
-
-  #{@click_options_doc}
-  """
-  @spec click_link(arg, locator_input(), Options.click_opts()) :: arg when arg: var
-  def click_link(session, locator, opts \\ []) do
-    click(session, locator, Keyword.put(opts, :kind, :link))
-  end
-
-  @doc """
-  Clicks a locator constrained to button elements.
-
-  ## Options
-
-  #{@click_options_doc}
-  """
-  @spec click_button(arg, locator_input(), Options.click_opts()) :: arg when arg: var
-  def click_button(session, locator, opts \\ []) do
-    click(session, locator, Keyword.put(opts, :kind, :button))
-  end
-
-  @doc """
   Fills a form field matched by `locator`.
 
   Bare string/regex shorthand is not supported.

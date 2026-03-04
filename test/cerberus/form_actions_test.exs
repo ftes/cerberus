@@ -20,7 +20,7 @@ defmodule Cerberus.FormActionsTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/search")
-      |> click_link(text: "Articles")
+      |> click(text: "Articles")
       |> assert_has(text: "Articles", exact: true)
       |> visit("/search")
       |> fill_in(label("Search term"), "phoenix")
@@ -73,7 +73,7 @@ defmodule Cerberus.FormActionsTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/counter")
-      |> click_button(text: "Increment")
+      |> click(text: "Increment")
       |> assert_has(text: "Count: 1", exact: true)
     end
 
@@ -83,7 +83,7 @@ defmodule Cerberus.FormActionsTest do
           unquote(driver)
           |> driver_session(context)
           |> visit("/search")
-          |> click_link(text: "Definitely Missing Link")
+          |> click(text: "Definitely Missing Link")
         end
 
       assert click_error.message =~ "possible candidates:"

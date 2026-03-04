@@ -267,7 +267,7 @@ defmodule CerberusTest do
     assert_raise ArgumentError, ~r/invalid options/, fn ->
       session()
       |> visit("/articles")
-      |> click([text: "Articles"], kind: :nope)
+      |> click([text: "Articles"], nope: true)
     end
   end
 

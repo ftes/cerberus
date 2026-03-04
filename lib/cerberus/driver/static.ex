@@ -152,7 +152,7 @@ defmodule Cerberus.Driver.Static do
   @impl true
   def click(%__MODULE__{} = session, %Locator{} = locator, opts) do
     {expected, match_opts} = LocatorOps.click(locator, opts)
-    kind = Keyword.get(opts, :kind, :any)
+    kind = Keyword.get(match_opts, :kind, :any)
 
     case find_clickable_link(session, expected, match_opts, kind) do
       {:ok, link} when is_binary(link.href) ->
@@ -529,8 +529,7 @@ defmodule Cerberus.Driver.Static do
     Html.find_button(session.html, expected, opts, Session.scope(session))
   end
 
-  defp click_button_error(:button), do: "static driver does not support button clicks"
-  defp click_button_error(_kind), do: "static driver does not support dynamic button clicks"
+  defp click_button_error(_kind), do: "static driver does not support button clicks"
 
   defp no_clickable_error(:link), do: "no link matched locator"
   defp no_clickable_error(:button), do: "no button matched locator"

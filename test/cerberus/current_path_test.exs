@@ -24,7 +24,7 @@ defmodule Cerberus.CurrentPathTest do
 
       assert session.current_path == "/live/redirects"
 
-      session = click_button(session, text: "Patch link")
+      session = click(session, text: "Patch link")
       assert session.current_path == "/live/redirects?details=true&foo=bar"
     end
 
@@ -36,7 +36,7 @@ defmodule Cerberus.CurrentPathTest do
 
       assert session.current_path == "/live/redirects"
 
-      session = click_button(session, text: "Button with push navigation")
+      session = click(session, text: "Button with push navigation")
       assert session.current_path == "/live/counter?foo=bar"
     end
 
@@ -56,7 +56,7 @@ defmodule Cerberus.CurrentPathTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/live/redirects")
-        |> click_button(text: "Patch link")
+        |> click(text: "Patch link")
 
       assert session.current_path == "/live/redirects?details=true&foo=bar"
 

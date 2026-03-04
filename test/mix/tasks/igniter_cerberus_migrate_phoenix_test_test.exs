@@ -146,6 +146,38 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     refute output =~ "Direct PhoenixTest.<function> call detected"
   end
 
+  test "write mode rewrites click_link/click_button calls to click", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_click_aliases_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleClickAliasesTest do
+        import PhoenixTest
+
+        test "example", %{conn: conn} do
+          conn
+          |> visit("/articles")
+          |> click_link("Counter")
+          |> click_button("Increment")
+        end
+      end
+      """
+    )
+
+    _output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ "click("
+    refute rewritten =~ "click_link("
+    refute rewritten =~ "click_button("
+  end
+
   test "write mode rewrites PhoenixTest.visit when first arg is not conn", %{tmp_dir: tmp_dir} do
     file = Path.join(tmp_dir, "sample_direct_visit_test.exs")
 
@@ -584,6 +616,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     test_root = Path.join(project_copy, "test")
     test_dir = Path.join(project_copy, "test/features")
     static_copy = Path.join(test_dir, "phoenix_test_baseline_test.exs")
+    migration_ready_copy = Path.join(test_dir, "migration_ready_test.exs")
     feature_case_copy = Path.join(test_dir, "pt_feature_case_import_test.exs")
     form_fill_copy = Path.join(test_dir, "pt_form_fill_test.exs")
     support_feature_case_copy = Path.join(project_copy, "test/support/feature_case.ex")
@@ -597,11 +630,18 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
       end)
 
     rewritten_static = File.read!(static_copy)
+    rewritten_migration_ready = File.read!(migration_ready_copy)
     rewritten_feature_case = File.read!(feature_case_copy)
     rewritten_form_fill = File.read!(form_fill_copy)
     rewritten_support_feature_case = File.read!(support_feature_case_copy)
 
     assert rewritten_static =~ "import Cerberus"
+    assert rewritten_static =~ "click("
+    refute rewritten_static =~ "click_link("
+    refute rewritten_static =~ "click_button("
+    assert rewritten_migration_ready =~ "click("
+    refute rewritten_migration_ready =~ "click_link("
+    refute rewritten_migration_ready =~ "click_button("
     assert rewritten_feature_case =~ "|> session()"
     assert rewritten_feature_case =~ ~r/\|> assert_has\(\s*and_\(\s*css\("h1"\),\s*expected\s*\)\s*\)/s
     assert rewritten_form_fill =~ ~s{Cerberus.fill_in(session, ~l"Search term"i, value)}
@@ -632,6 +672,12 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
       run_mix(work_dir, ["cerberus.migrate_phoenix_test", "--write", test_glob, support_glob])
 
     assert migrate_status == 0, "migration failed:\n#{migrate_output}"
+
+    Enum.each(test_paths, fn test_path ->
+      rewritten = File.read!(Path.join(work_dir, test_path))
+      refute rewritten =~ "click_link("
+      refute rewritten =~ "click_button("
+    end)
 
     post_args = ["test" | test_paths]
     {post_output, post_status} = run_mix(work_dir, post_args)

@@ -5,9 +5,12 @@ defmodule Cerberus.Driver.LocatorOps do
 
   @spec click(Locator.t(), keyword()) :: {String.t() | Regex.t(), keyword()}
   def click(%Locator{} = locator, opts) when is_list(opts) do
-    locator
-    |> merged_opts(opts)
-    |> clickable_shape(locator)
+    merged_opts =
+      locator
+      |> merged_opts(opts)
+      |> Keyword.put(:kind, inferred_click_kind(locator))
+
+    clickable_shape(merged_opts, locator)
   end
 
   @spec submit(Locator.t(), keyword()) :: {String.t() | Regex.t(), keyword()}
@@ -137,4 +140,17 @@ defmodule Cerberus.Driver.LocatorOps do
       _ -> opts
     end
   end
+
+  defp inferred_click_kind(%Locator{kind: :link}), do: :link
+  defp inferred_click_kind(%Locator{kind: :button}), do: :button
+
+  defp inferred_click_kind(%Locator{kind: :role} = locator) do
+    case Locator.resolved_kind(locator) do
+      :link -> :link
+      :button -> :button
+      _ -> :any
+    end
+  end
+
+  defp inferred_click_kind(%Locator{}), do: :any
 end

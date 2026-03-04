@@ -63,6 +63,21 @@ defmodule Cerberus.PasswordAuthFlowTest do
       |> submit(button("Log out"))
       |> assert_path("/auth/live/users/log_in")
     end
+
+    test "live click supports inexact submit button text matching (#{driver})", context do
+      email = unique_email("live-click")
+      password = "Password12345!"
+
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/auth/live/users/register")
+      |> fill_in(label("Email"), email)
+      |> fill_in(label("Password"), password)
+      |> fill_in(label("Confirm Password"), password)
+      |> click(~l"Create live"i)
+      |> assert_path("/auth/live/dashboard")
+      |> assert_has(text("Live dashboard for: #{email}", exact: true))
+    end
   end
 
   defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)

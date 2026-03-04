@@ -19,7 +19,7 @@ defmodule Cerberus.BrowserLinkClickSemanticsTest do
     :browser
     |> SharedBrowserSession.driver_session(context)
     |> visit("/browser/link/semantics")
-    |> click_link(link("Prevented link", exact: true))
+    |> click(link("Prevented link", exact: true))
     |> assert_path("/browser/link/semantics")
     |> assert_has(text("Link result: prevented", exact: true))
   end
@@ -28,7 +28,7 @@ defmodule Cerberus.BrowserLinkClickSemanticsTest do
     :browser
     |> SharedBrowserSession.driver_session(context)
     |> visit("/browser/link/semantics")
-    |> click_link(link("Intercepted link", exact: true))
+    |> click(link("Intercepted link", exact: true))
     |> assert_path("/main", query: [from: "intercepted"])
     |> assert_has(text("Main page", exact: true))
   end

@@ -6,7 +6,6 @@ defmodule Cerberus.Options do
   option lists (`click`, `fill_in`, `assert_has`, `submit`, and related helpers).
   """
 
-  @type click_kind :: :any | :link | :button
   @type locator_match_by :: :text | :label | :link | :button | :placeholder | :title | :alt | :aria_label | :testid
   @type role_locator_name :: String.t() | Regex.t() | nil
   @type locator_nested_input :: Cerberus.Locator.input()
@@ -134,7 +133,6 @@ defmodule Cerberus.Options do
         ]
 
   @type click_opts :: [
-          kind: click_kind(),
           timeout: non_neg_integer(),
           selector: String.t() | nil,
           checked: boolean() | nil,
@@ -318,11 +316,6 @@ defmodule Cerberus.Options do
         ]
 
   @click_opts_schema [
-    kind: [
-      type: {:in, [:any, :link, :button]},
-      default: :any,
-      doc: "Limits click matching to links, buttons, or both."
-    ],
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],
     selector: [type: :any, default: nil, doc: "Limits matching to elements that satisfy the CSS selector."],
     checked: [type: :any, default: nil, doc: "Requires matched elements to be checked/unchecked."],

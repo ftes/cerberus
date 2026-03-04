@@ -40,7 +40,7 @@ defmodule Cerberus.ProfilingTest do
     _session =
       session()
       |> visit("/search")
-      |> click_link(link("Articles"))
+      |> click(link("Articles"))
       |> assert_has(text("Articles"))
 
     buckets = Enum.map(Profiling.snapshot(), & &1.bucket)

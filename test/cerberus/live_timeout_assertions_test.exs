@@ -14,7 +14,7 @@ defmodule Cerberus.LiveTimeoutAssertionsTest do
       assert live_session.assert_timeout_ms == 500
       live_session
     end)
-    |> click_button(button("Async navigate!"))
+    |> click(button("Async navigate!"))
     |> assert_path("/live/counter")
   end
 
@@ -22,7 +22,7 @@ defmodule Cerberus.LiveTimeoutAssertionsTest do
     :phoenix
     |> session()
     |> visit("/live/async_page")
-    |> click_button(button("Async redirect!"))
+    |> click(button("Async redirect!"))
     |> assert_path("/articles")
   end
 end

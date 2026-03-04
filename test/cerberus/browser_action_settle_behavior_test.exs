@@ -20,7 +20,7 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     :browser
     |> SharedBrowserSession.driver_session(context)
     |> visit("/live/counter")
-    |> click_button(button("Increment", exact: true))
+    |> click(button("Increment", exact: true))
     |> then(fn updated ->
       readiness = updated.last_result.observed.readiness
       assert is_map(readiness)
@@ -55,7 +55,7 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     :browser
     |> SharedBrowserSession.driver_session(context)
     |> visit("/live/redirects")
-    |> click_link(link("Navigate link", exact: true))
+    |> click(link("Navigate link", exact: true))
     |> then(fn updated ->
       readiness = updated.last_result.observed.readiness
       assert is_map(readiness)

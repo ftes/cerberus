@@ -221,7 +221,7 @@ defmodule Cerberus.Driver.Live do
   def click(%__MODULE__{} = session, %Locator{} = locator, opts) do
     session = with_latest_html(session)
     {expected, match_opts} = LocatorOps.click(locator, opts)
-    kind = Keyword.get(opts, :kind, :any)
+    kind = Keyword.get(match_opts, :kind, :any)
 
     case find_clickable_link(session, expected, match_opts, kind) do
       {:ok, link} when is_binary(link.href) ->
@@ -1301,14 +1301,19 @@ defmodule Cerberus.Driver.Live do
   defp find_clickable_button(_session, _expected, _opts, :link), do: :error
 
   defp find_clickable_button(%{view: view} = session, expected, opts, _kind) when not is_nil(view) do
-    LiveViewHTML.find_live_clickable_button(session.html, expected, opts, Session.scope(session))
+    case LiveViewHTML.find_live_clickable_button(session.html, expected, opts, Session.scope(session)) do
+      {:ok, button} ->
+        {:ok, button}
+
+      :error ->
+        LiveViewHTML.find_submit_button(session.html, expected, opts, Session.scope(session))
+    end
   end
 
   defp find_clickable_button(%__MODULE__{} = session, expected, opts, _kind) do
     Html.find_button(session.html, expected, opts, Session.scope(session))
   end
 
-  defp click_button_error(:button), do: "live driver can only click buttons on live routes for click_button"
   defp click_button_error(_kind), do: "live driver can only click buttons on live routes"
 
   defp no_clickable_error(:link), do: "no link matched locator"
@@ -1389,7 +1394,11 @@ defmodule Cerberus.Driver.Live do
 
   defp click_or_error_for_button(session, button, kind) do
     if live_route?(session) do
-      click_live_button(session, button)
+      if submit_button_match?(button) do
+        click_live_submit_button(session, button)
+      else
+        click_live_button(session, button)
+      end
     else
       observed = %{
         action: :button,
@@ -1399,6 +1408,22 @@ defmodule Cerberus.Driver.Live do
       }
 
       {:error, session, observed, click_button_error(kind)}
+    end
+  end
+
+  defp submit_button_match?(button) when is_map(button) do
+    Map.has_key?(button, :form_phx_submit)
+  end
+
+  defp click_live_submit_button(session, button) do
+    case do_live_submit(session, button) do
+      {:ok, updated_session, observed} ->
+        click_observed = Map.put(observed, :action, :button)
+        {:ok, update_last_result(updated_session, :click, click_observed), click_observed}
+
+      {:error, failed_session, observed, reason} ->
+        click_observed = Map.put(observed, :action, :button)
+        {:error, failed_session, click_observed, reason}
     end
   end
 

@@ -71,7 +71,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/selector-edge")
-      |> click_button(button("Create", exact: true))
+      |> click(button("Create", exact: true))
       |> assert_has(text("Selected: confirmed", exact: true))
     end
 

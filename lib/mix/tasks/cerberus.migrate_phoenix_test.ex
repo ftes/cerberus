@@ -696,29 +696,46 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   @spec canonicalize_node(Macro.t(), boolean()) :: {Macro.t(), boolean()}
   defp canonicalize_node({{:., dot_meta, [module_ast, fun]}, call_meta, args} = node, changed)
        when is_atom(fun) and is_list(args) do
+    canonical_fun = canonical_click_fun(fun)
+    fun_changed? = canonical_fun != fun
     scope_builder = &build_remote_css_scope(module_ast, &1)
     assertion_scope_builder = &build_remote_assertion_scope(module_ast, &1, &2)
 
-    case canonicalize_call_args(fun, args, scope_builder, assertion_scope_builder) do
+    case canonicalize_call_args(canonical_fun, args, scope_builder, assertion_scope_builder) do
       {:ok, updated_args} ->
-        {{{:., dot_meta, [module_ast, fun]}, call_meta, updated_args}, true}
+        {{{:., dot_meta, [module_ast, canonical_fun]}, call_meta, updated_args}, true}
 
       :no_change ->
-        {node, changed}
+        if fun_changed? do
+          {{{:., dot_meta, [module_ast, canonical_fun]}, call_meta, args}, true}
+        else
+          {node, changed}
+        end
     end
   end
 
   defp canonicalize_node({fun, meta, args} = node, changed) when is_atom(fun) and is_list(args) do
-    case canonicalize_call_args(fun, args, &build_local_css_scope/1, &build_local_assertion_scope/2) do
+    canonical_fun = canonical_click_fun(fun)
+    fun_changed? = canonical_fun != fun
+
+    case canonicalize_call_args(canonical_fun, args, &build_local_css_scope/1, &build_local_assertion_scope/2) do
       {:ok, updated_args} ->
-        {{fun, meta, updated_args}, true}
+        {{canonical_fun, meta, updated_args}, true}
 
       :no_change ->
-        {node, changed}
+        if fun_changed? do
+          {{canonical_fun, meta, args}, true}
+        else
+          {node, changed}
+        end
     end
   end
 
   defp canonicalize_node(node, changed), do: {node, changed}
+
+  @spec canonical_click_fun(atom()) :: atom()
+  defp canonical_click_fun(fun) when fun in [:click_link, :click_button], do: :click
+  defp canonical_click_fun(fun), do: fun
 
   @spec ensure_cerberus_imports(Macro.t()) :: {Macro.t(), boolean()}
   defp ensure_cerberus_imports(ast) do
