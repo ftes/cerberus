@@ -428,8 +428,6 @@ defmodule Cerberus.Driver.Static do
     end
   end
 
-  defp locator_assertion_requires_locator_engine?(%Locator{kind: kind}) when kind in [:and, :or, :not, :css], do: true
-
   defp locator_assertion_requires_locator_engine?(%Locator{opts: locator_opts}) do
     Keyword.has_key?(locator_opts, :selector) or
       Keyword.has_key?(locator_opts, :has) or

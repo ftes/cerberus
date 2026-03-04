@@ -29,35 +29,10 @@ defmodule Cerberus.Fixtures.AuthStore do
   def register_user(email, password) when is_binary(email) and is_binary(password) do
     normalized_email = normalize_email(email)
 
-    cond do
-      normalized_email == "" ->
-        {:error, :invalid}
-
-      password == "" ->
-        {:error, :invalid}
-
-      true ->
-        Agent.get_and_update(__MODULE__, fn state ->
-          case Map.fetch(state.user_ids_by_email, normalized_email) do
-            {:ok, _id} ->
-              {{:error, :email_taken}, state}
-
-            :error ->
-              user = %{
-                id: state.next_id,
-                email: normalized_email,
-                password_hash: hash_password(password)
-              }
-
-              updated_state = %{
-                next_id: state.next_id + 1,
-                users_by_id: Map.put(state.users_by_id, user.id, user),
-                user_ids_by_email: Map.put(state.user_ids_by_email, normalized_email, user.id)
-              }
-
-              {{:ok, user}, updated_state}
-          end
-        end)
+    if invalid_registration_input?(normalized_email, password) do
+      {:error, :invalid}
+    else
+      register_unique_user(normalized_email, password)
     end
   end
 
@@ -101,6 +76,38 @@ defmodule Cerberus.Fixtures.AuthStore do
         _ -> :error
       end
     end)
+  end
+
+  defp invalid_registration_input?(normalized_email, password) do
+    normalized_email == "" or password == ""
+  end
+
+  defp register_unique_user(normalized_email, password) do
+    Agent.get_and_update(__MODULE__, fn state ->
+      register_user_in_state(state, normalized_email, password)
+    end)
+  end
+
+  defp register_user_in_state(state, normalized_email, password) do
+    case Map.fetch(state.user_ids_by_email, normalized_email) do
+      {:ok, _id} ->
+        {{:error, :email_taken}, state}
+
+      :error ->
+        user = %{
+          id: state.next_id,
+          email: normalized_email,
+          password_hash: hash_password(password)
+        }
+
+        updated_state = %{
+          next_id: state.next_id + 1,
+          users_by_id: Map.put(state.users_by_id, user.id, user),
+          user_ids_by_email: Map.put(state.user_ids_by_email, normalized_email, user.id)
+        }
+
+        {{:ok, user}, updated_state}
+    end
   end
 
   defp normalize_email(email) do

@@ -921,25 +921,35 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
 
       indexes ->
         {updated_args, changed?} =
-          Enum.reduce(indexes, {args, false}, fn index, {acc_args, acc_changed?} ->
-            case Enum.fetch(acc_args, index) do
-              {:ok, arg} ->
-                if bare_variable_ast?(arg) and not locator_expression_ast?(arg) do
-                  {List.replace_at(acc_args, index, label_call_ast(arg)), true}
-                else
-                  {acc_args, acc_changed?}
-                end
-
-              :error ->
-                {acc_args, acc_changed?}
-            end
-          end)
+          Enum.reduce(indexes, {args, false}, &reduce_label_variable_locator_arg_index/2)
 
         if changed?, do: {:ok, updated_args}, else: :no_change
     end
   end
 
   defp canonicalize_label_variable_locator_args(_fun, _args), do: :no_change
+
+  @spec reduce_label_variable_locator_arg_index(non_neg_integer(), {[Macro.t()], boolean()}) ::
+          {[Macro.t()], boolean()}
+  defp reduce_label_variable_locator_arg_index(index, {args, changed?}) do
+    case Enum.fetch(args, index) do
+      {:ok, arg} ->
+        maybe_replace_label_variable_arg(args, index, arg, changed?)
+
+      :error ->
+        {args, changed?}
+    end
+  end
+
+  @spec maybe_replace_label_variable_arg([Macro.t()], non_neg_integer(), Macro.t(), boolean()) ::
+          {[Macro.t()], boolean()}
+  defp maybe_replace_label_variable_arg(args, index, arg, changed?) do
+    if bare_variable_ast?(arg) and not locator_expression_ast?(arg) do
+      {List.replace_at(args, index, label_call_ast(arg)), true}
+    else
+      {args, changed?}
+    end
+  end
 
   @spec reduce_locator_arg_index(non_neg_integer(), {[Macro.t()], boolean()}) :: {[Macro.t()], boolean()}
   defp reduce_locator_arg_index(index, {args, changed?}) do

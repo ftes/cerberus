@@ -71,15 +71,7 @@ defmodule Cerberus.Html do
       |> safe_query(query_selector)
       |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, locator, selector))
       |> maybe_filter_scope_target_closest_candidates(root_node, from_locator)
-      |> Enum.flat_map(fn node ->
-        hidden? = node_hidden_in_root?(root_node, node)
-
-        if selected_visibility?(visibility, hidden?) do
-          [locator_assertion_value(root_node, node, locator)]
-        else
-          []
-        end
-      end)
+      |> Enum.flat_map(&locator_assertion_values_for_node(root_node, &1, locator, visibility))
     end)
   end
 
@@ -1265,6 +1257,17 @@ defmodule Cerberus.Html do
       end
     end)
   end
+
+  defp locator_assertion_values_for_node(root_node, node, locator, visibility) do
+    hidden? = node_hidden_in_root?(root_node, node)
+    maybe_locator_assertion_value(selected_visibility?(visibility, hidden?), root_node, node, locator)
+  end
+
+  defp maybe_locator_assertion_value(true, root_node, node, locator) do
+    [locator_assertion_value(root_node, node, locator)]
+  end
+
+  defp maybe_locator_assertion_value(false, _root_node, _node, _locator), do: []
 
   defp maybe_append_assertion_value(_node, tag, attrs, children, match_by, hidden?, acc) do
     value = assertion_value_for(tag, attrs, children, match_by)

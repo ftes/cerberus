@@ -603,7 +603,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
     assert rewritten_static =~ "import Cerberus"
     assert rewritten_feature_case =~ "|> session()"
-    assert rewritten_feature_case =~ ~r/\|> assert_has\(\s*css\("h1"\),\s*expected/s
+    assert rewritten_feature_case =~ ~r/\|> assert_has\(\s*and_\(\s*css\("h1"\),\s*expected\s*\)\s*\)/s
     assert rewritten_form_fill =~ ~s{Cerberus.fill_in(session, ~l"Search term"i, value)}
     assert rewritten_form_fill =~ ~s{Cerberus.assert_has(session, Cerberus.and_(Cerberus.css("body"), expected))}
     assert rewritten_support_feature_case =~ "import Cerberus"

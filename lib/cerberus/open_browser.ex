@@ -138,15 +138,13 @@ defmodule Cerberus.OpenBrowser do
     end
   end
 
-  defp maybe_prefix_static_path(attrs, static_path) when is_binary(static_path) do
+  defp maybe_prefix_static_path(attrs, static_path) when is_list(attrs) and is_binary(static_path) do
     Enum.map(attrs, fn
       {"src", path} -> {"src", prefix_static_path(path, static_path)}
       {"href", path} -> {"href", prefix_static_path(path, static_path)}
       attr -> attr
     end)
   end
-
-  defp maybe_prefix_static_path(attrs, _static_path), do: attrs
 
   defp prefix_static_path(<<"//" <> _::binary>> = url, _prefix), do: url
   defp prefix_static_path(<<"/" <> _::binary>> = path, prefix), do: "file://#{Path.join([prefix, path])}"

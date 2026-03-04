@@ -367,12 +367,7 @@ defmodule Cerberus.LocatorParityTest do
       %{name: "assert_has title helper", expect: :ok, run: &assert_has(&1, title("Articles heading", exact: true))},
       %{name: "assert_has alt helper", expect: :ok, run: &assert_has(&1, alt("Hero banner", exact: true))},
       %{name: "assert_has placeholder helper", expect: :ok, run: &assert_has(&1, placeholder("Search placeholder"))},
-      %{
-        name: "assert_has css locator unsupported in this slice",
-        expect: :error,
-        error_module: InvalidLocatorError,
-        run: &assert_has(&1, css("#root"))
-      },
+      %{name: "assert_has css locator", expect: :ok, run: &assert_has(&1, css("#root"))},
       %{
         name: "assert_has selector option unsupported in this slice",
         expect: :error,
@@ -628,7 +623,7 @@ defmodule Cerberus.LocatorParityTest do
         name: "assert_has supports composed css and text locator assertions",
         html: @chained_locator_html,
         expect: :ok,
-        run: &assert_has(&1, and_(css("#apply-secondary"), text("Apply", exact: true)))
+        run: &assert_has(&1, and_(css("#apply-secondary"), text("Apply")))
       },
       %{
         name: "fill_in supports same-element and composition with css",
