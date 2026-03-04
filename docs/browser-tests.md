@@ -188,13 +188,6 @@ After install, Cerberus automatically discovers local managed-runtime binaries v
 
 No extra binary-path config is required for normal local runs after installation.
 
-CI-friendly form:
-
-```bash
-MIX_ENV=test mix cerberus.install.chrome --format env >> "$GITHUB_ENV"
-MIX_ENV=test mix cerberus.install.firefox --format env >> "$GITHUB_ENV"
-```
-
 Installed paths are stable per version, for example:
 - `tmp/chrome-<version>`
 - `tmp/chromedriver-<version>`

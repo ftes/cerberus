@@ -326,18 +326,18 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   defp rewrite_content(file, content) do
     content
     |> rewrite_with_ast()
-    |> maybe_ensure_phoenix_test_endpoint_compat(file)
+    |> maybe_ensure_cerberus_endpoint_config(file)
     |> maybe_ensure_test_helper_endpoint(file)
   end
 
-  @spec maybe_ensure_phoenix_test_endpoint_compat({String.t(), warning_messages()}, String.t()) ::
+  @spec maybe_ensure_cerberus_endpoint_config({String.t(), warning_messages()}, String.t()) ::
           {String.t(), warning_messages()}
-  defp maybe_ensure_phoenix_test_endpoint_compat({content, warnings}, file) do
+  defp maybe_ensure_cerberus_endpoint_config({content, warnings}, file) do
     cond do
       not config_test_file?(file) ->
         {content, warnings}
 
-      has_phoenix_test_endpoint_config?(content) ->
+      has_cerberus_endpoint_config?(content) ->
         {content, warnings}
 
       true ->
@@ -345,7 +345,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
           {:ok, endpoint_ast} ->
             updated =
               content
-              |> append_phoenix_test_endpoint_config(endpoint_ast)
+              |> append_cerberus_endpoint_config(endpoint_ast)
               |> Code.format_string!()
               |> IO.iodata_to_binary()
 
@@ -435,14 +435,14 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
 
   defp cerberus_endpoint_put_env_call_args?(_args), do: false
 
-  @spec has_phoenix_test_endpoint_config?(String.t()) :: boolean()
-  defp has_phoenix_test_endpoint_config?(content) when is_binary(content) do
+  @spec has_cerberus_endpoint_config?(String.t()) :: boolean()
+  defp has_cerberus_endpoint_config?(content) when is_binary(content) do
     case Sourceror.parse_string(content) do
       {:ok, ast} ->
         {_ast, found?} =
           Macro.prewalk(ast, false, fn
             {:config, _meta, args} = node, found? when is_list(args) ->
-              {node, found? or phoenix_test_endpoint_config_args?(args)}
+              {node, found? or cerberus_endpoint_config_args?(args)}
 
             node, found? ->
               {node, found?}
@@ -451,16 +451,16 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
         found?
 
       _ ->
-        String.contains?(content, "config :phoenix_test")
+        String.contains?(content, "config :cerberus")
     end
   end
 
-  @spec phoenix_test_endpoint_config_args?([Macro.t()]) :: boolean()
-  defp phoenix_test_endpoint_config_args?([app_ast | rest]) do
-    atom_literal(app_ast) == {:ok, :phoenix_test} and endpoint_ast_from_config_rest(rest) != :error
+  @spec cerberus_endpoint_config_args?([Macro.t()]) :: boolean()
+  defp cerberus_endpoint_config_args?([app_ast | rest]) do
+    atom_literal(app_ast) == {:ok, :cerberus} and endpoint_ast_from_config_rest(rest) != :error
   end
 
-  defp phoenix_test_endpoint_config_args?(_args), do: false
+  defp cerberus_endpoint_config_args?(_args), do: false
 
   @spec infer_endpoint_ast(String.t()) :: {:ok, Macro.t()} | :error
   defp infer_endpoint_ast(file) do
@@ -546,9 +546,9 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     end
   end
 
-  @spec append_phoenix_test_endpoint_config(String.t(), Macro.t()) :: String.t()
-  defp append_phoenix_test_endpoint_config(content, endpoint_ast) when is_binary(content) do
-    config_line = "config :phoenix_test, endpoint: #{Macro.to_string(endpoint_ast)}"
+  @spec append_cerberus_endpoint_config(String.t(), Macro.t()) :: String.t()
+  defp append_cerberus_endpoint_config(content, endpoint_ast) when is_binary(content) do
+    config_line = "config :cerberus, endpoint: #{Macro.to_string(endpoint_ast)}"
 
     if String.ends_with?(content, "\n") do
       content <> config_line <> "\n"
@@ -678,15 +678,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     end
   end
 
-  defp rewrite_node({:config, meta, args} = node, state) when is_list(args) do
-    case rewrite_config_app(args) do
-      {:ok, updated_args} ->
-        {{:config, meta, updated_args}, mark_changed(state)}
-
-      :no_change ->
-        {node, state}
-    end
-  end
+  defp rewrite_node({:config, _meta, args} = node, state) when is_list(args), do: {node, state}
 
   defp rewrite_node({fun, _meta, args} = node, state) when is_atom(fun) and is_list(args) do
     next_state = maybe_warn_browser_helper(state, fun)
@@ -1105,30 +1097,10 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   defp split_text_assertion_args([session, scope, maybe_opts]), do: {:ok, [session, scope], maybe_opts, :none}
   defp split_text_assertion_args(_args), do: :error
 
-  @spec rewrite_config_app([Macro.t()]) :: {:ok, [Macro.t()]} | :no_change
-  defp rewrite_config_app([app_ast | rest]) do
-    case atom_literal(app_ast) do
-      {:ok, :phoenix_test} ->
-        {:ok, [replace_atom_literal(app_ast, :cerberus) | rest]}
-
-      _ ->
-        :no_change
-    end
-  end
-
-  defp rewrite_config_app(_args), do: :no_change
-
   @spec atom_literal(Macro.t()) :: {:ok, atom()} | :error
   defp atom_literal(value) when is_atom(value), do: {:ok, value}
   defp atom_literal({:__block__, _meta, [value]}), do: atom_literal(value)
   defp atom_literal(_value), do: :error
-
-  @spec replace_atom_literal(Macro.t(), atom()) :: Macro.t()
-  defp replace_atom_literal({:__block__, meta, [_old]}, replacement) when is_atom(replacement) do
-    {:__block__, meta, [replacement]}
-  end
-
-  defp replace_atom_literal(_old, replacement), do: replacement
 
   @spec split_labeled_value_args([Macro.t()]) :: split_args_result()
   defp split_labeled_value_args([locator, maybe_opts]), do: {:ok, [locator], maybe_opts, :none}

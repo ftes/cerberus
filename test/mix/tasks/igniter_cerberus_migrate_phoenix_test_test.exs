@@ -5,6 +5,8 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
   @task "cerberus.migrate_phoenix_test"
   @moduletag :tmp_dir
+  @project_root Path.expand("../../../", __DIR__)
+  @fixture_project_dir Path.join(@project_root, "fixtures/migration_project")
 
   test "dry-run prints diff and keeps files unchanged", %{tmp_dir: tmp_dir} do
     file = Path.join(tmp_dir, "sample_feature_test.exs")
@@ -231,7 +233,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     assert output =~ "updated #{file}"
   end
 
-  test "write mode rewrites config :phoenix_test to config :cerberus and keeps phoenix_test endpoint compat", %{
+  test "write mode preserves phoenix_test config and appends cerberus endpoint config", %{
     tmp_dir: tmp_dir
   } do
     config_dir = Path.join(tmp_dir, "config")
@@ -245,7 +247,10 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
       config :phoenix_test,
         endpoint: MyAppWeb.Endpoint,
-        otp_app: :my_app
+        otp_app: :my_app,
+        playwright: [
+          headless: true
+        ]
       """
     )
 
@@ -257,10 +262,13 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
     rewritten = File.read!(file)
 
-    assert rewritten =~ "config :cerberus"
+    assert rewritten =~ "config :phoenix_test,"
     assert rewritten =~ "endpoint: MyAppWeb.Endpoint"
     assert rewritten =~ "otp_app: :my_app"
-    assert rewritten =~ "config :phoenix_test, endpoint: MyAppWeb.Endpoint"
+    assert rewritten =~ "playwright:"
+    assert rewritten =~ "headless: true"
+    assert rewritten =~ "config :cerberus, endpoint: MyAppWeb.Endpoint"
+    refute rewritten =~ "config :phoenix_test, endpoint: MyAppWeb.Endpoint"
     assert output =~ "updated #{file}"
   end
 
@@ -538,7 +546,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
   @tag :slow
   test "can run against committed nested Phoenix fixture project tests", %{tmp_dir: tmp_dir} do
-    fixture_dir = "fixtures/migration_project"
+    fixture_dir = @fixture_project_dir
     project_copy = Path.join(tmp_dir, "migration_project")
     test_root = Path.join(project_copy, "test")
     test_dir = Path.join(project_copy, "test/features")
@@ -571,7 +579,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
   @tag :slow
   test "runs full sample suite before migration and applies migration task", %{tmp_dir: tmp_dir} do
-    fixture_dir = "fixtures/migration_project"
+    fixture_dir = @fixture_project_dir
     work_dir = Path.join(tmp_dir, "work")
     test_glob = "test/features/pt_*_test.exs"
     support_glob = "test/support/**/*.ex"
@@ -598,7 +606,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
   end
 
   defp run_mix(work_dir, args) do
-    base_env = [{"MIX_ENV", "test"}, {"CERBERUS_PATH", Path.expand(".")}]
+    base_env = [{"MIX_ENV", "test"}, {"CERBERUS_PATH", @project_root}]
 
     System.cmd("mix", args, cd: work_dir, env: base_env, stderr_to_stdout: true)
   end

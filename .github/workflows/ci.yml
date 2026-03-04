@@ -85,7 +85,7 @@ jobs:
           key: ${{ runner.os }}-browser-runtime-${{ env.CERBERUS_CHROME_VERSION }}
 
       - name: Install Chrome
-        run: mix cerberus.install.chrome --format env >> "$GITHUB_ENV"
+        run: mix cerberus.install.chrome
 
       # - name: Install Firefox
       #   run: mix cerberus.install.firefox --format env >> "$GITHUB_ENV"
