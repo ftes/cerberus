@@ -26,3 +26,4 @@ Keep a log of what you did to present when you're done.
 - If in doubt about static/live driver behavior, check PhoenixTest static and live driver implementations for reference patterns.
 - If in doubt about browser driver behavior, use Cuprite as the primary implementation reference; use Playwright JS as the secondary reference.
 - For refactors/renames, use Igniter when it helps.
+- There is NO `@tag :browser`. Don't try to filter tests with `--only browser` or `--exclude browser`. Running browser tests is cheap and fine.

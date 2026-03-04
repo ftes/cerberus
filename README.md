@@ -43,10 +43,9 @@ session
 |> click(~l"button:Increment"r)
 |> assert_has(~l"Count: 1"e)
 
-session(:browser) # chrome
+session(:browser, show_browser: true) # open chrome
 |> visit("/live/counter")
 |> evaluate_js("prompt('Hey!')")
-|> screenshot()
 ```
 
 For progressive, step-by-step examples (scopes, forms, tabs, browser extensions), see [Getting Started](docs/getting-started.md).
