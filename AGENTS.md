@@ -19,7 +19,7 @@ Keep a log of what you did to present when you're done.
 - Run targeted `mix test` often after changing files.
 - Run `mix format` after each logical change set (and before tests/precommit), since precommit checks formatting and does not rewrite files.
 - Commit in small increments and run `mix do format + precommit + test + test.slow` before each commit.
-- Cerberus is unreleased. Feel free to change anything - ignore backwards compatability.
+- Cerberus is unreleased. Don't preserve backwards compatability. KISS. Don't warn about legacy arguments or functions. Always remove and change with a clean cut.
 - Codex: Run real-browser tests outside the Codex sandbox (escalated permissions), since Chrome startup can fail inside the sandbox.
 - If public API/behavior/examples changed, update docs in the same change (`README.md`, relevant guides, moduledocs).
 - Current browser policy: run Chrome only. Ignore Firefox and websocket lanes locally and in CI unless explicitly requested.
