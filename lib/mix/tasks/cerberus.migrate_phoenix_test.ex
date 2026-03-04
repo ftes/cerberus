@@ -701,7 +701,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     scope_builder = &build_remote_css_scope(module_ast, &1)
     assertion_scope_builder = &build_remote_assertion_scope(module_ast, &1, &2)
 
-    case canonicalize_call_args(canonical_fun, args, scope_builder, assertion_scope_builder) do
+    case canonicalize_call_args(canonical_fun, fun, args, scope_builder, assertion_scope_builder) do
       {:ok, updated_args} ->
         {{{:., dot_meta, [module_ast, canonical_fun]}, call_meta, updated_args}, true}
 
@@ -718,7 +718,13 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     canonical_fun = canonical_click_fun(fun)
     fun_changed? = canonical_fun != fun
 
-    case canonicalize_call_args(canonical_fun, args, &build_local_css_scope/1, &build_local_assertion_scope/2) do
+    case canonicalize_call_args(
+           canonical_fun,
+           fun,
+           args,
+           &build_local_css_scope/1,
+           &build_local_assertion_scope/2
+         ) do
       {:ok, updated_args} ->
         {{canonical_fun, meta, updated_args}, true}
 
@@ -785,7 +791,13 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
             fun == :session or
               match?(
                 {:ok, _updated_args},
-                canonicalize_call_args(fun, args, &build_local_css_scope/1, &build_local_assertion_scope/2)
+                canonicalize_call_args(
+                  fun,
+                  fun,
+                  args,
+                  &build_local_css_scope/1,
+                  &build_local_assertion_scope/2
+                )
               )
 
           {node, needed or import_needed_for_call?}
@@ -827,12 +839,13 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
 
   @spec canonicalize_call_args(
           atom(),
+          atom(),
           [Macro.t()],
           (Macro.t() -> Macro.t()),
           (Macro.t(), Macro.t() -> Macro.t())
         ) ::
           canonicalize_result()
-  defp canonicalize_call_args(fun, args, scope_builder, assertion_scope_builder)
+  defp canonicalize_call_args(fun, source_fun, args, scope_builder, assertion_scope_builder)
        when is_function(scope_builder, 1) and is_function(assertion_scope_builder, 2) do
     {args, changed?} =
       Enum.reduce(
@@ -840,7 +853,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
           fn acc -> canonicalize_text_assertion_args(fun, acc) end,
           fn acc -> canonicalize_labeled_value_call_args(fun, acc) end,
           fn acc -> canonicalize_scope_locator_args(fun, acc, scope_builder, assertion_scope_builder) end,
-          fn acc -> canonicalize_explicit_locator_args(fun, acc) end,
+          fn acc -> canonicalize_explicit_locator_args(fun, source_fun, acc) end,
           fn acc -> canonicalize_label_variable_locator_args(fun, acc) end
         ],
         {args, false},
@@ -914,21 +927,21 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
 
   defp canonicalize_scope_locator_args(_fun, _args, _scope_builder, _assertion_scope_builder), do: :no_change
 
-  @spec canonicalize_explicit_locator_args(atom(), [Macro.t()]) :: canonicalize_result()
-  defp canonicalize_explicit_locator_args(fun, args) when fun in @explicit_locator_calls do
+  @spec canonicalize_explicit_locator_args(atom(), atom(), [Macro.t()]) :: canonicalize_result()
+  defp canonicalize_explicit_locator_args(fun, source_fun, args) when fun in @explicit_locator_calls do
     case locator_arg_indexes_for(fun, args) do
       [] ->
         :no_change
 
       indexes ->
         {updated_args, changed?} =
-          Enum.reduce(indexes, {args, false}, &reduce_locator_arg_index/2)
+          Enum.reduce(indexes, {args, false}, &reduce_locator_arg_index(&1, fun, source_fun, &2))
 
         if changed?, do: {:ok, updated_args}, else: :no_change
     end
   end
 
-  defp canonicalize_explicit_locator_args(_fun, _args), do: :no_change
+  defp canonicalize_explicit_locator_args(_fun, _source_fun, _args), do: :no_change
 
   @spec canonicalize_label_variable_locator_args(atom(), [Macro.t()]) :: canonicalize_result()
   defp canonicalize_label_variable_locator_args(fun, args) when fun in @label_locator_variable_calls do
@@ -968,9 +981,10 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     end
   end
 
-  @spec reduce_locator_arg_index(non_neg_integer(), {[Macro.t()], boolean()}) :: {[Macro.t()], boolean()}
-  defp reduce_locator_arg_index(index, {args, changed?}) do
-    case locatorized_arg_at(args, index) do
+  @spec reduce_locator_arg_index(non_neg_integer(), atom(), atom(), {[Macro.t()], boolean()}) ::
+          {[Macro.t()], boolean()}
+  defp reduce_locator_arg_index(index, fun, source_fun, {args, changed?}) do
+    case locatorized_arg_at(args, index, fun, source_fun) do
       {:ok, updated_args} -> {updated_args, true}
       :no_change -> {args, changed?}
     end
@@ -995,11 +1009,13 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   defp locator_arg_indexes_for(fun, [_, _, _]) when fun in @explicit_locator_calls, do: [1]
   defp locator_arg_indexes_for(_fun, _args), do: []
 
-  @spec locatorized_arg_at([Macro.t()], non_neg_integer()) :: {:ok, [Macro.t()]} | :no_change
-  defp locatorized_arg_at(args, index) when is_list(args) and is_integer(index) and index >= 0 do
+  @spec locatorized_arg_at([Macro.t()], non_neg_integer(), atom(), atom()) ::
+          {:ok, [Macro.t()]} | :no_change
+  defp locatorized_arg_at(args, index, fun, source_fun)
+       when is_list(args) and is_integer(index) and index >= 0 and is_atom(fun) and is_atom(source_fun) do
     case Enum.fetch(args, index) do
       {:ok, arg} ->
-        case explicit_locator_ast(arg) do
+        case explicit_locator_ast(arg, fun, source_fun) do
           {:ok, locator_ast} ->
             {:ok, List.replace_at(args, index, locator_ast)}
 
@@ -1013,7 +1029,31 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   end
 
   @spec explicit_locator_ast(Macro.t()) :: {:ok, Macro.t()} | :no_change
-  defp explicit_locator_ast(arg) do
+  defp explicit_locator_ast(arg), do: explicit_locator_ast(arg, :unknown, :unknown)
+
+  @spec explicit_locator_ast(Macro.t(), atom(), atom()) :: {:ok, Macro.t()} | :no_change
+  defp explicit_locator_ast(arg, :click, source_fun) when source_fun in [:click_link, :click_button] do
+    alias_kind = if(source_fun == :click_link, do: :link, else: :button)
+
+    cond do
+      locator_expression_ast?(arg) ->
+        :no_change
+
+      binary_literal_ast?(arg) ->
+        {:ok, [{alias_kind, binary_literal_value(arg)}]}
+
+      regex_literal_ast?(arg) ->
+        {:ok, [{alias_kind, arg}]}
+
+      keyword_ast?(arg) ->
+        :no_change
+
+      true ->
+        :no_change
+    end
+  end
+
+  defp explicit_locator_ast(arg, _fun, _source_fun) do
     cond do
       locator_expression_ast?(arg) ->
         :no_change

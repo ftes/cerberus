@@ -173,7 +173,41 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
 
     rewritten = File.read!(file)
 
-    assert rewritten =~ "click("
+    assert rewritten =~ ~s{|> click(link: "Counter")}
+    assert rewritten =~ ~s{|> click(button: "Increment")}
+    refute rewritten =~ ~s{|> click(~l"Counter"i)}
+    refute rewritten =~ ~s{|> click(~l"Increment"i)}
+    refute rewritten =~ "click_link("
+    refute rewritten =~ "click_button("
+  end
+
+  test "write mode rewrites remote click aliases to click with clickable locators", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_remote_click_aliases_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleRemoteClickAliasesTest do
+        test "example", %{conn: conn} do
+          session = PhoenixTest.visit(conn, "/articles")
+          session = PhoenixTest.click_link(session, "Counter")
+          PhoenixTest.click_button(session, ~r/Increment/i)
+        end
+      end
+      """
+    )
+
+    _output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ ~s{Cerberus.click(session, link: "Counter")}
+    assert rewritten =~ ~s{Cerberus.click(session, button: ~r/Increment/i)}
+    refute rewritten =~ ~s{Cerberus.click(session, ~l"Counter"i)}
     refute rewritten =~ "click_link("
     refute rewritten =~ "click_button("
   end
@@ -636,10 +670,13 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     rewritten_support_feature_case = File.read!(support_feature_case_copy)
 
     assert rewritten_static =~ "import Cerberus"
-    assert rewritten_static =~ "click("
+    assert rewritten_static =~ ~s{|> click(link: "Counter")}
+    assert rewritten_static =~ ~s{|> click(button: "Increment")}
+    refute rewritten_static =~ ~s{|> click(~l"Counter"i)}
     refute rewritten_static =~ "click_link("
     refute rewritten_static =~ "click_button("
-    assert rewritten_migration_ready =~ "click("
+    assert rewritten_migration_ready =~ ~s{|> click(link: "Counter")}
+    assert rewritten_migration_ready =~ ~s{|> click(button: "Increment")}
     refute rewritten_migration_ready =~ "click_link("
     refute rewritten_migration_ready =~ "click_button("
     assert rewritten_feature_case =~ "|> session()"
