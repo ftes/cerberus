@@ -82,6 +82,8 @@ Default strategy:
 
 ### Composition (advanced)
 - same-element AND: `button("Apply") |> testid("apply-secondary-button")`
+- equivalent explicit form: `and_(button("Apply"), testid("apply-secondary-button"))`
+- both forms produce the same locator semantics; keep pipes for inline readability, use `and_` when combining pre-built locators (for example in helpers/reductions) and for symmetry with `or_`/`not_`
 - descendant requirement: `button("Apply") |> has(testid("apply-secondary-marker"))`
 - descendant exclusion: `button("Apply") |> has_not(testid("apply-secondary-marker"))`
 - alternatives (OR): `or_(css("#primary"), css("#secondary"))`
