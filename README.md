@@ -65,8 +65,6 @@ session()
 submit failed: no submit button matched locator
 locator: [text: "Definitely Missing Submit"]
 ...
-observed: %{..., candidate_values: ["Run Search", "Run Nested Search"]}
-
 possible candidates:
   - "Run Search"
   - "Run Nested Search"

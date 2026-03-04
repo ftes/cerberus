@@ -281,7 +281,6 @@ defmodule Cerberus.Assertions do
     current_path: #{inspect(current_path)}
     scope: #{inspect(scope)}
     transition: #{inspect(transition)}
-    observed: #{inspect(observed)}
     """
 
     maybe_append_candidate_values(base_message, reason, observed)
