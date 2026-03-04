@@ -45,7 +45,8 @@ session
 
 session(:browser, headless: false, slow_mo: 500) # open chrome
 |> visit("/live/counter")
-|> evaluate_js("prompt('Hey!')", fn _result -> :ok end)
+|> evaluate_js("prompt('Hey!')")
+|> screenshot(full_page: true)
 ```
 
 For progressive, step-by-step examples (scopes, forms, tabs, browser extensions), see [Getting Started](docs/getting-started.md).
@@ -83,18 +84,17 @@ For locator forms and advanced composition (`~l` modifiers, `and_`, `or_`, `not_
 - [Cheat Sheet](docs/cheatsheet.md)
 - [Getting Started](docs/getting-started.md)
 
-## Debugging Snapshots
+## Debugging
 
 ```elixir
-session = session() |> visit("/articles")
+session()
+|> visit("/articles")
+|> open_browser() # 1) human: open static HTML snapshot in browser
+|> render_html(&IO.inspect(LazyHTML.query(&1, "h1"))) # 2) AI: inspect static HTML snapshot
 
-session
-|> open_browser() # 1) human debugging: open rendered HTML in your local browser
-
-session
-|> render_html(fn lazy_html ->
-  IO.inspect(LazyHTML.query(lazy_html, "h1"))
-end) # 2) in-process DOM access for AI/tooling workflows
+session(:browser, show_browser: true, slow_mo: 500) # 3) human: watch live interaction in browser
+|> visit("/articles")
+|> screenshot(full_page: true) # 4) human and AI: static .png screenshot
 ```
 
 ## Browser Tests
