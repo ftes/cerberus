@@ -78,7 +78,7 @@ defmodule Cerberus.Driver.Browser.Evaluate do
   defp maybe_unblock_dialog(user_context_pid, tab_id, wait_ms, bidi_opts) when wait_ms > 0 do
     case UserContextProcess.await_dialog_open(user_context_pid, wait_ms, tab_id) do
       {:ok, %{} = dialog} ->
-        dismiss_dialog(dialog, tab_id, bidi_opts)
+        accept_dialog(dialog, tab_id, bidi_opts)
 
       {:error, :timeout, _events} ->
         :ok
@@ -88,18 +88,18 @@ defmodule Cerberus.Driver.Browser.Evaluate do
     end
   end
 
-  defp dismiss_dialog(dialog, tab_id, bidi_opts) do
+  defp accept_dialog(dialog, tab_id, bidi_opts) do
     dialog_type = dialog["type"]
 
     if dialog_type in ["alert", "confirm", "prompt"] do
-      do_dismiss_dialog(tab_id, bidi_opts)
+      do_accept_dialog(tab_id, dialog_type, bidi_opts)
     else
       :ok
     end
   end
 
-  defp do_dismiss_dialog(tab_id, bidi_opts) do
-    params = %{"context" => tab_id, "accept" => false}
+  defp do_accept_dialog(tab_id, dialog_type, bidi_opts) do
+    params = dialog_prompt_params(tab_id, dialog_type)
     opts = Keyword.put(bidi_opts, :timeout, @default_dialog_timeout_ms)
 
     case BiDi.command("browsingContext.handleUserPrompt", params, opts) do
@@ -112,6 +112,14 @@ defmodule Cerberus.Driver.Browser.Evaluate do
       {:error, reason, details} ->
         {:error, "failed to handle dialog: #{reason}", details}
     end
+  end
+
+  defp dialog_prompt_params(tab_id, "prompt") do
+    %{"context" => tab_id, "accept" => true, "userText" => ""}
+  end
+
+  defp dialog_prompt_params(tab_id, _dialog_type) do
+    %{"context" => tab_id, "accept" => true}
   end
 
   defp poll_wait_ms(deadline) do

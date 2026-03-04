@@ -127,7 +127,11 @@ defmodule Cerberus.Browser do
   end
 
   @doc """
-  Asserts the next dialog text matches a text locator and accepts or dismisses it.
+  Asserts that a dialog matching the text locator was observed.
+
+  Browser operations auto-accept dialogs. `assert_dialog/3` only matches dialog text
+  from the active dialog or recently observed dialog events.
+  Prompt dialogs are auto-accepted with an empty string input.
 
   ## Options
 

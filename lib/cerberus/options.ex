@@ -280,8 +280,6 @@ defmodule Cerberus.Options do
 
   @type browser_assert_dialog_opts :: [
           timeout: pos_integer(),
-          accept: boolean(),
-          prompt_text: String.t() | nil,
           browser: keyword()
         ]
 
@@ -523,8 +521,6 @@ defmodule Cerberus.Options do
 
   @browser_assert_dialog_opts_schema [
     timeout: [type: :pos_integer, doc: "Wait timeout in milliseconds for dialog lifecycle events."],
-    accept: [type: :boolean, default: false, doc: "Whether to accept/confirm the dialog. Defaults to dismiss/cancel."],
-    prompt_text: [type: :any, default: nil, doc: "Prompt text sent when accepting prompt dialogs."],
     browser: [type: :keyword_list, default: [], doc: "Per-call browser config overrides used for timeout defaults."]
   ]
 
@@ -719,10 +715,7 @@ defmodule Cerberus.Options do
 
   @spec validate_browser_assert_dialog!(keyword()) :: browser_assert_dialog_opts()
   def validate_browser_assert_dialog!(opts) do
-    opts
-    |> validate!(@browser_assert_dialog_opts_schema, "Browser.assert_dialog/3")
-    |> validate_optional_string!("Browser.assert_dialog/3", :prompt_text)
-    |> validate_prompt_text_with_accept!("Browser.assert_dialog/3")
+    validate!(opts, @browser_assert_dialog_opts_schema, "Browser.assert_dialog/3")
   end
 
   @spec validate_browser_with_popup!(keyword()) :: browser_with_popup_opts()
@@ -924,16 +917,6 @@ defmodule Cerberus.Options do
       other ->
         raise ArgumentError,
               "#{op_name} invalid options: :same_site must be one of :strict, :lax, :none, \"strict\", \"lax\", or \"none\" (got #{inspect(other)})"
-    end
-  end
-
-  defp validate_prompt_text_with_accept!(opts, op_name) do
-    case {Keyword.get(opts, :accept, false), Keyword.get(opts, :prompt_text)} do
-      {false, prompt_text} when is_binary(prompt_text) ->
-        raise ArgumentError, "#{op_name} invalid options: :prompt_text requires :accept to be true"
-
-      _ ->
-        opts
     end
   end
 

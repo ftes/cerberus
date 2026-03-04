@@ -74,11 +74,9 @@ defmodule Cerberus.Driver.Browser.Extensions do
   @spec assert_dialog(BrowserSession.t(), Locator.t(), Options.browser_assert_dialog_opts()) :: BrowserSession.t()
   def assert_dialog(%BrowserSession{} = session, %Locator{} = locator, opts \\ []) when is_list(opts) do
     timeout_ms = dialog_timeout_ms(opts)
-    accept? = Keyword.get(opts, :accept, false)
-    prompt_text = Keyword.get(opts, :prompt_text)
     dialog = await_open_dialog!(session, locator, timeout_ms)
     assert_dialog_text_match!(locator, dialog)
-    maybe_handle_assert_dialog_prompt!(session, timeout_ms, accept?, prompt_text, dialog)
+    ensure_dialog_auto_accepted!(session, timeout_ms, dialog)
     session
   end
 
@@ -403,7 +401,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
   defp handle_dialog_timeout!(locator, events) do
     case matching_observed_dialog(events, locator) do
       {:ok, %{} = dialog} ->
-        Map.put(dialog, "autoHandled", true)
+        dialog
 
       :error ->
         case latest_observed_dialog(events) do
@@ -494,8 +492,8 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  defp handle_dialog_prompt!(session, timeout_ms, accept?, prompt_text, operation_name) do
-    params = dialog_prompt_params(session.tab_id, accept?, prompt_text)
+  defp ensure_dialog_auto_accepted!(session, timeout_ms, dialog) do
+    params = dialog_prompt_params(session.tab_id, dialog["type"])
     opts = Keyword.put(bidi_opts(session), :timeout, timeout_ms)
 
     case BiDi.command("browsingContext.handleUserPrompt", params, opts) do
@@ -506,34 +504,10 @@ defmodule Cerberus.Driver.Browser.Extensions do
         :ok
 
       {:error, reason, details} ->
-        raise ArgumentError, "#{operation_name} failed to handle prompt: #{reason} (#{inspect(details)})"
+        raise ArgumentError,
+              "assert_dialog/3 failed to auto-accept observed dialog: #{reason} (#{inspect(details)})"
     end
   end
-
-  defp maybe_handle_assert_dialog_prompt!(session, timeout_ms, accept?, prompt_text, dialog) do
-    if auto_handled_dialog?(dialog) do
-      ensure_auto_handled_dialog_compatible_options!(accept?, prompt_text)
-    else
-      handle_dialog_prompt!(session, timeout_ms, accept?, prompt_text, "assert_dialog/3")
-    end
-  end
-
-  defp auto_handled_dialog?(%{"autoHandled" => true}), do: true
-  defp auto_handled_dialog?(_dialog), do: false
-
-  defp ensure_auto_handled_dialog_compatible_options!(true, _prompt_text) do
-    raise AssertionError,
-      message:
-        "assert_dialog/3 matched a dialog that was already auto-handled as dismissed; cannot apply accept: true after closure"
-  end
-
-  defp ensure_auto_handled_dialog_compatible_options!(_accept?, prompt_text) when is_binary(prompt_text) do
-    raise AssertionError,
-      message:
-        "assert_dialog/3 matched a dialog that was already auto-handled as dismissed; cannot apply prompt_text after closure"
-  end
-
-  defp ensure_auto_handled_dialog_compatible_options!(_accept?, _prompt_text), do: :ok
 
   defp poll_action_task(_action_task, {:ok, _} = action_outcome), do: action_outcome
   defp poll_action_task(action_task, :pending), do: Task.yield(action_task, 0) || :pending
@@ -715,15 +689,8 @@ defmodule Cerberus.Driver.Browser.Extensions do
           "add_cookie/4 :same_site must be :lax, :strict, :none (or lowercase strings), got: #{inspect(value)}"
   end
 
-  defp dialog_prompt_params(context_id, accept?, prompt_text) do
-    base = %{"context" => context_id, "accept" => accept?}
-
-    if accept? and is_binary(prompt_text) do
-      Map.put(base, "userText", prompt_text)
-    else
-      base
-    end
-  end
+  defp dialog_prompt_params(context_id, "prompt"), do: %{"context" => context_id, "accept" => true, "userText" => ""}
+  defp dialog_prompt_params(context_id, _type), do: %{"context" => context_id, "accept" => true}
 
   defp await_download_match!(session, expected_filename, timeout_ms) do
     case UserContextProcess.await_download(session.user_context_pid, expected_filename, timeout_ms, session.tab_id) do

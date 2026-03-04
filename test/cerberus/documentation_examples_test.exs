@@ -92,7 +92,7 @@ defmodule Cerberus.DocumentationExamplesTest do
 
     session
     |> assert_has(text("Press result: submitted", exact: true))
-    |> assert_has(text("Dialog result: cancelled", exact: true))
+    |> assert_has(text("Dialog result: confirmed", exact: true))
   end
 
   @tag :tmp_dir
