@@ -408,8 +408,26 @@ defmodule Cerberus.Driver.Static do
   defp run_locator_assertion(%__MODULE__{} = session, %Locator{} = locator, opts, mode) when mode in [:assert, :refute] do
     match_opts = locator_match_opts(locator, opts)
     visible = Keyword.get(opts, :visible, true)
-    matched = Html.locator_assertion_values(session.html, locator, visible, Session.scope(session))
 
+    case locator_assertion_values(session, locator, visible) do
+      {:ok, matched} ->
+        finalize_locator_assertion(session, locator, visible, matched, match_opts, mode)
+
+      {:error, reason} ->
+        observed = %{
+          path: session.current_path,
+          visible: visible,
+          texts: [],
+          matched: [],
+          expected: locator,
+          transition: session_transition(session)
+        }
+
+        {:error, session, observed, reason}
+    end
+  end
+
+  defp finalize_locator_assertion(session, locator, visible, matched, match_opts, mode) do
     observed = %{
       path: session.current_path,
       visible: visible,
@@ -427,6 +445,23 @@ defmodule Cerberus.Driver.Static do
       {:error, reason} ->
         {:error, session, observed, reason}
     end
+  end
+
+  defp locator_assertion_values(%__MODULE__{} = session, %Locator{} = locator, visible) do
+    {:ok, Html.locator_assertion_values(session.html, locator, visible, Session.scope(session))}
+  catch
+    kind, reason ->
+      case {kind, reason} do
+        {:throw, {throw_key, _deadline_ms}} when is_atom(throw_key) ->
+          if throw_key == Html.assertion_deadline_throw() do
+            {:error, "assertion timed out while resolving locator candidates"}
+          else
+            :erlang.raise(kind, reason, __STACKTRACE__)
+          end
+
+        _ ->
+          :erlang.raise(kind, reason, __STACKTRACE__)
+      end
   end
 
   defp locator_assertion_requires_locator_engine?(%Locator{opts: locator_opts}) do

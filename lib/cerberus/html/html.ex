@@ -5,6 +5,9 @@ defmodule Cerberus.Html do
   alias Cerberus.Options
   alias Cerberus.Query
 
+  @assertion_deadline_key :cerberus_assertion_deadline_ms
+  @assertion_deadline_throw :cerberus_assertion_deadline_exceeded
+
   @spec texts(String.t() | LazyHTML.t(), true | false | :any, String.t() | nil) :: [String.t()]
   def texts(html_or_doc, visibility \\ true, scope \\ nil)
 
@@ -59,19 +62,24 @@ defmodule Cerberus.Html do
   def locator_assertion_values(html_or_doc, locator, visibility \\ true, scope \\ nil)
 
   def locator_assertion_values(%LazyHTML{} = lazy_html, %Locator{} = locator, visibility, scope) do
+    assert_deadline!()
     locator = locator_without_from(locator)
     from_locator = Keyword.get(locator.opts, :from)
     selector = selector_opt(locator.opts)
     query_selector = within_query_selector(locator)
+    locator_for_filter = locator_for_candidate_filter(locator, query_selector)
 
     lazy_html
     |> scoped_nodes(scope)
     |> Enum.flat_map(fn root_node ->
+      assert_deadline!()
+      hidden_nodes = hidden_nodes_in_root(root_node)
+
       root_node
       |> safe_query(query_selector)
-      |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, locator, selector))
+      |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, locator_for_filter, selector))
       |> maybe_filter_scope_target_closest_candidates(root_node, from_locator)
-      |> Enum.flat_map(&locator_assertion_values_for_node(root_node, &1, locator, visibility))
+      |> Enum.flat_map(&locator_assertion_values_for_node(root_node, hidden_nodes, &1, locator, visibility))
     end)
   end
 
@@ -439,6 +447,7 @@ defmodule Cerberus.Html do
   end
 
   defp scope_target_candidate_matches?(root_node, node, %Locator{} = locator, selector) do
+    assert_deadline!()
     opts = locator.opts
 
     node_matches_within_locator?(root_node, node, locator) and
@@ -478,6 +487,8 @@ defmodule Cerberus.Html do
   end
 
   defp contains_node_or_same?(container, node) do
+    assert_deadline!()
+
     same_node?(container, node) or
       Enum.any?(safe_query(container, "*"), &same_node?(&1, node))
   end
@@ -505,6 +516,26 @@ defmodule Cerberus.Html do
     %{locator | opts: Keyword.delete(locator.opts, :from)}
   end
 
+  defp locator_for_candidate_filter(%Locator{kind: :and, value: members} = locator, query_selector)
+       when is_list(members) and is_binary(query_selector) do
+    {filtered_members, removed?} =
+      Enum.reduce(members, {[], false}, fn
+        %Locator{kind: :css, value: value}, {acc, false} when value == query_selector ->
+          {acc, true}
+
+        member, {acc, removed?} ->
+          {[member | acc], removed?}
+      end)
+
+    if removed? do
+      %{locator | value: Enum.reverse(filtered_members)}
+    else
+      locator
+    end
+  end
+
+  defp locator_for_candidate_filter(locator, _query_selector), do: locator
+
   defp resolve_role_locator(%Locator{kind: :role} = locator) do
     %{locator | kind: Locator.resolved_kind(locator)}
   end
@@ -512,24 +543,30 @@ defmodule Cerberus.Html do
   defp resolve_role_locator(locator), do: locator
 
   defp node_matches_within_locator?(root_node, node, %Locator{kind: :and, value: members}) when is_list(members) do
+    assert_deadline!()
     Enum.all?(members, &node_matches_within_locator?(root_node, node, &1))
   end
 
   defp node_matches_within_locator?(root_node, node, %Locator{kind: :or, value: members}) when is_list(members) do
+    assert_deadline!()
     Enum.any?(members, &node_matches_within_locator?(root_node, node, &1))
   end
 
   defp node_matches_within_locator?(root_node, node, %Locator{kind: :not, value: [member]}) do
+    assert_deadline!()
     not node_matches_within_locator?(root_node, node, member)
   end
 
   defp node_matches_within_locator?(root_node, node, %Locator{kind: :css, value: value}) do
+    assert_deadline!()
+
     root_node
     |> safe_query(value)
     |> Enum.any?(&same_node?(&1, node))
   end
 
   defp node_matches_within_locator?(root_node, node, %Locator{} = locator) do
+    assert_deadline!()
     resolved_locator = resolve_role_locator(locator)
     value = within_locator_match_value(root_node, node, resolved_locator)
 
@@ -551,6 +588,16 @@ defmodule Cerberus.Html do
   defp within_locator_match_value(_root_node, _node, _locator), do: nil
 
   defp within_query_selector(%Locator{kind: :css, value: value}), do: value
+
+  defp within_query_selector(%Locator{kind: :and, value: members}) when is_list(members) do
+    members
+    |> Enum.find_value(fn member ->
+      selector = within_query_selector(member)
+      if selector == "*", do: nil, else: selector
+    end)
+    |> Kernel.||("*")
+  end
+
   defp within_query_selector(%Locator{kind: :and}), do: "*"
   defp within_query_selector(%Locator{kind: :or}), do: "*"
   defp within_query_selector(%Locator{kind: :not}), do: "*"
@@ -1281,8 +1328,8 @@ defmodule Cerberus.Html do
     end)
   end
 
-  defp locator_assertion_values_for_node(root_node, node, locator, visibility) do
-    hidden? = node_hidden_in_root?(root_node, node)
+  defp locator_assertion_values_for_node(root_node, hidden_nodes, node, locator, visibility) do
+    hidden? = node_hidden_in_root?(hidden_nodes, node)
     maybe_locator_assertion_value(selected_visibility?(visibility, hidden?), root_node, node, locator)
   end
 
@@ -1401,13 +1448,17 @@ defmodule Cerberus.Html do
   defp selected_visibility?(:any, _hidden?), do: true
   defp selected_visibility?(_other, hidden?), do: not hidden?
 
-  defp node_hidden_in_root?(root_node, node) do
+  defp hidden_nodes_in_root(root_node) do
+    root_node
+    |> safe_query("*")
+    |> Enum.filter(&hidden_node?/1)
+  end
+
+  defp node_hidden_in_root?(hidden_nodes, node) do
+    assert_deadline!()
+
     hidden_node?(node) or
-      root_node
-      |> safe_query("*")
-      |> Enum.any?(fn candidate ->
-        hidden_node?(candidate) and contains_node_or_same?(candidate, node)
-      end)
+      Enum.any?(hidden_nodes, &contains_node_or_same?(&1, node))
   end
 
   defp hidden_node?(node) do
@@ -2019,6 +2070,8 @@ defmodule Cerberus.Html do
   defp node_matches_selector?(_root_node, _node, nil), do: true
 
   defp node_matches_selector?(root_node, node, selector) do
+    assert_deadline!()
+
     root_node
     |> safe_query(selector)
     |> Enum.any?(&same_node?(&1, node))
@@ -2053,6 +2106,7 @@ defmodule Cerberus.Html do
   defp button_node?(node), do: node_tag(node) == "button"
 
   defp same_node?(left, right) do
+    assert_deadline!()
     left_id = attr(left, "id")
     right_id = attr(right, "id")
 
@@ -2061,6 +2115,35 @@ defmodule Cerberus.Html do
     else
       node_tag(left) == node_tag(right) and node_text(left) == node_text(right) and
         node_attrs(left) == node_attrs(right)
+    end
+  end
+
+  @spec current_assertion_deadline_ms() :: integer() | nil
+  def current_assertion_deadline_ms do
+    Process.get(@assertion_deadline_key)
+  end
+
+  @spec put_assertion_deadline_ms(integer() | nil) :: integer() | nil
+  def put_assertion_deadline_ms(deadline_ms) when is_integer(deadline_ms) do
+    Process.put(@assertion_deadline_key, deadline_ms)
+  end
+
+  def put_assertion_deadline_ms(nil) do
+    Process.delete(@assertion_deadline_key)
+  end
+
+  @spec assertion_deadline_throw() :: atom()
+  def assertion_deadline_throw, do: @assertion_deadline_throw
+
+  defp assert_deadline! do
+    case current_assertion_deadline_ms() do
+      deadline_ms when is_integer(deadline_ms) ->
+        if System.monotonic_time(:millisecond) > deadline_ms do
+          throw({@assertion_deadline_throw, deadline_ms})
+        end
+
+      _ ->
+        :ok
     end
   end
 end

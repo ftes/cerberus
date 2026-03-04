@@ -4,6 +4,7 @@ defmodule Cerberus.Phoenix.LiveViewTimeout do
   alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Live
   alias Cerberus.Driver.Static
+  alias Cerberus.Html
   alias Cerberus.Phoenix.LiveViewWatcher
   alias ExUnit.AssertionError
   alias Phoenix.LiveView.Channel, as: LiveViewChannel
@@ -17,8 +18,14 @@ defmodule Cerberus.Phoenix.LiveViewTimeout do
         when session: var, result: var
   def with_timeout(session, timeout, action, fetch_redirect_info \\ &via_assert_redirect/1)
 
-  def with_timeout(%Static{} = session, _timeout, action, _fetch_redirect_info) when is_function(action) do
+  def with_timeout(%Static{} = session, timeout, action, _fetch_redirect_info)
+      when timeout <= 0 and is_function(action) do
     action.(session)
+  end
+
+  def with_timeout(%Static{} = session, timeout, action, _fetch_redirect_info) when is_function(action) do
+    deadline = timeout_deadline(timeout)
+    with_assertion_deadline(deadline, fn -> action.(session) end)
   end
 
   def with_timeout(%Live{view: nil} = session, _timeout, action, _fetch_redirect_info) when is_function(action) do
@@ -35,7 +42,10 @@ defmodule Cerberus.Phoenix.LiveViewTimeout do
 
     try do
       :ok = LiveViewWatcher.watch_view(watcher, session.view)
-      handle_watched_messages_until(session, deadline, action, fetch_redirect_info)
+
+      with_assertion_deadline(deadline, fn ->
+        handle_watched_messages_until(session, deadline, action, fetch_redirect_info)
+      end)
     after
       Process.exit(watcher, :normal)
     end
@@ -48,7 +58,10 @@ defmodule Cerberus.Phoenix.LiveViewTimeout do
 
   def with_timeout(%Browser{} = session, timeout, action, _fetch_redirect_info) when is_function(action) do
     deadline = timeout_deadline(timeout)
-    handle_browser_messages_until(session, deadline, action)
+
+    with_assertion_deadline(deadline, fn ->
+      handle_browser_messages_until(session, deadline, action)
+    end)
   end
 
   def with_timeout(session, _timeout, action, _fetch_redirect_info) when is_function(action) do
@@ -171,6 +184,17 @@ defmodule Cerberus.Phoenix.LiveViewTimeout do
     case Phoenix.LiveViewTest.assert_redirect(session.view) do
       {path, flash} -> %{kind: :redirect, to: path, flash: flash}
       path -> path
+    end
+  end
+
+  defp with_assertion_deadline(deadline_ms, fun) when is_integer(deadline_ms) and is_function(fun, 0) do
+    previous = Html.current_assertion_deadline_ms()
+    Html.put_assertion_deadline_ms(deadline_ms)
+
+    try do
+      fun.()
+    after
+      Html.put_assertion_deadline_ms(previous)
     end
   end
 end
