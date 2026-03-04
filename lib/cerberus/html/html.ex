@@ -462,6 +462,12 @@ defmodule Cerberus.Html do
     %{locator | opts: Keyword.delete(locator.opts, :from)}
   end
 
+  defp resolve_role_locator(%Locator{kind: :role} = locator) do
+    %{locator | kind: Locator.resolved_kind(locator)}
+  end
+
+  defp resolve_role_locator(locator), do: locator
+
   defp node_matches_within_locator?(root_node, node, %Locator{kind: :and, value: members}) when is_list(members) do
     Enum.all?(members, &node_matches_within_locator?(root_node, node, &1))
   end
@@ -477,9 +483,10 @@ defmodule Cerberus.Html do
   end
 
   defp node_matches_within_locator?(root_node, node, %Locator{} = locator) do
-    value = within_locator_match_value(root_node, node, locator)
+    resolved_locator = resolve_role_locator(locator)
+    value = within_locator_match_value(root_node, node, resolved_locator)
 
-    is_binary(value) and Query.match_text?(value, locator.value, locator.opts)
+    is_binary(value) and Query.match_text?(value, resolved_locator.value, resolved_locator.opts)
   end
 
   defp within_locator_match_value(_root_node, node, %Locator{kind: :text}), do: node_text(node)
@@ -514,6 +521,9 @@ defmodule Cerberus.Html do
     do: "[alt],img[alt],input[type='image'][alt],[role='img'][alt],button,a[href]"
 
   defp within_query_selector(%Locator{kind: :testid}), do: "[data-testid]"
+
+  defp within_query_selector(%Locator{kind: :role} = locator),
+    do: locator |> resolve_role_locator() |> within_query_selector()
 
   defp match_select_values(select_node, requested, option_opts, multiple?) do
     options = safe_query(select_node, "option")
@@ -1045,10 +1055,12 @@ defmodule Cerberus.Html do
   end
 
   defp locator_matches_action_node?(root_node, node, %Locator{kind: kind, value: expected, opts: opts}, context) do
+    resolved_kind = Locator.resolved_kind(%Locator{kind: kind, value: expected, opts: opts})
+
     with true <- node_matches_selector?(root_node, node, selector_opt(opts)),
          true <- node_matches_locator_filters?(node, opts),
          true <- Query.matches_state_filters?(scope_target_state(node), opts),
-         value when is_binary(value) <- action_locator_match_value(root_node, node, kind, context),
+         value when is_binary(value) <- action_locator_match_value(root_node, node, resolved_kind, context),
          true <- Query.match_text?(value, expected, opts) do
       true
     else

@@ -41,6 +41,11 @@ defmodule Cerberus.Driver.LocatorOps do
     {"", opts}
   end
 
+  defp clickable_shape(opts, %Locator{kind: :role} = locator) do
+    resolved_kind = Locator.resolved_kind(locator)
+    clickable_shape(opts, %{locator | kind: resolved_kind})
+  end
+
   defp clickable_shape(opts, %Locator{kind: :css, value: selector}) do
     {"", ensure_selector_opt(opts, selector)}
   end
@@ -80,6 +85,11 @@ defmodule Cerberus.Driver.LocatorOps do
 
   defp form_shape(opts, %Locator{kind: :css, value: selector}) do
     {"", ensure_selector_opt(opts, selector)}
+  end
+
+  defp form_shape(opts, %Locator{kind: :role} = locator) do
+    resolved_kind = Locator.resolved_kind(locator)
+    form_shape(opts, %{locator | kind: resolved_kind})
   end
 
   defp form_shape(opts, %Locator{kind: kind}) when kind in [:and, :or] do

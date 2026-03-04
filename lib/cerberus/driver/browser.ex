@@ -765,6 +765,7 @@ defmodule Cerberus.Driver.Browser do
 
   defp locator_opts_payload(opts) when is_list(opts) do
     %{
+      role: Keyword.get(opts, :role),
       exact: Keyword.get(opts, :exact),
       normalizeWs: Keyword.get(opts, :normalize_ws),
       selector: Keyword.get(opts, :selector),

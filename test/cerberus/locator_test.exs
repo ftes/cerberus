@@ -45,13 +45,13 @@ defmodule Cerberus.LocatorTest do
   end
 
   test "~l supports role modifier using ROLE:NAME syntax" do
-    assert %Locator{kind: :button, value: "Increment"} = ~l"button:Increment"r
-    assert %Locator{kind: :link, value: "Counter"} = ~l"link:Counter"r
-    assert %Locator{kind: :label, value: "Search term"} = ~l"textbox:Search term"r
-    assert %Locator{kind: :label, value: "Race 2"} = ~l"listbox:Race 2"r
-    assert %Locator{kind: :label, value: "Age"} = ~l"spinbutton:Age"r
-    assert %Locator{kind: :button, value: "Tab Primary"} = ~l"tab:Tab Primary"r
-    assert %Locator{kind: :button, value: "Menu Secondary"} = ~l"menuitem:Menu Secondary"r
+    assert %Locator{kind: :role, value: "Increment", opts: [role: "button"]} = ~l"button:Increment"r
+    assert %Locator{kind: :role, value: "Counter", opts: [role: "link"]} = ~l"link:Counter"r
+    assert %Locator{kind: :role, value: "Search term", opts: [role: "textbox"]} = ~l"textbox:Search term"r
+    assert %Locator{kind: :role, value: "Race 2", opts: [role: "listbox"]} = ~l"listbox:Race 2"r
+    assert %Locator{kind: :role, value: "Age", opts: [role: "spinbutton"]} = ~l"spinbutton:Age"r
+    assert %Locator{kind: :role, value: "Tab Primary", opts: [role: "tab"]} = ~l"tab:Tab Primary"r
+    assert %Locator{kind: :role, value: "Menu Secondary", opts: [role: "menuitem"]} = ~l"menuitem:Menu Secondary"r
   end
 
   test "~l supports css selector modifier" do
@@ -122,7 +122,7 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :label, value: "Email"} = label_has_locator
 
     role_has_locator = Locator.normalize(text: "Save", has: role(:button, name: "Submit")).opts[:has]
-    assert %Locator{kind: :button, value: "Submit"} = role_has_locator
+    assert %Locator{kind: :role, value: "Submit", opts: [role: "button"]} = role_has_locator
   end
 
   test "supports nested has locators" do
@@ -173,17 +173,49 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :and, value: [%Locator{kind: :button}, %Locator{kind: :testid}]} = locator
   end
 
-  test "normalizes role locator to operation-specific kind" do
-    assert %Locator{kind: :button, value: "Increment"} = Locator.normalize(role: :button, name: "Increment")
-    assert %Locator{kind: :button, value: "Tab Primary"} = Locator.normalize(role: :tab, name: "Tab Primary")
-    assert %Locator{kind: :button, value: "Menu Secondary"} = Locator.normalize(role: :menuitem, name: "Menu Secondary")
-    assert %Locator{kind: :link, value: "Counter"} = Locator.normalize(role: "link", name: "Counter")
-    assert %Locator{kind: :label, value: "Search term"} = Locator.normalize(role: :textbox, name: "Search term")
-    assert %Locator{kind: :label, value: "Race 2"} = Locator.normalize(role: :listbox, name: "Race 2")
-    assert %Locator{kind: :label, value: "Age"} = Locator.normalize(role: :spinbutton, name: "Age")
-    assert %Locator{kind: :label, value: "Email updates"} = Locator.normalize(role: :checkbox, name: "Email updates")
-    assert %Locator{kind: :alt, value: "Logo"} = Locator.normalize(role: :img, name: "Logo")
-    assert %Locator{kind: :text, value: "Dashboard"} = Locator.normalize(role: :heading, name: "Dashboard")
+  test "preserves role locator kind and metadata" do
+    assert %Locator{kind: :role, value: "Increment", opts: [role: "button"]} =
+             Locator.normalize(role: :button, name: "Increment")
+
+    assert %Locator{kind: :role, value: "Tab Primary", opts: [role: "tab"]} =
+             Locator.normalize(role: :tab, name: "Tab Primary")
+
+    assert %Locator{kind: :role, value: "Menu Secondary", opts: [role: "menuitem"]} =
+             Locator.normalize(role: :menuitem, name: "Menu Secondary")
+
+    assert %Locator{kind: :role, value: "Counter", opts: [role: "link"]} =
+             Locator.normalize(role: "link", name: "Counter")
+
+    assert %Locator{kind: :role, value: "Search term", opts: [role: "textbox"]} =
+             Locator.normalize(role: :textbox, name: "Search term")
+
+    assert %Locator{kind: :role, value: "Race 2", opts: [role: "listbox"]} =
+             Locator.normalize(role: :listbox, name: "Race 2")
+
+    assert %Locator{kind: :role, value: "Age", opts: [role: "spinbutton"]} =
+             Locator.normalize(role: :spinbutton, name: "Age")
+
+    assert %Locator{kind: :role, value: "Email updates", opts: [role: "checkbox"]} =
+             Locator.normalize(role: :checkbox, name: "Email updates")
+
+    assert %Locator{kind: :role, value: "Logo", opts: [role: "img"]} =
+             Locator.normalize(role: :img, name: "Logo")
+
+    assert %Locator{kind: :role, value: "Dashboard", opts: [role: "heading"]} =
+             Locator.normalize(role: :heading, name: "Dashboard")
+  end
+
+  test "resolved_kind maps role locators to matcher kinds" do
+    assert :button == [role: :button, name: "Increment"] |> Locator.normalize() |> Locator.resolved_kind()
+    assert :button == [role: :tab, name: "Tab Primary"] |> Locator.normalize() |> Locator.resolved_kind()
+    assert :button == [role: :menuitem, name: "Menu Secondary"] |> Locator.normalize() |> Locator.resolved_kind()
+    assert :link == [role: :link, name: "Counter"] |> Locator.normalize() |> Locator.resolved_kind()
+    assert :label == [role: :textbox, name: "Search term"] |> Locator.normalize() |> Locator.resolved_kind()
+    assert :label == [role: :listbox, name: "Race 2"] |> Locator.normalize() |> Locator.resolved_kind()
+    assert :label == [role: :spinbutton, name: "Age"] |> Locator.normalize() |> Locator.resolved_kind()
+    assert :label == [role: :checkbox, name: "Email updates"] |> Locator.normalize() |> Locator.resolved_kind()
+    assert :alt == [role: :img, name: "Logo"] |> Locator.normalize() |> Locator.resolved_kind()
+    assert :text == [role: :heading, name: "Dashboard"] |> Locator.normalize() |> Locator.resolved_kind()
   end
 
   test "role locator requires supported role and name" do

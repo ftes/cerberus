@@ -98,6 +98,19 @@ defmodule Cerberus.FormActionsTest do
       assert submit_error.message =~ "possible candidates:"
       assert submit_error.message =~ "Run Search"
     end
+
+    test "role locator failures include possible candidate hints (#{driver})", context do
+      role_click_error =
+        assert_raise ExUnit.AssertionError, fn ->
+          unquote(driver)
+          |> driver_session(context)
+          |> visit("/search")
+          |> click(role(:link, name: "Definitely Missing Link"))
+        end
+
+      assert role_click_error.message =~ "possible candidates:"
+      assert role_click_error.message =~ "Articles"
+    end
   end
 
   test "live driver reports missing fields for fill_in and missing submit controls on counter page" do

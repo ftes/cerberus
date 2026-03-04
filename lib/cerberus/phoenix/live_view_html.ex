@@ -151,10 +151,12 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   end
 
   defp live_clickable_locator_match?(root_node, node, %Locator{kind: kind, value: expected, opts: opts}) do
+    resolved_kind = Locator.resolved_kind(%Locator{kind: kind, value: expected, opts: opts})
+
     with true <- node_matches_selector?(root_node, node, selector_opt(opts)),
          true <- Html.node_matches_locator_filters?(node, opts),
          true <- Query.matches_state_filters?(live_clickable_state(node), opts),
-         value when is_binary(value) <- live_clickable_locator_value(root_node, node, kind),
+         value when is_binary(value) <- live_clickable_locator_value(root_node, node, resolved_kind),
          true <- Query.match_text?(value, expected, opts) do
       true
     else

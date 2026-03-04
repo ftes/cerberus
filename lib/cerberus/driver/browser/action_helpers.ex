@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAction && window.__cerberusAction.__version === 11) return;
+    if (window.__cerberusAction && window.__cerberusAction.__version === 12) return;
 
     const helper = {};
-    helper.__version = 11;
+    helper.__version = 12;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -750,6 +750,42 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       }
     };
 
+    helper.roleToKind = (roleName) => {
+      switch (String(roleName || "").toLowerCase()) {
+        case "button":
+        case "menuitem":
+        case "tab":
+          return "button";
+        case "link":
+          return "link";
+        case "textbox":
+        case "searchbox":
+        case "combobox":
+        case "listbox":
+        case "spinbutton":
+        case "checkbox":
+        case "radio":
+        case "switch":
+          return "label";
+        case "img":
+          return "alt";
+        case "heading":
+          return "text";
+        default:
+          return null;
+      }
+    };
+
+    helper.locatorKind = (locator) => {
+      if (!locator || typeof locator !== "object") return null;
+
+      const rawKind = String(locator.kind || "").toLowerCase();
+      if (rawKind !== "role") return rawKind;
+
+      const opts = locator.opts && typeof locator.opts === "object" ? locator.opts : {};
+      return helper.roleToKind(opts.role);
+    };
+
     helper.previewValues = (candidates, op, matchBy, limit = 8) => {
       const values = [];
 
@@ -772,7 +808,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         return opts.selector;
       }
 
-      switch ((locator.kind || "").toLowerCase()) {
+      const rawKind = String(locator.kind || "").toLowerCase();
+      const kind = rawKind === "role" ? helper.locatorKind(locator) : rawKind;
+
+      switch (kind) {
         case "css":
           return typeof locator.value === "string" && locator.value.trim() !== "" ? locator.value : "*";
         case "text":
@@ -914,7 +953,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
     helper.matchesLocator = (candidate, locator, op) => {
       if (!locator || typeof locator !== "object") return false;
 
-      const kind = (locator.kind || "").toLowerCase();
+      const rawKind = String(locator.kind || "").toLowerCase();
+      const kind = rawKind === "role" ? helper.locatorKind(locator) : rawKind;
+
+      if (!kind) return false;
 
       if (kind === "and" || kind === "or") {
         const members = Array.isArray(locator.members) ? locator.members : [];

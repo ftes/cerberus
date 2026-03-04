@@ -16,8 +16,10 @@ defmodule Cerberus.Locator do
 
   @type leaf_kind ::
           :text | :label | :link | :button | :placeholder | :title | :alt | :aria_label | :testid | :css
+  @type role_kind :: :role
+  @type resolved_role_kind :: :text | :label | :link | :button | :alt
   @type composite_kind :: :and | :or
-  @type locator_kind :: leaf_kind() | composite_kind()
+  @type locator_kind :: leaf_kind() | role_kind() | composite_kind()
   @type composite_value :: [t()]
   @type t :: %__MODULE__{
           kind: locator_kind(),
@@ -25,6 +27,22 @@ defmodule Cerberus.Locator do
           opts: keyword()
         }
   @type input :: t() | String.t() | Regex.t() | keyword() | map() | [input()]
+  @role_kind_map %{
+    "button" => :button,
+    "menuitem" => :button,
+    "tab" => :button,
+    "link" => :link,
+    "textbox" => :label,
+    "searchbox" => :label,
+    "combobox" => :label,
+    "listbox" => :label,
+    "spinbutton" => :label,
+    "checkbox" => :label,
+    "radio" => :label,
+    "switch" => :label,
+    "img" => :alt,
+    "heading" => :text
+  }
 
   @spec normalize(term()) :: t()
   def normalize(%__MODULE__{} = locator), do: normalize_locator(locator, locator)
@@ -136,10 +154,56 @@ defmodule Cerberus.Locator do
 
   @spec contains_kind?(input(), locator_kind()) :: boolean()
   def contains_kind?(locator, kind)
-      when kind in [:text, :label, :link, :button, :placeholder, :title, :alt, :aria_label, :testid, :css, :and, :or] do
+      when kind in [
+             :text,
+             :label,
+             :link,
+             :button,
+             :placeholder,
+             :title,
+             :alt,
+             :aria_label,
+             :testid,
+             :css,
+             :role,
+             :and,
+             :or
+           ] do
     locator
     |> normalize()
     |> contains_kind_recursive?(kind)
+  end
+
+  @spec resolved_kind(t()) :: locator_kind() | resolved_role_kind()
+  def resolved_kind(%__MODULE__{kind: :role} = locator) do
+    locator
+    |> role_name_from_locator!(locator)
+    |> resolve_role_kind!(locator)
+  end
+
+  def resolved_kind(%__MODULE__{kind: kind}), do: kind
+
+  @spec resolve_role_kind(String.t() | atom()) :: {:ok, resolved_role_kind()} | :error
+  def resolve_role_kind(role) do
+    with {:ok, role_name} <- normalize_role_name(role),
+         {:ok, kind} <- Map.fetch(@role_kind_map, role_name) do
+      {:ok, kind}
+    else
+      _ -> :error
+    end
+  end
+
+  @spec resolve_role_kind!(String.t() | atom(), term()) :: resolved_role_kind()
+  def resolve_role_kind!(role, original) do
+    case resolve_role_kind(role) do
+      {:ok, kind} ->
+        kind
+
+      :error ->
+        raise InvalidLocatorError,
+          locator: original,
+          message: "unsupported :role #{inspect(role)} in #{inspect(original)}"
+    end
   end
 
   @spec contains_has_filter?(input()) :: boolean()
@@ -156,7 +220,7 @@ defmodule Cerberus.Locator do
   def sigil(value, modifiers) when is_binary(value) and is_list(modifiers) do
     sigil_opts = parse_sigil_modifiers!(value, modifiers)
     base_locator = sigil_base_locator!(sigil_opts, value, modifiers)
-    opts = sigil_locator_opts(base_locator.kind, sigil_opts.exact)
+    opts = Keyword.merge(base_locator.opts, sigil_locator_opts(base_locator.kind, sigil_opts.exact))
 
     %{base_locator | opts: opts}
   end
@@ -179,8 +243,14 @@ defmodule Cerberus.Locator do
   end
 
   defp sigil_base_locator!(%{kind: :role, role: role_name}, value, modifiers) do
-    role_kind = role_to_kind!(role_name, {:l, value, modifiers})
-    %__MODULE__{kind: role_kind, value: parse_role_name!(value, {:l, value, modifiers})}
+    normalized_role = normalize_role_name!(role_name, {:l, value, modifiers})
+    resolve_role_kind!(normalized_role, {:l, value, modifiers})
+
+    %__MODULE__{
+      kind: :role,
+      value: parse_role_name!(value, {:l, value, modifiers}),
+      opts: [role: normalized_role]
+    }
   end
 
   defp sigil_locator_opts(:testid, exact) do
@@ -334,8 +404,8 @@ defmodule Cerberus.Locator do
     ensure_only_keys!(locator_map, original, [:role, :name, :exact, :selector, :has, :from])
     ensure_text_value!(:name, name, original)
     role_name = normalize_role_name!(role, original)
-    role_kind = role_to_kind!(role_name, original)
-    %__MODULE__{kind: role_kind, value: name, opts: locator_opts(locator_map, original)}
+    resolve_role_kind!(role_name, original)
+    %__MODULE__{kind: :role, value: name, opts: locator_map |> locator_opts(original) |> Keyword.put(:role, role_name)}
   end
 
   defp key_value(locator_map, key) when is_atom(key) do
@@ -502,39 +572,28 @@ defmodule Cerberus.Locator do
   end
 
   defp normalize_role_name!(role, original) do
-    case role do
-      value when is_atom(value) ->
-        value |> Atom.to_string() |> String.downcase()
+    case normalize_role_name(role) do
+      {:ok, role_name} ->
+        role_name
 
-      value when is_binary(value) and value != "" ->
-        String.downcase(value)
-
-      _ ->
+      :error ->
         raise InvalidLocatorError,
           locator: original,
           message: "invalid locator #{inspect(original)}; :role must be an atom or string"
     end
   end
 
-  defp role_to_kind!("button", _original), do: :button
-  defp role_to_kind!("menuitem", _original), do: :button
-  defp role_to_kind!("tab", _original), do: :button
-  defp role_to_kind!("link", _original), do: :link
-  defp role_to_kind!("textbox", _original), do: :label
-  defp role_to_kind!("searchbox", _original), do: :label
-  defp role_to_kind!("combobox", _original), do: :label
-  defp role_to_kind!("listbox", _original), do: :label
-  defp role_to_kind!("spinbutton", _original), do: :label
-  defp role_to_kind!("checkbox", _original), do: :label
-  defp role_to_kind!("radio", _original), do: :label
-  defp role_to_kind!("switch", _original), do: :label
-  defp role_to_kind!("img", _original), do: :alt
-  defp role_to_kind!("heading", _original), do: :text
+  defp normalize_role_name(role) do
+    case role do
+      value when is_atom(value) ->
+        {:ok, value |> Atom.to_string() |> String.downcase()}
 
-  defp role_to_kind!(role_name, original) do
-    raise InvalidLocatorError,
-      locator: original,
-      message: "unsupported :role #{inspect(role_name)} in #{inspect(original)}"
+      value when is_binary(value) and value != "" ->
+        {:ok, String.downcase(value)}
+
+      _ ->
+        :error
+    end
   end
 
   defp parse_sigil_modifiers!(value, modifiers) do
@@ -669,6 +728,11 @@ defmodule Cerberus.Locator do
     %{locator | opts: normalize_leaf_opts(opts, original)}
   end
 
+  defp normalize_locator(%__MODULE__{kind: :role, value: value, opts: opts} = locator, original) do
+    ensure_text_value!(:name, value, original)
+    %{locator | opts: normalize_role_opts(opts, original)}
+  end
+
   defp normalize_locator(%__MODULE__{kind: :css, value: value, opts: opts} = locator, original) do
     ensure_css_selector_value!(:css, value, original)
     %{locator | opts: normalize_leaf_opts(opts, original)}
@@ -710,6 +774,31 @@ defmodule Cerberus.Locator do
       message: "invalid locator #{inspect(original)}; :opts must be a keyword list"
   end
 
+  defp normalize_role_opts(opts, original) when is_list(opts) do
+    opts_map = Map.new(opts)
+    ensure_only_keys!(opts_map, original, [:role, :exact, :selector, :has, :from])
+
+    role_name =
+      case key_value(opts_map, :role) do
+        :__missing__ ->
+          raise InvalidLocatorError,
+            locator: original,
+            message: "invalid locator #{inspect(original)}; :role locator is missing :role metadata"
+
+        role ->
+          normalize_role_name!(role, original)
+      end
+
+    resolve_role_kind!(role_name, original)
+    opts_map |> locator_opts(original) |> Keyword.put(:role, role_name)
+  end
+
+  defp normalize_role_opts(_opts, original) do
+    raise InvalidLocatorError,
+      locator: original,
+      message: "invalid locator #{inspect(original)}; :opts must be a keyword list"
+  end
+
   defp normalize_composite_opts(opts, original) when is_list(opts) do
     opts_map = Map.new(opts)
     ensure_only_keys!(opts_map, original, [:has, :from])
@@ -744,5 +833,20 @@ defmodule Cerberus.Locator do
       %__MODULE__{} -> true
       _ -> false
     end
+  end
+
+  defp role_name_from_locator!(%__MODULE__{opts: opts}, original) do
+    role =
+      case Keyword.get(opts, :role) do
+        nil ->
+          raise InvalidLocatorError,
+            locator: original,
+            message: "invalid locator #{inspect(original)}; :role locator is missing :role metadata"
+
+        value ->
+          value
+      end
+
+    normalize_role_name!(role, original)
   end
 end

@@ -478,6 +478,12 @@ defmodule Cerberus.Assertions do
       message: "css locators are not supported for assert_has/3 or refute_has/3 in this slice"
   end
 
+  defp normalize_assert_locator_kind(%Locator{kind: :role, value: value} = locator, _locator_input, opts) do
+    role_match_by = Locator.resolved_kind(locator)
+    normalized_locator_opts = locator.opts |> Keyword.delete(:role) |> put_match_by(role_match_by)
+    {%{locator | kind: :text, value: value, opts: normalized_locator_opts}, opts}
+  end
+
   defp normalize_assert_locator_kind(%Locator{kind: kind, value: value} = locator, _locator_input, opts)
        when kind in [:label, :link, :button, :placeholder, :title, :alt, :aria_label] do
     {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, kind)}, opts}
