@@ -45,6 +45,8 @@ defmodule Cerberus.Driver.Browser do
     "field_not_select" => "matched field is not a select element",
     "field_not_radio" => "matched field is not a radio input",
     "field_not_checkbox" => "matched field is not a checkbox",
+    "target_detached" => "matched target is no longer attached",
+    "target_not_visible" => "matched element is not visible",
     "option_not_found" => "browser select failed: option_not_found",
     "option_disabled" => "browser select failed: option_disabled",
     "select_not_multiple" => "browser select failed: select_not_multiple",

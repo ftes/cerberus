@@ -497,6 +497,17 @@ defmodule Cerberus.Fixtures.PageController do
             <div id="drop-target">Drop target</div>
             <p id="drag-result">Drag result: pending</p>
           </section>
+
+          <section>
+            <h2>Actionability</h2>
+            <button id="hidden-action" type="button" style="display:none">Hidden Action</button>
+            <p id="hidden-action-result">Hidden action result: pending</p>
+
+            <div style="height: 1600px"></div>
+
+            <button id="offscreen-action" type="button">Offscreen Action</button>
+            <p id="offscreen-action-result">Offscreen action result: pending</p>
+          </section>
         </main>
 
         <script>
@@ -510,6 +521,10 @@ defmodule Cerberus.Fixtures.PageController do
             const dragSource = document.getElementById("drag-source");
             const dropTarget = document.getElementById("drop-target");
             const dragResult = document.getElementById("drag-result");
+            const hiddenActionButton = document.getElementById("hidden-action");
+            const hiddenActionResult = document.getElementById("hidden-action-result");
+            const offscreenActionButton = document.getElementById("offscreen-action");
+            const offscreenActionResult = document.getElementById("offscreen-action-result");
 
             keyboardInput.addEventListener("input", () => {
               keyboardValue.textContent = "Keyboard value: " + keyboardInput.value;
@@ -538,6 +553,14 @@ defmodule Cerberus.Fixtures.PageController do
             dropTarget.addEventListener("drop", (event) => {
               event.preventDefault();
               dragResult.textContent = "Drag result: dropped";
+            });
+
+            hiddenActionButton.addEventListener("click", () => {
+              hiddenActionResult.textContent = "Hidden action result: clicked";
+            });
+
+            offscreenActionButton.addEventListener("click", () => {
+              offscreenActionResult.textContent = "Offscreen action result: clicked";
             });
           })();
         </script>

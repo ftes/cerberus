@@ -83,6 +83,36 @@ defmodule Cerberus.BrowserExtensionsTest do
     File.rm(path)
   end
 
+  test "click rejects hidden targets via actionability visibility checks" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+
+    error =
+      assert_raise AssertionError, fn ->
+        click(session, button("Hidden Action", exact: true))
+      end
+
+    assert error.message =~ "matched element is not visible"
+  end
+
+  test "click scrolls offscreen targets into view before acting" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+
+    evaluate_js(session, "window.scrollY", &assert(&1 == 0))
+
+    session =
+      session
+      |> click(button("Offscreen Action", exact: true))
+      |> assert_has(text("Offscreen action result: clicked", exact: true))
+
+    evaluate_js(session, "window.scrollY", &assert(&1 > 0))
+  end
+
   test "evaluate_js and cookie helpers cover add_cookie and session cookie semantics" do
     session =
       :browser

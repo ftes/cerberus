@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAction && window.__cerberusAction.__version === 8) return;
+    if (window.__cerberusAction && window.__cerberusAction.__version === 9) return;
 
     const helper = {};
-    helper.__version = 8;
+    helper.__version = 9;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -155,6 +155,65 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
     helper.dispatchInputChange = (field) => {
       field.dispatchEvent(new Event("input", { bubbles: true }));
       field.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+
+    helper.scrollTargetIntoView = (element) => {
+      if (!element || typeof element.scrollIntoView !== "function") return;
+
+      try {
+        element.scrollIntoView({ block: "center", inline: "center" });
+      } catch (_error) {
+        try {
+          element.scrollIntoView();
+        } catch (_nestedError) {
+          // ignored
+        }
+      }
+    };
+
+    helper.isElementVisible = (element) => {
+      if (!element || element.isConnected !== true) return false;
+
+      let current = element;
+      while (current && current.nodeType === Node.ELEMENT_NODE) {
+        if (typeof current.hasAttribute === "function" && current.hasAttribute("hidden")) return false;
+
+        let style = null;
+        try {
+          style = window.getComputedStyle(current);
+        } catch (_error) {
+          return false;
+        }
+
+        if (!style) return false;
+        if (style.display === "none") return false;
+        if (style.visibility === "hidden" || style.visibility === "collapse") return false;
+
+        current = current.parentElement;
+      }
+
+      try {
+        const rect = element.getBoundingClientRect();
+        return !!rect && rect.width > 0 && rect.height > 0;
+      } catch (_error) {
+        return false;
+      }
+    };
+
+    helper.requiresVisibilityCheck = (op) => op !== "upload";
+
+    helper.prepareTargetForAction = (element, op) => {
+      if (!element || element.isConnected !== true) {
+        return { ok: false, reason: "target_detached" };
+      }
+
+      helper.scrollTargetIntoView(element);
+
+      if (helper.requiresVisibilityCheck(op) && !helper.isElementVisible(element)) {
+        return { ok: false, reason: "target_not_visible" };
+      }
+
+      return { ok: true };
     };
 
     helper.regexFromExpected = (payload) => {
@@ -1010,6 +1069,11 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         path: helper.currentPath(),
         ...extra
       });
+
+      const actionability = helper.prepareTargetForAction(element, op);
+      if (!actionability || actionability.ok !== true) {
+        return fail(actionability && actionability.reason ? actionability.reason : "actionability_check_failed");
+      }
 
       if (op === "fill_in") {
         if (target.kind !== "field") return fail("field_fill_failed");
