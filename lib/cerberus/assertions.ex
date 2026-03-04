@@ -15,9 +15,13 @@ defmodule Cerberus.Assertions do
   alias ExUnit.AssertionError
 
   @type locator_input :: Locator.t() | keyword() | map()
+  @type assert_locator_input :: locator_input() | String.t() | Regex.t()
 
   defguardp is_locator_input(input)
             when is_list(input) or (is_map(input) and not is_struct(input, Regex))
+
+  defguardp is_assert_locator_input(input)
+            when is_binary(input) or is_struct(input, Regex) or is_locator_input(input)
 
   @spec click(arg, locator_input(), Driver.click_opts()) :: arg when arg: var
   def click(session, locator_input, opts \\ []) when is_locator_input(locator_input) and is_list(opts) do
@@ -199,8 +203,9 @@ defmodule Cerberus.Assertions do
         )
   end
 
-  @spec assert_has(arg, locator_input(), Driver.assert_opts()) :: arg when arg: var
-  def assert_has(session, locator_input, call_opts \\ []) when is_locator_input(locator_input) and is_list(call_opts) do
+  @spec assert_has(arg, assert_locator_input(), Driver.assert_opts()) :: arg when arg: var
+  def assert_has(session, locator_input, call_opts \\ [])
+      when is_assert_locator_input(locator_input) and is_list(call_opts) do
     call_has_timeout = Keyword.has_key?(call_opts, :timeout)
     {locator, call_opts} = normalize_assert_locator(locator_input, call_opts)
     validated_opts = Options.validate_assert!(call_opts, "assert_has/3")
@@ -218,8 +223,9 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  @spec refute_has(arg, locator_input(), Driver.assert_opts()) :: arg when arg: var
-  def refute_has(session, locator_input, call_opts \\ []) when is_locator_input(locator_input) and is_list(call_opts) do
+  @spec refute_has(arg, assert_locator_input(), Driver.assert_opts()) :: arg when arg: var
+  def refute_has(session, locator_input, call_opts \\ [])
+      when is_assert_locator_input(locator_input) and is_list(call_opts) do
     call_has_timeout = Keyword.has_key?(call_opts, :timeout)
     {locator, call_opts} = normalize_assert_locator(locator_input, call_opts)
     validated_opts = Options.validate_assert!(call_opts, "refute_has/3")
