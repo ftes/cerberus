@@ -28,7 +28,23 @@ defmodule Cerberus.Browser do
   @assert_dialog_args_error "Browser.assert_dialog/3 expects a text locator and options as a keyword list"
   @with_popup_args_error "Browser.with_popup/4 expects trigger callback arity 1, callback arity 2, and options as a keyword list"
   @add_cookie_args_error "Browser.add_cookie/4 expects cookie name and value strings and options as a keyword list"
+  @screenshot_options_doc NimbleOptions.docs(Options.screenshot_schema())
+  @type_options_doc NimbleOptions.docs(Options.browser_type_schema())
+  @press_options_doc NimbleOptions.docs(Options.browser_press_schema())
+  @drag_options_doc NimbleOptions.docs(Options.browser_drag_schema())
+  @assert_dialog_options_doc NimbleOptions.docs(Options.browser_assert_dialog_schema())
+  @with_popup_options_doc NimbleOptions.docs(Options.browser_with_popup_schema())
+  @add_cookie_options_doc NimbleOptions.docs(Options.browser_add_cookie_schema())
 
+  @doc """
+  Captures a browser screenshot.
+
+  `opts_or_path` accepts either a path string or keyword options.
+
+  ## Options
+
+  #{@screenshot_options_doc}
+  """
   @spec screenshot(session, String.t() | keyword()) :: session when session: var
   def screenshot(session, opts \\ [])
 
@@ -47,6 +63,13 @@ defmodule Cerberus.Browser do
     raise ArgumentError, "Browser.screenshot/2 expects a path string or keyword options"
   end
 
+  @doc """
+  Types text into the currently focused element or a matched element.
+
+  ## Options
+
+  #{@type_options_doc}
+  """
   @spec type(session, String.t(), Options.browser_type_opts()) :: session when session: var
   def type(session, text, opts \\ [])
 
@@ -61,6 +84,13 @@ defmodule Cerberus.Browser do
     end)
   end
 
+  @doc """
+  Presses a keyboard key.
+
+  ## Options
+
+  #{@press_options_doc}
+  """
   @spec press(session, String.t(), Options.browser_press_opts()) :: session when session: var
   def press(session, key, opts \\ [])
 
@@ -75,6 +105,13 @@ defmodule Cerberus.Browser do
     end)
   end
 
+  @doc """
+  Drags from `source_selector` to `target_selector`.
+
+  ## Options
+
+  #{@drag_options_doc}
+  """
   @spec drag(session, String.t(), String.t(), Options.browser_drag_opts()) :: session when session: var
   def drag(session, source_selector, target_selector, opts \\ [])
 
@@ -89,6 +126,13 @@ defmodule Cerberus.Browser do
     end)
   end
 
+  @doc """
+  Asserts the next dialog text matches a text locator and accepts or dismisses it.
+
+  ## Options
+
+  #{@assert_dialog_options_doc}
+  """
   @spec assert_dialog(session, Locator.input(), Options.browser_assert_dialog_opts()) :: session when session: var
   def assert_dialog(session, locator, opts \\ [])
 
@@ -111,6 +155,13 @@ defmodule Cerberus.Browser do
     )
   end
 
+  @doc """
+  Runs a popup flow, yielding both main and popup sessions to `callback_fun`.
+
+  ## Options
+
+  #{@with_popup_options_doc}
+  """
   @spec with_popup(
           session,
           (session -> term()),
@@ -137,6 +188,9 @@ defmodule Cerberus.Browser do
     )
   end
 
+  @doc """
+  Evaluates JavaScript in the active page and returns the decoded result value.
+  """
   @spec evaluate_js(Session.t(), String.t()) :: term()
   def evaluate_js(session, expression) do
     case evaluate_js_value(session, expression) do
@@ -145,6 +199,9 @@ defmodule Cerberus.Browser do
     end
   end
 
+  @doc """
+  Evaluates JavaScript and passes the result to `callback`, returning the original session.
+  """
   @spec evaluate_js(Session.t(), String.t(), (term() -> term())) :: Session.t()
   def evaluate_js(session, expression, callback) when is_function(callback, 1) do
     case evaluate_js_value(session, expression) do
@@ -161,18 +218,34 @@ defmodule Cerberus.Browser do
     raise ArgumentError, "Browser.evaluate_js/3 expects an expression string and callback with arity 1"
   end
 
+  @doc """
+  Returns all browser cookies visible to the active page.
+  """
   @spec cookies(Session.t()) :: [cookie]
   def cookies(%BrowserSession{} = session), do: Extensions.cookies(session)
   def cookies(session), do: Assertions.unsupported(session, :cookies)
 
+  @doc """
+  Returns the cookie by `name` or `nil` when not present.
+  """
   @spec cookie(Session.t(), String.t()) :: cookie | nil
   def cookie(%BrowserSession{} = session, name) when is_binary(name), do: Extensions.cookie(session, name)
   def cookie(session, _name), do: Assertions.unsupported(session, :cookie)
 
+  @doc """
+  Returns the session cookie (commonly `_app_key`) when present.
+  """
   @spec session_cookie(Session.t()) :: cookie | nil
   def session_cookie(%BrowserSession{} = session), do: Extensions.session_cookie(session)
   def session_cookie(session), do: Assertions.unsupported(session, :session_cookie)
 
+  @doc """
+  Adds a cookie to the active browser context.
+
+  ## Options
+
+  #{@add_cookie_options_doc}
+  """
   @spec add_cookie(session, String.t(), String.t(), Options.browser_add_cookie_opts()) :: session when session: var
   def add_cookie(session, name, value, opts \\ [])
 

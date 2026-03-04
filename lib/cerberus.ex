@@ -46,10 +46,36 @@ defmodule Cerberus do
   @locator_kind_keys [:text, :label, :link, :button, :placeholder, :title, :alt, :role, :css, :testid, :and, :or]
   @locator_kind_string_keys Enum.map(@locator_kind_keys, &Atom.to_string/1)
   @default_submit_selector "button[type='submit'],button:not([type])"
+  @session_common_options_doc NimbleOptions.docs(Options.session_common_schema())
+  @session_browser_options_doc NimbleOptions.docs(Options.session_browser_schema())
+  @path_options_doc NimbleOptions.docs(Options.path_schema())
+  @assert_download_options_doc NimbleOptions.docs(Options.assert_download_schema())
+  @click_options_doc NimbleOptions.docs(Options.click_schema())
+  @fill_in_options_doc NimbleOptions.docs(Options.fill_in_schema())
+  @submit_options_doc NimbleOptions.docs(Options.submit_schema())
+  @upload_options_doc NimbleOptions.docs(Options.upload_schema())
+  @select_options_doc NimbleOptions.docs(Options.select_schema())
+  @assert_options_doc NimbleOptions.docs(Options.assert_schema())
 
+  @doc """
+  Starts a default non-browser (`:phoenix`) session with default options.
+  """
   @spec session() :: Session.t()
   def session, do: session([])
 
+  @doc """
+  Starts a non-browser (`:phoenix`) session.
+
+  This arity also accepts `Plug.Conn` and driver atoms:
+
+  - `session(conn)` seeds the new session from an existing conn.
+  - `session(:phoenix)` starts non-browser mode.
+  - `session(:browser | :chrome | :firefox)` starts browser mode with defaults.
+
+  ## Options
+
+  #{@session_common_options_doc}
+  """
   @spec session(Options.session_common_opts()) :: Session.t()
   def session(opts) when is_list(opts) do
     opts
@@ -94,6 +120,10 @@ defmodule Cerberus do
   - `browser: [init_script: "..."]` or `browser: [init_scripts: ["...", ...]]`
   - `webdriver_url: "http://remote-webdriver:4444"` to use a remote WebDriver endpoint
     without local browser/chromedriver launch.
+
+  ## Options
+
+  #{@session_browser_options_doc}
   """
   @spec session(:browser, Options.session_browser_opts()) :: Session.t()
   def session(:browser, opts) when is_list(opts) do
@@ -161,12 +191,21 @@ defmodule Cerberus do
     end
   end
 
+  @doc """
+  Opens a new tab for browser sessions and returns the updated session.
+  """
   @spec open_tab(arg) :: arg when arg: var
   def open_tab(session), do: dispatch_tab_operation!(session, :open_tab)
 
+  @doc """
+  Switches the active tab to `target_session` for browser sessions.
+  """
   @spec switch_tab(Session.t(), Session.t()) :: Session.t()
   def switch_tab(session, target_session), do: dispatch_tab_operation!(session, :switch_tab, [target_session])
 
+  @doc """
+  Closes the current tab for browser sessions.
+  """
   @spec close_tab(arg) :: arg when arg: var
   def close_tab(session), do: dispatch_tab_operation!(session, :close_tab)
 
@@ -185,10 +224,21 @@ defmodule Cerberus do
     driver_module_for_session!(session).unwrap(session, fun)
   end
 
+  @doc """
+  Writes the current rendered page snapshot to a temporary HTML file and opens it.
+
+  This is primarily useful for human debugging because it lets you inspect the
+  rendered page in a real browser tab.
+
+  For callback-based DOM inspection in-process (for example, by AI tooling), see
+  `render_html/2`.
+  """
   @spec open_browser(arg) :: arg when arg: var
   def open_browser(session), do: open_browser(session, &OpenBrowser.open_with_system_cmd/1)
 
-  @doc false
+  @doc """
+  Same as `open_browser/1`, but allows injecting a custom open callback.
+  """
   @spec open_browser(arg, (String.t() -> term())) :: arg when arg: var
   def open_browser(session, open_fun) when is_function(open_fun, 1) do
     driver_module_for_session!(session).open_browser(session, open_fun)
@@ -198,9 +248,36 @@ defmodule Cerberus do
     raise ArgumentError, "open_browser/2 expects a callback with arity 1"
   end
 
+  @doc """
+  Renders the current page HTML and passes it to the callback as `LazyHTML`.
+
+  This is primarily for debugging, and can be useful for AI-assisted workflows
+  that need to inspect the entire DOM tree in-process.
+
+  For human-oriented inspection in a browser, see `open_browser/1`.
+  """
+  @spec render_html(arg, (LazyHTML.t() -> term())) :: arg when arg: var
+  def render_html(session, callback) when is_function(callback, 1) do
+    driver_module_for_session!(session).render_html(session, callback)
+  end
+
+  def render_html(_session, _callback) do
+    raise ArgumentError, "render_html/2 expects a callback with arity 1"
+  end
+
+  @doc """
+  Builds a text locator.
+  """
   @spec text(String.t() | Regex.t()) :: Locator.t()
   def text(value) when is_binary(value) or is_struct(value, Regex), do: text(value, [])
 
+  @doc """
+  Builds or composes a text locator.
+
+  Supported forms:
+  - `text(value, opts)` for a leaf locator
+  - `text(locator, value)` to compose with an existing locator
+  """
   @spec text(String.t() | Regex.t(), keyword()) :: Locator.t()
   def text(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     Locator.leaf(:text, value, opts)
@@ -211,14 +288,27 @@ defmodule Cerberus do
     and_(locator, text(value))
   end
 
+  @doc """
+  Composes a text constraint into an existing locator with locator options.
+  """
   @spec text(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
   def text(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     and_(locator, text(value, opts))
   end
 
+  @doc """
+  Builds a link locator.
+  """
   @spec link(String.t() | Regex.t()) :: Locator.t()
   def link(value) when is_binary(value) or is_struct(value, Regex), do: link(value, [])
 
+  @doc """
+  Builds or composes a link locator.
+
+  Supported forms:
+  - `link(value, opts)` for a leaf locator
+  - `link(locator, value)` to compose with an existing locator
+  """
   @spec link(String.t() | Regex.t(), keyword()) :: Locator.t()
   def link(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     Locator.leaf(:link, value, opts)
@@ -229,14 +319,27 @@ defmodule Cerberus do
     and_(locator, link(value))
   end
 
+  @doc """
+  Composes a link constraint into an existing locator with locator options.
+  """
   @spec link(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
   def link(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     and_(locator, link(value, opts))
   end
 
+  @doc """
+  Builds a button locator.
+  """
   @spec button(String.t() | Regex.t()) :: Locator.t()
   def button(value) when is_binary(value) or is_struct(value, Regex), do: button(value, [])
 
+  @doc """
+  Builds or composes a button locator.
+
+  Supported forms:
+  - `button(value, opts)` for a leaf locator
+  - `button(locator, value)` to compose with an existing locator
+  """
   @spec button(String.t() | Regex.t(), keyword()) :: Locator.t()
   def button(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     Locator.leaf(:button, value, opts)
@@ -247,14 +350,27 @@ defmodule Cerberus do
     and_(locator, button(value))
   end
 
+  @doc """
+  Composes a button constraint into an existing locator with locator options.
+  """
   @spec button(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
   def button(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     and_(locator, button(value, opts))
   end
 
+  @doc """
+  Builds a label locator.
+  """
   @spec label(String.t() | Regex.t()) :: Locator.t()
   def label(value) when is_binary(value) or is_struct(value, Regex), do: label(value, [])
 
+  @doc """
+  Builds or composes a label locator.
+
+  Supported forms:
+  - `label(value, opts)` for a leaf locator
+  - `label(locator, value)` to compose with an existing locator
+  """
   @spec label(String.t() | Regex.t(), keyword()) :: Locator.t()
   def label(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     Locator.leaf(:label, value, opts)
@@ -265,14 +381,27 @@ defmodule Cerberus do
     and_(locator, label(value))
   end
 
+  @doc """
+  Composes a label constraint into an existing locator with locator options.
+  """
   @spec label(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
   def label(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     and_(locator, label(value, opts))
   end
 
+  @doc """
+  Builds a placeholder locator.
+  """
   @spec placeholder(String.t() | Regex.t()) :: Locator.t()
   def placeholder(value) when is_binary(value) or is_struct(value, Regex), do: placeholder(value, [])
 
+  @doc """
+  Builds or composes a placeholder locator.
+
+  Supported forms:
+  - `placeholder(value, opts)` for a leaf locator
+  - `placeholder(locator, value)` to compose with an existing locator
+  """
   @spec placeholder(String.t() | Regex.t(), keyword()) :: Locator.t()
   def placeholder(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     Locator.leaf(:placeholder, value, opts)
@@ -283,14 +412,27 @@ defmodule Cerberus do
     and_(locator, placeholder(value))
   end
 
+  @doc """
+  Composes a placeholder constraint into an existing locator with locator options.
+  """
   @spec placeholder(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
   def placeholder(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     and_(locator, placeholder(value, opts))
   end
 
+  @doc """
+  Builds a title locator.
+  """
   @spec title(String.t() | Regex.t()) :: Locator.t()
   def title(value) when is_binary(value) or is_struct(value, Regex), do: title(value, [])
 
+  @doc """
+  Builds or composes a title locator.
+
+  Supported forms:
+  - `title(value, opts)` for a leaf locator
+  - `title(locator, value)` to compose with an existing locator
+  """
   @spec title(String.t() | Regex.t(), keyword()) :: Locator.t()
   def title(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     Locator.leaf(:title, value, opts)
@@ -301,14 +443,27 @@ defmodule Cerberus do
     and_(locator, title(value))
   end
 
+  @doc """
+  Composes a title constraint into an existing locator with locator options.
+  """
   @spec title(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
   def title(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     and_(locator, title(value, opts))
   end
 
+  @doc """
+  Builds an alt-text locator.
+  """
   @spec alt(String.t() | Regex.t()) :: Locator.t()
   def alt(value) when is_binary(value) or is_struct(value, Regex), do: alt(value, [])
 
+  @doc """
+  Builds or composes an alt-text locator.
+
+  Supported forms:
+  - `alt(value, opts)` for a leaf locator
+  - `alt(locator, value)` to compose with an existing locator
+  """
   @spec alt(String.t() | Regex.t(), keyword()) :: Locator.t()
   def alt(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     Locator.leaf(:alt, value, opts)
@@ -319,14 +474,27 @@ defmodule Cerberus do
     and_(locator, alt(value))
   end
 
+  @doc """
+  Composes an alt-text constraint into an existing locator with locator options.
+  """
   @spec alt(locator_input(), String.t() | Regex.t(), keyword()) :: Locator.t()
   def alt(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
     and_(locator, alt(value, opts))
   end
 
+  @doc """
+  Builds a CSS locator.
+  """
   @spec css(String.t()) :: Locator.t()
   def css(value) when is_binary(value), do: css(value, [])
 
+  @doc """
+  Builds or composes a CSS locator.
+
+  Supported forms:
+  - `css(value, opts)` for a leaf locator
+  - `css(locator, value)` to compose with an existing locator
+  """
   @spec css(String.t(), keyword()) :: Locator.t()
   def css(value, opts) when is_binary(value) and is_list(opts) do
     Locator.leaf(:css, value, opts)
@@ -337,14 +505,27 @@ defmodule Cerberus do
     and_(locator, css(value))
   end
 
+  @doc """
+  Composes a CSS constraint into an existing locator with locator options.
+  """
   @spec css(locator_input(), String.t(), keyword()) :: Locator.t()
   def css(locator, value, opts) when is_binary(value) and is_list(opts) do
     and_(locator, css(value, opts))
   end
 
+  @doc """
+  Builds a role locator.
+  """
   @spec role(String.t() | atom()) :: Locator.t()
   def role(role_name) when is_binary(role_name) or is_atom(role_name), do: role(role_name, [])
 
+  @doc """
+  Builds or composes a role locator.
+
+  Supported forms:
+  - `role(role_name, opts)` for a leaf locator
+  - `role(locator, role_name)` to compose with an existing locator
+  """
   @spec role(String.t() | atom(), keyword()) :: Locator.t()
   def role(role, opts) when (is_binary(role) or is_atom(role)) and is_list(opts) do
     Locator.role(role, opts)
@@ -355,14 +536,27 @@ defmodule Cerberus do
     and_(locator, role(role_name))
   end
 
+  @doc """
+  Composes a role constraint into an existing locator with locator options.
+  """
   @spec role(locator_input(), String.t() | atom(), keyword()) :: Locator.t()
   def role(locator, role_name, opts) when (is_binary(role_name) or is_atom(role_name)) and is_list(opts) do
     and_(locator, role(role_name, opts))
   end
 
+  @doc """
+  Builds a test-id locator.
+  """
   @spec testid(String.t()) :: Locator.t()
   def testid(value) when is_binary(value), do: testid(value, [])
 
+  @doc """
+  Builds or composes a test-id locator.
+
+  Supported forms:
+  - `testid(value, opts)` for a leaf locator
+  - `testid(locator, value)` to compose with an existing locator
+  """
   @spec testid(String.t(), keyword()) :: Locator.t()
   def testid(value, opts) when is_binary(value) and is_list(opts) do
     Locator.leaf(:testid, value, opts)
@@ -373,6 +567,9 @@ defmodule Cerberus do
     and_(locator, testid(value))
   end
 
+  @doc """
+  Composes a test-id constraint into an existing locator with locator options.
+  """
   @spec testid(locator_input(), String.t(), keyword()) :: Locator.t()
   def testid(locator, value, opts) when is_binary(value) and is_list(opts) do
     and_(locator, testid(value, opts))
@@ -433,6 +630,9 @@ defmodule Cerberus do
   @spec sigil_l(String.t(), charlist()) :: Locator.t()
   def sigil_l(value, modifiers) when is_list(modifiers), do: Locator.sigil(value, modifiers)
 
+  @doc """
+  Visits `path` and returns the updated session.
+  """
   @spec visit(arg, String.t(), keyword()) :: arg when arg: var
   def visit(session, path, opts \\ []) when is_binary(path) do
     driver = driver_module_for_session!(session)
@@ -443,11 +643,17 @@ defmodule Cerberus do
     end)
   end
 
+  @doc """
+  Reloads the current path, defaulting to `/` when the session has no current path.
+  """
   @spec reload_page(arg, keyword()) :: arg when arg: var
   def reload_page(session, opts \\ []) do
     visit(session, current_path(session) || "/", opts)
   end
 
+  @doc """
+  Returns the normalized current path tracked by the session.
+  """
   @spec current_path(Session.t()) :: String.t() | nil
   def current_path(session) do
     session
@@ -476,6 +682,13 @@ defmodule Cerberus do
     driver_module_for_session!(session).within(session, normalized_locator, callback)
   end
 
+  @doc """
+  Asserts the session path matches `expected`.
+
+  ## Options
+
+  #{@path_options_doc}
+  """
   @spec assert_path(arg, String.t() | Regex.t(), Options.path_opts()) :: arg when arg: var
   def assert_path(session, expected, opts \\ []) when is_binary(expected) or is_struct(expected, Regex) do
     call_has_timeout = Keyword.has_key?(opts, :timeout)
@@ -485,6 +698,13 @@ defmodule Cerberus do
     run_path_assertion!(session, :assert_path, expected, opts, timeout)
   end
 
+  @doc """
+  Refutes that the session path matches `expected`.
+
+  ## Options
+
+  #{@path_options_doc}
+  """
   @spec refute_path(arg, String.t() | Regex.t(), Options.path_opts()) :: arg when arg: var
   def refute_path(session, expected, opts \\ []) when is_binary(expected) or is_struct(expected, Regex) do
     call_has_timeout = Keyword.has_key?(opts, :timeout)
@@ -505,6 +725,10 @@ defmodule Cerberus do
 
   Browser driver waits on BiDi download events. Static/live drivers assert on
   the current response `content-disposition` headers.
+
+  ## Options
+
+  #{@assert_download_options_doc}
   """
   @spec assert_download(arg, String.t(), Options.assert_download_opts()) :: arg when arg: var
   def assert_download(session, filename, opts \\ [])
@@ -523,9 +747,23 @@ defmodule Cerberus do
     raise ArgumentError, "assert_download/3 expects a filename string and options as a keyword list"
   end
 
+  @doc """
+  Clicks a matched element using unscoped shorthand (`click(session, locator)`).
+  """
   @spec click(arg, locator_input()) :: arg when arg: var
   def click(session, locator), do: click(session, locator, [])
 
+  @doc """
+  Clicks a matched element.
+
+  Supported forms:
+  - `click(session, locator, opts)` for unscoped clicks
+  - `click(session, scope_locator, locator)` for scoped clicks
+
+  ## Options
+
+  #{@click_options_doc}
+  """
   @spec click(arg, scope_locator_input(), locator_input() | Options.click_opts()) :: arg when arg: var
   def click(session, scope_locator_or_locator, locator_or_opts) do
     if locator_input_term?(locator_or_opts) do
@@ -535,6 +773,13 @@ defmodule Cerberus do
     end
   end
 
+  @doc """
+  Clicks a locator within `scope_locator`.
+
+  ## Options
+
+  #{@click_options_doc}
+  """
   @spec click(arg, scope_locator_input(), locator_input(), Options.click_opts()) :: arg when arg: var
   def click(session, scope_locator, locator, opts) when is_list(opts) do
     within(session, scope_locator, fn scoped ->
@@ -542,11 +787,25 @@ defmodule Cerberus do
     end)
   end
 
+  @doc """
+  Clicks a locator constrained to link elements.
+
+  ## Options
+
+  #{@click_options_doc}
+  """
   @spec click_link(arg, locator_input(), Options.click_opts()) :: arg when arg: var
   def click_link(session, locator, opts \\ []) do
     click(session, locator, Keyword.put(opts, :kind, :link))
   end
 
+  @doc """
+  Clicks a locator constrained to button elements.
+
+  ## Options
+
+  #{@click_options_doc}
+  """
   @spec click_button(arg, locator_input(), Options.click_opts()) :: arg when arg: var
   def click_button(session, locator, opts \\ []) do
     click(session, locator, Keyword.put(opts, :kind, :button))
@@ -562,6 +821,10 @@ defmodule Cerberus do
   `testid(...)`, and `css(...)` are also supported.
   Sigil examples: `fill_in(session, ~l"#search_q"c, "Aragorn")`,
   `fill_in(session, ~l"search-input"t, "Aragorn")`.
+
+  ## Options
+
+  #{@fill_in_options_doc}
   """
   @spec fill_in(arg, locator_input(), Options.fill_in_value(), Options.fill_in_opts()) :: arg when arg: var
   def fill_in(session, locator, value, opts \\ []) when is_list(opts) do
@@ -577,6 +840,10 @@ defmodule Cerberus do
   Helper locators like `label(...)`, `testid(...)`, and `css(...)` are also supported.
   Sigil examples: `upload(session, ~l"#avatar"c, "/tmp/avatar.jpg")`,
   `upload(session, ~l"avatar-upload"t, "/tmp/avatar.jpg")`.
+
+  ## Options
+
+  #{@upload_options_doc}
   """
   @spec upload(arg, locator_input(), String.t(), Options.upload_opts()) :: arg when arg: var
   def upload(session, locator, path, opts \\ [])
@@ -595,9 +862,19 @@ defmodule Cerberus do
   @spec submit(arg) :: arg when arg: var
   def submit(session), do: submit(session, css(@default_submit_selector), [])
 
+  @doc """
+  Submits a matched submit-capable control using default options.
+  """
   @spec submit(arg, locator_input()) :: arg when arg: var
   def submit(session, locator), do: submit(session, locator, [])
 
+  @doc """
+  Submits a matched submit-capable control.
+
+  ## Options
+
+  #{@submit_options_doc}
+  """
   @spec submit(arg, locator_input(), Options.submit_opts()) :: arg when arg: var
   def submit(session, locator, opts) when is_list(opts) do
     Assertions.submit(session, locator, opts)
@@ -618,6 +895,13 @@ defmodule Cerberus do
   @spec select(arg, locator_input()) :: arg when arg: var
   def select(session, locator), do: select(session, locator, [])
 
+  @doc """
+  Selects option text in a matched `<select>` field.
+
+  ## Options
+
+  #{@select_options_doc}
+  """
   @spec select(arg, locator_input(), Options.select_opts()) :: arg when arg: var
   def select(session, locator, opts) when is_list(opts) do
     Assertions.select(session, locator, opts)
@@ -636,6 +920,13 @@ defmodule Cerberus do
   @spec choose(arg, locator_input()) :: arg when arg: var
   def choose(session, locator), do: choose(session, locator, [])
 
+  @doc """
+  Chooses a matched radio input.
+
+  ## Options
+
+  #{@fill_in_options_doc}
+  """
   @spec choose(arg, locator_input(), Options.choose_opts()) :: arg when arg: var
   def choose(session, locator, opts) when is_list(opts) do
     Assertions.choose(session, locator, opts)
@@ -654,6 +945,13 @@ defmodule Cerberus do
   @spec check(arg, locator_input()) :: arg when arg: var
   def check(session, locator), do: check(session, locator, [])
 
+  @doc """
+  Checks a matched checkbox.
+
+  ## Options
+
+  #{@fill_in_options_doc}
+  """
   @spec check(arg, locator_input(), Options.check_opts()) :: arg when arg: var
   def check(session, locator, opts) when is_list(opts) do
     Assertions.check(session, locator, opts)
@@ -672,6 +970,13 @@ defmodule Cerberus do
   @spec uncheck(arg, locator_input()) :: arg when arg: var
   def uncheck(session, locator), do: uncheck(session, locator, [])
 
+  @doc """
+  Unchecks a matched checkbox.
+
+  ## Options
+
+  #{@fill_in_options_doc}
+  """
   @spec uncheck(arg, locator_input(), Options.check_opts()) :: arg when arg: var
   def uncheck(session, locator, opts) when is_list(opts) do
     Assertions.uncheck(session, locator, opts)
@@ -692,6 +997,13 @@ defmodule Cerberus do
   @spec assert_has(arg, locator_input()) :: arg when arg: var
   def assert_has(session, locator), do: assert_has(session, locator, [])
 
+  @doc """
+  Asserts content exists, supporting unscoped and scoped forms.
+
+  ## Options
+
+  #{@assert_options_doc}
+  """
   @spec assert_has(arg, scope_locator_input(), locator_input() | Options.assert_opts()) :: arg when arg: var
   def assert_has(session, scope_locator_or_locator, locator_or_opts) do
     if locator_input_term?(locator_or_opts) do
@@ -701,6 +1013,13 @@ defmodule Cerberus do
     end
   end
 
+  @doc """
+  Asserts content exists within `scope_locator`.
+
+  ## Options
+
+  #{@assert_options_doc}
+  """
   @spec assert_has(arg, scope_locator_input(), locator_input(), Options.assert_opts()) :: arg when arg: var
   def assert_has(session, scope_locator, locator, opts) when is_list(opts) do
     within(session, scope_locator, fn scoped ->
@@ -723,6 +1042,13 @@ defmodule Cerberus do
   @spec refute_has(arg, locator_input()) :: arg when arg: var
   def refute_has(session, locator), do: refute_has(session, locator, [])
 
+  @doc """
+  Refutes content exists, supporting unscoped and scoped forms.
+
+  ## Options
+
+  #{@assert_options_doc}
+  """
   @spec refute_has(arg, scope_locator_input(), locator_input() | Options.assert_opts()) :: arg when arg: var
   def refute_has(session, scope_locator_or_locator, locator_or_opts) do
     if locator_input_term?(locator_or_opts) do
@@ -732,6 +1058,13 @@ defmodule Cerberus do
     end
   end
 
+  @doc """
+  Refutes content exists within `scope_locator`.
+
+  ## Options
+
+  #{@assert_options_doc}
+  """
   @spec refute_has(arg, scope_locator_input(), locator_input(), Options.assert_opts()) :: arg when arg: var
   def refute_has(session, scope_locator, locator, opts) when is_list(opts) do
     within(session, scope_locator, fn scoped ->
