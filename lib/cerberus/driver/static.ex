@@ -570,15 +570,16 @@ defmodule Cerberus.Driver.Static do
     method = normalize_submit_method(button.method)
     form_selector = FormData.submit_form_selector(button)
     submitted_params = FormData.params_for_submit(session, button, form_selector)
+    request_params = normalize_submit_request_params(method, submitted_params)
 
-    case follow_form_request(session, method, button.action, submitted_params) do
+    case follow_form_request(session, method, button.action, request_params) do
       {:ok, updated, transition} ->
         observed = %{
           action: :submit,
           clicked: button.text,
           method: method,
           path: Session.current_path(updated),
-          params: submitted_params,
+          params: request_params,
           transition: transition
         }
 
@@ -598,6 +599,9 @@ defmodule Cerberus.Driver.Static do
         {:error, failed_session, observed, reason}
     end
   end
+
+  defp normalize_submit_request_params("get", params), do: params
+  defp normalize_submit_request_params(_method, params), do: FormData.decode_query_params(params)
 
   defp follow_form_request(session, method, action, params) do
     request_path = submit_request_path(method, action, session.current_path, params)

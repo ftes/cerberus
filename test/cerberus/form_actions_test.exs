@@ -56,6 +56,19 @@ defmodule Cerberus.FormActionsTest do
       |> assert_has(text: "Nested search query: phoenix", exact: true)
     end
 
+    test "submit normalizes nested form params for non-GET requests (#{driver})", context do
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/nested-submit")
+      |> fill_in(label("Email"), "someone-1@teamengine.co.uk")
+      |> fill_in(label("Password"), "Pass123456789!")
+      |> submit(text: "Sign In")
+      |> assert_has(text: "session.email: someone-1@teamengine.co.uk", exact: true)
+      |> assert_has(text: "session.password: Pass123456789!", exact: true)
+      |> assert_has(text: "flat session[email] key?: false", exact: true)
+      |> assert_has(text: "flat session[password] key?: false", exact: true)
+    end
+
     test "click_button works on live counter flow for live and browser drivers (#{driver})", context do
       unquote(driver)
       |> driver_session(context)

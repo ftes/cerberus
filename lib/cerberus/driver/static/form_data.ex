@@ -3,6 +3,7 @@ defmodule Cerberus.Driver.Static.FormData do
 
   alias Cerberus.Html
   alias Cerberus.Session
+  alias Plug.Conn.Query
 
   @spec put_form_value(map(), String.t() | nil, String.t(), term()) :: map()
   def put_form_value(form_data, form, name, value) do
@@ -40,6 +41,24 @@ defmodule Cerberus.Driver.Static.FormData do
       nil -> params
       {name, value} -> Map.put(params, name, value)
     end
+  end
+
+  @spec decode_query_params(map()) :: map()
+  def decode_query_params(params) when is_map(params) do
+    {query_parts, replacements} =
+      params
+      |> expand_query_entries()
+      |> Enum.with_index()
+      |> Enum.map_reduce(%{}, fn {{name, value}, index}, acc ->
+        marker = "__cerberus_param_#{index}__"
+        part = "#{URI.encode_www_form(name)}=#{URI.encode_www_form(marker)}"
+        {part, Map.put(acc, marker, value)}
+      end)
+
+    query_parts
+    |> Enum.join("&")
+    |> Query.decode()
+    |> restore_query_values(replacements)
   end
 
   @spec clear_submitted_form(map(), String.t() | nil) :: map()
@@ -190,6 +209,30 @@ defmodule Cerberus.Driver.Static.FormData do
   defp selector_from_key("form:" <> form_id), do: ~s(form[id="#{form_id}"])
   defp selector_from_key("selector:" <> selector) when selector != "", do: selector
   defp selector_from_key(_), do: nil
+
+  defp expand_query_entries(params) do
+    Enum.flat_map(params, fn
+      {name, value} when is_list(value) ->
+        Enum.map(value, &{name, &1})
+
+      {name, value} ->
+        [{name, value}]
+    end)
+  end
+
+  defp restore_query_values(%{} = value, replacements) do
+    Map.new(value, fn {key, nested} -> {key, restore_query_values(nested, replacements)} end)
+  end
+
+  defp restore_query_values(values, replacements) when is_list(values) do
+    Enum.map(values, &restore_query_values(&1, replacements))
+  end
+
+  defp restore_query_values(value, replacements) when is_binary(value) do
+    Map.get(replacements, value, value)
+  end
+
+  defp restore_query_values(value, _replacements), do: value
 
   defp button_payload(button) do
     case {button.button_name, button.button_value} do

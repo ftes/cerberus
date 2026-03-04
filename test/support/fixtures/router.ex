@@ -38,6 +38,8 @@ defmodule Cerberus.Fixtures.Router do
     get("/search", PageController, :search_form)
     get("/search/results", PageController, :search_results)
     get("/search/nested/results", PageController, :search_nested_results)
+    get("/nested-submit", PageController, :nested_submit_form)
+    post("/nested-submit/result", PageController, :nested_submit_result)
     get("/search/profile/a", PageController, :profile_version_a)
     get("/search/profile/b", PageController, :profile_version_b)
     get("/search/profile/results", PageController, :profile_results)

@@ -244,6 +244,58 @@ defmodule Cerberus.Fixtures.PageController do
     """)
   end
 
+  def nested_submit_form(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Nested Submit Form</title>
+      </head>
+      <body>
+        <main>
+          <h1>Nested Submit</h1>
+          <form action="/nested-submit/result" method="post">
+            <input type="hidden" name="_csrf_token" value="#{Plug.CSRFProtection.get_csrf_token()}" />
+            <label for="session_email">Email</label>
+            <input id="session_email" name="session[email]" type="email" value="" />
+            <label for="session_password">Password</label>
+            <input id="session_password" name="session[password]" type="password" value="" />
+            <button type="submit">Sign In</button>
+          </form>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def nested_submit_result(conn, params) do
+    params = merged_request_params(conn, params)
+    session = Map.get(params, "session", %{})
+    email = Map.get(session, "email", "")
+    password = Map.get(session, "password", "")
+    has_flat_email_key = Map.has_key?(params, "session[email]")
+    has_flat_password_key = Map.has_key?(params, "session[password]")
+
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Fixture Nested Submit Result</title>
+      </head>
+      <body>
+        <main>
+          <p id="session-email">session.email: #{email}</p>
+          <p id="session-password">session.password: #{password}</p>
+          <p id="flat-session-email-key">flat session[email] key?: #{has_flat_email_key}</p>
+          <p id="flat-session-password-key">flat session[password] key?: #{has_flat_password_key}</p>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
   def static_upload(conn, _params) do
     html(conn, """
     <!doctype html>
