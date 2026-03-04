@@ -26,6 +26,13 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     assert live_callback_error.message =~ "evaluate_js is not implemented for :live driver"
 
+    live_no_callback_error =
+      assert_raise AssertionError, fn ->
+        evaluate_js(live, "(() => 2 + 2)()")
+      end
+
+    assert live_no_callback_error.message =~ "evaluate_js is not implemented for :live driver"
+
     static_popup_error =
       assert_raise AssertionError, fn ->
         with_popup(static, fn s -> s end, fn _main, _popup -> :ok end)
@@ -183,11 +190,13 @@ defmodule Cerberus.BrowserExtensionsTest do
     end
   end
 
-  test "evaluate_js supports optional callback assertions and returns session for chaining" do
+  test "evaluate_js supports pipeable no-callback and callback forms" do
     session =
       :browser
       |> session()
       |> visit("/articles")
+
+    assert evaluate_js(session, "(() => 21 + 21)()") == session
 
     returned_session =
       evaluate_js(session, "(() => 21 + 21)()", fn value ->

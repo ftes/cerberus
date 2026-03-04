@@ -236,6 +236,7 @@ session =
   |> press("Enter", selector: "#press-input")
 
 evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), 10)", fn _ -> :ok end)
+evaluate_js(session, "window.__cerberusMarker = 'ready'")
 
 session =
   session

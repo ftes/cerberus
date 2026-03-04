@@ -193,6 +193,18 @@ defmodule Cerberus.Browser do
   end
 
   @doc """
+  Evaluates JavaScript and ignores the result, returning the original session.
+  """
+  @spec evaluate_js(Session.t(), String.t()) :: Session.t()
+  def evaluate_js(session, expression) when is_binary(expression) do
+    evaluate_js(session, expression, fn _value -> :ok end)
+  end
+
+  def evaluate_js(_session, _expression) do
+    raise ArgumentError, "Browser.evaluate_js/2 expects an expression string"
+  end
+
+  @doc """
   Evaluates JavaScript and passes the result to `callback`, returning the original session.
   """
   @spec evaluate_js(Session.t(), String.t(), (term() -> term())) :: Session.t()

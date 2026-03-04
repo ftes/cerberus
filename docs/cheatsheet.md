@@ -123,7 +123,8 @@ Use `Cerberus.Browser` only with `session(:browser)`.
 | Popup capture | `session` \|> `Browser.with_popup(fn main -> click(main, ~l"button:Open Popup"r) end, fn _main, popup -> assert_path(popup, "/browser/popup/destination") end)` |
 | Popup same-tab fallback | `session(:browser, browser: [popup_mode: :same_tab])` \|> `visit("/browser/popup/auto")` \|> `assert_path("/browser/popup/destination", timeout: 1500)` |
 | Assert download (browser/static/live) | `session` \|> `click(~l"link:Download Report"r)` \|> `assert_download("report.txt")` |
-| Evaluate JS | `Browser.evaluate_js(session, "(() => 42)()", fn value -> assert value == 42 end)` |
+| Evaluate JS (ignore result) | `Browser.evaluate_js(session, "window.__cerberusMarker = 'ready'")` |
+| Evaluate JS (assert result) | `Browser.evaluate_js(session, "(() => 42)()", fn value -> assert value == 42 end)` |
 | Cookie lookup | `Browser.cookie(session, "_my_cookie")` |
 
 > #### Warning
