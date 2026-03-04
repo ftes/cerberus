@@ -51,8 +51,8 @@ Recommended alternatives:
 Install runtimes:
 
 ```bash
-mix cerberus.install.chrome --format shell
-mix cerberus.install.firefox --format shell
+MIX_ENV=test mix cerberus.install.chrome --format shell
+MIX_ENV=test mix cerberus.install.firefox --format shell
 ```
 
 Install tasks maintain stable links (`tmp/chrome-current`, `tmp/chromedriver-current`, `tmp/firefox-current`, `tmp/geckodriver-current`) that Cerberus auto-detects for local managed runtime startup.

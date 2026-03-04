@@ -6,17 +6,13 @@ defmodule Mix.Tasks.Cerberus.Install.Chrome do
 
       mix cerberus.install.chrome
       mix cerberus.install.chrome --version 146.0.7680.31
-      mix cerberus.install.chrome --format json
-      mix cerberus.install.chrome --format env
-      mix cerberus.install.chrome --format shell
   """
 
   use Mix.Task
 
   alias Cerberus.Browser.Install
 
-  @switches [version: :string, format: :string]
-  @formats ["plain", "json", "env", "shell"]
+  @switches [version: :string]
 
   @impl Mix.Task
   def run(args) do
@@ -25,8 +21,6 @@ defmodule Mix.Tasks.Cerberus.Install.Chrome do
     if invalid != [] do
       Mix.raise("invalid options: #{inspect(invalid)}")
     end
-
-    format = normalize_format(opts[:format] || "plain")
 
     install_opts =
       case opts[:version] do
@@ -37,23 +31,11 @@ defmodule Mix.Tasks.Cerberus.Install.Chrome do
     case Install.install(:chrome, install_opts) do
       {:ok, payload} ->
         payload
-        |> Install.render(format)
+        |> Install.render()
         |> Mix.shell().info()
 
       {:error, reason} ->
         Mix.raise(reason)
-    end
-  end
-
-  defp normalize_format(format) when is_binary(format) do
-    normalized = format |> String.trim() |> String.downcase()
-
-    case normalized do
-      "plain" -> :plain
-      "json" -> :json
-      "env" -> :env
-      "shell" -> :shell
-      _ -> Mix.raise("unsupported format #{inspect(format)}; expected one of: #{Enum.join(@formats, ", ")}")
     end
   end
 end

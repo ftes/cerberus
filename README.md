@@ -24,7 +24,7 @@ Why integrate?
 ```
 
 ```bash
-sh> mix cerberus.install.chrome
+sh> MIX_ENV=test mix cerberus.install.chrome
 ```
 
 ```elixir
@@ -100,7 +100,7 @@ Start in Phoenix mode (static/live) for fast feedback, then switch to browser mo
 Install Chrome with:
 
 ```bash
-mix cerberus.install.chrome
+MIX_ENV=test mix cerberus.install.chrome
 ```
 
 That task is simple to run in CI setup steps too.
@@ -125,8 +125,8 @@ Most tests only need `session(:browser)`; deeper runtime/config details are docu
 Cerberus includes an Igniter migration task for PhoenixTest codebases:
 
 ```bash
-mix cerberus.migrate_phoenix_test
-mix cerberus.migrate_phoenix_test --write test/my_app_web/features
+MIX_ENV=test mix cerberus.migrate_phoenix_test
+MIX_ENV=test mix cerberus.migrate_phoenix_test --write test/my_app_web/features
 ```
 
 It performs safe rewrites, reports manual follow-ups, and defaults to dry-run diff output.

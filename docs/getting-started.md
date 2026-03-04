@@ -274,30 +274,18 @@ session(:browser, user_agent: metadata)
 Install browser binaries with Cerberus Mix tasks:
 
 ```bash
-mix cerberus.install.chrome
-mix cerberus.install.firefox
+MIX_ENV=test mix cerberus.install.chrome
+MIX_ENV=test mix cerberus.install.firefox
 ```
 
 For explicit versions:
 
 ```bash
-mix cerberus.install.chrome --version 146.0.7680.31
-mix cerberus.install.firefox --firefox-version 148.0 --geckodriver-version 0.36.0
+MIX_ENV=test mix cerberus.install.chrome --version 146.0.7680.31
+MIX_ENV=test mix cerberus.install.firefox --firefox-version 148.0 --geckodriver-version 0.36.0
 ```
 
-The tasks expose stable output formats:
-- `--format json` for machine-readable payloads
-- `--format env` for CI (`KEY=VALUE`)
-- `--format shell` for local shell exports
-
-Recommended shell handoff:
-
-```bash
-eval "$(mix cerberus.install.chrome --format shell)"
-eval "$(mix cerberus.install.firefox --format shell)"
-```
-
-Cerberus also writes stable local links on install (`tmp/chrome-current`, `tmp/chromedriver-current`, `tmp/firefox-current`, `tmp/geckodriver-current`), so local managed browser runs work without extra binary-path config.
+Cerberus writes stable local links on install (`tmp/chrome-current`, `tmp/chromedriver-current`, `tmp/firefox-current`, `tmp/geckodriver-current`), so local managed browser runs work without extra binary-path config.
 
 ## Step 10: Remote WebDriver Mode
 

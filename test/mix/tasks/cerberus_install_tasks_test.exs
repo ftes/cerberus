@@ -61,6 +61,42 @@ defmodule Mix.Tasks.Cerberus.InstallTasksTest do
              Path.expand("/tmp/chromedriver-146/chromedriver")
   end
 
+  test "mix cerberus.install.chrome resolves script from cerberus app path, not cwd", %{tmp_dir: tmp_dir} do
+    install_output = """
+    Chrome runtime ready
+    chrome_binary=/tmp/chrome-146/chrome
+    chrome_version=146.0.7680.31
+    chromedriver_binary=/tmp/chromedriver-146/chromedriver
+    chromedriver_version=146.0.7680.31
+    """
+
+    cwd_script_path = Path.join([tmp_dir, "bin", "chrome.sh"])
+    File.mkdir_p!(Path.dirname(cwd_script_path))
+    File.write!(cwd_script_path, "#!/bin/sh\n")
+
+    Install.put_command_runner(fn script, args, _opts ->
+      send(self(), {:runner_invocation, script, args})
+      {install_output, 0}
+    end)
+
+    previous_cwd = File.cwd!()
+
+    try do
+      File.cd!(tmp_dir)
+
+      capture_io(fn ->
+        Mix.Task.reenable(@chrome_task)
+        Mix.Task.run(@chrome_task, [])
+      end)
+    after
+      File.cd!(previous_cwd)
+    end
+
+    assert_receive {:runner_invocation, script, []}
+    refute script == cwd_script_path
+    assert script =~ "/bin/chrome.sh"
+  end
+
   test "mix cerberus.install.firefox forwards version flags and renders env", %{tmp_dir: tmp_dir} do
     install_output = """
     Firefox runtime ready

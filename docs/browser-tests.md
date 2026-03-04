@@ -168,8 +168,8 @@ mix test test/cerberus/explicit_browser_test.exs
 Install local browser runtimes with public Mix tasks:
 
 ```bash
-mix cerberus.install.chrome --version 146.0.7680.31
-mix cerberus.install.firefox --firefox-version 148.0 --geckodriver-version 0.36.0
+MIX_ENV=test mix cerberus.install.chrome --version 146.0.7680.31
+MIX_ENV=test mix cerberus.install.firefox --firefox-version 148.0 --geckodriver-version 0.36.0
 ```
 
 Both tasks install missing binaries and reuse existing per-version installations.
@@ -191,8 +191,8 @@ No extra binary-path config is required for normal local runs after installation
 CI-friendly form:
 
 ```bash
-mix cerberus.install.chrome --format env >> "$GITHUB_ENV"
-mix cerberus.install.firefox --format env >> "$GITHUB_ENV"
+MIX_ENV=test mix cerberus.install.chrome --format env >> "$GITHUB_ENV"
+MIX_ENV=test mix cerberus.install.firefox --format env >> "$GITHUB_ENV"
 ```
 
 Installed paths are stable per version, for example:

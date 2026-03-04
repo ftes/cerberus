@@ -63,31 +63,11 @@ defmodule Cerberus.Browser.Install do
     }
   end
 
-  @spec render(install_payload(), :plain | :json | :env | :shell) :: String.t()
-  def render(payload, :plain) do
+  @spec render(install_payload()) :: String.t()
+  def render(payload) do
     payload
     |> ordered_pairs()
     |> Enum.map_join("\n", fn {key, value} -> "#{key}=#{value}" end)
-  end
-
-  def render(payload, :env) do
-    payload
-    |> env_vars()
-    |> Enum.sort_by(fn {key, _value} -> key end)
-    |> Enum.map_join("\n", fn {key, value} -> "#{key}=#{value}" end)
-  end
-
-  def render(payload, :shell) do
-    payload
-    |> env_vars()
-    |> Enum.sort_by(fn {key, _value} -> key end)
-    |> Enum.map_join("\n", fn {key, value} -> "export #{key}=#{shell_quote(value)}" end)
-  end
-
-  def render(payload, :json) do
-    payload
-    |> normalize_payload_for_json()
-    |> JSON.encode!()
   end
 
   @doc false
@@ -114,24 +94,10 @@ defmodule Cerberus.Browser.Install do
     :ok
   end
 
-  defp normalize_payload_for_json(payload) do
-    %{
-      browser: payload.browser,
-      binaries: Map.new(payload.binaries),
-      versions: Map.new(payload.versions),
-      env: Map.new(env_vars(payload))
-    }
-  end
-
   defp ordered_pairs(%{raw: raw}) when is_map(raw) do
     raw
     |> Enum.map(fn {key, value} -> {key, value} end)
     |> Enum.sort_by(fn {key, _value} -> key end)
-  end
-
-  defp shell_quote(value) when is_binary(value) do
-    escaped = String.replace(value, "'", "'\\''")
-    "'#{escaped}'"
   end
 
   defp command_runner(opts) do
@@ -318,12 +284,17 @@ defmodule Cerberus.Browser.Install do
   defp installer_script_path(:firefox), do: script_path("firefox.sh")
 
   defp script_path(script_name) do
-    candidate = Path.expand("bin/#{script_name}")
+    root = Mix.Project.deps_paths()[:cerberus] || local_project_root()
+    candidate = Path.expand("bin/#{script_name}", root)
 
     if File.exists?(candidate) do
       {:ok, candidate}
     else
       {:error, "installer script not found: #{candidate}"}
     end
+  end
+
+  defp local_project_root do
+    Path.dirname(Mix.Project.project_file())
   end
 end

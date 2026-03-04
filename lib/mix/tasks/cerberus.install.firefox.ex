@@ -6,17 +6,13 @@ defmodule Mix.Tasks.Cerberus.Install.Firefox do
 
       mix cerberus.install.firefox
       mix cerberus.install.firefox --firefox-version 148.0 --geckodriver-version 0.36.0
-      mix cerberus.install.firefox --format json
-      mix cerberus.install.firefox --format env
-      mix cerberus.install.firefox --format shell
   """
 
   use Mix.Task
 
   alias Cerberus.Browser.Install
 
-  @switches [firefox_version: :string, geckodriver_version: :string, format: :string]
-  @formats ["plain", "json", "env", "shell"]
+  @switches [firefox_version: :string, geckodriver_version: :string]
 
   @impl Mix.Task
   def run(args) do
@@ -26,8 +22,6 @@ defmodule Mix.Tasks.Cerberus.Install.Firefox do
       Mix.raise("invalid options: #{inspect(invalid)}")
     end
 
-    format = normalize_format(opts[:format] || "plain")
-
     install_opts =
       []
       |> maybe_put_opt(:firefox_version, opts[:firefox_version])
@@ -36,7 +30,7 @@ defmodule Mix.Tasks.Cerberus.Install.Firefox do
     case Install.install(:firefox, install_opts) do
       {:ok, payload} ->
         payload
-        |> Install.render(format)
+        |> Install.render()
         |> Mix.shell().info()
 
       {:error, reason} ->
@@ -51,16 +45,4 @@ defmodule Mix.Tasks.Cerberus.Install.Firefox do
   end
 
   defp maybe_put_opt(opts, _key, _value), do: opts
-
-  defp normalize_format(format) when is_binary(format) do
-    normalized = format |> String.trim() |> String.downcase()
-
-    case normalized do
-      "plain" -> :plain
-      "json" -> :json
-      "env" -> :env
-      "shell" -> :shell
-      _ -> Mix.raise("unsupported format #{inspect(format)}; expected one of: #{Enum.join(@formats, ", ")}")
-    end
-  end
 end
