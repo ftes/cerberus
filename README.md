@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/hexpm/l/cerberus.svg)](https://github.com/ftes/cerberus/blob/main/LICENSE)
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/ftes/cerberus/ci.yml)](https://github.com/ftes/cerberus/actions)
 
-![Cerberus hero artwork](docs/hero.avif)
+![Cerberus hero artwork](docs/banner.avif)
 
 Ship Phoenix feature tests fast without losing browser truth.
 
