@@ -135,6 +135,15 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :css, value: ".badge"} = nested_has
   end
 
+  test "normalizes has_not locator option for nested locator kinds" do
+    locator = Locator.normalize(button: "Apply", has_not: testid("apply-secondary-marker"))
+    has_not_locator = locator.opts[:has_not]
+
+    assert %Locator{kind: :button, value: "Apply"} = locator
+    assert %Locator{kind: :testid, value: "apply-secondary-marker"} = has_not_locator
+    assert has_not_locator.opts[:exact] == true
+  end
+
   test "closest helper composes base locator with from locator" do
     locator = closest(css(".fieldset"), from: label("Email"))
 
@@ -166,6 +175,37 @@ defmodule Cerberus.LocatorTest do
 
     assert %Locator{kind: :or, value: disj_members} = disjunction
     assert Enum.map(disj_members, & &1.value) == ["#primary", "#secondary", "#tertiary"]
+  end
+
+  test "composes not locators including chained A and not B patterns" do
+    negated = not_(button("Run Search"))
+    assert %Locator{kind: :not, value: [%Locator{kind: :button, value: "Run Search"}]} = negated
+
+    chained = "Run Search" |> button() |> not_(testid("submit-secondary-button"))
+
+    assert %Locator{
+             kind: :and,
+             value: [
+               %Locator{kind: :button, value: "Run Search"},
+               %Locator{kind: :not, value: [%Locator{kind: :testid, value: "submit-secondary-button"}]}
+             ]
+           } = chained
+
+    negated_conjunction = not_(and_(button("Run Search"), testid("submit-secondary-button")))
+
+    assert %Locator{
+             kind: :not,
+             value: [%Locator{kind: :and, value: [%Locator{kind: :button}, %Locator{kind: :testid}]}]
+           } = negated_conjunction
+  end
+
+  test "supports map normalization for not composition" do
+    locator = Locator.normalize(not: %{and: [%{button: "Run Search"}, %{testid: "submit-secondary-button"}]})
+
+    assert %Locator{
+             kind: :not,
+             value: [%Locator{kind: :and, value: [%Locator{kind: :button}, %Locator{kind: :testid}]}]
+           } = locator
   end
 
   test "pipe composition overloads create same-element and semantics" do

@@ -466,7 +466,7 @@ defmodule Cerberus.Assertions do
 
   defp normalize_assert_locator_kind(%Locator{kind: :text} = locator, _locator_input, opts), do: {locator, opts}
 
-  defp normalize_assert_locator_kind(%Locator{kind: kind}, locator_input, _opts) when kind in [:and, :or] do
+  defp normalize_assert_locator_kind(%Locator{kind: kind}, locator_input, _opts) when kind in [:and, :or, :not] do
     raise InvalidLocatorError,
       locator: locator_input,
       message: "composed locators are not supported for assert_has/3 or refute_has/3 in this slice"
@@ -511,6 +511,12 @@ defmodule Cerberus.Assertions do
       raise InvalidLocatorError,
         locator: locator_input,
         message: "has locator option is not supported for assert_has/3 or refute_has/3 in this slice"
+    end
+
+    if Keyword.has_key?(locator_opts, :has_not) do
+      raise InvalidLocatorError,
+        locator: locator_input,
+        message: "has_not locator option is not supported for assert_has/3 or refute_has/3 in this slice"
     end
   end
 

@@ -129,6 +129,14 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       |> assert_has(text("Selected: secondary", exact: true))
     end
 
+    test "has_not locator option disambiguates duplicate live buttons with nested marker elements (#{driver})", context do
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/live/selector-edge")
+      |> click("Apply" |> button() |> has_not(testid("apply-secondary-marker")))
+      |> assert_has(text("Selected: primary", exact: true))
+    end
+
     test "pipe-composed and vs nesting semantics are consistent across static and browser (#{driver})", context do
       assert_raise ExUnit.AssertionError, ~r/no (elements|clickable)/, fn ->
         unquote(driver)
@@ -142,6 +150,27 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       |> visit("/live/selector-edge")
       |> click("Apply" |> button() |> has(testid("apply-secondary-marker")))
       |> assert_has(text("Selected: secondary", exact: true))
+    end
+
+    test "boolean locator algebra supports A and not B semantics (#{driver})", context do
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/live/selector-edge")
+      |> click(and_(button("Apply"), not_(testid("apply-secondary"))))
+      |> assert_has(text("Selected: primary", exact: true))
+    end
+
+    test "boolean locator algebra supports not(A and B) semantics (#{driver})", context do
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/live/selector-edge")
+      |> click(
+        and_(
+          button("Apply"),
+          not_(and_(button("Apply"), testid("apply-secondary")))
+        )
+      )
+      |> assert_has(text("Selected: primary", exact: true))
     end
 
     test "or composition enforces strict uniqueness for actions (#{driver})", context do

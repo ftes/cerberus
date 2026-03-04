@@ -56,21 +56,13 @@ defmodule Cerberus.Html do
 
   @spec node_matches_locator_filters?(term(), Options.locator_filter_opts()) :: boolean()
   def node_matches_locator_filters?(node, opts) when is_list(opts) do
-    case Keyword.get(opts, :has) do
-      nil ->
-        true
-
-      %Locator{} = has_locator ->
-        node_has_locator?(node, has_locator)
-
-      _other ->
-        false
-    end
+    matches_nested_filter?(node, Keyword.get(opts, :has), true) and
+      matches_nested_filter?(node, Keyword.get(opts, :has_not), false)
   end
 
   @spec fragment_matches_locator_filters?(String.t(), Options.locator_filter_opts()) :: boolean()
   def fragment_matches_locator_filters?(fragment_html, opts) when is_binary(fragment_html) and is_list(opts) do
-    if Keyword.has_key?(opts, :has) do
+    if Keyword.has_key?(opts, :has) or Keyword.has_key?(opts, :has_not) do
       fragment_matches_locator_filters_in_doc?(fragment_html, opts)
     else
       true
@@ -476,6 +468,10 @@ defmodule Cerberus.Html do
     Enum.any?(members, &node_matches_within_locator?(root_node, node, &1))
   end
 
+  defp node_matches_within_locator?(root_node, node, %Locator{kind: :not, value: [member]}) do
+    not node_matches_within_locator?(root_node, node, member)
+  end
+
   defp node_matches_within_locator?(root_node, node, %Locator{kind: :css, value: value}) do
     root_node
     |> safe_query(value)
@@ -506,6 +502,7 @@ defmodule Cerberus.Html do
   defp within_query_selector(%Locator{kind: :css, value: value}), do: value
   defp within_query_selector(%Locator{kind: :and}), do: "*"
   defp within_query_selector(%Locator{kind: :or}), do: "*"
+  defp within_query_selector(%Locator{kind: :not}), do: "*"
   defp within_query_selector(%Locator{kind: :text}), do: "*"
   defp within_query_selector(%Locator{kind: :link}), do: "a[href]"
   defp within_query_selector(%Locator{kind: :button}), do: "button"
@@ -1037,29 +1034,31 @@ defmodule Cerberus.Html do
     end
   end
 
-  defp locator_matches_action_node?(root_node, node, %Locator{kind: :and, value: members}, context)
+  defp locator_matches_action_node?(root_node, node, %Locator{kind: :and, value: members, opts: opts}, context)
        when is_list(members) do
-    Enum.all?(members, &locator_matches_action_node?(root_node, node, &1, context))
+    Enum.all?(members, &locator_matches_action_node?(root_node, node, &1, context)) and
+      action_node_matches_common_opts?(root_node, node, opts)
   end
 
-  defp locator_matches_action_node?(root_node, node, %Locator{kind: :or, value: members}, context)
+  defp locator_matches_action_node?(root_node, node, %Locator{kind: :or, value: members, opts: opts}, context)
        when is_list(members) do
-    Enum.any?(members, &locator_matches_action_node?(root_node, node, &1, context))
+    Enum.any?(members, &locator_matches_action_node?(root_node, node, &1, context)) and
+      action_node_matches_common_opts?(root_node, node, opts)
+  end
+
+  defp locator_matches_action_node?(root_node, node, %Locator{kind: :not, value: [member], opts: opts}, context) do
+    not locator_matches_action_node?(root_node, node, member, context) and
+      action_node_matches_common_opts?(root_node, node, opts)
   end
 
   defp locator_matches_action_node?(root_node, node, %Locator{kind: :css, value: selector, opts: opts}, _context) do
-    node_matches_selector?(root_node, node, selector) and
-      node_matches_selector?(root_node, node, selector_opt(opts)) and
-      node_matches_locator_filters?(node, opts) and
-      Query.matches_state_filters?(scope_target_state(node), opts)
+    node_matches_selector?(root_node, node, selector) and action_node_matches_common_opts?(root_node, node, opts)
   end
 
   defp locator_matches_action_node?(root_node, node, %Locator{kind: kind, value: expected, opts: opts}, context) do
     resolved_kind = Locator.resolved_kind(%Locator{kind: kind, value: expected, opts: opts})
 
-    with true <- node_matches_selector?(root_node, node, selector_opt(opts)),
-         true <- node_matches_locator_filters?(node, opts),
-         true <- Query.matches_state_filters?(scope_target_state(node), opts),
+    with true <- action_node_matches_common_opts?(root_node, node, opts),
          value when is_binary(value) <- action_locator_match_value(root_node, node, resolved_kind, context),
          true <- Query.match_text?(value, expected, opts) do
       true
@@ -1101,6 +1100,12 @@ defmodule Cerberus.Html do
   end
 
   defp action_locator_match_value(_root_node, _node, :alt, _context), do: nil
+
+  defp action_node_matches_common_opts?(root_node, node, opts) when is_list(opts) do
+    node_matches_selector?(root_node, node, selector_opt(opts)) and
+      node_matches_locator_filters?(node, opts) and
+      Query.matches_state_filters?(scope_target_state(node), opts)
+  end
 
   defp pick_match_result(matches, opts) do
     case Query.pick_match(matches, opts) do
@@ -1451,6 +1456,18 @@ defmodule Cerberus.Html do
         Query.matches_state_filters?(scope_target_state(candidate_node), has_locator.opts)
     end)
   end
+
+  defp matches_nested_filter?(_node, nil, _expected), do: true
+
+  defp matches_nested_filter?(node, %Locator{} = nested_locator, true) do
+    node_has_locator?(node, nested_locator)
+  end
+
+  defp matches_nested_filter?(node, %Locator{} = nested_locator, false) do
+    not node_has_locator?(node, nested_locator)
+  end
+
+  defp matches_nested_filter?(_node, _invalid, _expected), do: false
 
   defp safe_query_in_node(selector, node) when is_binary(selector) do
     safe_query(node, selector)

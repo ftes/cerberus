@@ -41,7 +41,8 @@ defmodule Cerberus do
     :css,
     :testid,
     :and,
-    :or
+    :or,
+    :not
   ]
   @locator_kind_string_keys Enum.map(@locator_kind_keys, &Atom.to_string/1)
   @session_common_options_doc NimbleOptions.docs(Options.session_common_schema())
@@ -620,6 +621,18 @@ defmodule Cerberus do
   """
   def or_(left, right), do: Locator.compose_or(left, right)
 
+  @spec not_(locator_input()) :: Locator.t()
+  @doc """
+  Negates a locator.
+  """
+  def not_(locator), do: Locator.compose_not(locator)
+
+  @spec not_(locator_input(), locator_input()) :: Locator.t()
+  @doc """
+  Composes `left AND NOT(right)`.
+  """
+  def not_(left, right), do: and_(left, not_(right))
+
   @spec has(locator_input(), locator_input()) :: Locator.t()
   @doc """
   Adds a descendant locator constraint (`:has`) to a locator.
@@ -629,6 +642,12 @@ defmodule Cerberus do
       button("Apply") |> has(testid("apply-secondary-marker"))
   """
   def has(locator, nested_locator), do: Locator.put_has(locator, nested_locator)
+
+  @spec has_not(locator_input(), locator_input()) :: Locator.t()
+  @doc """
+  Adds a descendant-negation locator constraint (`:has_not`) to a locator.
+  """
+  def has_not(locator, nested_locator), do: Locator.put_has_not(locator, nested_locator)
 
   @doc """
   Composes a locator that matches the closest ancestor of a nested `from` locator.

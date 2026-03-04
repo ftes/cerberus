@@ -81,7 +81,7 @@ Prefer user-facing selectors first:
 
 Use `testid(...)` when text/role is ambiguous, and CSS for structural targeting only.
 
-For locator forms and advanced composition (`~l` modifiers, `and_`, `or_`, `has`, `closest`), see:
+For locator forms and advanced composition (`~l` modifiers, `and_`, `or_`, `not_`, `has`, `has_not`, `closest`), see:
 - [Cheat Sheet](docs/cheatsheet.md)
 - [Getting Started](docs/getting-started.md)
 

@@ -135,27 +135,31 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     end
   end
 
-  defp live_clickable_locator_match?(root_node, node, %Locator{kind: :and, value: members}) when is_list(members) do
-    Enum.all?(members, &live_clickable_locator_match?(root_node, node, &1))
+  defp live_clickable_locator_match?(root_node, node, %Locator{kind: :and, value: members, opts: opts})
+       when is_list(members) do
+    Enum.all?(members, &live_clickable_locator_match?(root_node, node, &1)) and
+      live_clickable_common_opts_match?(root_node, node, opts)
   end
 
-  defp live_clickable_locator_match?(root_node, node, %Locator{kind: :or, value: members}) when is_list(members) do
-    Enum.any?(members, &live_clickable_locator_match?(root_node, node, &1))
+  defp live_clickable_locator_match?(root_node, node, %Locator{kind: :or, value: members, opts: opts})
+       when is_list(members) do
+    Enum.any?(members, &live_clickable_locator_match?(root_node, node, &1)) and
+      live_clickable_common_opts_match?(root_node, node, opts)
+  end
+
+  defp live_clickable_locator_match?(root_node, node, %Locator{kind: :not, value: [member], opts: opts}) do
+    not live_clickable_locator_match?(root_node, node, member) and
+      live_clickable_common_opts_match?(root_node, node, opts)
   end
 
   defp live_clickable_locator_match?(root_node, node, %Locator{kind: :css, value: selector, opts: opts}) do
-    node_matches_selector?(root_node, node, selector) and
-      node_matches_selector?(root_node, node, selector_opt(opts)) and
-      Html.node_matches_locator_filters?(node, opts) and
-      Query.matches_state_filters?(live_clickable_state(node), opts)
+    node_matches_selector?(root_node, node, selector) and live_clickable_common_opts_match?(root_node, node, opts)
   end
 
   defp live_clickable_locator_match?(root_node, node, %Locator{kind: kind, value: expected, opts: opts}) do
     resolved_kind = Locator.resolved_kind(%Locator{kind: kind, value: expected, opts: opts})
 
-    with true <- node_matches_selector?(root_node, node, selector_opt(opts)),
-         true <- Html.node_matches_locator_filters?(node, opts),
-         true <- Query.matches_state_filters?(live_clickable_state(node), opts),
+    with true <- live_clickable_common_opts_match?(root_node, node, opts),
          value when is_binary(value) <- live_clickable_locator_value(root_node, node, resolved_kind),
          true <- Query.match_text?(value, expected, opts) do
       true
@@ -173,6 +177,12 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   defp live_clickable_locator_value(_root_node, _node, :link), do: nil
   defp live_clickable_locator_value(_root_node, _node, :label), do: nil
   defp live_clickable_locator_value(_root_node, _node, :placeholder), do: nil
+
+  defp live_clickable_common_opts_match?(root_node, node, opts) when is_list(opts) do
+    node_matches_selector?(root_node, node, selector_opt(opts)) and
+      Html.node_matches_locator_filters?(node, opts) and
+      Query.matches_state_filters?(live_clickable_state(node), opts)
+  end
 
   defp live_clickable_state(node) do
     %{

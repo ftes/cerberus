@@ -546,6 +546,19 @@ defmodule Cerberus.LocatorParityTest do
         run: &submit(&1, "Run Search" |> button() |> has(css(".kind-secondary")))
       },
       %{
+        name: "submit supports has_not nested locator filter",
+        html: @chained_locator_html,
+        expect: :ok,
+        run: &submit(&1, "Run Search" |> button() |> has_not(testid("submit-secondary-marker")))
+      },
+      %{
+        name: "submit has_not filter errors when nested locator still matches",
+        html: @chained_locator_html,
+        expect: :error,
+        error_module: AssertionError,
+        run: &submit(&1, "Run Search" |> button() |> has_not(css("span")))
+      },
+      %{
         name: "submit supports nested and composition inside has",
         html: @chained_locator_html,
         expect: :ok,
@@ -570,6 +583,25 @@ defmodule Cerberus.LocatorParityTest do
           )
       },
       %{
+        name: "submit supports A and not B boolean composition",
+        html: @chained_locator_html,
+        expect: :ok,
+        run: &submit(&1, and_(button("Run Search"), not_(testid("submit-secondary-button"))))
+      },
+      %{
+        name: "submit supports not(A and B) boolean composition",
+        html: @chained_locator_html,
+        expect: :ok,
+        run:
+          &submit(
+            &1,
+            and_(
+              button("Run Search"),
+              not_(and_(button("Run Search"), testid("submit-secondary-button")))
+            )
+          )
+      },
+      %{
         name: "submit or composition enforces strict uniqueness for actions",
         html: @chained_locator_html,
         expect: :error,
@@ -582,6 +614,13 @@ defmodule Cerberus.LocatorParityTest do
         expect: :error,
         error_module: InvalidLocatorError,
         run: &assert_has(&1, has(text("Apply"), text("secondary")))
+      },
+      %{
+        name: "assert_has rejects has_not locator option in this slice",
+        html: @chained_locator_html,
+        expect: :error,
+        error_module: InvalidLocatorError,
+        run: &assert_has(&1, has_not(text("Apply"), text("secondary")))
       },
       %{
         name: "fill_in supports same-element and composition with css",

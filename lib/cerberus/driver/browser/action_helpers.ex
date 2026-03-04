@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAction && window.__cerberusAction.__version === 12) return;
+    if (window.__cerberusAction && window.__cerberusAction.__version === 13) return;
 
     const helper = {};
-    helper.__version = 12;
+    helper.__version = 13;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -834,6 +834,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           return "[data-testid]";
         case "and":
         case "or":
+        case "not":
           return "*";
         default:
           return "*";
@@ -947,6 +948,11 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         if (!helper.elementHasLocator(candidate.__el, opts.has, op)) return false;
       }
 
+      const hasNot = opts.has_not || opts.hasNot;
+      if (hasNot) {
+        if (helper.elementHasLocator(candidate.__el, hasNot, op)) return false;
+      }
+
       return true;
     };
 
@@ -957,6 +963,13 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       const kind = rawKind === "role" ? helper.locatorKind(locator) : rawKind;
 
       if (!kind) return false;
+
+      if (kind === "not") {
+        const members = Array.isArray(locator.members) ? locator.members : [];
+        if (members.length !== 1) return false;
+
+        return !helper.matchesLocator(candidate, members[0], op) && helper.matchesLocatorCommonOpts(candidate, locator.opts, op);
+      }
 
       if (kind === "and" || kind === "or") {
         const members = Array.isArray(locator.members) ? locator.members : [];

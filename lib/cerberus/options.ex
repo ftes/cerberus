@@ -47,7 +47,8 @@ defmodule Cerberus.Options do
           nth: pos_integer() | nil,
           index: non_neg_integer() | nil,
           match_by: locator_match_by(),
-          has: Cerberus.Locator.t() | nil
+          has: Cerberus.Locator.t() | nil,
+          has_not: Cerberus.Locator.t() | nil
         ]
   @type path_match_opts :: [exact: boolean()]
   @type session_common_opts :: [

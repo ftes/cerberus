@@ -739,7 +739,7 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp locator_payload(%Locator{kind: kind, value: members, opts: opts}) when kind in [:and, :or] do
+  defp locator_payload(%Locator{kind: kind, value: members, opts: opts}) when kind in [:and, :or, :not] do
     %{
       kind: Atom.to_string(kind),
       members: Enum.map(members, &locator_payload/1),
@@ -770,6 +770,7 @@ defmodule Cerberus.Driver.Browser do
       normalizeWs: Keyword.get(opts, :normalize_ws),
       selector: Keyword.get(opts, :selector),
       has: nested_locator_payload(Keyword.get(opts, :has)),
+      has_not: nested_locator_payload(Keyword.get(opts, :has_not)),
       checked: Keyword.get(opts, :checked),
       disabled: Keyword.get(opts, :disabled),
       selected: Keyword.get(opts, :selected),

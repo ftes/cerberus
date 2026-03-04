@@ -82,7 +82,10 @@ Default strategy:
 ### Composition (advanced)
 - same-element AND: `button("Apply") |> testid("apply-secondary-button")`
 - descendant requirement: `button("Apply") |> has(testid("apply-secondary-marker"))`
+- descendant exclusion: `button("Apply") |> has_not(testid("apply-secondary-marker"))`
 - alternatives (OR): `or_(css("#primary"), css("#secondary"))`
+- boolean algebra: `and_(button("Apply"), not_(testid("apply-secondary-button")))`
+- negated conjunction: `not_(and_(button("Apply"), testid("apply-secondary-button")))`
 - nearest ancestor scope: `closest(css(".fieldset"), from: label("Email", exact: true))`
 
 ### Sigil `~l`

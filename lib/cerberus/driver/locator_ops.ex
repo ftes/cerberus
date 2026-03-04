@@ -37,7 +37,7 @@ defmodule Cerberus.Driver.LocatorOps do
     |> Keyword.put(:locator, locator)
   end
 
-  defp clickable_shape(opts, %Locator{kind: kind}) when kind in [:and, :or] do
+  defp clickable_shape(opts, %Locator{kind: kind}) when kind in [:and, :or, :not] do
     {"", opts}
   end
 
@@ -92,7 +92,7 @@ defmodule Cerberus.Driver.LocatorOps do
     form_shape(opts, %{locator | kind: resolved_kind})
   end
 
-  defp form_shape(opts, %Locator{kind: kind}) when kind in [:and, :or] do
+  defp form_shape(opts, %Locator{kind: kind}) when kind in [:and, :or, :not] do
     {"", opts}
   end
 
