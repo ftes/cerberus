@@ -206,7 +206,8 @@ defmodule Cerberus.Driver.Browser do
   @impl true
   def open_browser(%__MODULE__{} = session, open_fun) when is_function(open_fun, 1) do
     {state, html, url} = html_snapshot!(session)
-    path = OpenBrowser.write_snapshot!(html, snapshot_base_url(state.base_url, url))
+    endpoint = Application.get_env(:cerberus, :endpoint)
+    path = OpenBrowser.write_snapshot!(html, snapshot_base_url(state.base_url, url), endpoint)
     _ = open_fun.(path)
     session
   end
@@ -458,8 +459,25 @@ defmodule Cerberus.Driver.Browser do
     timeout_ms = assertion_timeout_ms(opts)
     match_opts = locator_match_opts(locator, Keyword.delete(opts, :timeout))
     visible = visibility_filter(opts)
+    assertion_runner = if(locator_assertion_requires_locator_engine?(locator), do: :locator, else: :text)
 
-    case run_text_assertion(state, expected, visible, match_opts, timeout_ms, :assert) do
+    case run_assertion_by_mode(assertion_runner, state, locator, expected, visible, match_opts, timeout_ms, :assert) do
+      {:ok, next_state, observed} ->
+        {:ok, update_session(session, next_state, :assert_has, observed), observed}
+
+      {:error, reason, observed} ->
+        {:error, session, observed, reason}
+    end
+  end
+
+  @impl true
+  def assert_has(%__MODULE__{} = session, %Locator{} = locator, opts) do
+    state = state!(session)
+    timeout_ms = assertion_timeout_ms(opts)
+    match_opts = locator_match_opts(locator, Keyword.delete(opts, :timeout))
+    visible = visibility_filter(opts)
+
+    case run_assertion_by_mode(:locator, state, locator, nil, visible, match_opts, timeout_ms, :assert) do
       {:ok, next_state, observed} ->
         {:ok, update_session(session, next_state, :assert_has, observed), observed}
 
@@ -474,8 +492,25 @@ defmodule Cerberus.Driver.Browser do
     timeout_ms = assertion_timeout_ms(opts)
     match_opts = locator_match_opts(locator, Keyword.delete(opts, :timeout))
     visible = visibility_filter(opts)
+    assertion_runner = if(locator_assertion_requires_locator_engine?(locator), do: :locator, else: :text)
 
-    case run_text_assertion(state, expected, visible, match_opts, timeout_ms, :refute) do
+    case run_assertion_by_mode(assertion_runner, state, locator, expected, visible, match_opts, timeout_ms, :refute) do
+      {:ok, next_state, observed} ->
+        {:ok, update_session(session, next_state, :refute_has, observed), observed}
+
+      {:error, reason, observed} ->
+        {:error, session, observed, reason}
+    end
+  end
+
+  @impl true
+  def refute_has(%__MODULE__{} = session, %Locator{} = locator, opts) do
+    state = state!(session)
+    timeout_ms = assertion_timeout_ms(opts)
+    match_opts = locator_match_opts(locator, Keyword.delete(opts, :timeout))
+    visible = visibility_filter(opts)
+
+    case run_assertion_by_mode(:locator, state, locator, nil, visible, match_opts, timeout_ms, :refute) do
       {:ok, next_state, observed} ->
         {:ok, update_session(session, next_state, :refute_has, observed), observed}
 
@@ -776,6 +811,7 @@ defmodule Cerberus.Driver.Browser do
       selector: Keyword.get(opts, :selector),
       has: nested_locator_payload(Keyword.get(opts, :has)),
       has_not: nested_locator_payload(Keyword.get(opts, :has_not)),
+      from: nested_locator_payload(Keyword.get(opts, :from)),
       checked: Keyword.get(opts, :checked),
       disabled: Keyword.get(opts, :disabled),
       selected: Keyword.get(opts, :selected),
@@ -1133,6 +1169,16 @@ defmodule Cerberus.Driver.Browser do
     Map.has_key?(payload, "awaited") or Map.has_key?(payload, "lastSignal")
   end
 
+  defp run_assertion_by_mode(:text, state, _locator, expected, visible, match_opts, timeout_ms, mode)
+       when mode in [:assert, :refute] do
+    run_text_assertion(state, expected, visible, match_opts, timeout_ms, mode)
+  end
+
+  defp run_assertion_by_mode(:locator, state, locator, _expected, visible, match_opts, timeout_ms, mode)
+       when mode in [:assert, :refute] do
+    run_locator_assertion(state, locator, visible, match_opts, timeout_ms, mode)
+  end
+
   defp run_text_assertion(state, expected, visible, match_opts, timeout_ms, mode) when mode in [:assert, :refute] do
     do_run_text_assertion(state, expected, visible, match_opts, timeout_ms, mode)
   end
@@ -1164,6 +1210,33 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
+  defp run_locator_assertion(state, locator, visible, match_opts, timeout_ms, mode) when mode in [:assert, :refute] do
+    do_run_locator_assertion(state, locator, visible, match_opts, timeout_ms, mode)
+  end
+
+  defp do_run_locator_assertion(state, locator, visible, match_opts, timeout_ms, mode) do
+    eval_result =
+      eval_json_with_transient_retry(state, timeout_ms, fn remaining_timeout_ms ->
+        payload = build_locator_assertion_payload(state, locator, visible, match_opts, remaining_timeout_ms, mode)
+        Expressions.locator_assertion(payload)
+      end)
+
+    case eval_result do
+      {:ok, result} ->
+        next_state = %{state | current_path: result["path"] || state.current_path}
+        observed = locator_assertion_observed(result, locator, visible)
+
+        case locator_assertion_outcome(result, match_opts, mode) do
+          :ok -> {:ok, next_state, observed}
+          {:error, reason} -> {:error, reason, observed}
+        end
+
+      {:error, reason, details} ->
+        observed = %{path: state.current_path, details: details}
+        {:error, "failed to evaluate browser locator assertion: #{reason}", observed}
+    end
+  end
+
   defp build_text_assertion_payload(state, expected, visible, match_opts, timeout_ms, mode, match_by) do
     {between_min, between_max} = between_bounds(match_opts)
 
@@ -1174,6 +1247,24 @@ defmodule Cerberus.Driver.Browser do
       exact: Keyword.get(match_opts, :exact, false),
       normalizeWs: Keyword.get(match_opts, :normalize_ws, true),
       matchBy: Atom.to_string(match_by),
+      visibility: visibility_mode(visible),
+      timeoutMs: timeout_ms,
+      mode: Atom.to_string(mode),
+      count: Keyword.get(match_opts, :count),
+      min: Keyword.get(match_opts, :min),
+      max: Keyword.get(match_opts, :max),
+      betweenMin: between_min,
+      betweenMax: between_max,
+      pollMs: 250
+    }
+  end
+
+  defp build_locator_assertion_payload(state, locator, visible, match_opts, timeout_ms, mode) do
+    {between_min, between_max} = between_bounds(match_opts)
+
+    %{
+      scopeSelector: Session.scope(state),
+      locator: locator_payload(locator),
       visibility: visibility_mode(visible),
       timeoutMs: timeout_ms,
       mode: Atom.to_string(mode),
@@ -1210,6 +1301,30 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
+  defp locator_assertion_outcome(result, match_opts, mode) when mode in [:assert, :refute] do
+    if Query.has_count_constraints?(match_opts) do
+      match_count =
+        case Map.get(result, "matchCount") do
+          value when is_integer(value) and value >= 0 ->
+            value
+
+          _ ->
+            result
+            |> Map.get("matched", [])
+            |> List.wrap()
+            |> length()
+        end
+
+      Query.assertion_count_outcome(match_count, match_opts, mode)
+    else
+      if result["ok"] == true do
+        :ok
+      else
+        {:error, locator_assertion_reason(mode)}
+      end
+    end
+  end
+
   defp between_bounds(opts) do
     case Keyword.get(opts, :between) do
       {min, max} -> {min, max}
@@ -1219,6 +1334,8 @@ defmodule Cerberus.Driver.Browser do
 
   defp text_assertion_reason(:assert), do: "expected text not found"
   defp text_assertion_reason(:refute), do: "unexpected matching text found"
+  defp locator_assertion_reason(:assert), do: "expected locator not found"
+  defp locator_assertion_reason(:refute), do: "unexpected matching locator found"
 
   defp run_path_assertion(session, expected, opts, op) when op in [:assert_path, :refute_path] do
     state = state!(session)
@@ -1291,6 +1408,26 @@ defmodule Cerberus.Driver.Browser do
       matched: result["matched"] || [],
       expected: expected
     }
+  end
+
+  defp locator_assertion_observed(result, locator, visible) when is_map(result) do
+    %{
+      path: result["path"],
+      title: result["title"] || "",
+      visible: visible,
+      texts: result["texts"] || [],
+      matched: result["matched"] || [],
+      expected: locator
+    }
+  end
+
+  defp locator_assertion_requires_locator_engine?(%Locator{kind: kind}) when kind in [:and, :or, :not, :css], do: true
+
+  defp locator_assertion_requires_locator_engine?(%Locator{opts: locator_opts}) do
+    Keyword.has_key?(locator_opts, :selector) or
+      Keyword.has_key?(locator_opts, :has) or
+      Keyword.has_key?(locator_opts, :has_not) or
+      Keyword.has_key?(locator_opts, :from)
   end
 
   defp eval_json_transient_read(state, expression, timeout_ms \\ 0)

@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAssert && window.__cerberusAssert.__version === 7) return;
+    if (window.__cerberusAssert && window.__cerberusAssert.__version === 8) return;
 
     const helper = {};
-    helper.__version = 7;
+    helper.__version = 8;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -581,6 +581,435 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         cleanupFns.push(() => clearInterval(intervalRef));
 
         const timeoutRef = setTimeout(() => finish(helper.textDiagnostics(options)), timeoutMs);
+        cleanupFns.push(() => clearTimeout(timeoutRef));
+      });
+    };
+
+    helper.roleToKind = (roleName) => {
+      switch (String(roleName || "").toLowerCase()) {
+        case "button":
+        case "menuitem":
+        case "tab":
+          return "button";
+        case "link":
+          return "link";
+        case "textbox":
+        case "searchbox":
+        case "combobox":
+        case "listbox":
+        case "spinbutton":
+        case "checkbox":
+        case "radio":
+        case "switch":
+          return "label";
+        case "img":
+          return "alt";
+        case "heading":
+          return "text";
+        default:
+          return null;
+      }
+    };
+
+    helper.locatorKind = (locator) => {
+      if (!locator || typeof locator !== "object") return null;
+
+      const rawKind = String(locator.kind || "").toLowerCase();
+      if (rawKind !== "role") return rawKind;
+
+      const opts = locator.opts && typeof locator.opts === "object" ? locator.opts : {};
+      return helper.roleToKind(opts.role);
+    };
+
+    helper.locatorOpts = (locator) => {
+      if (!locator || typeof locator !== "object") return {};
+      return locator.opts && typeof locator.opts === "object" ? locator.opts : {};
+    };
+
+    helper.locatorWithoutFrom = (locator) => {
+      if (!locator || typeof locator !== "object") return locator;
+
+      const opts = helper.locatorOpts(locator);
+      if (!opts.from) return locator;
+
+      const nextOpts = { ...opts };
+      delete nextOpts.from;
+
+      return { ...locator, opts: nextOpts };
+    };
+
+    helper.locatorQuerySelector = (locator) => {
+      if (!locator || typeof locator !== "object") return "*";
+
+      const opts = helper.locatorOpts(locator);
+      if (typeof opts.selector === "string" && opts.selector.trim() !== "") {
+        return opts.selector;
+      }
+
+      const kind = helper.locatorKind(locator);
+
+      switch (kind) {
+        case "css":
+          return typeof locator.value === "string" && locator.value.trim() !== "" ? locator.value : "*";
+        case "text":
+        case "and":
+        case "or":
+        case "not":
+          return "*";
+        case "link":
+          return "a[href]";
+        case "button":
+          return "button";
+        case "label":
+          return "label";
+        case "placeholder":
+          return "input[placeholder],textarea[placeholder],select[placeholder]";
+        case "title":
+          return "[title]";
+        case "aria_label":
+          return "[aria-label]";
+        case "alt":
+          return "[alt],img[alt],input[type='image'][alt],[role='img'][alt],button,a[href]";
+        case "testid":
+          return "[data-testid]";
+        default:
+          return "*";
+      }
+    };
+
+    helper.matchesLocatorStateFilters = (element, opts) => {
+      if (!opts || typeof opts !== "object") return true;
+
+      const tag = (element.tagName || "").toLowerCase();
+      const checked = element.checked === true;
+      const selected =
+        tag === "option"
+          ? element.selected === true
+          : tag === "select"
+            ? Array.from(element.options || []).some((option) => option.selected === true)
+            : checked;
+      const disabled = element.disabled === true;
+      const readonly = element.readOnly === true || element.hasAttribute("readonly");
+
+      if (typeof opts.checked === "boolean" && checked !== opts.checked) return false;
+      if (typeof opts.selected === "boolean" && selected !== opts.selected) return false;
+      if (typeof opts.disabled === "boolean" && disabled !== opts.disabled) return false;
+      if (typeof opts.readonly === "boolean" && readonly !== opts.readonly) return false;
+
+      return true;
+    };
+
+    helper.locatorValueForMatch = (element, hidden, kind, context) => {
+      const tag = (element.tagName || "").toLowerCase();
+      if (tag === "script" || tag === "style" || tag === "noscript") return null;
+
+      switch (kind) {
+        case "text":
+          return hidden ? element.textContent : element.innerText || element.textContent;
+        case "link":
+          if (tag !== "a" || !element.hasAttribute("href")) return null;
+          return hidden ? element.textContent : element.innerText || element.textContent;
+        case "button":
+          if (tag !== "button") return null;
+          return hidden ? element.textContent : element.innerText || element.textContent;
+        case "label":
+          if (tag !== "label") return null;
+          return hidden ? element.textContent : element.innerText || element.textContent;
+        case "placeholder":
+          if (!(tag === "input" || tag === "textarea" || tag === "select")) return null;
+          return element.getAttribute("placeholder") || "";
+        case "title":
+          return element.getAttribute("title") || "";
+        case "aria_label":
+          return element.getAttribute("aria-label") || "";
+        case "testid":
+          return element.getAttribute("data-testid") || "";
+        case "alt":
+          return helper.altSourceForElement(element, context && context.altCache);
+        default:
+          return null;
+      }
+    };
+
+    helper.locatorObservationValue = (element, hidden, locator, context) => {
+      const kind = helper.locatorKind(locator);
+      const value = helper.locatorValueForMatch(element, hidden, kind, context);
+      const fallback = hidden ? element.textContent : element.innerText || element.textContent;
+      return helper.normalize(value || fallback || "", true);
+    };
+
+    helper.matchesLocatorCommonOpts = (element, locator, context) => {
+      const opts = helper.locatorOpts(locator);
+
+      if (!helper.matchesLocatorStateFilters(element, opts)) return false;
+
+      if (typeof opts.selector === "string" && opts.selector.trim() !== "") {
+        if (!helper.matchesSelector(element, opts.selector)) return false;
+      }
+
+      if (opts.has && !helper.elementHasLocator(element, opts.has, context)) return false;
+
+      const hasNot = opts.has_not || opts.hasNot;
+      if (hasNot && helper.elementHasLocator(element, hasNot, context)) return false;
+
+      return true;
+    };
+
+    helper.matchesLocator = (element, locator, hidden, context) => {
+      if (!locator || typeof locator !== "object") return false;
+
+      const kind = helper.locatorKind(locator);
+      if (!kind) return false;
+
+      if (kind === "not") {
+        const members = Array.isArray(locator.members) ? locator.members : [];
+        if (members.length !== 1) return false;
+
+        return !helper.matchesLocator(element, members[0], hidden, context) && helper.matchesLocatorCommonOpts(element, locator, context);
+      }
+
+      if (kind === "and" || kind === "or") {
+        const members = Array.isArray(locator.members) ? locator.members : [];
+        if (members.length === 0) return false;
+
+        const memberMatch =
+          kind === "and"
+            ? members.every((member) => helper.matchesLocator(element, member, hidden, context))
+            : members.some((member) => helper.matchesLocator(element, member, hidden, context));
+
+        return memberMatch && helper.matchesLocatorCommonOpts(element, locator, context);
+      }
+
+      if (kind === "css") {
+        if (typeof locator.value !== "string") return false;
+        if (!helper.matchesSelector(element, locator.value)) return false;
+        return helper.matchesLocatorCommonOpts(element, locator, context);
+      }
+
+      const value = helper.locatorValueForMatch(element, hidden, kind, context);
+      if (typeof value !== "string") return false;
+
+      const locatorOpts = helper.locatorOpts(locator);
+      const exact = locatorOpts.exact === true;
+      const normalizeWs = locatorOpts.normalizeWs !== false;
+      const matchText = helper.buildTextMatcher(locator.expected, exact, normalizeWs);
+
+      if (!matchText(value)) return false;
+      return helper.matchesLocatorCommonOpts(element, locator, context);
+    };
+
+    helper.elementHasLocator = (element, locator, context) => {
+      if (!element || !locator) return false;
+
+      const nestedLocator = helper.locatorWithoutFrom(locator);
+      const selector = helper.locatorQuerySelector(nestedLocator);
+      let nodes = [];
+
+      try {
+        nodes = Array.from(element.querySelectorAll(selector));
+      } catch (_error) {
+        return false;
+      }
+
+      return nodes.some((node) => {
+        const hidden = helper.isHidden(node);
+        return helper.matchesLocator(node, nestedLocator, hidden, context);
+      });
+    };
+
+    helper.containsNodeOrSame = (container, node) => {
+      if (!container || !node) return false;
+      return container === node || (typeof container.contains === "function" && container.contains(node));
+    };
+
+    helper.scopeCandidateIsClosestForFrom = (candidate, candidates, fromNode) => {
+      return candidates.every((other) => {
+        if (other.element === candidate.element) return true;
+        if (!helper.containsNodeOrSame(other.element, fromNode)) return true;
+        return !helper.containsNodeOrSame(candidate.element, other.element);
+      });
+    };
+
+    helper.closestScopeCandidateForAnyFrom = (candidate, candidates, fromCandidates) => {
+      return fromCandidates.some((fromEntry) => {
+        const fromNode = fromEntry.element;
+
+        return (
+          helper.containsNodeOrSame(candidate.element, fromNode) &&
+          helper.scopeCandidateIsClosestForFrom(candidate, candidates, fromNode)
+        );
+      });
+    };
+
+    helper.collectLocatorMatches = (options) => {
+      const roots = helper.resolveRoots(options.scopeSelector || null);
+      const locator = options.locator && typeof options.locator === "object" ? options.locator : null;
+      if (!locator) return [];
+
+      const locatorWithoutFrom = helper.locatorWithoutFrom(locator);
+      const fromLocator = helper.locatorOpts(locator).from || null;
+      const visibility = options.visibility || "visible";
+      const selector = helper.locatorQuerySelector(locatorWithoutFrom);
+      const context = { altCache: new Map() };
+      const candidates = [];
+
+      helper.eachCandidateElement(roots, selector, null, (element) => {
+        const hidden = helper.isHidden(element);
+        if (visibility !== "all" && !helper.selectedVisibility(visibility, hidden)) return true;
+        if (!helper.matchesLocator(element, locatorWithoutFrom, hidden, context)) return true;
+
+        candidates.push({ element, hidden });
+        return true;
+      });
+
+      if (!fromLocator) return candidates;
+
+      const fromCandidates = [];
+      const fromSelector = helper.locatorQuerySelector(fromLocator);
+
+      helper.eachCandidateElement(roots, fromSelector, null, (element) => {
+        const hidden = helper.isHidden(element);
+        if (!helper.matchesLocator(element, fromLocator, hidden, context)) return true;
+        fromCandidates.push({ element, hidden });
+        return true;
+      });
+
+      return candidates.filter((candidate) => helper.closestScopeCandidateForAnyFrom(candidate, candidates, fromCandidates));
+    };
+
+    helper.locatorQuick = (options) => {
+      const mode = options.mode || "assert";
+      const filters = helper.matchFilters(options);
+      const matches = helper.collectLocatorMatches(options);
+      const matchCount = matches.length;
+      const ok = helper.assertionSatisfied(mode, matchCount, filters);
+      const reason = helper.assertionReason(mode, matchCount, filters, ok);
+
+      return {
+        ok,
+        reason,
+        matchCount,
+        path: window.location.pathname + window.location.search,
+        title: document.title || ""
+      };
+    };
+
+    helper.locatorDiagnostics = (options) => {
+      const mode = options.mode || "assert";
+      const filters = helper.matchFilters(options);
+      const locator = options.locator && typeof options.locator === "object" ? options.locator : null;
+      const locatorWithoutFrom = locator ? helper.locatorWithoutFrom(locator) : null;
+      const context = { altCache: new Map() };
+      const matches = helper.collectLocatorMatches(options);
+      const values = matches
+        .map((entry) => helper.locatorObservationValue(entry.element, entry.hidden, locatorWithoutFrom, context))
+        .filter((value) => value !== "");
+      const matchCount = matches.length;
+      const ok = helper.assertionSatisfied(mode, matchCount, filters);
+      const reason = helper.assertionReason(mode, matchCount, filters, ok);
+
+      return {
+        ok,
+        reason,
+        matchCount,
+        path: window.location.pathname + window.location.search,
+        title: document.title || "",
+        texts: values,
+        matched: values
+      };
+    };
+
+    helper.locator = (options) => {
+      const timeoutMs = Math.max(0, Number(options.timeoutMs || 0));
+      const pollMs = Math.max(50, Number(options.pollMs || 250));
+      const deadline = Date.now() + timeoutMs;
+      const initial = helper.locatorQuick(options);
+
+      if (initial.ok) {
+        return Promise.resolve(JSON.stringify(initial));
+      }
+
+      if (timeoutMs <= 0) {
+        return Promise.resolve(JSON.stringify(helper.locatorDiagnostics(options)));
+      }
+
+      return new Promise((resolve) => {
+        let resolved = false;
+        let dirty = true;
+        let pendingCheck = false;
+        const cleanupFns = [];
+
+        const finish = (result) => {
+          if (resolved) return;
+          resolved = true;
+          for (const cleanup of cleanupFns) {
+            try {
+              cleanup();
+            } catch (_error) {
+              // ignored
+            }
+          }
+          resolve(JSON.stringify(result));
+        };
+
+        const scheduleCheck = () => {
+          if (resolved || pendingCheck || !dirty) return;
+          pendingCheck = true;
+
+          const run = () => {
+            pendingCheck = false;
+            if (resolved) return;
+            dirty = false;
+            const quick = helper.locatorQuick(options);
+            if (quick.ok) finish(quick);
+          };
+
+          if (typeof window.requestAnimationFrame === "function") {
+            window.requestAnimationFrame(() => run());
+          } else {
+            setTimeout(run, 0);
+          }
+        };
+
+        try {
+          const observer = new MutationObserver(() => {
+            dirty = true;
+            scheduleCheck();
+          });
+
+          const observedRoots = helper.resolveRoots(options.scopeSelector || null);
+          const roots = observedRoots.length > 0 ? observedRoots : [document.documentElement || document.body || document];
+
+          for (const root of roots) {
+            if (!root) continue;
+
+            observer.observe(root, {
+              subtree: true,
+              childList: true,
+              attributes: true,
+              characterData: true
+            });
+          }
+
+          cleanupFns.push(() => observer.disconnect());
+        } catch (_error) {
+          // ignored
+        }
+
+        scheduleCheck();
+
+        const intervalRef = setInterval(() => {
+          if (Date.now() >= deadline) {
+            finish(helper.locatorDiagnostics(options));
+            return;
+          }
+
+          dirty = true;
+          scheduleCheck();
+        }, pollMs);
+        cleanupFns.push(() => clearInterval(intervalRef));
+
+        const timeoutRef = setTimeout(() => finish(helper.locatorDiagnostics(options)), timeoutMs);
         cleanupFns.push(() => clearTimeout(timeoutRef));
       });
     };

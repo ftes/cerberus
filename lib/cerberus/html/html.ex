@@ -54,6 +54,42 @@ defmodule Cerberus.Html do
     end
   end
 
+  @spec locator_assertion_values(String.t() | LazyHTML.t(), Locator.t(), true | false | :any, String.t() | nil) ::
+          [String.t()]
+  def locator_assertion_values(html_or_doc, locator, visibility \\ true, scope \\ nil)
+
+  def locator_assertion_values(%LazyHTML{} = lazy_html, %Locator{} = locator, visibility, scope) do
+    locator = locator_without_from(locator)
+    from_locator = Keyword.get(locator.opts, :from)
+    selector = selector_opt(locator.opts)
+    query_selector = within_query_selector(locator)
+
+    lazy_html
+    |> scoped_nodes(scope)
+    |> Enum.flat_map(fn root_node ->
+      root_node
+      |> safe_query(query_selector)
+      |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, locator, selector))
+      |> maybe_filter_scope_target_closest_candidates(root_node, from_locator)
+      |> Enum.flat_map(fn node ->
+        hidden? = node_hidden_in_root?(root_node, node)
+
+        if selected_visibility?(visibility, hidden?) do
+          [locator_assertion_value(root_node, node, locator)]
+        else
+          []
+        end
+      end)
+    end)
+  end
+
+  def locator_assertion_values(html, %Locator{} = locator, visibility, scope) when is_binary(html) do
+    case parse_document(html) do
+      {:ok, lazy_html} -> locator_assertion_values(lazy_html, locator, visibility, scope)
+      _ -> []
+    end
+  end
+
   @spec node_matches_locator_filters?(term(), Options.locator_filter_opts()) :: boolean()
   def node_matches_locator_filters?(node, opts) when is_list(opts) do
     matches_nested_filter?(node, Keyword.get(opts, :has), true) and
@@ -1332,6 +1368,41 @@ defmodule Cerberus.Html do
 
     hidden_attr? or String.contains?(style, "display:none") or
       String.contains?(style, "visibility:hidden")
+  end
+
+  defp selected_visibility?(true, hidden?), do: not hidden?
+  defp selected_visibility?(false, hidden?), do: hidden?
+  defp selected_visibility?(:any, _hidden?), do: true
+  defp selected_visibility?(_other, hidden?), do: not hidden?
+
+  defp node_hidden_in_root?(root_node, node) do
+    hidden_node?(node) or
+      root_node
+      |> safe_query("*")
+      |> Enum.any?(fn candidate ->
+        hidden_node?(candidate) and contains_node_or_same?(candidate, node)
+      end)
+  end
+
+  defp hidden_node?(node) do
+    hidden_attr? = is_binary(attr(node, "hidden"))
+
+    style =
+      node
+      |> attr("style")
+      |> to_string()
+      |> String.downcase()
+      |> String.replace(" ", "")
+
+    hidden_attr? or String.contains?(style, "display:none") or
+      String.contains?(style, "visibility:hidden")
+  end
+
+  defp locator_assertion_value(root_node, node, locator) do
+    case within_locator_match_value(root_node, node, locator) do
+      value when is_binary(value) and value != "" -> value
+      _ -> node_text(node)
+    end
   end
 
   defp node_text(node) do

@@ -5,7 +5,6 @@ defmodule Cerberus.Assertions do
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.Static, as: StaticSession
-  alias Cerberus.InvalidLocatorError
   alias Cerberus.Locator
   alias Cerberus.Options
   alias Cerberus.Path
@@ -466,38 +465,15 @@ defmodule Cerberus.Assertions do
 
   defp normalize_assert_locator(locator_input, opts) do
     locator = Locator.normalize(locator_input)
-    ensure_assert_locator_opts!(locator, locator_input)
-    normalize_assert_locator_kind(locator, locator_input, opts)
+    normalize_assert_locator_kind(locator, opts)
   end
 
-  defp normalize_assert_locator_kind(%Locator{kind: :text} = locator, _locator_input, opts), do: {locator, opts}
-
-  defp normalize_assert_locator_kind(%Locator{kind: kind}, locator_input, _opts) when kind in [:and, :or, :not] do
-    raise InvalidLocatorError,
-      locator: locator_input,
-      message: "composed locators are not supported for assert_has/3 or refute_has/3 in this slice"
-  end
-
-  defp normalize_assert_locator_kind(%Locator{kind: :css}, locator_input, _opts) do
-    raise InvalidLocatorError,
-      locator: locator_input,
-      message: "css locators are not supported for assert_has/3 or refute_has/3 in this slice"
-  end
-
-  defp normalize_assert_locator_kind(%Locator{kind: :role, value: value} = locator, _locator_input, opts) do
-    role_match_by = Locator.resolved_kind(locator)
-    normalized_locator_opts = locator.opts |> Keyword.delete(:role) |> put_match_by(role_match_by)
-    {%{locator | kind: :text, value: value, opts: normalized_locator_opts}, opts}
-  end
-
-  defp normalize_assert_locator_kind(%Locator{kind: kind, value: value} = locator, _locator_input, opts)
-       when kind in [:label, :link, :button, :placeholder, :title, :alt, :aria_label] do
-    {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, kind)}, opts}
-  end
-
-  defp normalize_assert_locator_kind(%Locator{kind: :testid, value: value} = locator, _locator_input, opts) do
-    normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
-    {%{locator | kind: :text, value: value, opts: normalized_opts}, opts}
+  defp normalize_assert_locator_kind(%Locator{} = locator, opts) do
+    if locator_assertion_requires_locator_engine?(locator) do
+      {locator, opts}
+    else
+      normalize_assert_locator_simple_kind(locator, opts)
+    end
   end
 
   defp normalize_submit_locator(locator_input, opts) do
@@ -506,24 +482,31 @@ defmodule Cerberus.Assertions do
     {locator, opts}
   end
 
-  defp ensure_assert_locator_opts!(%Locator{opts: locator_opts}, locator_input) do
-    if Keyword.has_key?(locator_opts, :selector) do
-      raise InvalidLocatorError,
-        locator: locator_input,
-        message: "selector locator option is not supported for assert_has/3 or refute_has/3 in this slice"
-    end
+  defp normalize_assert_locator_simple_kind(%Locator{kind: :text} = locator, opts), do: {locator, opts}
 
-    if Keyword.has_key?(locator_opts, :has) do
-      raise InvalidLocatorError,
-        locator: locator_input,
-        message: "has locator option is not supported for assert_has/3 or refute_has/3 in this slice"
-    end
+  defp normalize_assert_locator_simple_kind(%Locator{kind: :role, value: value} = locator, opts) do
+    role_match_by = Locator.resolved_kind(locator)
+    normalized_locator_opts = locator.opts |> Keyword.delete(:role) |> put_match_by(role_match_by)
+    {%{locator | kind: :text, value: value, opts: normalized_locator_opts}, opts}
+  end
 
-    if Keyword.has_key?(locator_opts, :has_not) do
-      raise InvalidLocatorError,
-        locator: locator_input,
-        message: "has_not locator option is not supported for assert_has/3 or refute_has/3 in this slice"
-    end
+  defp normalize_assert_locator_simple_kind(%Locator{kind: kind, value: value} = locator, opts)
+       when kind in [:label, :link, :button, :placeholder, :title, :alt, :aria_label] do
+    {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, kind)}, opts}
+  end
+
+  defp normalize_assert_locator_simple_kind(%Locator{kind: :testid, value: value} = locator, opts) do
+    normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
+    {%{locator | kind: :text, value: value, opts: normalized_opts}, opts}
+  end
+
+  defp locator_assertion_requires_locator_engine?(%Locator{kind: kind}) when kind in [:and, :or, :not, :css], do: true
+
+  defp locator_assertion_requires_locator_engine?(%Locator{opts: locator_opts}) do
+    Keyword.has_key?(locator_opts, :selector) or
+      Keyword.has_key?(locator_opts, :has) or
+      Keyword.has_key?(locator_opts, :has_not) or
+      Keyword.has_key?(locator_opts, :from)
   end
 
   defp merge_locator_selector_opts(%Locator{opts: locator_opts}, opts) when is_list(locator_opts) do

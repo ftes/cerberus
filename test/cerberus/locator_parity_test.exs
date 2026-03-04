@@ -613,18 +613,22 @@ defmodule Cerberus.LocatorParityTest do
         run: &submit(&1, or_(css("#submit-primary"), css("#submit-secondary")))
       },
       %{
-        name: "assert_has rejects has locator option in this slice",
+        name: "assert_has supports has locator option",
         html: @chained_locator_html,
-        expect: :error,
-        error_module: InvalidLocatorError,
-        run: &assert_has(&1, has(text("Apply"), text("secondary")))
+        expect: :ok,
+        run: &assert_has(&1, has(button("Apply"), text("secondary", exact: true)))
       },
       %{
-        name: "assert_has rejects has_not locator option in this slice",
+        name: "assert_has supports has_not locator option",
         html: @chained_locator_html,
-        expect: :error,
-        error_module: InvalidLocatorError,
-        run: &assert_has(&1, has_not(text("Apply"), text("secondary")))
+        expect: :ok,
+        run: &assert_has(&1, has_not(button("Apply"), text("secondary", exact: true)))
+      },
+      %{
+        name: "assert_has supports composed css and text locator assertions",
+        html: @chained_locator_html,
+        expect: :ok,
+        run: &assert_has(&1, and_(css("#apply-secondary"), text("Apply", exact: true)))
       },
       %{
         name: "fill_in supports same-element and composition with css",

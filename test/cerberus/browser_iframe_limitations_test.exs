@@ -71,8 +71,10 @@ defmodule Cerberus.BrowserIframeLimitationsTest do
     |> within(css("#same-origin-frame"), fn frame_scope ->
       frame_scope
       |> assert_has(text("Same-origin iframe body marker", exact: true))
+      |> assert_has(and_(css("#iframe-same-origin-marker"), text("Same-origin iframe body marker", exact: true)))
       |> click(button("Frame Increment", exact: true))
       |> assert_has(text("Frame Count: 1", exact: true))
+      |> assert_has(and_(css("#iframe-count"), text("Frame Count: 1", exact: true)))
     end)
     |> assert_has(text("Outside iframe marker", exact: true))
   end

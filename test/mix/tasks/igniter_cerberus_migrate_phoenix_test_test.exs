@@ -138,8 +138,8 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     rewritten = File.read!(file)
 
     assert rewritten =~ "Cerberus.visit(session(conn), \"/articles\")"
-    assert rewritten =~ ~s{Cerberus.assert_has(session, Cerberus.css("#main"), ~l"Articles"i)}
-    assert rewritten =~ ~s{Cerberus.refute_has(session, Cerberus.css("#missing"), ~l"Nope"i)}
+    assert rewritten =~ ~s{Cerberus.assert_has(session, Cerberus.and_(Cerberus.css("#main"), ~l"Articles"i))}
+    assert rewritten =~ ~s{Cerberus.refute_has(session, Cerberus.and_(Cerberus.css("#missing"), ~l"Nope"i))}
     assert rewritten =~ ~s{Cerberus.fill_in(session, ~l"Search term"i, "phoenix")}
     assert rewritten =~ ~s{Cerberus.select(session, ~l"Role"i, option: "admin")}
     refute output =~ "visit(conn, ...)"
@@ -328,7 +328,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     rewritten = File.read!(file)
 
     assert rewritten =~ "alias Cerberus, as: Assertions"
-    assert rewritten =~ ~s{Assertions.assert_has(conn, Assertions.css("#main"), ~l"Articles"i)}
+    assert rewritten =~ ~s{Assertions.assert_has(conn, Assertions.and_(Assertions.css("#main"), ~l"Articles"i))}
     refute rewritten =~ "alias PhoenixTest.Assertions"
     assert output =~ "updated #{file}"
   end
@@ -358,7 +358,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     rewritten = File.read!(file)
 
     assert rewritten =~ "alias Cerberus, as: PTA"
-    assert rewritten =~ ~s{PTA.refute_has(conn, PTA.css("#missing"), ~l"Nope"i)}
+    assert rewritten =~ ~s{PTA.refute_has(conn, PTA.and_(PTA.css("#missing"), ~l"Nope"i))}
     refute rewritten =~ "alias PhoenixTest.Assertions, as: PTA"
     assert output =~ "updated #{file}"
   end
@@ -391,7 +391,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     rewritten = File.read!(file)
 
     assert rewritten =~ ~r/\|> fill_in\(\s*~l"Search term"i,\s*"phoenix"\s*\)/s
-    assert rewritten =~ ~r/\|> assert_has\(\s*css\("body"\),\s*~l"Search query: phoenix"i/s
+    assert rewritten =~ ~r/\|> assert_has\(\s*and_\(\s*css\("body"\),\s*~l"Search query: phoenix"i\s*\)\s*\)/s
   end
 
   test "write mode wraps choose locator variables with label/1", %{tmp_dir: tmp_dir} do
@@ -605,7 +605,7 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     assert rewritten_feature_case =~ "|> session()"
     assert rewritten_feature_case =~ ~r/\|> assert_has\(\s*css\("h1"\),\s*expected/s
     assert rewritten_form_fill =~ ~s{Cerberus.fill_in(session, ~l"Search term"i, value)}
-    assert rewritten_form_fill =~ ~s{Cerberus.assert_has(session, Cerberus.css("body"), expected)}
+    assert rewritten_form_fill =~ ~s{Cerberus.assert_has(session, Cerberus.and_(Cerberus.css("body"), expected))}
     assert rewritten_support_feature_case =~ "import Cerberus"
     refute rewritten_support_feature_case =~ "import PhoenixTest"
   end

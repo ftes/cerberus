@@ -79,15 +79,15 @@ defmodule Cerberus.PathScopeBehaviorTest do
       |> assert_has(text("Search", exact: true))
     end
 
-    test "assert_has/refute_has combine two locators without first-match scoping (#{driver})", context do
+    test "assert_has/refute_has compose scoped locators without first-match scoping (#{driver})", context do
       session =
         unquote(driver)
         |> driver_session(context)
         |> visit("/search")
-        |> assert_has(css("button"), text("Run Nested Search", exact: true))
+        |> assert_has(and_(css("button"), text("Run Nested Search", exact: true)))
 
       assert_raise ExUnit.AssertionError, fn ->
-        refute_has(session, css("button"), text("Run Nested Search", exact: true))
+        refute_has(session, and_(css("button"), text("Run Nested Search", exact: true)))
       end
     end
   end

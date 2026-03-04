@@ -17,12 +17,12 @@ defmodule Cerberus.WithinClosestBehaviorTest do
   end
 
   for driver <- [:phoenix, :browser] do
-    test "scoped assert_has/refute_has support closest without within callback (#{driver})", context do
+    test "scoped assert_has/refute_has support closest with nested has filters (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/field-wrapper-errors")
-      |> assert_has(closest(css(".fieldset"), from: label("Email")), text("can't be blank"))
-      |> refute_has(closest(css(".fieldset"), from: label("Email")), text("Outer wrapper error"))
+      |> assert_has(has(closest(css(".fieldset"), from: label("Email")), text("can't be blank")))
+      |> assert_has(has_not(closest(css(".fieldset"), from: label("Email")), text("Outer wrapper error")))
     end
 
     test "scoped click supports closest scope locator (#{driver})", context do

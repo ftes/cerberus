@@ -32,7 +32,13 @@ defmodule Cerberus.Driver.Browser.Expressions do
       #{assert_helper_binding_snippet()}
 
       return JSON.stringify({
-        ok: !!(helper && typeof helper.text === "function" && typeof helper.path === "function")
+        ok:
+          !!(
+            helper &&
+              typeof helper.text === "function" &&
+              typeof helper.locator === "function" &&
+              typeof helper.path === "function"
+          )
       });
     })()
     """
@@ -154,6 +160,51 @@ defmodule Cerberus.Driver.Browser.Expressions do
         matched: [],
         helperMissing: true,
         jsTiming: { expressionTextAssertionMs: 0 }
+      });
+    })()
+    """
+  end
+
+  @spec locator_assertion(map()) :: String.t()
+  def locator_assertion(payload) when is_map(payload) do
+    encoded_payload = JSON.encode!(payload)
+    mode_value = Map.get(payload, :mode, "assert")
+
+    """
+    (async () => {
+      const now = () =>
+        typeof performance !== "undefined" && typeof performance.now === "function"
+          ? performance.now()
+          : Date.now();
+
+      #{assert_helper_binding_snippet()}
+      if (helper && typeof helper.locator === "function") {
+        const startedAt = now();
+        const raw = await helper.locator(#{encoded_payload});
+        const elapsedMs = now() - startedAt;
+
+        try {
+          const parsed = JSON.parse(raw);
+          const jsTiming = parsed && parsed.jsTiming && typeof parsed.jsTiming === "object" ? parsed.jsTiming : {};
+          parsed.jsTiming = { ...jsTiming, expressionLocatorAssertionMs: elapsedMs };
+          return JSON.stringify(parsed);
+        } catch (_error) {
+          return raw;
+        }
+      }
+
+      const mode = #{JSON.encode!(mode_value)};
+      const reason = mode === "assert" ? "expected locator not found" : "unexpected matching locator found";
+
+      return JSON.stringify({
+        ok: false,
+        reason,
+        path: #{current_path_expression()},
+        title: document.title || "",
+        texts: [],
+        matched: [],
+        helperMissing: true,
+        jsTiming: { expressionLocatorAssertionMs: 0 }
       });
     })()
     """

@@ -88,9 +88,14 @@ defmodule Cerberus.Driver.Live do
   def close_tab(%__MODULE__{} = session), do: session
 
   @impl true
+  def open_browser(%__MODULE__{view: view} = session, open_fun) when is_function(open_fun, 1) and not is_nil(view) do
+    _ = Phoenix.LiveViewTest.open_browser(view, open_fun)
+    session
+  end
+
   def open_browser(%__MODULE__{} = session, open_fun) when is_function(open_fun, 1) do
     html = snapshot_html(session)
-    path = OpenBrowser.write_snapshot!(html, endpoint_url(session.endpoint))
+    path = OpenBrowser.write_snapshot!(html, endpoint_url(session.endpoint), session.endpoint)
     _ = open_fun.(path)
     session
   end
@@ -507,54 +512,106 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def assert_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
+    if locator_assertion_requires_locator_engine?(locator) do
+      run_locator_assertion(session, locator, opts, :assert)
+    else
+      match_opts = locator_match_opts(locator, opts)
+      visible = Keyword.get(opts, :visible, true)
+      match_by = Keyword.get(match_opts, :match_by, :text)
+      {session, texts} = assertion_values(session, visible, match_by)
+      matched = Enum.filter(texts, &Query.match_text?(&1, expected, match_opts))
+
+      observed = %{
+        path: session.current_path,
+        visible: visible,
+        texts: texts,
+        matched: matched,
+        expected: expected,
+        transition: session_transition(session)
+      }
+
+      case Query.assertion_count_outcome(length(matched), match_opts, :assert) do
+        :ok ->
+          {:ok, update_session(session, :assert_has, observed), observed}
+
+        {:error, reason} ->
+          {:error, session, observed, reason}
+      end
+    end
+  end
+
+  @impl true
+  def assert_has(%__MODULE__{} = session, %Locator{} = locator, opts) do
+    run_locator_assertion(session, locator, opts, :assert)
+  end
+
+  @impl true
+  def refute_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
+    if locator_assertion_requires_locator_engine?(locator) do
+      run_locator_assertion(session, locator, opts, :refute)
+    else
+      match_opts = locator_match_opts(locator, opts)
+      visible = Keyword.get(opts, :visible, true)
+      match_by = Keyword.get(match_opts, :match_by, :text)
+      {session, texts} = assertion_values(session, visible, match_by)
+      matched = Enum.filter(texts, &Query.match_text?(&1, expected, match_opts))
+
+      observed = %{
+        path: session.current_path,
+        visible: visible,
+        texts: texts,
+        matched: matched,
+        expected: expected,
+        transition: session_transition(session)
+      }
+
+      case Query.assertion_count_outcome(length(matched), match_opts, :refute) do
+        :ok ->
+          {:ok, update_session(session, :refute_has, observed), observed}
+
+        {:error, reason} ->
+          {:error, session, observed, reason}
+      end
+    end
+  end
+
+  @impl true
+  def refute_has(%__MODULE__{} = session, %Locator{} = locator, opts) do
+    run_locator_assertion(session, locator, opts, :refute)
+  end
+
+  defp run_locator_assertion(%__MODULE__{} = session, %Locator{} = locator, opts, mode) when mode in [:assert, :refute] do
+    session = with_latest_html(session)
     match_opts = locator_match_opts(locator, opts)
     visible = Keyword.get(opts, :visible, true)
-    match_by = Keyword.get(match_opts, :match_by, :text)
-    {session, texts} = assertion_values(session, visible, match_by)
-    matched = Enum.filter(texts, &Query.match_text?(&1, expected, match_opts))
+    matched = Html.locator_assertion_values(session.html, locator, visible, Session.scope(session))
 
     observed = %{
       path: session.current_path,
       visible: visible,
-      texts: texts,
+      texts: matched,
       matched: matched,
-      expected: expected,
+      expected: locator,
       transition: session_transition(session)
     }
 
-    case Query.assertion_count_outcome(length(matched), match_opts, :assert) do
+    case Query.assertion_count_outcome(length(matched), match_opts, mode) do
       :ok ->
-        {:ok, update_session(session, :assert_has, observed), observed}
+        op = if(mode == :assert, do: :assert_has, else: :refute_has)
+        {:ok, update_session(session, op, observed), observed}
 
       {:error, reason} ->
         {:error, session, observed, reason}
     end
   end
 
-  @impl true
-  def refute_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
-    match_opts = locator_match_opts(locator, opts)
-    visible = Keyword.get(opts, :visible, true)
-    match_by = Keyword.get(match_opts, :match_by, :text)
-    {session, texts} = assertion_values(session, visible, match_by)
-    matched = Enum.filter(texts, &Query.match_text?(&1, expected, match_opts))
+  defp locator_assertion_requires_locator_engine?(%Locator{kind: kind}) when kind in [:and, :or, :not, :css], do: true
 
-    observed = %{
-      path: session.current_path,
-      visible: visible,
-      texts: texts,
-      matched: matched,
-      expected: expected,
-      transition: session_transition(session)
-    }
-
-    case Query.assertion_count_outcome(length(matched), match_opts, :refute) do
-      :ok ->
-        {:ok, update_session(session, :refute_has, observed), observed}
-
-      {:error, reason} ->
-        {:error, session, observed, reason}
-    end
+  defp locator_assertion_requires_locator_engine?(%Locator{opts: locator_opts}) do
+    Keyword.has_key?(locator_opts, :selector) or
+      Keyword.has_key?(locator_opts, :has) or
+      Keyword.has_key?(locator_opts, :has_not) or
+      Keyword.has_key?(locator_opts, :from)
   end
 
   @impl true
