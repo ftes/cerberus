@@ -3,13 +3,14 @@ defmodule Cerberus.Driver.Live do
 
   @behaviour Cerberus.Driver
 
-  import Phoenix.LiveViewTest, only: [element: 2, element: 3, render: 1, render_click: 1]
+  import Phoenix.LiveViewTest, only: [element: 2, element: 3, render: 1, render_click: 2]
 
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.CandidateScope
   alias Cerberus.Driver.DownloadAssertion
   alias Cerberus.Driver.Live.FormData
   alias Cerberus.Driver.LocatorOps
+  alias Cerberus.Driver.SelectorFallback
   alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.Html
   alias Cerberus.Locator
@@ -213,7 +214,9 @@ defmodule Cerberus.Driver.Live do
       |> maybe_put_flash_cookie(session.endpoint, flash)
       |> then(&Conn.follow_get(session.endpoint, &1, request_path))
 
-    session_from_conn(session, conn, request_path)
+    session
+    |> session_from_conn(conn, request_path)
+    |> maybe_store_follow_redirect_flash(flash)
   end
 
   def follow_redirect(%__MODULE__{} = session, %{to: to, flash: flash}) when is_binary(to) do
@@ -660,7 +663,19 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp locator_assertion_values(%__MODULE__{} = session, %Locator{} = locator, visible) do
-    {:ok, Html.locator_assertion_values(session.html, locator, visible, Session.scope(session))}
+    matched = Html.locator_assertion_values(session.html, locator, visible, Session.scope(session))
+
+    matched =
+      if matched == [] do
+        case SelectorFallback.selected_option_assertion_values(session.form_data, locator, visible) do
+          nil -> matched
+          fallback -> fallback
+        end
+      else
+        matched
+      end
+
+    {:ok, matched}
   catch
     kind, reason ->
       case {kind, reason} do
@@ -775,11 +790,15 @@ defmodule Cerberus.Driver.Live do
     click_live_dispatch_change_button(session, button)
   end
 
+  defp click_live_button(session, %{data_method: method} = button) when is_binary(method) and method != "" do
+    click_live_data_method(session, button, :button)
+  end
+
   defp click_live_button(session, button) do
     result =
       session.view
       |> live_button_element(button, Session.scope(session))
-      |> render_click()
+      |> render_click(%{})
 
     case result do
       rendered when is_binary(rendered) ->
@@ -906,6 +925,10 @@ defmodule Cerberus.Driver.Live do
     {:error, failed_session, observed, reason}
   end
 
+  defp click_live_link(session, %{data_method: method} = link) when is_binary(method) and method != "" do
+    click_live_data_method(session, link, :link)
+  end
+
   defp click_live_link(session, link) do
     result = maybe_render_click_link(session, link)
 
@@ -955,6 +978,65 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
+  defp click_live_data_method(session, element, action) when action in [:button, :link] do
+    method = normalize_submit_method(element[:data_method])
+    request_target = data_method_target(element)
+
+    if is_binary(request_target) and request_target != "" do
+      case follow_form_request(session, method, request_target, %{}) do
+        {:ok, updated, _submit_transition} ->
+          transition =
+            transition(
+              route_kind(session),
+              driver_kind(updated),
+              :click,
+              session.current_path,
+              Session.current_path(updated)
+            )
+
+          observed = %{
+            action: action,
+            clicked: element[:text] || "",
+            path: Session.current_path(updated),
+            method: method,
+            transition: transition,
+            texts: Html.texts(updated.html, :any, Session.scope(updated))
+          }
+
+          {:ok, update_last_result(updated, :click, observed), observed}
+
+        {:error, failed_session, reason, details} ->
+          observed = %{
+            action: action,
+            clicked: element[:text] || "",
+            path: session.current_path,
+            method: method,
+            details: details,
+            transition: session_transition(session)
+          }
+
+          {:error, failed_session, observed, reason}
+      end
+    else
+      observed = %{
+        action: action,
+        clicked: element[:text] || "",
+        path: session.current_path,
+        method: method,
+        transition: session_transition(session)
+      }
+
+      {:error, session, observed, "data-method element must define `data-to` or `href`"}
+    end
+  end
+
+  defp data_method_target(element) do
+    case blank_to_nil(element[:data_to]) do
+      nil -> blank_to_nil(element[:href])
+      value -> value
+    end
+  end
+
   defp click_link_via_visit(session, link, reason) do
     updated = visit(session, link.href, [])
 
@@ -981,7 +1063,7 @@ defmodule Cerberus.Driver.Live do
   defp maybe_render_click_link(session, link) do
     session.view
     |> live_link_element(link, Session.scope(session))
-    |> render_click()
+    |> render_click(%{})
   rescue
     _ -> {:error, :live_click_unsupported}
   end
@@ -1363,7 +1445,13 @@ defmodule Cerberus.Driver.Live do
         {:ok, button}
 
       :error ->
-        LiveViewHTML.find_submit_button(session.html, expected, opts, Session.scope(session))
+        case LiveViewHTML.find_submit_button(session.html, expected, opts, Session.scope(session)) do
+          {:ok, button} ->
+            {:ok, button}
+
+          :error ->
+            Html.find_button(session.html, expected, opts, Session.scope(session))
+        end
     end
   end
 
@@ -1424,7 +1512,7 @@ defmodule Cerberus.Driver.Live do
       selector when is_binary(selector) and selector != "" ->
         selector
         |> find_active_form_submit_button(session)
-        |> normalize_active_submit_button_result()
+        |> normalize_active_submit_button_result(session, selector)
 
       _ ->
         no_active_form_submit_error()
@@ -1437,10 +1525,15 @@ defmodule Cerberus.Driver.Live do
     finder.(session.html, "", match_opts, Session.scope(session))
   end
 
-  defp normalize_active_submit_button_result({:ok, button}), do: {:ok, button}
+  defp normalize_active_submit_button_result({:ok, button}, _session, _selector), do: {:ok, button}
 
-  defp normalize_active_submit_button_result(:error),
-    do: {:error, "submit/1 could not find a submit button in the active form"}
+  defp normalize_active_submit_button_result(:error, session, selector) do
+    case active_form_submit_fallback(session, selector) do
+      {:ok, button} -> {:ok, button}
+      :error -> {:error, "submit/1 could not find a submit button in the active form"}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
   defp submit_button_finder(:live), do: &LiveViewHTML.find_submit_button/4
   defp submit_button_finder(:static), do: &Html.find_submit_button/4
@@ -1448,6 +1541,70 @@ defmodule Cerberus.Driver.Live do
   defp no_active_form_submit_error do
     {:error, "submit/1 requires an active form; call fill_in/select/choose/check/uncheck/upload first"}
   end
+
+  defp active_form_submit_fallback(%__MODULE__{} = session, selector) when is_binary(selector) do
+    with {:ok, attrs} <- active_form_attributes(session.html, selector) do
+      form_phx_submit = present_attr?(Map.get(attrs, "phx-submit"))
+      action = blank_to_nil(Map.get(attrs, "action"))
+
+      if form_phx_submit or is_binary(action) do
+        {:ok,
+         %{
+           text: "",
+           action: action,
+           method: blank_to_nil(Map.get(attrs, "method")),
+           form: blank_to_nil(Map.get(attrs, "id")),
+           form_selector: selector,
+           form_phx_submit: form_phx_submit,
+           button_name: nil,
+           button_value: nil
+         }}
+      else
+        {:error, "submit target form must have a `phx-submit` or `action` defined"}
+      end
+    end
+  end
+
+  defp active_form_attributes(html, selector) when is_binary(html) and is_binary(selector) do
+    case form_id_from_selector(selector) do
+      id when is_binary(id) ->
+        escaped_id = Regex.escape(id)
+
+        case Regex.run(~r/<form\b(?=[^>]*\bid=(['"])#{escaped_id}\1)([^>]*)>/is, html, capture: :all_but_first) do
+          [_, attrs] -> {:ok, parse_html_attributes(attrs)}
+          _ -> :error
+        end
+
+      _ ->
+        :error
+    end
+  end
+
+  defp form_id_from_selector(selector) when is_binary(selector) do
+    case Regex.run(~r/form\[id=(['"])([^'"]+)\1\]/, selector, capture: :all_but_first) do
+      [_, id] ->
+        id
+
+      _ ->
+        case Regex.run(~r/#([A-Za-z0-9_-]+)/, selector, capture: :all_but_first) do
+          [id] -> id
+          _ -> nil
+        end
+    end
+  end
+
+  defp parse_html_attributes(attrs) when is_binary(attrs) do
+    ~r/([A-Za-z_:][-A-Za-z0-9_:.]*)\s*=\s*(['"])(.*?)\2/s
+    |> Regex.scan(attrs)
+    |> Enum.reduce(%{}, fn [_, key, _quote, value], acc ->
+      Map.put(acc, String.downcase(key), value)
+    end)
+  end
+
+  defp present_attr?(value) when is_binary(value), do: String.trim(value) != ""
+  defp present_attr?(_), do: false
+  defp blank_to_nil(value) when is_binary(value), do: if(String.trim(value) == "", do: nil, else: value)
+  defp blank_to_nil(_), do: nil
 
   defp locator_match_opts(%Locator{opts: locator_opts}, opts) do
     Keyword.merge(locator_opts, opts)
@@ -1771,8 +1928,21 @@ defmodule Cerberus.Driver.Live do
     if button[:form_phx_submit] do
       do_live_phx_submit(session, button, form_payload, additional)
     else
-      params = Map.merge(form_payload, additional)
-      do_live_action_submit(session, button, params)
+      action = blank_to_nil(button[:action])
+
+      if is_binary(action) do
+        params = Map.merge(form_payload, additional)
+        do_live_action_submit(session, %{button | action: action}, params)
+      else
+        observed = %{
+          action: :submit,
+          clicked: button[:text] || "",
+          path: session.current_path,
+          transition: session_transition(session)
+        }
+
+        {:error, session, observed, "submit target form must have a `phx-submit` or `action` defined"}
+      end
     end
   end
 
@@ -2606,6 +2776,12 @@ defmodule Cerberus.Driver.Live do
         }
     end
   end
+
+  defp maybe_store_follow_redirect_flash(%{conn: %Plug.Conn{} = conn} = session, flash) when is_map(flash) do
+    %{session | conn: put_in(conn.private[:cerberus_follow_redirect_flash], flash)}
+  end
+
+  defp maybe_store_follow_redirect_flash(session, _flash), do: session
 
   defp unwrap_conn_result(%Plug.Conn{} = conn, session, from_driver) when from_driver in [:static, :live] do
     case redirect_target(conn) do

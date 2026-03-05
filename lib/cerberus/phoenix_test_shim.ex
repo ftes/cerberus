@@ -39,7 +39,7 @@ defmodule Cerberus.PhoenixTestShim do
   @doc """
   Returns the current path.
   """
-  def current_path(session), do: Cerberus.current_path(ensure_session(session))
+  def current_path(session), do: Cerberus.current_path(ensure_session(session), return_result: true)
 
   def assert_has(session, selector) do
     {locator, opts} = normalize_assert_request(selector, [])
@@ -53,8 +53,13 @@ defmodule Cerberus.PhoenixTestShim do
 
   def assert_has(session, selector, text), do: assert_has(session, selector, text: normalize_scalar(text))
 
-  def assert_has(session, selector, text, opts) when is_list(opts),
-    do: assert_has(session, selector, Keyword.put(opts, :text, normalize_scalar(text)))
+  def assert_has(session, selector, text, opts) when is_list(opts) do
+    if Keyword.has_key?(opts, :text) do
+      raise ArgumentError, text_arg_conflict_message(:assert_has, selector, text, opts)
+    end
+
+    assert_has(session, selector, Keyword.put(opts, :text, normalize_scalar(text)))
+  end
 
   def refute_has(session, selector) do
     {locator, opts} = normalize_assert_request(selector, [])
@@ -68,8 +73,13 @@ defmodule Cerberus.PhoenixTestShim do
 
   def refute_has(session, selector, text), do: refute_has(session, selector, text: normalize_scalar(text))
 
-  def refute_has(session, selector, text, opts) when is_list(opts),
-    do: refute_has(session, selector, Keyword.put(opts, :text, normalize_scalar(text)))
+  def refute_has(session, selector, text, opts) when is_list(opts) do
+    if Keyword.has_key?(opts, :text) do
+      raise ArgumentError, text_arg_conflict_message(:refute_has, selector, text, opts)
+    end
+
+    refute_has(session, selector, Keyword.put(opts, :text, normalize_scalar(text)))
+  end
 
   def assert_path(session, expected, opts \\ []) do
     Cerberus.assert_path(ensure_session(session), expected, normalize_path_opts(opts))
@@ -362,6 +372,8 @@ defmodule Cerberus.PhoenixTestShim do
 
   defp normalize_assert_request(selector, opts) do
     opts = normalize_match_opts(opts)
+    validate_assert_match_opts!(opts)
+    {selector, opts} = normalize_value_selector(selector, opts)
     exact = Keyword.get(opts, :exact, false)
     locator = normalize_selector(selector)
 
@@ -384,6 +396,22 @@ defmodule Cerberus.PhoenixTestShim do
       end
 
     {locator, Keyword.drop(opts, [:text, :value, :label, :exact])}
+  end
+
+  defp validate_assert_match_opts!(opts) do
+    if Keyword.has_key?(opts, :text) and Keyword.has_key?(opts, :value) do
+      raise ArgumentError, "Cannot provide both :text and :value to assertions"
+    end
+  end
+
+  defp normalize_value_selector(selector, opts) do
+    case Keyword.fetch(opts, :value) do
+      {:ok, value} when is_binary(selector) ->
+        {"#{selector}[value=#{inspect(value)}]", Keyword.delete(opts, :value)}
+
+      _ ->
+        {selector, opts}
+    end
   end
 
   defp normalize_match_opts(opts) do
@@ -428,6 +456,21 @@ defmodule Cerberus.PhoenixTestShim do
 
   defp exact_opt(value, _exact) when is_struct(value, Regex), do: []
   defp exact_opt(_value, exact), do: [exact: exact]
+
+  defp text_arg_conflict_message(fun, selector, text, opts) do
+    normalized_text = normalize_scalar(text)
+    suggested_opts = Keyword.delete(opts, :text)
+
+    suggested_call =
+      if suggested_opts == [] do
+        "#{fun}(session, #{inspect(selector)}, #{inspect(normalized_text)})"
+      else
+        "#{fun}(session, #{inspect(selector)}, #{inspect(normalized_text)}, #{inspect(suggested_opts)})"
+      end
+
+    "Cannot specify `text` as the third argument and `:text` as an option.\n\n" <>
+      "You might want to change it to:\n\n#{suggested_call}\n"
+  end
 
   defp selector_string?(value) when not is_binary(value), do: false
 

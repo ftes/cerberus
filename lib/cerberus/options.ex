@@ -265,7 +265,13 @@ defmodule Cerberus.Options do
 
   @type screenshot_opts :: [
           path: String.t() | nil,
-          full_page: boolean()
+          full_page: boolean(),
+          open: boolean(),
+          return_result: boolean()
+        ]
+
+  @type return_result_opts :: [
+          return_result: boolean()
         ]
 
   @type path_query :: map() | keyword() | nil
@@ -449,7 +455,9 @@ defmodule Cerberus.Options do
 
   @screenshot_opts_schema [
     path: [type: :any, default: nil, doc: "Optional file path for the screenshot output."],
-    full_page: [type: :boolean, doc: "Captures the full document instead of only the viewport."]
+    full_page: [type: :boolean, doc: "Captures the full document instead of only the viewport."],
+    open: [type: :boolean, default: false, doc: "Opens the saved screenshot with the default system viewer."],
+    return_result: [type: :boolean, default: false, doc: "Returns the screenshot PNG binary instead of the session."]
   ]
 
   @session_common_opts_schema [
@@ -555,6 +563,10 @@ defmodule Cerberus.Options do
     same_site: [type: :any, default: :lax, doc: "Cookie sameSite policy (:strict, :lax, :none)."]
   ]
 
+  @return_result_opts_schema [
+    return_result: [type: :boolean, default: false, doc: "When true, returns the computed value instead of the session."]
+  ]
+
   @spec click_schema() :: keyword()
   def click_schema, do: @click_opts_schema
 
@@ -599,6 +611,9 @@ defmodule Cerberus.Options do
 
   @spec browser_add_cookie_schema() :: keyword()
   def browser_add_cookie_schema, do: @browser_add_cookie_opts_schema
+
+  @spec return_result_schema() :: keyword()
+  def return_result_schema, do: @return_result_opts_schema
 
   @spec session_common_schema() :: keyword()
   def session_common_schema, do: @session_common_opts_schema
@@ -749,6 +764,11 @@ defmodule Cerberus.Options do
     |> validate_optional_string!("Browser.add_cookie/4", :domain)
     |> validate_optional_string!("Browser.add_cookie/4", :path)
     |> validate_cookie_same_site!("Browser.add_cookie/4")
+  end
+
+  @spec validate_return_result!(keyword(), String.t()) :: return_result_opts()
+  def validate_return_result!(opts, op_name) do
+    validate!(opts, @return_result_opts_schema, op_name)
   end
 
   @spec validate_session_common!(keyword()) :: session_common_opts()

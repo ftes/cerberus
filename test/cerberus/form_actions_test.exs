@@ -126,6 +126,35 @@ defmodule Cerberus.FormActionsTest do
     end
   end
 
+  test "submit/1 can submit active live forms without a submit button when phx-submit is defined (phoenix)" do
+    :phoenix
+    |> session()
+    |> visit("/live/form-change")
+    |> fill_in(label("No button name"), "Arnor")
+    |> submit()
+    |> assert_has(text("No button submit: Arnor", exact: true))
+  end
+
+  test "submit/1 errors when active live form has neither phx-submit nor action (phoenix)" do
+    assert_raise ExUnit.AssertionError, ~r/`phx-submit` or `action` defined/, fn ->
+      :phoenix
+      |> session()
+      |> visit("/live/form-change")
+      |> fill_in(label("Name (no phx-change)"), "Arnor")
+      |> submit()
+    end
+  end
+
+  @tag skip: "browser submit-active-form-no-button parity bug"
+  test "submit/1 parity for no-button live forms in browser driver" do
+    :browser
+    |> session()
+    |> visit("/live/form-change")
+    |> fill_in(label("No button name"), "Arnor")
+    |> submit()
+    |> assert_has(text("No button submit: Arnor", exact: true))
+  end
+
   test "live driver reports missing fields for fill_in and missing submit controls on counter page" do
     assert_raise ExUnit.AssertionError, ~r/no form field matched locator/, fn ->
       :phoenix

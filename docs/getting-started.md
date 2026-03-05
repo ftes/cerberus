@@ -245,6 +245,13 @@ session =
 session
 |> assert_has(~l"Press result: submitted"e)
 |> assert_has(~l"Dialog result: cancelled"e)
+
+png =
+  screenshot(session, path: "tmp/extensions.png", return_result: true)
+
+cookie(session, "_cerberus_fixture_key", fn entry ->
+  assert entry
+end)
 ```
 
 ## Step 8: Per-Test Browser Overrides

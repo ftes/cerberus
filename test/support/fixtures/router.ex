@@ -4,6 +4,10 @@ defmodule Cerberus.Fixtures.Router do
 
   import Phoenix.LiveView.Router
 
+  alias Cerberus.Fixtures.LiveSandbox
+  alias Cerberus.Fixtures.PhoenixTest.LayoutView, as: PhoenixTestLayoutView
+  alias Cerberus.Fixtures.PhoenixTestPlaywright.LayoutView, as: PhoenixTestPlaywrightLayoutView
+
   pipeline :browser do
     plug(:accepts, ["html"])
     plug(:fetch_session)
@@ -17,6 +21,128 @@ defmodule Cerberus.Fixtures.Router do
     plug(:fetch_session)
     plug(:fetch_live_flash)
     plug(:put_secure_browser_headers)
+  end
+
+  pipeline :phoenix_test_browser do
+    plug(:accepts, ["html"])
+    plug(:fetch_session)
+    plug(:fetch_live_flash)
+    plug(:put_root_layout, html: {PhoenixTestLayoutView, :root})
+    plug(:protect_from_forgery)
+    plug(:put_secure_browser_headers)
+  end
+
+  pipeline :phoenix_test_playwright_browser do
+    plug(:accepts, ["html"])
+    plug(:fetch_session)
+    plug(:fetch_live_flash)
+    plug(:put_root_layout, html: {PhoenixTestPlaywrightLayoutView, :root})
+    plug(:put_secure_browser_headers)
+  end
+
+  pipeline :phoenix_test_playwright_browser_csrf do
+    plug(:accepts, ["html"])
+    plug(:fetch_session)
+    plug(:fetch_live_flash)
+    plug(:put_root_layout, html: {PhoenixTestPlaywrightLayoutView, :root})
+    plug(:protect_from_forgery)
+    plug(:put_secure_browser_headers)
+  end
+
+  pipeline :phoenix_test_auth_header do
+    plug(:phoenix_test_proxy_header_auth)
+  end
+
+  scope "/phoenix_test", Cerberus.Fixtures.PhoenixTest do
+    pipe_through(:phoenix_test_browser)
+
+    post("/page/create_record", PageController, :create)
+    post("/page/update_record", PageController, :update)
+    put("/page/update_record", PageController, :update)
+    post("/page/delete_record", PageController, :delete)
+    delete("/page/delete_record", PageController, :delete)
+    get("/page/unauthorized", PageController, :unauthorized)
+    get("/page/redirect_to_static", PageController, :redirect_to_static)
+    post("/page/redirect_to_liveview", PageController, :redirect_to_liveview)
+    post("/page/redirect_to_static", PageController, :redirect_to_static)
+    get("/page/:page", PageController, :show)
+
+    live_session :phoenix_test_live_pages, layout: {PhoenixTestLayoutView, :app} do
+      live("/live/index", IndexLive)
+      live("/live/index/alias", IndexLive)
+      live("/live/page_2", Page2Live)
+      live("/live/async_page", AsyncPageLive)
+      live("/live/async_page_2", AsyncPage2Live)
+      live("/live/dynamic_form", DynamicFormLive)
+      live("/live/simple_ordinal_inputs", SimpleOrdinalInputsLive)
+      live("/live/nested", NestedLive)
+    end
+
+    scope "/auth" do
+      pipe_through([:phoenix_test_auth_header])
+
+      live_session :phoenix_test_auth, layout: {PhoenixTestLayoutView, :app} do
+        live("/live/index", IndexLive)
+        live("/live/page_2", Page2Live)
+      end
+    end
+
+    live("/live/redirect_on_mount/:redirect_type", RedirectLive)
+  end
+
+  scope "/phoenix_test/playwright/pw", Cerberus.Fixtures.PhoenixTestPlaywright.Playwright do
+    pipe_through([:phoenix_test_playwright_browser_csrf])
+
+    live_session :phoenix_test_playwright_pw, on_mount: LiveSandbox do
+      live("/live", Live)
+      live("/live/ecto", EctoLive)
+    end
+
+    get("/other", PageController, :other)
+    get("/longer-than-viewport", PageController, :longer_than_viewport)
+    get("/cookies", PageController, :cookies)
+    get("/session", PageController, :session)
+    get("/headers", PageController, :headers)
+    get("/js-script-console-error", PageController, :js_script_console_error)
+  end
+
+  scope "/phoenix_test/playwright", Cerberus.Fixtures.PhoenixTestPlaywright do
+    pipe_through(:phoenix_test_playwright_browser)
+
+    post("/page/create_record", PageController, :create)
+    put("/page/update_record", PageController, :update)
+    delete("/page/delete_record", PageController, :delete)
+    get("/page/unauthorized", PageController, :unauthorized)
+    get("/page/redirect_to_static", PageController, :redirect_to_static)
+    post("/page/redirect_to_liveview", PageController, :redirect_to_liveview)
+    post("/page/redirect_to_static", PageController, :redirect_to_static)
+    get("/page/:page", PageController, :show)
+
+    live_session :phoenix_test_playwright_live_pages,
+      layout: {PhoenixTestPlaywrightLayoutView, :app},
+      on_mount: LiveSandbox do
+      live("/live/index", IndexLive)
+      live("/live/index/alias", IndexLive)
+      live("/live/page_2", Page2Live)
+      live("/live/async_page", AsyncPageLive)
+      live("/live/async_page_2", AsyncPage2Live)
+      live("/live/dynamic_form", DynamicFormLive)
+      live("/live/simple_ordinal_inputs", SimpleOrdinalInputsLive)
+      live("/live/nested", NestedLive)
+    end
+
+    scope "/auth" do
+      pipe_through([:phoenix_test_auth_header])
+
+      live_session :phoenix_test_playwright_auth,
+        layout: {PhoenixTestPlaywrightLayoutView, :app},
+        on_mount: LiveSandbox do
+        live("/live/index", IndexLive)
+        live("/live/page_2", Page2Live)
+      end
+    end
+
+    live("/live/redirect_on_mount/:redirect_type", RedirectLive)
   end
 
   scope "/", Cerberus.Fixtures do
@@ -76,7 +202,7 @@ defmodule Cerberus.Fixtures.Router do
 
     live_session :fixtures,
       root_layout: {Cerberus.Fixtures.Layouts, :root},
-      on_mount: Cerberus.Fixtures.LiveSandbox do
+      on_mount: LiveSandbox do
       live("/live/counter", CounterPageLive)
       live("/live/async_page", AsyncPageLive)
       live("/live/async_page_2", AsyncPage2Live)
@@ -96,5 +222,9 @@ defmodule Cerberus.Fixtures.Router do
       live("/auth/live/users/log_in", AuthLogInLive)
       live("/auth/live/dashboard", AuthDashboardLive)
     end
+  end
+
+  defp phoenix_test_proxy_header_auth(conn, _opts) do
+    Cerberus.Fixtures.PhoenixTest.Router.proxy_header_auth(conn, [])
   end
 end

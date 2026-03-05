@@ -55,6 +55,26 @@ defmodule Cerberus.AssertionFilterSemanticsTest do
                      |> refute_has(text("Articles"), with: "Articles")
                    end
     end
+
+    test "assertions can match value attributes on static pages (#{driver})", context do
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/controls")
+      |> assert_has(css("input[value='33']"))
+      |> assert_has(label("Age", exact: true))
+      |> refute_has(css("input[value='99']"))
+    end
+
+    test "assertions can match updated value attributes on live pages (#{driver})", context do
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/live/controls")
+      |> assert_has(css("input[value='33']"))
+      |> assert_has(label("Age", exact: true))
+      |> fill_in(label("Age"), "41")
+      |> assert_has(css("input[value='41']"))
+      |> refute_has(css("input[value='33']"))
+    end
   end
 
   defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)

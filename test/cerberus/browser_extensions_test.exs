@@ -139,9 +139,22 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert cookie.value == "cookie-value"
     assert cookie.path == "/"
 
+    assert cookie(session, "cerberus-browser-cookie", fn entry ->
+             send(self(), {:cookie_callback, entry})
+           end) == session
+
+    assert_receive {:cookie_callback, %{name: "cerberus-browser-cookie", value: "cookie-value"}}
+
     assert Enum.any?(cookies(session), fn entry ->
              entry.name == "cerberus-browser-cookie" and entry.value == "cookie-value"
            end)
+
+    assert cookies(session, fn entries ->
+             send(self(), {:cookies_callback, entries})
+           end) == session
+
+    assert_receive {:cookies_callback, entries}
+    assert Enum.any?(entries, &(&1.name == "cerberus-browser-cookie" and &1.value == "cookie-value"))
 
     session =
       session
@@ -153,6 +166,12 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert fixture_session_cookie.name == "_cerberus_fixture_key"
     assert fixture_session_cookie.http_only
     assert fixture_session_cookie.session
+
+    assert session_cookie(session, fn entry ->
+             send(self(), {:session_cookie_callback, entry})
+           end) == session
+
+    assert_receive {:session_cookie_callback, %{name: "_cerberus_fixture_key"}}
   end
 
   test "browser keyword options are validated with NimbleOptions" do
@@ -190,7 +209,7 @@ defmodule Cerberus.BrowserExtensionsTest do
     end
   end
 
-  test "evaluate_js supports pipeable no-callback and callback forms" do
+  test "evaluate_js supports callback, ignore-result, and return_result forms" do
     session =
       :browser
       |> session()
@@ -204,6 +223,11 @@ defmodule Cerberus.BrowserExtensionsTest do
       end)
 
     assert returned_session == session
+    assert evaluate_js(session, "(() => 9 * 9)()", return_result: true) == 81
+
+    assert_raise ArgumentError, ~r/Browser.evaluate_js\/3 invalid options/, fn ->
+      evaluate_js(session, "(() => 9 * 9)()", return_result: :yes)
+    end
 
     assert_raise AssertionError, fn ->
       evaluate_js(session, "(() => 40 + 1)()", fn value ->

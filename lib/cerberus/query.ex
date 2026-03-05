@@ -4,6 +4,7 @@ defmodule Cerberus.Query do
   alias Cerberus.Options
 
   @state_keys [:checked, :disabled, :selected, :readonly]
+  @non_breaking_spaces ~r/[\x{00A0}\x{202F}]/u
 
   @spec match_text?(String.t(), String.t() | Regex.t(), Options.text_match_opts()) :: boolean()
   def match_text?(actual, expected, opts \\ []) when is_binary(actual) do
@@ -27,7 +28,8 @@ defmodule Cerberus.Query do
   defp maybe_normalize_ws(value, opts) do
     if Keyword.get(opts, :normalize_ws, true) do
       value
-      |> String.replace(~r/\s+/, " ")
+      |> String.replace(@non_breaking_spaces, " ")
+      |> String.replace(~r/\s+/u, " ")
       |> String.trim()
     else
       value

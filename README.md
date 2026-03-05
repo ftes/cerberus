@@ -1,4 +1,5 @@
 # Cerberus
+Fast Phoenix feature tests with real-browser confidence.
 
 [![Hex.pm Version](https://img.shields.io/hexpm/v/cerberus)](https://hex.pm/packages/cerberus)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/cerberus/)
@@ -7,15 +8,14 @@
 
 ![Cerberus hero artwork](docs/banner.avif)
 
-Ship Phoenix feature tests fast without losing browser truth.
+Single API to feature test
+1. LiveViews
+2. Controllers (static/dead views)
+3. In Browser
 
-Cerberus is vertically integrated. Think of it as
-- Phoenix-aware test APIs (PhoenixTest / PhoenixTest.Playwright)
-- plus lower-level browser drivers (Capybara + Cuprite / Playwright).
-
-Why integrate?
-1. You can easily switch from non-browser tests (fast!) to browser tests when you add JS hooks.
-2. We can guarantee correctness: Phoenix driver behaviour is tested against real browser behaviour.
+Vertically integrated: It's like PhoenixTest + Playwright. Or Capybara + Cuprite. Why you ask?
+1. **You can** easily switch from non-browser tests (fast!) to browser tests when you add JS hooks.
+2. **We can** guarantee correctness: Phoenix drivers are tested against real browser behaviour.
 
 ## 30-Second Start
 ```ex
@@ -41,7 +41,7 @@ import Cerberus.Browser
 session(:browser, headless: false, slow_mo: 500) # open chrome
 |> visit("/live/counter")
 |> evaluate_js("prompt('Hey!')")
-|> screenshot(full_page: true)
+|> screenshot(full_page: true, open: true)
 ```
 
 For progressive, step-by-step examples (scopes, forms, tabs, browser extensions), see [Getting Started](docs/getting-started.md).
@@ -74,6 +74,8 @@ Use `~l` sigil shorthand for common one-liners:
 - `~l"Save"` means exact text match by default
 - `~l"Save"i` means inexact text match
 - `~l"button:Save"r` means role + accessible name
+- text-like matches normalize whitespace by default (`normalize_ws: true`), including NBSP characters
+- set `normalize_ws: false` when you need exact raw whitespace matching
 
 Use `testid(...)` when text/role is ambiguous, and CSS for structural targeting only.
 
@@ -92,6 +94,11 @@ session()
 session(:browser, show_browser: true, slow_mo: 500) # 3) human: watch live interaction in browser
 |> visit("/articles")
 |> screenshot(full_page: true) # 4) human and AI: static .png screenshot
+
+png =
+  session(:browser)
+  |> visit("/articles")
+  |> screenshot(path: "tmp/page.png", return_result: true) # raw PNG bytes
 ```
 
 ## Browser Tests

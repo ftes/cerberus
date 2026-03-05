@@ -26,6 +26,38 @@ defmodule CerberusTest do
              |> assert_has(text("Session user: alice", exact: true))
   end
 
+  test "session(conn) preserves cookie-backed auth state" do
+    email = "session-carry-#{System.unique_integer([:positive])}@example.com"
+    password = "Password12345!"
+
+    %StaticSession{conn: seeded_conn} =
+      session()
+      |> visit("/auth/static/users/register")
+      |> fill_in(label("Email"), email)
+      |> fill_in(label("Password"), password)
+      |> fill_in(label("Confirm Password"), password)
+      |> submit(button("Create account"))
+      |> assert_path("/auth/static/dashboard")
+      |> assert_has(text("Signed in as: #{email}", exact: true))
+
+    seeded_conn
+    |> session()
+    |> visit("/auth/static/dashboard")
+    |> assert_has(text("Signed in as: #{email}", exact: true))
+  end
+
+  test "session(conn) preserves init_test_session values before first request" do
+    seeded_conn =
+      Phoenix.ConnTest.build_conn()
+      |> Phoenix.ConnTest.init_test_session(%{})
+      |> Plug.Conn.put_session(:session_user, "bob")
+
+    seeded_conn
+    |> session()
+    |> visit("/session/user")
+    |> assert_has(text("Session user: bob", exact: true))
+  end
+
   test "session constructor rejects explicit auto/static/live driver selection" do
     assert_raise ArgumentError, ~r/unsupported public driver :auto/, fn ->
       session(:auto)
@@ -365,6 +397,23 @@ defmodule CerberusTest do
     assert reloaded.current_path == "/articles"
   end
 
+  test "current_path supports callback and return_result forms while preserving pipeline by default" do
+    session = visit(session(), "/articles")
+
+    assert current_path(session) == session
+
+    assert current_path(session, fn path ->
+             send(self(), {:current_path_value, path})
+           end) == session
+
+    assert_receive {:current_path_value, "/articles"}
+    assert current_path(session, return_result: true) == "/articles"
+
+    assert_raise ArgumentError, ~r/current_path\/2 invalid options/, fn ->
+      current_path(session, return_result: :yes)
+    end
+  end
+
   test "open_browser creates an HTML snapshot for static sessions" do
     session =
       session()
@@ -394,6 +443,21 @@ defmodule CerberusTest do
     assert is_list(texts)
     assert Enum.any?(texts, &String.contains?(&1, "Articles"))
     refute Enum.empty?(LazyHTML.query(lazy_html, "h1"))
+  end
+
+  test "render_html supports return_result option" do
+    session = visit(session(), "/articles")
+
+    assert render_html(session, []) == session
+
+    lazy_html = render_html(session, return_result: true)
+
+    assert %LazyHTML{} = lazy_html
+    assert Enum.any?(Cerberus.Html.texts(lazy_html, :any, nil), &String.contains?(&1, "Articles"))
+
+    assert_raise ArgumentError, ~r/render_html\/2 invalid options/, fn ->
+      render_html(session, return_result: :yes)
+    end
   end
 
   test "open_browser creates an HTML snapshot for live sessions" do

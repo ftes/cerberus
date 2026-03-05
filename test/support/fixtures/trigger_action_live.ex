@@ -127,6 +127,14 @@ defmodule Cerberus.Fixtures.TriggerActionLive do
 
       <button phx-click="show-dynamic-form">Show Dynamic Form</button>
 
+      <button
+        data-method="post"
+        data-to="/trigger-action/result"
+        data-csrf={Plug.CSRFProtection.get_csrf_token()}
+      >
+        Data-method Trigger Action
+      </button>
+
       <form
         :if={@show_dynamic_form}
         id="dynamic-trigger-form"

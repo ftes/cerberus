@@ -261,6 +261,66 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       return source;
     };
 
+    helper.buttonSelector = "button,input[type='submit'],input[type='button'],input[type='image']";
+
+    helper.isButtonLikeElement = (element) => {
+      const tag = (element.tagName || "").toLowerCase();
+      if (tag === "button") return true;
+      if (tag !== "input") return false;
+      const type = (element.getAttribute("type") || "").toLowerCase();
+      return type === "submit" || type === "button" || type === "image";
+    };
+
+    helper.buttonText = (element, hidden) => {
+      const tag = (element.tagName || "").toLowerCase();
+
+      if (tag === "input") {
+        return element.getAttribute("value") || "";
+      }
+
+      return hidden ? element.textContent : element.innerText || element.textContent;
+    };
+
+    helper.labelMapForDocument = (doc, cache) => {
+      if (!doc) return new Map();
+      if (cache && cache.has(doc)) return cache.get(doc);
+
+      const labels = new Map();
+
+      let nodes = [];
+      try {
+        nodes = Array.from(doc.querySelectorAll("label[for]"));
+      } catch (_error) {
+        nodes = [];
+      }
+
+      for (const label of nodes) {
+        const id = label.getAttribute("for");
+        if (!id) continue;
+        labels.set(id, label.textContent || "");
+      }
+
+      if (cache) cache.set(doc, labels);
+      return labels;
+    };
+
+    helper.labelForControl = (element, hidden, context) => {
+      const doc = element.ownerDocument || document;
+      const labels = helper.labelMapForDocument(doc, context && context.labelCache);
+      const byId = labels.get(element.id || "");
+
+      if (byId) return byId;
+
+      if (typeof element.closest === "function") {
+        const wrappingLabel = element.closest("label");
+        if (wrappingLabel) {
+          return hidden ? wrappingLabel.textContent || "" : wrappingLabel.innerText || wrappingLabel.textContent || "";
+        }
+      }
+
+      return "";
+    };
+
     helper.valueForMatch = (element, hidden, matchBy, normalizeWs, context) => {
       const tag = (element.tagName || "").toLowerCase();
       if (tag === "script" || tag === "style" || tag === "noscript") return null;
@@ -273,7 +333,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           if (tag !== "a" || !element.hasAttribute("href")) return null;
           break;
         case "button":
-          if (tag !== "button") return null;
+          if (!helper.isButtonLikeElement(element)) return null;
           break;
         case "placeholder":
           if (!(tag === "input" || tag === "textarea" || tag === "select")) return null;
@@ -295,9 +355,11 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       switch (matchBy) {
         case "label":
         case "link":
-        case "button":
         case "text":
           source = hidden ? element.textContent : element.innerText || element.textContent;
+          break;
+        case "button":
+          source = helper.buttonText(element, hidden);
           break;
         case "placeholder":
           source = element.getAttribute("placeholder") || "";
@@ -659,7 +721,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         case "link":
           return "a[href]";
         case "button":
-          return "button";
+          return helper.buttonSelector;
         case "label":
           return "label";
         case "placeholder":
@@ -710,11 +772,14 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           if (tag !== "a" || !element.hasAttribute("href")) return null;
           return hidden ? element.textContent : element.innerText || element.textContent;
         case "button":
-          if (tag !== "button") return null;
-          return hidden ? element.textContent : element.innerText || element.textContent;
+          if (!helper.isButtonLikeElement(element)) return null;
+          return helper.buttonText(element, hidden);
         case "label":
-          if (tag !== "label") return null;
-          return hidden ? element.textContent : element.innerText || element.textContent;
+          if (tag === "label") return hidden ? element.textContent : element.innerText || element.textContent;
+          if (tag === "input" || tag === "textarea" || tag === "select") {
+            return helper.labelForControl(element, hidden, context);
+          }
+          return null;
         case "placeholder":
           if (!(tag === "input" || tag === "textarea" || tag === "select")) return null;
           return element.getAttribute("placeholder") || "";
@@ -850,7 +915,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const fromLocator = helper.locatorOpts(locator).from || null;
       const visibility = options.visibility || "visible";
       const selector = helper.locatorQuerySelector(locatorWithoutFrom);
-      const context = { altCache: new Map() };
+      const context = { altCache: new Map(), labelCache: new WeakMap() };
       const candidates = [];
 
       helper.eachCandidateElement(roots, selector, null, (element) => {
@@ -899,7 +964,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const filters = helper.matchFilters(options);
       const locator = options.locator && typeof options.locator === "object" ? options.locator : null;
       const locatorWithoutFrom = locator ? helper.locatorWithoutFrom(locator) : null;
-      const context = { altCache: new Map() };
+      const context = { altCache: new Map(), labelCache: new WeakMap() };
       const matches = helper.collectLocatorMatches(options);
       const values = matches
         .map((entry) => helper.locatorObservationValue(entry.element, entry.hidden, locatorWithoutFrom, context))

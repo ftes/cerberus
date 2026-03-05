@@ -67,6 +67,25 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       return helper.uniqueSelector(form) || "";
     };
 
+    helper.buttonSelector = "button,input[type='submit'],input[type='button'],input[type='image']";
+
+    helper.isButtonLikeInput = (element) => {
+      const tag = (element.tagName || "").toLowerCase();
+      if (tag !== "input") return false;
+      const type = (element.getAttribute("type") || "").toLowerCase();
+      return type === "submit" || type === "button" || type === "image";
+    };
+
+    helper.buttonText = (element) => {
+      const tag = (element.tagName || "").toLowerCase();
+
+      if (tag === "input") {
+        return helper.normalize(element.getAttribute("value") || "", true);
+      }
+
+      return helper.normalize(element.textContent, true);
+    };
+
     helper.currentPath = () => window.location.pathname + window.location.search;
 
     helper.liveRoots = () => {
@@ -575,7 +594,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
               .queryWithinRoots(roots, "[phx-click]", selector)
               .filter((element) => {
                 const tag = (element.tagName || "").toLowerCase();
-                return tag !== "a" && tag !== "button";
+                return tag !== "a" && tag !== "button" && !helper.isButtonLikeInput(element);
               })
               .map((element, index) =>
                 helper.attachElement(
@@ -602,12 +621,12 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       const buttons =
         kind === "link"
           ? []
-          : helper.queryWithinRoots(roots, "button", selector).map((element, index) =>
+          : helper.queryWithinRoots(roots, helper.buttonSelector, selector).map((element, index) =>
               helper.attachElement(
                 {
                   kind: "button",
                   index,
-                  text: helper.normalize(element.textContent, true),
+                  text: helper.buttonText(element),
                   title: element.getAttribute("title") || "",
                   ariaLabel: element.getAttribute("aria-label") || "",
                   alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt]"),
@@ -627,22 +646,24 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
     };
 
     helper.submitCandidates = (roots, selector) => {
-      const allButtons = helper.queryWithinRoots(roots, "button", selector);
+      const allButtons = helper.queryWithinRoots(roots, helper.buttonSelector, selector);
 
       return allButtons
         .map((element, index) => ({ element, index }))
         .filter(({ element }) => {
-          const type = (element.getAttribute("type") || "submit").toLowerCase();
+          const tag = (element.tagName || "").toLowerCase();
+          const type = (element.getAttribute("type") || (tag === "button" ? "submit" : "")).toLowerCase();
           return type === "submit" || type === "";
         })
         .map(({ element, index }) => {
-          const type = (element.getAttribute("type") || "submit").toLowerCase();
+          const tag = (element.tagName || "").toLowerCase();
+          const type = (element.getAttribute("type") || (tag === "button" ? "submit" : "")).toLowerCase();
 
           return helper.attachElement(
             {
               kind: "button",
               index,
-              text: helper.normalize(element.textContent, true),
+              text: helper.buttonText(element),
               title: element.getAttribute("title") || "",
               ariaLabel: element.getAttribute("aria-label") || "",
               alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt]"),
@@ -883,7 +904,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         case "link":
           return "a[href]";
         case "button":
-          return "button";
+          return helper.buttonSelector;
         case "label":
           return "label,input,textarea,select";
         case "placeholder":

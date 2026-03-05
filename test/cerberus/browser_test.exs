@@ -44,4 +44,42 @@ defmodule Cerberus.BrowserTest do
     assert :binary.part(png, 0, 8) == <<137, 80, 78, 71, 13, 10, 26, 10>>
     File.rm(path)
   end
+
+  @tag :tmp_dir
+  test "screenshot supports callback, return_result, and open options", %{tmp_dir: tmp_dir} do
+    path = Path.join(tmp_dir, "cerberus-screenshot-options.png")
+
+    previous_open_fun = Application.get_env(:cerberus, :open_with_system_cmd)
+
+    Application.put_env(:cerberus, :open_with_system_cmd, fn opened_path ->
+      send(self(), {:opened_screenshot, opened_path})
+      :ok
+    end)
+
+    on_exit(fn ->
+      if is_nil(previous_open_fun) do
+        Application.delete_env(:cerberus, :open_with_system_cmd)
+      else
+        Application.put_env(:cerberus, :open_with_system_cmd, previous_open_fun)
+      end
+    end)
+
+    session =
+      :browser
+      |> session()
+      |> visit("/articles")
+
+    assert screenshot(session, [path: path], fn png_binary ->
+             assert is_binary(png_binary)
+             assert byte_size(png_binary) > 0
+             assert :binary.part(png_binary, 0, 8) == <<137, 80, 78, 71, 13, 10, 26, 10>>
+           end) == session
+
+    png_binary = screenshot(session, path: path, return_result: true, open: true)
+
+    assert is_binary(png_binary)
+    assert byte_size(png_binary) > 0
+    assert :binary.part(png_binary, 0, 8) == <<137, 80, 78, 71, 13, 10, 26, 10>>
+    assert_receive {:opened_screenshot, ^path}
+  end
 end

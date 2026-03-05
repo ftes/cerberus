@@ -10,6 +10,7 @@ defmodule Cerberus.Fixtures.FormChangeLive do
        name: "",
        email: "",
        nickname: "",
+       no_button_name: "",
        hidden_name: "",
        hidden_email: "",
        hidden_race: ""
@@ -40,6 +41,10 @@ defmodule Cerberus.Fixtures.FormChangeLive do
        hidden_email: params["email"] || "",
        hidden_race: params["hidden_race"] || ""
      )}
+  end
+
+  def handle_event("save_no_button", params, socket) do
+    {:noreply, assign(socket, no_button_name: params["name"] || "")}
   end
 
   @impl true
@@ -75,6 +80,12 @@ defmodule Cerberus.Fixtures.FormChangeLive do
         <input id="no_change_name" name="name" type="text" value="" />
       </form>
       <p id="no-change-result">No change value: unchanged</p>
+
+      <form id="submit-no-button-form" phx-submit="save_no_button">
+        <label for="submit_no_button_name">No button name</label>
+        <input id="submit_no_button_name" name="name" type="text" value={@no_button_name} />
+      </form>
+      <p id="no-button-submit-result">No button submit: {@no_button_name}</p>
 
       <form id="changes-hidden-input-form" phx-change="validate_hidden">
         <input type="hidden" name="hidden_race" value="hobbit" />

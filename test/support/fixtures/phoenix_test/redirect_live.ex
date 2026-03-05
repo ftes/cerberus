@@ -1,0 +1,26 @@
+defmodule Cerberus.Fixtures.PhoenixTest.RedirectLive do
+  @moduledoc false
+  use Phoenix.LiveView
+
+  def render(assigns) do
+    ~H"""
+    <h1>You shouldn't see this</h1>
+    """
+  end
+
+  def mount(%{"redirect_type" => redirect_type}, _, socket) do
+    case redirect_type do
+      "push_navigate" ->
+        {:ok,
+         socket
+         |> put_flash(:info, "Navigated!")
+         |> push_navigate(to: "/phoenix_test/live/index")}
+
+      "redirect" ->
+        {:ok,
+         socket
+         |> put_flash(:info, "Redirected!")
+         |> redirect(to: "/phoenix_test/live/index")}
+    end
+  end
+end

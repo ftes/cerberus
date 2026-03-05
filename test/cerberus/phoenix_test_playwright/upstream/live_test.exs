@@ -1,0 +1,1427 @@
+defmodule Cerberus.PhoenixTestPlaywright.Upstream.LiveTest do
+  use Cerberus.TestSupport.PhoenixTestPlaywright.Case, async: true
+
+  alias Cerberus.TestSupport.PhoenixTestPlaywright.ActiveForm
+  alias Cerberus.TestSupport.PhoenixTestPlaywright.Driver
+  alias Cerberus.TestSupport.PhoenixTestPlaywright.Html
+  alias ExUnit.AssertionError
+
+  @moduletag skip: "phoenix_test_playwright live upstream parity in progress"
+
+  describe "render_page_title/1" do
+    test "renders the default page title", %{conn: conn} do
+      title =
+        conn
+        |> visit("/live/index")
+        |> Driver.render_page_title()
+
+      assert title == "PhoenixTest is the best!"
+    end
+
+    @tag skip: "ignore"
+    test "renders updated page title", %{conn: conn} do
+      title =
+        conn
+        |> visit("/live/index")
+        |> click_button("Change page title")
+        |> Driver.render_page_title()
+
+      assert title == "Title changed!"
+    end
+  end
+
+  describe "visit/2" do
+    test "navigates to given LiveView page", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> assert_has("h1", text: "LiveView main page")
+    end
+
+    test "user can visit different pages sequentially", %{conn: conn} do
+      conn
+      |> visit("/live/page_2")
+      |> visit("/live/index")
+      |> assert_has("h1", text: "LiveView main page")
+    end
+  end
+
+  describe "click_link/2" do
+    test "follows 'navigate' links", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> click_link("Navigate link")
+      |> assert_has("h1", text: "LiveView page 2")
+    end
+
+    test "follows navigation that subsequently redirect", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> click_link("Navigate (and redirect back) link")
+      |> assert_has("h1", text: "LiveView main page")
+      |> assert_has("#flash-group", text: "Navigated back!")
+    end
+
+    test "finds link by substring", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> click_link("and redirect back")
+      |> assert_has("h1", text: "LiveView main page")
+    end
+
+    test "accepts click_link with selector", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> click_link("a", "Navigate link")
+      |> assert_has("h1", text: "LiveView page 2")
+    end
+
+    test "handles patches to current view", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> click_link("Patch link")
+      |> assert_has("h2", text: "LiveView main page details")
+    end
+
+    test "handles navigation to a non-liveview", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> click_link("Navigate to non-liveview")
+      |> assert_has("h1", text: "Main page")
+    end
+
+    @tag skip: "ignore"
+    test "preserves headers across navigation", %{conn: conn} do
+      conn
+      |> Plug.Conn.put_req_header("x-custom-header", "Some-Value")
+      |> visit("/live/index")
+      |> click_link("Navigate to non-liveview")
+      |> assert_has("h1", text: "Main page")
+      |> then(fn %{conn: conn} ->
+        assert {"x-custom-header", "Some-Value"} in conn.req_headers
+      end)
+    end
+
+    test "raises error when there are multiple links with same text", %{conn: conn} do
+      assert_raise ArgumentError, ~r/more than one element matching selector/, fn ->
+        conn
+        |> visit("/live/index")
+        |> click_link("Multiple links")
+      end
+    end
+
+    test "raises an error when link element can't be found with given text", %{conn: conn} do
+      assert_raise ArgumentError, ~r/not find element.*No link/, fn ->
+        conn
+        |> visit("/live/index")
+        |> click_link("No link")
+      end
+    end
+
+    test "raises an error when there are no links on the page", %{conn: conn} do
+      assert_raise ArgumentError, ~r/not find element.*role=link/, fn ->
+        conn
+        |> visit("/live/page_2")
+        |> click_link("No link")
+      end
+    end
+  end
+
+  describe "click_button" do
+    test "finds button by substring", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> click_button("Show")
+      |> assert_has("#tab", text: "Tab title")
+    end
+
+    test "can be used inside within to scope phx-click buttons", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within(".wibble", fn session ->
+        # does not raise an error
+        click_button(session, "button", "action")
+      end)
+    end
+
+    test "handles a `phx-click` button", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> click_button("Show tab")
+      |> assert_has("#tab", text: "Tab title")
+    end
+
+    @tag skip: "ignore"
+    test "does not remove active form if button isn't form's submit button", %{conn: conn} do
+      session =
+        conn
+        |> visit("/live/index")
+        |> fill_in("User Name", with: "Aragorn")
+        |> click_button("Reset")
+
+      assert ActiveForm.active?(session.active_form)
+    end
+
+    @tag skip: "ignore"
+    test "resets active form if it is form's submit button", %{conn: conn} do
+      session =
+        conn
+        |> visit("/live/index")
+        |> fill_in("User Name", with: "Aragorn")
+        |> click_button("Save Nested Form")
+
+      refute ActiveForm.active?(session.active_form)
+    end
+
+    test "includes name and value if specified", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("User Name", with: "Aragorn")
+      |> click_button("Save Nested Form")
+      |> assert_has("#form-data", text: "user:no-phx-change-form-button: save")
+    end
+
+    test "includes default data if form is untouched", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> click_button("Save Full Form")
+      |> assert_has("#form-data", text: "admin: off")
+      |> assert_has("#form-data", text: "contact: mail")
+      |> assert_has("#form-data", text: "level: 7")
+      |> assert_has("#form-data", text: "full_form_button: save")
+      |> assert_has("#form-data", text: "notes: Prefilled notes")
+      |> refute_has("#form-data", text: "disabled_textarea:")
+    end
+
+    test "can click button that does not submit form after filling form", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("Email", with: "some@example.com")
+      |> click_button("Save Nested Form")
+      |> refute_has("#form-data", text: "email: some@example.com")
+    end
+
+    test "submits owner form if button isn't nested inside form (including button data)", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#owner-form", fn session ->
+        fill_in(session, "Name", with: "Aragorn")
+      end)
+      |> click_button("Save Owner Form")
+      |> assert_has("#form-data", text: "name: Aragorn")
+      |> assert_has("#form-data", text: "form-button: save-owner-form")
+    end
+
+    test "follows form's redirect to live page", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#redirect-form", &fill_in(&1, "Name", with: "Aragorn"))
+      |> click_button("#redirect-form-submit", "Save Redirect Form")
+      |> assert_has("h1", text: "LiveView page 2")
+      |> assert_has("#flash-group", text: "Form saved and redirected")
+    end
+
+    @tag skip: "ignore"
+    test "follows form's redirect and preserves headers", %{conn: conn} do
+      conn
+      |> Plug.Conn.put_req_header("x-auth-header", "Some-Value")
+      |> visit("/auth/live/index")
+      |> within("#live-redirect-form", &select(&1, "Name", option: "Two"))
+      |> assert_path("/auth/live/page_2")
+      |> assert_has("#flash-group", text: "Redirected on phx-change")
+      |> then(fn %{conn: conn} ->
+        assert {"x-auth-header", "Some-Value"} in conn.req_headers
+      end)
+    end
+
+    test "follows form's redirect to static page", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#redirect-form-to-static", &fill_in(&1, "Name", with: "Aragorn"))
+      |> click_button("#redirect-form-to-static-submit", "Save Redirect to Static")
+      |> assert_has("h1", text: "Main page")
+      |> assert_has("#flash-group", text: "Redirected to static page")
+    end
+
+    test "submits regular (non phx-submit) form", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#non-liveview-form", &fill_in(&1, "Name", with: "Aragorn"))
+      |> click_button("Submit Non LiveView")
+      |> assert_has("#form-data", text: "name: Aragorn")
+    end
+
+    @tag skip: "ignore"
+    test "Raises an error if button with type 'button' inside form doesn't have valid phx-click", %{conn: conn} do
+      msg = ~r/to have a valid `phx-click` attribute or belong to a `form`/
+
+      assert_raise ArgumentError, msg, fn ->
+        conn
+        |> visit("/live/index")
+        |> within("#should-not-submit-form", &click_button(&1, "Non submit button"))
+      end
+    end
+
+    @tag skip: "ignore"
+    test "raises an error if form doesn't have a `phx-submit` or `action`", %{conn: conn} do
+      msg = ~r/to have a `phx-submit` or `action` defined/
+
+      assert_raise ArgumentError, msg, fn ->
+        conn
+        |> visit("/live/index")
+        |> within("#non-liveview-form", &fill_in(&1, "Name", with: "Aragorn"))
+        |> click_button("Submit Invalid Form")
+      end
+    end
+
+    test "raises an error when there are no buttons on page", %{conn: conn} do
+      assert_raise ArgumentError, ~r/Could not find element/, fn ->
+        conn
+        |> visit("/live/page_2")
+        |> click_button("Show tab")
+      end
+    end
+
+    @tag skip: "ignore"
+    test "raises an error if button is not part of form and has no phx-submit", %{conn: conn} do
+      msg = ~r/to have a valid `phx-click` attribute or belong to a `form` element/
+
+      assert_raise ArgumentError, msg, fn ->
+        conn
+        |> visit("/live/index")
+        |> click_button("Actionless Button")
+      end
+    end
+
+    test "raises an error if active form but can't find button", %{conn: conn} do
+      msg = ~r/Could not find element/
+
+      assert_raise ArgumentError, msg, fn ->
+        conn
+        |> visit("/live/index")
+        |> within("#no-phx-change-form", fn session ->
+          session
+          |> fill_in("Name", with: "Legolas")
+          |> click_button("No button")
+        end)
+      end
+    end
+
+    test "does not raise when clicking a button that contains text wrapped in another element", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> click_button("An ID-less Span Wrapped")
+    end
+
+    test "does not raise when targetting duplicate button differentiated by wrapped ID", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> click_button("#button-with-id-1 button", "Duplicate button with wrapped id")
+    end
+  end
+
+  describe "within/3" do
+    test "scopes assertions within selector", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> assert_has("button", text: "Reset")
+      |> within("#email-form", fn session ->
+        refute_has(session, "button", text: "Reset")
+      end)
+    end
+
+    test "scopes further form actions within a selector", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#email-form", fn session ->
+        fill_in(session, "Email", with: "someone@example.com")
+      end)
+      |> assert_has("input", label: "Email", value: "someone@example.com")
+    end
+
+    test "can target subsequent calls to nested liveview", %{conn: conn} do
+      conn
+      |> visit("/live/nested")
+      |> within("#child-live-view", fn session ->
+        session
+        |> fill_in("Email", with: "someone@example.com")
+        |> click_button("Save")
+        |> assert_has("#child-view-form-data", text: "email: someone@example.com")
+      end)
+      |> refute_has("#parent-view-form-data", text: "email: someone@example.com")
+    end
+
+    test "raises when data is not in scoped HTML", %{conn: conn} do
+      assert_raise ArgumentError, ~r/Could not find element.*"User Name"/, fn ->
+        conn
+        |> visit("/live/index")
+        |> within("#email-form", fn session ->
+          fill_in(session, "User Name", with: "Aragorn")
+        end)
+      end
+    end
+  end
+
+  describe "fill_in/4" do
+    test "fills in a single text field based on the label", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("Email", with: "someone@example.com")
+      |> assert_has("input", label: "Email", value: "someone@example.com")
+    end
+
+    test "can fill input with `nil` to override existing value", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#pre-rendered-data-form", fn session ->
+        fill_in(session, "Pre Rendered Input", with: nil)
+      end)
+      |> assert_has("#form-data", text: "input's value is empty")
+    end
+
+    test "can fill-in textareas", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("Notes", with: "Dunedain. Heir to the throne. King of Arnor and Gondor")
+      |> click_button("Save Full Form")
+      |> assert_has("#form-data",
+        text: "notes: Dunedain. Heir to the throne. King of Arnor and Gondor"
+      )
+    end
+
+    @tag skip: "ignore"
+    test "can fill-in prefilled textareas where label wraps textarea", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("Wrapped notes", with: "Some description")
+      |> click_button("Save Full Form")
+      |> assert_has("#form-data", text: "wrapped-notes: Some description")
+    end
+
+    test "can fill-in complex form fields", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("First Name", with: "Aragorn")
+      |> fill_in("Notes", with: "Dunedain. Heir to the throne. King of Arnor and Gondor")
+      |> click_button("Save Full Form")
+      |> assert_has("#form-data", text: "first_name: Aragorn")
+      |> assert_has("#form-data",
+        text: "notes: Dunedain. Heir to the throne. King of Arnor and Gondor"
+      )
+    end
+
+    test "can fill in numbers", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("Level (number)", with: 10)
+      |> click_button("Save Full Form")
+      |> assert_has("#form-data", text: "level: 10")
+    end
+
+    test "works in 'nested' forms", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("User Name", with: "Aragorn")
+      |> click_button("Save Nested Form")
+      |> assert_has("#form-data", text: "user:name: Aragorn")
+      |> assert_has("#form-data", text: "user:payer: off")
+      |> assert_has("#form-data", text: "user:role: El Jefe")
+    end
+
+    test "can be used to submit form", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("Email", with: "someone@example.com")
+      |> click_button("Save Email")
+      |> assert_has("#form-data", text: "email: someone@example.com")
+    end
+
+    test "can be combined with other forms' fill_ins (without pollution)", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("Email", with: "frodo@example.com")
+      |> fill_in("Comments", with: "Hobbit")
+      |> assert_has("#form-data", text: "comments: Hobbit")
+      |> refute_has("#form-data", text: "email: frodo@example.com")
+    end
+
+    test "can target a label with exact: false", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#complex-labels", fn session ->
+        fill_in(session, "Name", with: "Frodo", exact: false)
+      end)
+      |> assert_has("#form-data", text: "name: Frodo")
+    end
+
+    test "can target a label with exact: true", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#complex-labels", fn session ->
+        fill_in(session, "Name *", with: "Frodo", exact: true)
+      end)
+      |> assert_has("#form-data", text: "name: Frodo")
+    end
+
+    test "can target input with selector if multiple labels have same text", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#same-labels", fn session ->
+        fill_in(session, "#book-characters", "Character", with: "Frodo")
+      end)
+      |> assert_has("#form-data", text: "book-characters: Frodo")
+    end
+
+    test "raises an error when element can't be found with label", %{conn: conn} do
+      msg = ~r/Could not find element.*"Non-existent Email Label"./
+
+      assert_raise ArgumentError, msg, fn ->
+        conn
+        |> visit("/live/index")
+        |> fill_in("Non-existent Email Label", with: "some@example.com")
+      end
+    end
+
+    test "raises an error when label is found but no corresponding input is found", %{conn: conn} do
+      msg = ~r/Could not find element/
+
+      assert_raise ArgumentError, msg, fn ->
+        conn
+        |> visit("/live/index")
+        |> fill_in("Email (no input)", with: "some@example.com")
+      end
+    end
+  end
+
+  describe "select/3" do
+    test "selects given option for a label", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> select("Race", option: "Elf")
+      |> assert_has("#full-form option[value='elf']")
+    end
+
+    test "allows selecting option if a similar option exists", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> assert_has(".phx-connected")
+      |> select("Race", option: "Orc")
+      |> assert_has("#full-form option[value='orc']")
+    end
+
+    test "works in 'nested' forms", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> select("User Admin", option: "False")
+      |> click_button("Save Nested Form")
+      |> assert_has("#form-data", text: "user:admin: false")
+    end
+
+    test "can be used to submit form", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> select("Race", option: "Elf")
+      |> click_button("Save Full Form")
+      |> assert_has("#form-data", text: "race: elf")
+    end
+
+    test "works for multiple select", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> select("Race", option: "Elf")
+      |> select("Race 2", option: ["Elf", "Dwarf"])
+      |> click_button("Save Full Form")
+      |> assert_has("#form-data", text: "[elf, dwarf]")
+    end
+
+    @tag skip: "ignore"
+    test "works for multiple select with repeated calls", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> select("Race 2", option: "Elf")
+      |> select("Race 2", option: "Dwarf")
+      |> click_button("Save Full Form")
+      |> assert_has("#form-data", text: "[elf, dwarf]")
+    end
+
+    test "works with phx-click outside of forms", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#not-a-form", fn session ->
+        click(session, "select option", "Dog")
+      end)
+      |> assert_has("#form-data", text: "selected: [dog]")
+    end
+
+    test "works with phx-click and multi-select", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#not-a-form", fn session ->
+        session
+        |> click("select option", "Dog")
+        |> click("select option", "Cat")
+      end)
+      |> assert_has("#form-data", text: "selected: [dog, cat]")
+    end
+
+    test "can target a label with exact: false", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#complex-labels", fn session ->
+        select(session, "Choose a pet:", exact: false, option: "Dog")
+      end)
+      |> assert_has("#form-data", text: "pet: dog")
+    end
+
+    @tag skip: "not-implemented"
+    test "can target an option's text with exact_option: false", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#full-form", fn session ->
+        select(session, "Race", exact_option: false, option: "Hum")
+      end)
+      |> submit()
+      |> assert_has("#form-data", text: "race: human")
+    end
+
+    test "can target option with selector if multiple labels have same text", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#same-labels", fn session ->
+        select(session, "#select-favorite-character", "Character", option: "Frodo")
+      end)
+      |> assert_has("#form-data", text: "favorite-character: Frodo")
+    end
+
+    @tag skip: "ignore"
+    test "raises an error if select option is neither in a form nor has a phx-click", %{conn: conn} do
+      session = visit(conn, "/live/index")
+
+      assert_raise ArgumentError, ~r/to have a valid `phx-click` attribute on options or to belong to a `form`/, fn ->
+        select(session, "Invalid Select Option", option: "Dog")
+      end
+    end
+  end
+
+  describe "check/3" do
+    test "checks a checkbox", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> check("Admin")
+      |> click_button("Save Full Form")
+      |> assert_has("#form-data", text: "admin: on")
+    end
+
+    test "can check an unchecked checkbox", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> uncheck("Admin")
+      |> check("Admin")
+      |> click_button("Save Full Form")
+      |> assert_has("#form-data", text: "admin: on")
+    end
+
+    test "preserves initially checked box in group", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> check("Checkbox group 2")
+      |> click_button("Save Full Form")
+      |> assert_has("#form-data", text: "checkbox_group: [1, 2]")
+    end
+
+    test "handle checkbox name with '?'", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> check("Subscribe")
+      |> click_button("Save Full Form")
+      |> assert_has("#form-data", text: "subscribe?: on")
+    end
+
+    test "works in 'nested' forms", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> check("Payer")
+      |> click_button("Save Nested Form")
+      |> assert_has("#form-data", text: "user:payer: on")
+    end
+
+    test "works with phx-click outside a form", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#not-a-form", fn session ->
+        check(session, "Second Breakfast")
+      end)
+      |> assert_has("#form-data", text: "value: second-breakfast")
+    end
+
+    test "can target a label with exact: false", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#complex-labels", fn session ->
+        check(session, "Human", exact: false)
+      end)
+      |> assert_has("#form-data", text: "human: yes")
+    end
+
+    test "can specify input selector when multiple checkboxes have same label", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#same-labels", fn session ->
+        check(session, "#like-elixir", "Yes")
+      end)
+      |> assert_has("#form-data", text: "like-elixir: yes")
+    end
+
+    @tag skip: "ignore"
+    test "raises error if checkbox doesn't have phx-click or belong to form", %{conn: conn} do
+      session = visit(conn, "/live/index")
+
+      assert_raise ArgumentError, ~r/have a valid `phx-click` attribute or belong to a `form`/, fn ->
+        check(session, "Invalid Checkbox")
+      end
+    end
+  end
+
+  describe "uncheck/3" do
+    test "sends the default value (in hidden input)", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> uncheck("Admin")
+      |> click_button("Save Full Form")
+      |> assert_has("#form-data", text: "admin: off")
+    end
+
+    test "can uncheck a previous check/2 in the test", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> check("Admin")
+      |> uncheck("Admin")
+      |> click_button("Save Full Form")
+      |> assert_has("#form-data", text: "admin: off")
+    end
+
+    test "works in 'nested' forms", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> check("Payer")
+      |> uncheck("Payer")
+      |> click_button("Save Nested Form")
+      |> assert_has("#form-data", text: "user:payer: off")
+    end
+
+    test "works with phx-click outside a form", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#not-a-form", fn session ->
+        session
+        |> click("internal:label=\"Second Breakfast\"")
+        |> click("internal:label=\"Second Breakfast\"")
+      end)
+      |> refute_has("#form-data", text: "value: second-breakfast")
+    end
+
+    test "can target a label with exact: false", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#complex-labels", fn session ->
+        session
+        |> check("Human", exact: false)
+        |> uncheck("Human", exact: false)
+      end)
+      |> assert_has("#form-data", text: "human: no")
+    end
+
+    test "can specify input selector when multiple checkboxes have same label", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#same-labels", fn session ->
+        session
+        |> check("#like-elixir", "Yes")
+        |> uncheck("#like-elixir", "Yes")
+      end)
+      |> refute_has("#form-data", text: "like-elixir: yes")
+      |> assert_has("#form-data", text: "like-elixir: no")
+    end
+
+    @tag skip: "ignore"
+    test "raises error if checkbox doesn't have phx-click or belong to form", %{conn: conn} do
+      session = visit(conn, "/live/index")
+
+      assert_raise ArgumentError, ~r/have a valid `phx-click` attribute or belong to a `form`/, fn ->
+        uncheck(session, "Invalid Checkbox")
+      end
+    end
+
+    test "sends phx-value when phx-click attribute used", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> refute_has("#checkbox-phx-click-values-abc:checked")
+      |> assert_has("#checkbox-phx-click-values-abc-value", text: "Unchecked")
+      |> check("Checkbox abc")
+      |> assert_has("#checkbox-phx-click-values-abc:checked")
+      |> assert_has("#checkbox-phx-click-values-abc-value", text: "Checked")
+      |> uncheck("Checkbox abc")
+      |> refute_has("#checkbox-phx-click-values-abc:checked")
+      |> assert_has("#checkbox-phx-click-values-abc-value", text: "Unchecked")
+    end
+
+    test "sends phx-click JS command value when attribute used", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> refute_has("#checkbox-phx-click-values-def:checked")
+      |> assert_has("#checkbox-phx-click-values-def-value", text: "Unchecked")
+      |> check("Checkbox def")
+      |> assert_has("#checkbox-phx-click-values-def:checked")
+      |> assert_has("#checkbox-phx-click-values-def-value", text: "Checked")
+      |> uncheck("Checkbox def")
+      |> refute_has("#checkbox-phx-click-values-def:checked")
+      |> assert_has("#checkbox-phx-click-values-def-value", text: "Unchecked")
+    end
+  end
+
+  describe "choose/3" do
+    test "chooses an option in radio button", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> choose("Email Choice")
+      |> click_button("Save Full Form")
+      |> assert_has("#form-data", text: "contact: email")
+    end
+
+    test "uses the default 'checked' if present", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> click_button("Save Full Form")
+      |> assert_has("#form-data", text: "contact: mail")
+    end
+
+    test "works with a phx-click outside of a form", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#not-a-form", fn session ->
+        click(session, "internal:label=\"Huey\"")
+      end)
+      |> assert_has("#form-data", text: "value: huey")
+    end
+
+    test "can target a label with exact: false", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#complex-labels", fn session ->
+        choose(session, "Book", exact: false)
+      end)
+      |> assert_has("#form-data", text: "book-or-movie: book")
+    end
+
+    test "can specify input selector when multiple options have same label in same form", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#same-labels", fn session ->
+        choose(session, "#elixir-yes", "Yes")
+      end)
+      |> assert_has("#form-data", text: "elixir-yes: yes")
+    end
+
+    @tag skip: "ignore"
+    test "raises an error if radio is neither in a form nor has a phx-click", %{conn: conn} do
+      session = visit(conn, "/live/index")
+
+      assert_raise ArgumentError, ~r/to have a valid `phx-click` attribute or belong to a `form` element/, fn ->
+        choose(session, "Invalid Radio Button")
+      end
+    end
+  end
+
+  describe "upload/4" do
+    test "uploads an image", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#full-form", fn session ->
+        session
+        |> upload("Avatar", "test/files/elixir.jpg")
+        |> click_button("Save Full Form")
+      end)
+      |> assert_has("#form-data", text: "avatar: elixir.jpg")
+    end
+
+    test "can target a label with exact: false", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#complex-labels", fn session ->
+        session
+        |> upload("Avatar", "test/files/elixir.jpg", exact: false)
+        |> click_button("Save")
+      end)
+      |> assert_has("#form-data", text: "avatar_2: elixir.jpg")
+    end
+
+    test "can specify input selector when multiple inputs have same label", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#same-labels", fn session ->
+        session
+        |> upload("[name='main_avatar']", "Avatar", "test/files/elixir.jpg")
+        |> click_button("Submit Form")
+      end)
+      |> assert_has("#form-data", text: "main_avatar: elixir.jpg")
+    end
+
+    @tag skip: "ignore"
+    test "upload (without other form actions) does not work with submit (matches browser behavior)", %{conn: conn} do
+      session =
+        conn
+        |> visit("/live/index")
+        |> within("#full-form", fn session ->
+          upload(session, "Avatar", "test/files/elixir.jpg")
+        end)
+
+      assert_raise ArgumentError, ~r/no active form/, fn ->
+        submit(session)
+      end
+    end
+
+    @tag skip: "ignore"
+    test "throws a nice error message for the `:not_accepted` error", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#full-form", fn session ->
+        assert_raise ArgumentError, ~r/Unsupported file type/, fn ->
+          upload(session, "Avatar", "test/files/phoenix.png")
+        end
+      end)
+    end
+
+    @tag skip: "ignore"
+    test "throws a nice error message for the `:too_many_files` error", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#full-form", fn session ->
+        assert_raise ArgumentError, ~r/Too many files uploaded./, fn ->
+          upload(session, "Avatar", "test/files/elixir.jpg")
+          upload(session, "Avatar", "test/files/elixir.jpg")
+        end
+      end)
+    end
+
+    @tag skip: "ignore"
+    test "throws a nice error message for the `:too_large` error", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#tiny-upload-form", fn session ->
+        assert_raise ArgumentError, ~r/File too large./, fn ->
+          upload(session, "Tiny", "test/files/elixir.jpg")
+        end
+      end)
+    end
+
+    test "triggers phx-change validations upon file selection", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#upload-change-form", fn session ->
+        upload(session, "Avatar", "test/files/elixir.jpg")
+      end)
+      |> assert_has("#upload-change-result", text: "phx-change triggered on file selection")
+    end
+
+    @tag skip: "ignore"
+    test "follows redirects from `:progress` events", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#upload-redirect-form", fn session ->
+        upload(session, "Redirect Avatar", "test/files/elixir.jpg")
+      end)
+      |> assert_path("/live/page_2")
+    end
+  end
+
+  describe "filling out full form with field functions" do
+    test "populates all fields", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("First Name", with: "Legolas")
+      |> fill_in("Date", with: Date.new!(2023, 12, 30))
+      |> check("Admin")
+      |> select("Race", option: "Elf")
+      |> choose("Email Choice")
+      |> fill_in("Notes", with: "Woodland Elf")
+      |> click_button("Save Full Form")
+      |> assert_has("#form-data", text: "name: Legolas")
+      |> assert_has("#form-data", text: "date: 2023-12-30")
+      |> assert_has("#form-data", text: "admin: on")
+      |> assert_has("#form-data", text: "race: elf")
+      |> assert_has("#form-data", text: "contact: email")
+      |> assert_has("#form-data", text: "notes: Woodland Elf")
+    end
+
+    test "populates all fields in nested forms", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("User Name", with: "Legolas")
+      |> select("User Admin", option: "True")
+      |> click_button("Save Nested Form")
+      |> assert_has("#form-data", text: "user:name: Legolas")
+      |> assert_has("#form-data", text: "user:admin: true")
+    end
+  end
+
+  describe "submit/1" do
+    test "submits a pre-filled form via phx-submit", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("Email", with: "some@example.com")
+      |> submit()
+      |> assert_has("#form-data", text: "email: some@example.com")
+    end
+
+    test "includes pre-rendered data", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("First Name", with: "Aragorn")
+      |> submit()
+      |> assert_has("#form-data", text: "admin: off")
+      |> assert_has("#form-data", text: "race: human")
+      |> assert_has("#form-data", text: "contact: mail")
+    end
+
+    test "includes the first button's name and value if present", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("First Name", with: "Aragorn")
+      |> submit()
+      |> assert_has("#form-data", text: "full_form_button: save")
+    end
+
+    test "can submit form without button", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("Country of Origin", with: "Arnor")
+      |> submit()
+      |> assert_has("#form-data", text: "country: Arnor")
+    end
+
+    test "follows form's redirect to live page", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#redirect-form", fn session ->
+        session
+        |> fill_in("Name", with: "Aragorn")
+        |> submit()
+      end)
+      |> assert_has("h1", text: "LiveView page 2")
+      |> assert_has("#flash-group", text: "Form saved and redirected")
+    end
+
+    test "follows form's redirect to static page", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#redirect-form-to-static", fn session ->
+        session
+        |> fill_in("Name", with: "Aragorn")
+        |> submit()
+      end)
+      |> assert_has("h1", text: "Main page")
+      |> assert_has("#flash-group", text: "Redirected to static page")
+    end
+
+    @tag skip: "ignore"
+    test "preserves headers after form submission and redirect", %{conn: conn} do
+      conn
+      |> Plug.Conn.put_req_header("x-custom-header", "Some-Value")
+      |> visit("/live/index")
+      |> within("#redirect-form-to-static", fn session ->
+        session
+        |> fill_in("Name", with: "Aragorn")
+        |> submit()
+      end)
+      |> assert_has("h1", text: "Main page")
+      |> then(fn %{conn: conn} ->
+        assert {"x-custom-header", "Some-Value"} in conn.req_headers
+      end)
+    end
+
+    test "submits regular (non phx-submit) form", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#non-liveview-form", fn session ->
+        session
+        |> fill_in("Name", with: "Aragorn")
+        |> submit()
+      end)
+      |> assert_path("/page/create_record")
+      |> assert_has("#form-data", text: "name: Aragorn")
+      |> assert_has("#form-data", text: "button: save")
+    end
+
+    @tag skip: "ignore"
+    test "handles inputs that get removed through other actions without raising error", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("To keep", with: "this input should stay")
+      |> fill_in("To remove", with: "this input will now be removed")
+      |> submit()
+      |> check("Hide to remove")
+      |> submit()
+      |> assert_has("#form-data", text: "this input should stay")
+      |> refute_has("#form-data", text: "this input will now be removed")
+    end
+
+    @tag skip: "ignore"
+    test "raises an error if there's no active form", %{conn: conn} do
+      message = ~r/There's no active form. Fill in a form with `fill_in`, `select`, etc./
+
+      assert_raise ArgumentError, message, fn ->
+        conn
+        |> visit("/live/index")
+        |> submit()
+      end
+    end
+
+    @tag skip: "ignore"
+    test "raises an error if form doesn't have a `phx-submit` or `action`", %{conn: conn} do
+      msg = ~r/to have a `phx-submit` or `action` defined/
+
+      assert_raise ArgumentError, msg, fn ->
+        conn
+        |> visit("/live/index")
+        |> within("#invalid-form", fn session ->
+          session
+          |> fill_in("Name", with: "Aragorn")
+          |> submit()
+        end)
+      end
+    end
+  end
+
+  describe "nested forms with inputs_for" do
+    test "handles form with phx-submit (without phx-change)", %{conn: conn} do
+      conn
+      |> visit("/live/simple_ordinal_inputs")
+      |> fill_in("Title", with: "Fellowship")
+      |> fill_in("#simple_mailing_list_emails_0_email", "Email", with: "Bow")
+      |> submit()
+      |> assert_has("[data-role=email]", text: "Bow")
+    end
+  end
+
+  describe "open_browser" do
+    @describetag skip: "ignore"
+    setup do
+      open_fun = fn view ->
+        assert %Phoenix.LiveViewTest.View{} = view
+      end
+
+      %{open_fun: open_fun}
+    end
+
+    test "opens the browser", %{conn: conn, open_fun: open_fun} do
+      conn
+      |> visit("/live/index")
+      |> open_browser(open_fun)
+      |> assert_has("h1", text: "LiveView main page")
+    end
+  end
+
+  describe "unwrap" do
+    @describetag skip: "ignore"
+
+    test "provides an escape hatch that gives access to the underlying view", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> unwrap(fn view ->
+        view
+        |> Phoenix.LiveViewTest.element("#hook")
+        |> Phoenix.LiveViewTest.render_hook(:hook_event, %{name: "Legolas"})
+      end)
+      |> assert_has("#form-data", text: "name: Legolas")
+    end
+
+    test "follows redirects after unwrap action", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> unwrap(fn view ->
+        view
+        |> Phoenix.LiveViewTest.element("#hook-with-redirect")
+        |> Phoenix.LiveViewTest.render_hook(:hook_with_redirect_event)
+      end)
+      |> assert_has("h1", text: "LiveView page 2")
+    end
+  end
+
+  describe "current_path" do
+    test "it is set on visit", %{conn: conn} do
+      session = visit(conn, "/live/index")
+
+      assert Driver.current_path(session) == "/live/index"
+    end
+
+    test "it is set on visit with query string", %{conn: conn} do
+      session = visit(conn, "/live/index?foo=bar")
+
+      assert Driver.current_path(session) == "/live/index?foo=bar"
+    end
+
+    test "it is updated on href navigation", %{conn: conn} do
+      session =
+        conn
+        |> visit("/live/index")
+        |> click_link("Navigate to non-liveview")
+
+      assert Driver.current_path(session) == "/page/index?details=true&foo=bar"
+    end
+
+    @tag skip: "ignore: current_path is a point-in-time read, click doesn't wait for navigation"
+    test "it is updated on live navigation", %{conn: conn} do
+      session =
+        conn
+        |> visit("/live/index")
+        |> click_link("Navigate link")
+
+      assert Driver.current_path(session) == "/live/page_2?details=true&foo=bar"
+    end
+
+    @tag skip: "ignore: current_path is a point-in-time read, click doesn't wait for navigation"
+    test "it is updated on live patching", %{conn: conn} do
+      session =
+        conn
+        |> visit("/live/index")
+        |> click_link("Patch link")
+
+      assert Driver.current_path(session) == "/live/index?details=true&foo=bar"
+    end
+
+    @tag skip: "ignore: current_path is a point-in-time read, click doesn't wait for navigation"
+    test "it is updated on push navigation", %{conn: conn} do
+      session =
+        conn
+        |> visit("/live/index")
+        |> click_button("Button with push navigation")
+
+      assert Driver.current_path(session) == "/live/page_2?foo=bar"
+    end
+
+    @tag skip: "ignore: current_path is a point-in-time read, click doesn't wait for navigation"
+    test "it is updated on push patch", %{conn: conn} do
+      session =
+        conn
+        |> visit("/live/index")
+        |> click_button("Button with push patch")
+
+      assert Driver.current_path(session) == "/live/index?foo=bar"
+    end
+  end
+
+  describe "shared form helpers behavior" do
+    test "triggers phx-change validations", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("Email", with: "test@email.com")
+      |> fill_in("Email", with: nil)
+      |> assert_has("#form-errors", text: "Errors present")
+    end
+
+    test "sends _target with phx-change events", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("Email", with: "frodo@example.com")
+      |> assert_has("#form-data", text: "_target: [email]")
+    end
+
+    test "does not trigger phx-change event if one isn't present", %{conn: conn} do
+      session = visit(conn, "/live/index")
+
+      starting_html = Driver.render_html(session)
+
+      ending_html =
+        session
+        |> within("#no-phx-change-form", &fill_in(&1, "Name", with: "Aragorn"))
+        |> Driver.render_html()
+
+      assert Html.element(starting_html) == Html.element(ending_html)
+    end
+
+    test "follows redirects on phx-change", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("Email with redirect", with: "someone@example.com")
+      |> assert_has("h1", text: "LiveView page 2")
+      |> assert_has("#flash-group", text: "Redirected on phx-change")
+    end
+
+    test "preserves correct order of active form vs form data", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> within("#changes-hidden-input-form", fn session ->
+        session
+        |> fill_in("Name for hidden", with: "Frodo")
+        |> fill_in("Email for hidden", with: "frodo@example.com")
+      end)
+      |> assert_has("#form-data", text: "name: Frodo")
+      |> assert_has("#form-data", text: "email: frodo@example.com")
+      |> assert_has("#form-data", text: "hidden_race: hobbit")
+    end
+
+    test "phx-trigger-action causes POST to static view", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("Trigger action", with: "engage")
+      |> submit()
+      |> assert_has("#form-data", text: "trigger_action_hidden_input: trigger_action_hidden_value")
+      |> assert_has("#form-data", text: "trigger_action_input: engage")
+    end
+
+    test "phx-trigger-action from outside the form", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> click_button("Trigger from elsewhere")
+      |> assert_has("#form-data", text: "trigger_action_hidden_input: trigger_action_hidden_value")
+      |> refute_has("#form-data", text: "trigger_action_input:")
+    end
+
+    test "phx-trigger-action performed after patch", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> fill_in("Patch and trigger action", with: "let's go")
+      |> assert_path("/page/create_record")
+    end
+
+    test "phx-trigger-action ignored if view redirects", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> click_button("Redirect and trigger action")
+      |> assert_path("/live/page_2")
+    end
+
+    @tag skip: "ignore"
+    test "phx-trigger-action ignored if view navigates", %{conn: conn} do
+      conn
+      |> visit("/live/index")
+      |> click_button("Navigate and trigger action")
+      |> then(&(Process.sleep(1000) && &1))
+      |> assert_path("/live/page_2")
+    end
+
+    @tag skip: "ignore"
+    test "raises an error if multiple forms have phx-trigger-action", %{conn: conn} do
+      assert_raise ArgumentError, ~r/Found multiple forms/, fn ->
+        conn
+        |> visit("/live/index")
+        |> click_button("Trigger multiple")
+        |> assert_has("#form-data", text: "hidden: trigger_action_hidden_value")
+      end
+    end
+
+    test "handles phx-trigger-action on dynamically rendered forms", %{conn: conn} do
+      conn
+      |> visit("/live/dynamic_form")
+      |> click_button("Show Form")
+      |> fill_in("Message", with: "test")
+      |> submit()
+      |> assert_has("#form-data", text: "message: test")
+    end
+
+    @tag skip: "ignore"
+    test "raises an error if field doesn't have a `name` attribute", %{conn: conn} do
+      assert_raise ArgumentError, ~r/Field is missing a `name` attribute/, fn ->
+        conn
+        |> visit("/live/index")
+        |> within("#invalid-form", fn session ->
+          fill_in(session, "No Name Attribute", with: "random")
+        end)
+      end
+    end
+  end
+
+  describe "assert_has/3 with timeout" do
+    @tag skip: "ignore"
+    test "defaults to timeout 0", %{conn: conn} do
+      assert_raise AssertionError, ~r/Could not find any elements/, fn ->
+        conn
+        |> visit("/live/async_page")
+        |> assert_has("h1", text: "Title loaded async")
+      end
+    end
+
+    test "timeout waits for changes to LiveView as a result of info messages", %{conn: conn} do
+      conn
+      |> visit("/live/async_page")
+      |> click_button("Change h2")
+      |> assert_has("h2", text: "I've been changed!")
+    end
+
+    test "timeout waits for async assigns", %{conn: conn} do
+      conn
+      |> visit("/live/async_page")
+      |> assert_has("h1", text: "Title loaded async")
+    end
+
+    test "timeout handles async navigates", %{conn: conn} do
+      conn
+      |> visit("/live/async_page")
+      |> click_button("Async navigate!")
+      |> assert_has("h1", text: "LiveView page 2")
+    end
+
+    test "timeout handles fast async navigates", %{conn: conn} do
+      conn
+      |> visit("/live/async_page")
+      |> click_button("Navigate quickly")
+      |> assert_has("h1", text: "LiveView page 2")
+    end
+
+    test "timeout handles redirects", %{conn: conn} do
+      conn
+      |> visit("/live/async_page")
+      |> click_button("Async redirect!")
+      |> assert_has("h1", text: "Main page")
+    end
+
+    test "can handle multiple LiveViews (redirect one to another) with async behavior", %{conn: conn} do
+      conn
+      |> visit("/live/async_page")
+      |> click_button("Async navigate to async 2 page!")
+      |> assert_has("h1", text: "Another title loaded async")
+    end
+  end
+
+  describe "refute_has/3 with timeout" do
+    test "defaults to timeout 0", %{conn: conn} do
+      conn
+      |> visit("/live/async_page")
+      |> refute_has("h1")
+    end
+
+    test "timeout waits for changes to LiveView as a result of info messages", %{conn: conn} do
+      conn
+      |> visit("/live/async_page")
+      |> click_button("Change h2")
+      |> refute_has("h2", text: "Where we test LiveView's async behavior")
+    end
+
+    test "timeout waits for async assigns", %{conn: conn} do
+      conn
+      |> visit("/live/async_page")
+      |> then(&(Process.sleep(1000) && &1))
+      |> assert_has("h1", text: "Title loaded async")
+    end
+
+    test "timeout handles async navigates", %{conn: conn} do
+      conn
+      |> visit("/live/async_page")
+      |> click_button("Async navigate!")
+      |> refute_has("h2", text: "Where we test LiveView's async behavior")
+    end
+
+    test "timeout handles fast async navigates", %{conn: conn} do
+      conn
+      |> visit("/live/async_page")
+      |> click_button("Navigate quickly")
+      |> refute_has("h2", text: "Where we test LiveView's async behavior")
+    end
+
+    test "timeout handles redirects", %{conn: conn} do
+      conn
+      |> visit("/live/async_page")
+      |> click_button("Async redirect!")
+      |> refute_has("h2", text: "Where we test LiveView's async behavior")
+    end
+  end
+end

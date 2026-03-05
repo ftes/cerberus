@@ -105,7 +105,7 @@ defmodule Cerberus.Phoenix.LiveViewTimeoutTest do
     send(self(), {:watcher, view_pid, {:live_view_redirected, {:redirect, %{to: "/main"}}}})
 
     action = fn updated_session ->
-      if current_path(updated_session) == "/main" do
+      if current_path(updated_session, return_result: true) == "/main" do
         :redirected
       else
         raise AssertionError, message: "expected redirect to /main"
@@ -126,7 +126,7 @@ defmodule Cerberus.Phoenix.LiveViewTimeoutTest do
         DummyLiveView.render_html(view_pid)
 
       redirected_session ->
-        assert current_path(redirected_session) == "/main"
+        assert current_path(redirected_session, return_result: true) == "/main"
         :ok
     end
 
@@ -151,7 +151,7 @@ defmodule Cerberus.Phoenix.LiveViewTimeoutTest do
         DummyLiveView.render_html(view_pid)
 
       redirected_session ->
-        assert current_path(redirected_session) == "/main"
+        assert current_path(redirected_session, return_result: true) == "/main"
         :ok
     end
 

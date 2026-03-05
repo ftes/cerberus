@@ -287,6 +287,8 @@ defmodule Cerberus.Html do
             %{
               text: text,
               href: attr(node, "href"),
+              data_method: attr(node, "data-method"),
+              data_to: attr(node, "data-to"),
               disabled: false,
               readonly: false,
               selected: false,
@@ -308,7 +310,7 @@ defmodule Cerberus.Html do
         find_button_by_locator(lazy_html, locator, opts, scope)
 
       nil ->
-        query_selector = selector_opt(opts) || "button"
+        query_selector = selector_opt(opts) || button_selector()
         match_by = match_by_opt(opts)
 
         find_matching(
@@ -320,6 +322,8 @@ defmodule Cerberus.Html do
           fn node, text, _root_node ->
             %{
               text: text,
+              data_method: attr(node, "data-method"),
+              data_to: attr(node, "data-to"),
               disabled: disabled?(node),
               readonly: readonly?(node),
               selected: false,
@@ -579,7 +583,14 @@ defmodule Cerberus.Html do
   defp within_locator_match_value(root_node, node, %Locator{kind: :button}),
     do: button_match_value(root_node, node, :button)
 
-  defp within_locator_match_value(_root_node, node, %Locator{kind: :label}), do: node_text(node)
+  defp within_locator_match_value(root_node, node, %Locator{kind: :label}) do
+    if form_control_node?(node) do
+      field_label_for_node(root_node, node)
+    else
+      node_text(node)
+    end
+  end
+
   defp within_locator_match_value(_root_node, node, %Locator{kind: :placeholder}), do: attr(node, "placeholder") || ""
   defp within_locator_match_value(_root_node, node, %Locator{kind: :title}), do: attr(node, "title") || ""
   defp within_locator_match_value(_root_node, node, %Locator{kind: :aria_label}), do: attr(node, "aria-label") || ""
@@ -603,7 +614,7 @@ defmodule Cerberus.Html do
   defp within_query_selector(%Locator{kind: :not}), do: "*"
   defp within_query_selector(%Locator{kind: :text}), do: "*"
   defp within_query_selector(%Locator{kind: :link}), do: "a[href]"
-  defp within_query_selector(%Locator{kind: :button}), do: "button"
+  defp within_query_selector(%Locator{kind: :button}), do: button_selector()
   defp within_query_selector(%Locator{kind: :label}), do: "label"
 
   defp within_query_selector(%Locator{kind: :placeholder}),
@@ -706,13 +717,13 @@ defmodule Cerberus.Html do
     form_meta = form_meta_from_form_node(root_node, form_node)
 
     form_node
-    |> LazyHTML.query("button")
+    |> LazyHTML.query(submit_button_selector())
     |> Enum.flat_map(&maybe_submit_button_match(&1, form_meta, expected, opts, root_node, selector))
   end
 
   defp find_submit_button_in_owner_form(root_node, expected, opts, selector) do
     root_node
-    |> safe_query("button[form]")
+    |> safe_query(owner_submit_button_selector())
     |> Enum.flat_map(&owner_submit_button_matches(&1, root_node, expected, opts, selector))
   end
 
@@ -736,8 +747,8 @@ defmodule Cerberus.Html do
   end
 
   defp build_submit_button(button_node, form_meta, expected, opts, root_node, selector) do
-    text = node_text(button_node)
-    type = attr(button_node, "type") || "submit"
+    text = button_text(button_node)
+    type = button_type(button_node)
     match_by = match_by_opt(opts)
     match_value = button_match_value(root_node, button_node, match_by)
 
@@ -877,7 +888,7 @@ defmodule Cerberus.Html do
 
   defp find_submit_button_in_form_by_locator(root_node, form_node, form_meta, locator, opts, selector) do
     form_node
-    |> LazyHTML.query("button")
+    |> LazyHTML.query(submit_button_selector())
     |> Enum.flat_map(fn button_node ->
       case build_submit_button_by_locator(button_node, form_meta, locator, opts, root_node, selector) do
         nil -> []
@@ -888,7 +899,7 @@ defmodule Cerberus.Html do
 
   defp find_submit_button_in_owner_form_by_locator(root_node, locator, opts, selector) do
     root_node
-    |> safe_query("button[form]")
+    |> safe_query(owner_submit_button_selector())
     |> Enum.flat_map(&owner_form_submit_by_locator(root_node, &1, locator, opts, selector))
   end
 
@@ -899,9 +910,9 @@ defmodule Cerberus.Html do
   end
 
   defp submit_button_by_locator_candidate?(root_node, button_node, locator, selector) do
-    type = attr(button_node, "type") || "submit"
+    type = button_type(button_node)
 
-    type in ["submit", ""] and
+    type in ["submit", "", "image"] and
       node_matches_selector?(root_node, button_node, selector) and
       locator_matches_action_node?(root_node, button_node, locator, :submit_button)
   end
@@ -911,7 +922,7 @@ defmodule Cerberus.Html do
     method = attr(button_node, "formmethod") || form_meta.method
 
     %{
-      text: node_text(button_node),
+      text: button_text(button_node),
       title: attr(button_node, "title") || "",
       aria_label: attr(button_node, "aria-label") || "",
       alt: button_alt_text(button_node, root_node),
@@ -937,6 +948,8 @@ defmodule Cerberus.Html do
           %{
             text: node_text(node),
             href: attr(node, "href"),
+            data_method: attr(node, "data-method"),
+            data_to: attr(node, "data-to"),
             disabled: false,
             readonly: false,
             selected: false,
@@ -962,7 +975,9 @@ defmodule Cerberus.Html do
       mapped =
         maybe_put_unique_selector(
           %{
-            text: node_text(node),
+            text: button_text(node),
+            data_method: attr(node, "data-method"),
+            data_to: attr(node, "data-to"),
             disabled: disabled?(node),
             readonly: readonly?(node),
             selected: false,
@@ -1251,6 +1266,10 @@ defmodule Cerberus.Html do
     |> List.first() || "*"
   end
 
+  defp form_control_node?(node) do
+    node_tag(node) in ["input", "textarea", "select"]
+  end
+
   defp node_attrs(node) do
     case LazyHTML.attributes(node) do
       [attrs | _] when is_list(attrs) ->
@@ -1511,7 +1530,7 @@ defmodule Cerberus.Html do
   defp link_match_value(_root_node, node, match_by), do: action_match_attr_value(node, match_by, node_text(node))
 
   defp button_match_value(root_node, node, :alt), do: button_alt_text(node, root_node)
-  defp button_match_value(_root_node, node, match_by) when match_by in [:text, :button], do: node_text(node)
+  defp button_match_value(_root_node, node, match_by) when match_by in [:text, :button], do: button_text(node)
   defp button_match_value(_root_node, node, match_by), do: action_match_attr_value(node, match_by, node_text(node))
 
   defp field_match_value(_root_node, field_node, :placeholder), do: attr(field_node, "placeholder") || ""
@@ -2109,7 +2128,30 @@ defmodule Cerberus.Html do
     node_tag(node) == "a" and is_binary(attr(node, "href"))
   end
 
-  defp button_node?(node), do: node_tag(node) == "button"
+  defp button_node?(node), do: node_tag(node) == "button" or input_button_node?(node)
+
+  defp input_button_node?(node) do
+    node_tag(node) == "input" and button_type(node) in ["submit", "button", "image"]
+  end
+
+  defp button_type(node) do
+    case node_tag(node) do
+      "button" -> attr(node, "type") || "submit"
+      "input" -> attr(node, "type") || ""
+      _ -> ""
+    end
+  end
+
+  defp button_text(node) do
+    case node_tag(node) do
+      "input" -> attr(node, "value") || ""
+      _ -> node_text(node)
+    end
+  end
+
+  defp button_selector, do: "button,input[type='submit'],input[type='button'],input[type='image']"
+  defp submit_button_selector, do: "button,input[type='submit'],input[type='image']"
+  defp owner_submit_button_selector, do: "button[form],input[type='submit'][form],input[type='image'][form]"
 
   defp same_node?(left, right) do
     assert_deadline!()

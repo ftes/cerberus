@@ -38,6 +38,7 @@ defmodule Cerberus do
   @upload_options_doc NimbleOptions.docs(Options.upload_schema())
   @select_options_doc NimbleOptions.docs(Options.select_schema())
   @assert_options_doc NimbleOptions.docs(Options.assert_schema())
+  @return_result_options_doc NimbleOptions.docs(Options.return_result_schema())
 
   @doc """
   Starts a default non-browser (`:phoenix`) session with default options.
@@ -229,20 +230,41 @@ defmodule Cerberus do
   end
 
   @doc """
-  Renders the current page HTML and passes it to the callback as `LazyHTML`.
+  Renders the current page HTML.
 
   This is primarily for debugging, and can be useful for AI-assisted workflows
   that need to inspect the entire DOM tree in-process.
 
+  Use either:
+  - callback form (`render_html(session, fn lazy_html -> ... end)`) to keep piping
+  - `return_result: true` (`render_html(session, return_result: true)`) to return `LazyHTML`
+
   For human-oriented inspection in a browser, see `open_browser/1`.
+
+  ## Options
+
+  #{@return_result_options_doc}
   """
+  @spec render_html(arg, Options.return_result_opts()) :: arg | LazyHTML.t() when arg: var
   @spec render_html(arg, (LazyHTML.t() -> term())) :: arg when arg: var
-  def render_html(session, callback) when is_function(callback, 1) do
-    driver_module_for_session!(session).render_html(session, callback)
+  def render_html(session, callback_or_opts) when is_function(callback_or_opts, 1) or is_list(callback_or_opts) do
+    case callback_or_opts do
+      callback when is_function(callback, 1) ->
+        driver_module_for_session!(session).render_html(session, callback)
+
+      opts ->
+        opts = Options.validate_return_result!(opts, "render_html/2")
+
+        if Keyword.get(opts, :return_result, false) do
+          render_html_result(session)
+        else
+          session
+        end
+    end
   end
 
-  def render_html(_session, _callback) do
-    raise ArgumentError, "render_html/2 expects a callback with arity 1"
+  def render_html(_session, _callback_or_opts) do
+    raise ArgumentError, "render_html/2 expects a callback with arity 1 or keyword options"
   end
 
   @doc """
@@ -678,17 +700,42 @@ defmodule Cerberus do
   """
   @spec reload_page(arg, Options.reload_opts()) :: arg when arg: var
   def reload_page(session, opts \\ []) do
-    visit(session, current_path(session) || "/", opts)
+    visit(session, current_path(session, return_result: true) || "/", opts)
   end
 
   @doc """
-  Returns the normalized current path tracked by the session.
+  Resolves the normalized current path tracked by the session.
+
+  Use either:
+  - callback form (`current_path(session, fn path -> ... end)`) to keep piping
+  - `return_result: true` (`current_path(session, return_result: true)`) to return the path
+
+  ## Options
+
+  #{@return_result_options_doc}
   """
-  @spec current_path(Session.t()) :: String.t() | nil
-  def current_path(session) do
+  @spec current_path(Session.t()) :: Session.t()
+  @spec current_path(Session.t(), Options.return_result_opts()) :: Session.t() | String.t() | nil
+  @spec current_path(Session.t(), (String.t() | nil -> term())) :: Session.t()
+  def current_path(session, callback_or_opts \\ [])
+
+  def current_path(session, callback) when is_function(callback, 1) do
+    callback.(current_path_result(session))
     session
-    |> Session.current_path()
-    |> Path.normalize()
+  end
+
+  def current_path(session, opts) when is_list(opts) do
+    opts = Options.validate_return_result!(opts, "current_path/2")
+
+    if Keyword.get(opts, :return_result, false) do
+      current_path_result(session)
+    else
+      session
+    end
+  end
+
+  def current_path(_session, _callback_or_opts) do
+    raise ArgumentError, "current_path/2 expects a callback with arity 1 or keyword options"
   end
 
   @doc """
@@ -1017,6 +1064,26 @@ defmodule Cerberus do
   @spec refute_has(arg, locator_input(), Options.assert_opts()) :: arg when arg: var
   def refute_has(session, locator, opts) when is_list(opts) do
     Assertions.refute_has(session, locator, opts)
+  end
+
+  defp render_html_result(session) do
+    result_ref = make_ref()
+    caller = self()
+
+    _ =
+      driver_module_for_session!(session).render_html(session, fn lazy_html ->
+        send(caller, {result_ref, lazy_html})
+      end)
+
+    receive do
+      {^result_ref, lazy_html} -> lazy_html
+    end
+  end
+
+  defp current_path_result(session) do
+    session
+    |> Session.current_path()
+    |> Path.normalize()
   end
 
   defp driver_module_for_session!(%StaticSession{}), do: StaticSession

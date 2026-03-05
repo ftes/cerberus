@@ -1,7 +1,7 @@
 defmodule Cerberus.Phoenix.Conn do
   @moduledoc false
 
-  import Phoenix.ConnTest, only: [build_conn: 0, dispatch: 5, recycle: 1]
+  import Phoenix.ConnTest, only: [build_conn: 0, dispatch: 5, recycle: 2]
 
   @max_redirects 5
   @private_keys_to_preserve [:live_view_connect_params]
@@ -21,6 +21,11 @@ defmodule Cerberus.Phoenix.Conn do
 
   @spec ensure_conn(Plug.Conn.t() | nil) :: Plug.Conn.t()
   def ensure_conn(nil), do: build_conn()
+
+  def ensure_conn(%Plug.Conn{state: state} = conn) when state in [:unset, :set, :set_chunked, :set_file] do
+    conn
+  end
+
   def ensure_conn(conn), do: recycle_preserving_headers(conn)
 
   @spec fork_tab_conn(Plug.Conn.t() | nil) :: Plug.Conn.t() | nil
@@ -138,22 +143,12 @@ defmodule Cerberus.Phoenix.Conn do
   defp append_query(path, query), do: path <> "?" <> query
 
   defp recycle_preserving_headers(conn) do
-    recycled = recycle(conn)
-
-    recycled
-    |> preserve_headers(conn.req_headers)
+    conn
+    |> recycle(all_headers(conn))
     |> preserve_private(conn)
   end
 
-  defp preserve_headers(conn, headers) do
-    Enum.reduce(headers, conn, fn {name, value}, acc ->
-      if String.downcase(name) == "cookie" do
-        acc
-      else
-        Plug.Conn.put_req_header(acc, name, value)
-      end
-    end)
-  end
+  defp all_headers(conn), do: Enum.map(conn.req_headers, &elem(&1, 0))
 
   defp preserve_private(conn, source_conn) do
     Enum.reduce(@private_keys_to_preserve, conn, fn key, acc ->

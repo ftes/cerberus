@@ -109,6 +109,8 @@ Rules:
 - `e` and `i` are mutually exclusive
 - `r` requires `ROLE:NAME`
 - regex values are supported for text-like locators and role names, but cannot be combined with `exact: true|false`
+- text-like matching normalizes whitespace by default (`normalize_ws: true`), including NBSP characters
+- use `normalize_ws: false` to require exact raw whitespace matching
 
 ## Browser-Only Extensions
 
@@ -117,6 +119,8 @@ Use `Cerberus.Browser` only with `session(:browser)`.
 | Task | Example |
 | --- | --- |
 | Screenshot | `Browser.screenshot(session, path: "tmp/page.png")` |
+| Screenshot binary result | `png = Browser.screenshot(session, path: "tmp/page.png", return_result: true)` |
+| Screenshot + open viewer | `Browser.screenshot(session, path: "tmp/page.png", open: true)` |
 | Type keys | `Browser.type(session, "hello", selector: "#input")` |
 | Press key | `Browser.press(session, "Enter", selector: "#input")` |
 | Drag and drop | `Browser.drag(session, "#drag-source", "#drop-target")` |
@@ -128,6 +132,7 @@ Use `Cerberus.Browser` only with `session(:browser)`.
 | Evaluate JS (ignore result) | `Browser.evaluate_js(session, "window.__cerberusMarker = 'ready'")` |
 | Evaluate JS (assert result) | `Browser.evaluate_js(session, "(() => 42)()", fn value -> assert value == 42 end)` |
 | Cookie lookup | `Browser.cookie(session, "_my_cookie")` |
+| Cookie callback | `Browser.cookie(session, "_my_cookie", fn cookie -> assert cookie end)` |
 
 > #### Warning
 >

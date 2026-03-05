@@ -114,6 +114,24 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
     |> assert_has(text("message: dynamic", exact: true))
   end
 
+  test "data-method buttons on live pages submit to static endpoints (phoenix)" do
+    :phoenix
+    |> session()
+    |> visit("/live/trigger-action")
+    |> click(button("Data-method Trigger Action", exact: true))
+    |> assert_path("/trigger-action/result")
+    |> assert_has(text("method: POST", exact: true))
+  end
+
+  @tag skip: "browser data-method button parity bug"
+  test "data-method buttons on live pages submit to static endpoints (browser)", context do
+    context.shared_browser_session
+    |> visit("/live/trigger-action")
+    |> click(button("Data-method Trigger Action", exact: true))
+    |> assert_path("/trigger-action/result")
+    |> assert_has(text("method: POST", exact: true))
+  end
+
   test "raises an error if multiple forms have phx-trigger-action" do
     assert_raise AssertionError, ~r/Found multiple forms with phx-trigger-action/, fn ->
       :phoenix

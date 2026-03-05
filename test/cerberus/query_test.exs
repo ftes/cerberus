@@ -27,4 +27,13 @@ defmodule Cerberus.QueryTest do
     assert :ok = Query.assertion_count_outcome(1, [count: 2], :refute)
     assert {:error, _reason} = Query.assertion_count_outcome(2, [count: 2], :refute)
   end
+
+  test "match_text normalizes non-breaking spaces by default" do
+    assert Query.match_text?("Status:\u00A0complete", "Status: complete", exact: true)
+    assert Query.match_text?("Status:\u202Fcomplete", "Status: complete", exact: true)
+  end
+
+  test "match_text keeps non-breaking spaces distinct when normalize_ws is false" do
+    refute Query.match_text?("Status:\u00A0complete", "Status: complete", exact: true, normalize_ws: false)
+  end
 end
