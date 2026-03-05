@@ -2,6 +2,7 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.Components do
   @moduledoc false
   use Phoenix.Component
 
+  alias Phoenix.HTML.Form, as: HTMLForm
   alias Phoenix.HTML.FormField
 
   @doc """
@@ -65,7 +66,7 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.Components do
   def input(%{type: "checkbox"} = assigns) do
     assigns =
       assign_new(assigns, :checked, fn ->
-        Phoenix.HTML.Form.normalize_value("checkbox", assigns[:value])
+        HTMLForm.normalize_value("checkbox", assigns[:value])
       end)
 
     ~H"""

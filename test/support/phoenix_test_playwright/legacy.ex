@@ -6,6 +6,7 @@ defmodule Cerberus.TestSupport.PhoenixTestPlaywright.Legacy do
   alias Cerberus.TestSupport.PhoenixTestPlaywright.Driver
   alias Cerberus.TestSupport.PhoenixTestPlaywright.Live
   alias Phoenix.HTML.Safe
+  alias Plug.Conn.Query
 
   @prefix "/phoenix_test/playwright"
 
@@ -370,7 +371,7 @@ defmodule Cerberus.TestSupport.PhoenixTestPlaywright.Legacy do
 
   defp split_path(path) when is_binary(path) do
     uri = URI.parse(path)
-    query = if is_binary(uri.query), do: Plug.Conn.Query.decode(uri.query), else: %{}
+    query = if is_binary(uri.query), do: Query.decode(uri.query), else: %{}
     {uri.path || "/", normalize_query_map(query)}
   end
 

@@ -1,11 +1,11 @@
 ---
 # cerberus-k9tz
 title: PT live select parity for repeated and non-form flows
-status: todo
+status: completed
 type: bug
 priority: normal
 created_at: 2026-03-05T14:14:56Z
-updated_at: 2026-03-05T14:14:56Z
+updated_at: 2026-03-05T19:36:18Z
 parent: cerberus-zh82
 ---
 
@@ -34,3 +34,20 @@ Live select path likely assumes form-bound controls and does not implement outsi
 ## Acceptance
 - Unskip lines 571, 581, 591, 629 in live_test.
 - Add non-throwaway regression tests under test/cerberus for multi-select repeated calls and outside-form select with phx-click.
+
+## Summary of Changes
+- Unskipped and fixed all four select parity cases in PT live suite:
+  - repeated multi-select calls
+  - outside-form select with option phx-click
+  - outside-form multi-select with option phx-click
+  - invalid outside-form select contract error
+- Implemented cumulative multi-select value preservation across repeated select calls in live form data updates.
+- Added option-level phx-click metadata discovery for select fields and wired live select to dispatch option click events when select is outside a form.
+- Enforced clear contract error for outside-form select without option phx-click: expected select option to have a valid phx-click attribute on options or to belong to a form.
+- Added first-class non-throwaway regression coverage in test/cerberus/live_select_regression_test.exs.
+- Validation:
+  - PORT 4347 targeted parity tests for static and live data-method plus select parity slices
+  - PORT 4348 mix test test/cerberus/phoenix_test
+  - PORT 4351 mix test test/cerberus/live_select_regression_test.exs
+  - PORT 4354 mix test test/cerberus/phoenix_test test/cerberus/live_select_regression_test.exs
+- Follow-up recorded: browser parity gap for these select flows tracked in cerberus-efct.

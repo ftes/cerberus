@@ -232,6 +232,7 @@ defmodule Cerberus.Driver.Live do
     session = with_latest_html(session)
     {expected, match_opts} = LocatorOps.click(locator, opts)
     kind = Keyword.get(match_opts, :kind, :any)
+    maybe_raise_live_link_ambiguity!(session, expected, match_opts, kind)
 
     case find_clickable_link(session, expected, match_opts, kind) do
       {:ok, link} when is_binary(link.href) ->
@@ -790,10 +791,6 @@ defmodule Cerberus.Driver.Live do
     click_live_dispatch_change_button(session, button)
   end
 
-  defp click_live_button(session, %{data_method: method} = button, _kind) when is_binary(method) and method != "" do
-    click_live_data_method(session, button, :button)
-  end
-
   defp click_live_button(session, button, kind) do
     result =
       try do
@@ -941,10 +938,6 @@ defmodule Cerberus.Driver.Live do
     {:error, failed_session, observed, reason}
   end
 
-  defp click_live_link(session, %{data_method: method} = link) when is_binary(method) and method != "" do
-    click_live_data_method(session, link, :link)
-  end
-
   defp click_live_link(session, link) do
     result = maybe_render_click_link(session, link)
 
@@ -991,65 +984,6 @@ defmodule Cerberus.Driver.Live do
 
       _other ->
         click_link_via_visit(session, link, :click)
-    end
-  end
-
-  defp click_live_data_method(session, element, action) when action in [:button, :link] do
-    method = normalize_submit_method(element[:data_method])
-    request_target = data_method_target(element)
-
-    if is_binary(request_target) and request_target != "" do
-      case follow_form_request(session, method, request_target, %{}) do
-        {:ok, updated, _submit_transition} ->
-          transition =
-            transition(
-              route_kind(session),
-              driver_kind(updated),
-              :click,
-              session.current_path,
-              Session.current_path(updated)
-            )
-
-          observed = %{
-            action: action,
-            clicked: element[:text] || "",
-            path: Session.current_path(updated),
-            method: method,
-            transition: transition,
-            texts: Html.texts(updated.html, :any, Session.scope(updated))
-          }
-
-          {:ok, update_last_result(updated, :click, observed), observed}
-
-        {:error, failed_session, reason, details} ->
-          observed = %{
-            action: action,
-            clicked: element[:text] || "",
-            path: session.current_path,
-            method: method,
-            details: details,
-            transition: session_transition(session)
-          }
-
-          {:error, failed_session, observed, reason}
-      end
-    else
-      observed = %{
-        action: action,
-        clicked: element[:text] || "",
-        path: session.current_path,
-        method: method,
-        transition: session_transition(session)
-      }
-
-      {:error, session, observed, "data-method element must define `data-to` or `href`"}
-    end
-  end
-
-  defp data_method_target(element) do
-    case blank_to_nil(element[:data_to]) do
-      nil -> blank_to_nil(element[:href])
-      value -> value
     end
   end
 
@@ -1451,6 +1385,72 @@ defmodule Cerberus.Driver.Live do
 
   defp find_clickable_link(session, expected, opts, _kind) do
     Html.find_link(session.html, expected, opts, Session.scope(session))
+  end
+
+  defp maybe_raise_live_link_ambiguity!(_session, _expected, _opts, kind) when kind != :link do
+    :ok
+  end
+
+  defp maybe_raise_live_link_ambiguity!(session, expected, opts, :link) do
+    if simple_live_link_ambiguity_check?(opts) do
+      match_count =
+        live_link_match_count(session.html, expected, opts, CandidateScope.click_scope(opts, Session.scope(session)))
+
+      if match_count > 1 do
+        raise ArgumentError, "#{match_count} of them matched the text filter"
+      end
+    end
+  end
+
+  defp simple_live_link_ambiguity_check?(opts) do
+    simple_link_locator?(Keyword.get(opts, :locator)) and
+      not Query.has_count_constraints?(opts) and
+      not Keyword.get(opts, :first, false) and
+      not Keyword.get(opts, :last, false) and
+      is_nil(Keyword.get(opts, :index)) and
+      is_nil(Keyword.get(opts, :nth)) and
+      is_nil(Keyword.get(opts, :selector))
+  end
+
+  defp simple_link_locator?(%Locator{kind: :link}), do: true
+  defp simple_link_locator?(_), do: false
+
+  defp live_link_match_count(html, expected, opts, scope) when is_binary(html) do
+    lazy_html =
+      try do
+        LazyHTML.from_document(html)
+      rescue
+        _ -> nil
+      end
+
+    case lazy_html do
+      %LazyHTML{} = root ->
+        roots =
+          if is_binary(scope) and scope != "" do
+            safe_query(root, scope)
+          else
+            [root]
+          end
+
+        roots
+        |> Enum.flat_map(&safe_query(&1, "a[href]"))
+        |> Enum.count(fn node ->
+          Query.match_text?(link_node_text(node), expected, opts) and
+            Html.node_matches_locator_filters?(node, opts)
+        end)
+
+      _ ->
+        0
+    end
+  end
+
+  defp live_link_match_count(_html, _expected, _opts, _scope), do: 0
+
+  defp link_node_text(node) do
+    node
+    |> LazyHTML.text()
+    |> String.replace("\u00A0", " ")
+    |> String.trim()
   end
 
   defp find_clickable_button(_session, _expected, _opts, :link), do: :error
@@ -2307,10 +2307,19 @@ defmodule Cerberus.Driver.Live do
     with {:ok, field} <- find_live_select_field(session, expected, opts),
          {:ok, %{values: values, multiple?: multiple?}} <-
            Html.select_values(session.html, field, option, opts, Session.scope(session)) do
+      if select_requires_option_click?(field) and not select_has_option_clicks?(field) do
+        raise ArgumentError, select_option_click_contract_error()
+      end
+
       value = FormData.select_value_for_update(session, field, option, values, multiple?, :live)
       form_data = FormData.put_form_value(session.form_data, field.form, field.form_selector, field.name, value)
       updated = %{session | form_data: form_data}
-      handle_live_select_change(session, updated, field, option, value)
+
+      if select_requires_option_click?(field) do
+        handle_live_select_option_clicks(session, updated, field, option, value, values)
+      else
+        handle_live_select_change(session, updated, field, option, value)
+      end
     else
       {:error, reason} ->
         live_select_error(session, option, reason)
@@ -2393,6 +2402,37 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
+  defp handle_live_select_option_clicks(session, updated, field, option, value, selected_values) do
+    case trigger_live_select_option_clicks(updated, field, selected_values) do
+      {:ok, changed_session, change} ->
+        observed = %{
+          action: :select,
+          path: Session.current_path(changed_session),
+          field: field,
+          option: option,
+          value: value,
+          phx_change: change.triggered,
+          target: change.target,
+          transition: change.transition || session_transition(changed_session)
+        }
+
+        {:ok, update_last_result(changed_session, :select, observed), observed}
+
+      {:error, failed_session, reason, details} ->
+        observed = %{
+          action: :select,
+          path: session.current_path,
+          field: field,
+          option: option,
+          value: value,
+          details: details,
+          transition: session_transition(session)
+        }
+
+        {:error, failed_session, observed, reason}
+    end
+  end
+
   defp handle_live_choose_change(session, updated, field, value) do
     case maybe_trigger_live_change(updated, field) do
       {:ok, changed_session, change} ->
@@ -2431,6 +2471,48 @@ defmodule Cerberus.Driver.Live do
     }
 
     {:error, session, observed, reason}
+  end
+
+  defp select_requires_option_click?(field) do
+    field[:form] in [nil, ""] and field[:form_selector] in [nil, ""]
+  end
+
+  defp select_has_option_clicks?(field) do
+    field
+    |> Map.get(:option_phx_click_selectors, %{})
+    |> map_size() > 0
+  end
+
+  defp trigger_live_select_option_clicks(session, field, selected_values) do
+    selectors = Map.get(field, :option_phx_click_selectors, %{})
+    target = FormData.target_path(field.name)
+
+    Enum.reduce_while(selected_values, {:ok, session, %{triggered: false, target: target, transition: nil}}, fn
+      selected_value, acc ->
+        trigger_live_select_option_click(selectors, target, field, selected_value, acc)
+    end)
+  end
+
+  defp trigger_live_select_option_click(selectors, target, field, selected_value, {:ok, current_session, _change}) do
+    case Map.get(selectors, selected_value) do
+      selector when is_binary(selector) and selector != "" ->
+        result =
+          current_session.view
+          |> element(scoped_selector(selector, Session.scope(current_session)))
+          |> Phoenix.LiveViewTest.render_click(%{"value" => selected_value})
+
+        case resolve_live_change_result(current_session, result, target) do
+          {:ok, next_session, change} -> {:cont, {:ok, next_session, change}}
+          {:error, failed_session, reason, details} -> {:halt, {:error, failed_session, reason, details}}
+        end
+
+      _ ->
+        {:halt, {:error, current_session, select_option_click_contract_error(), %{field: field, value: selected_value}}}
+    end
+  end
+
+  defp select_option_click_contract_error do
+    "expected select option to have a valid `phx-click` attribute on options or to belong to a `form`"
   end
 
   defp live_choose_error(session, reason) do
@@ -2525,6 +2607,10 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp apply_live_checkbox_change(session, field, checked?, op) do
+    if checkbox_requires_phx_click?(field) and not field[:input_phx_click] do
+      raise ArgumentError, checkbox_click_contract_error()
+    end
+
     value = FormData.toggled_checkbox_value(session, field, checked?)
     form_data = FormData.put_form_value(session.form_data, field.form, field.form_selector, field.name, value)
     updated = %{session | form_data: form_data}
@@ -2573,6 +2659,14 @@ defmodule Cerberus.Driver.Live do
     %{session | form_data: form_data, last_result: LastResult.new(op, observed, session)}
   end
 
+  defp checkbox_requires_phx_click?(field) do
+    field[:form] in [nil, ""] and field[:form_selector] in [nil, ""]
+  end
+
+  defp checkbox_click_contract_error do
+    "expected checkbox input to have a valid `phx-click` attribute or belong to a `form`"
+  end
+
   defp maybe_trigger_live_change(%__MODULE__{} = session, field) do
     cond do
       field[:input_phx_change] ->
@@ -2580,6 +2674,9 @@ defmodule Cerberus.Driver.Live do
 
       field[:form_phx_change] ->
         trigger_form_phx_change(session, field)
+
+      field[:input_phx_click] ->
+        trigger_input_phx_click(session, field)
 
       true ->
         {:ok, session, %{triggered: false, target: nil, transition: session_transition(session)}}
@@ -2624,6 +2721,21 @@ defmodule Cerberus.Driver.Live do
       resolve_live_change_result(session, result, target)
     else
       {:error, session, "form-level phx-change requires a resolvable form selector", %{field: field}}
+    end
+  end
+
+  defp trigger_input_phx_click(session, field) do
+    selector = field[:selector]
+
+    if is_binary(selector) and selector != "" do
+      result =
+        session.view
+        |> element(scoped_selector(selector, Session.scope(session)))
+        |> render_click(%{})
+
+      resolve_live_change_result(session, result, nil)
+    else
+      {:error, session, "live field click requires a resolvable field selector", %{field: field}}
     end
   end
 

@@ -1042,7 +1042,7 @@ defmodule Cerberus.Html do
   end
 
   defp maybe_form_field_match(label_node, root_node, expected, opts, selector) do
-    label_text = node_text(label_node)
+    label_text = label_text_for_matching(label_node)
 
     with true <- Query.match_text?(label_text, expected, opts),
          {:ok, %{name: name, node: field_node} = field} <- field_for_label(root_node, label_node),
@@ -1549,12 +1549,12 @@ defmodule Cerberus.Html do
     with value when is_binary(value) <- id,
          true <- value != "",
          label when not is_nil(label) <- label_for_id(root_node, value) do
-      node_text(label)
+      label_text_for_matching(label)
     else
       _ ->
         case wrapping_label_for_control(root_node, field_node) do
           nil -> ""
-          label -> node_text(label)
+          label -> label_text_for_matching(label)
         end
     end
   end
@@ -1656,16 +1656,50 @@ defmodule Cerberus.Html do
 
   defp field_for_label(root_node, label_node) do
     case attr(label_node, "for") do
-      nil ->
-        label_node
-        |> safe_query("input,textarea,select")
-        |> Enum.find_value(:error, fn node -> field_node_to_map(root_node, node) end)
-
-      id ->
+      id when is_binary(id) and id != "" ->
         root_node
         |> safe_query_by_id(id)
-        |> Enum.find_value(:error, fn node -> field_node_to_map(root_node, node) end)
+        |> field_match(root_node)
+        |> fallback_label_field_match(label_node, root_node)
+
+      _ ->
+        label_field_match(label_node, root_node)
     end
+  end
+
+  defp fallback_label_field_match(:error, label_node, root_node), do: label_field_match(label_node, root_node)
+  defp fallback_label_field_match(match, _label_node, _root_node), do: match
+
+  defp label_field_match(label_node, root_node) do
+    label_node
+    |> safe_query("input,textarea,select")
+    |> field_match(root_node)
+  end
+
+  defp field_match(nodes, root_node) when is_list(nodes) do
+    Enum.find_value(nodes, :error, fn node -> field_node_to_map(root_node, node) end)
+  end
+
+  defp label_text_for_matching(label_node) do
+    label_text = node_text(label_node)
+
+    label_text
+    |> strip_nested_control_text(label_node)
+    |> normalize_label_text()
+  end
+
+  defp strip_nested_control_text(label_text, label_node) do
+    label_node
+    |> safe_query("input,textarea,select")
+    |> Enum.map(&node_text/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.reduce(label_text, fn control_text, acc -> String.replace(acc, control_text, " ") end)
+  end
+
+  defp normalize_label_text(text) when is_binary(text) do
+    text
+    |> String.replace(~r/\s+/u, " ")
+    |> String.trim()
   end
 
   defp field_node_to_map(root_node, node) do
@@ -2155,14 +2189,29 @@ defmodule Cerberus.Html do
 
   defp same_node?(left, right) do
     assert_deadline!()
-    left_id = attr(left, "id")
-    right_id = attr(right, "id")
+    node_signature(left) == node_signature(right)
+  end
 
-    if is_binary(left_id) and left_id != "" and is_binary(right_id) and right_id != "" do
-      left_id == right_id
+  defp node_signature(node), do: node_signature(node, [], 0)
+
+  defp node_signature(_node, acc, depth) when depth >= 64 do
+    Enum.reverse(acc)
+  end
+
+  defp node_signature(node, acc, depth) do
+    tag = node_tag(node)
+
+    if is_binary(tag) and tag != "" do
+      signature = {tag, List.first(LazyHTML.nth_child(node)), attr(node, "id"), attr(node, "name")}
+      parent = LazyHTML.parent_node(node)
+
+      if parent == node do
+        Enum.reverse([signature | acc])
+      else
+        node_signature(parent, [signature | acc], depth + 1)
+      end
     else
-      node_tag(left) == node_tag(right) and node_text(left) == node_text(right) and
-        node_attrs(left) == node_attrs(right)
+      Enum.reverse(acc)
     end
   end
 

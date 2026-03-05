@@ -1,11 +1,11 @@
 ---
 # cerberus-9f29
 title: PT live checkbox and uncheck non-form parity
-status: todo
+status: in-progress
 type: bug
 priority: normal
 created_at: 2026-03-05T14:14:56Z
-updated_at: 2026-03-05T14:14:56Z
+updated_at: 2026-03-05T19:36:23Z
 parent: cerberus-zh82
 ---
 

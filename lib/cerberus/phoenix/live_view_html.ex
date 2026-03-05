@@ -95,7 +95,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
       |> Enum.flat_map(fn root_node ->
         root_node
         |> safe_query(query_selector)
-        |> Enum.flat_map(&maybe_live_clickable_match_list(root_node, &1, lazy_html, expected, opts))
+        |> Enum.flat_map(&maybe_live_clickable_match_list(root_node, &1, expected, opts))
       end)
       |> Enum.filter(&Query.matches_state_filters?(&1, opts))
 
@@ -105,7 +105,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     end
   end
 
-  defp maybe_live_clickable_match(root_node, node, lazy_html, expected, opts) do
+  defp maybe_live_clickable_match(root_node, node, expected, opts) do
     locator = locator_opt(opts)
     text = node_text(node)
 
@@ -121,15 +121,15 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
       mapped =
         node
         |> build_live_clickable_button(root_node, text)
-        |> maybe_put_unique_selector(lazy_html, node)
+        |> maybe_put_unique_selector(root_node, node)
         |> maybe_put_match_selector(node, opts)
 
       mapped
     end
   end
 
-  defp maybe_live_clickable_match_list(root_node, node, lazy_html, expected, opts) do
-    case maybe_live_clickable_match(root_node, node, lazy_html, expected, opts) do
+  defp maybe_live_clickable_match_list(root_node, node, expected, opts) do
+    case maybe_live_clickable_match(root_node, node, expected, opts) do
       nil -> []
       mapped -> [mapped]
     end
@@ -211,7 +211,12 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   defp clickable_attr_match_value(_node, _match_by, fallback), do: fallback
 
   defp form_field_live_flags(lazy_html, field, scope) do
-    defaults = %{input_phx_change: false, form_phx_change: false}
+    defaults = %{
+      input_phx_change: false,
+      form_phx_change: false,
+      input_phx_click: false,
+      option_phx_click_selectors: %{}
+    }
 
     lazy_html
     |> scoped_nodes(scope)
@@ -228,8 +233,30 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
 
         %{
           input_phx_change: phx_binding?(attr(field_node, "phx-change")),
-          form_phx_change: phx_binding?(attr_or_nil(form_node, "phx-change"))
+          form_phx_change: phx_binding?(attr_or_nil(form_node, "phx-change")),
+          input_phx_click: phx_binding?(attr(field_node, "phx-click")),
+          option_phx_click_selectors: option_phx_click_selectors(root_node, field_node)
         }
+    end
+  end
+
+  defp option_phx_click_selectors(root_node, field_node) do
+    if node_tag(field_node) == "select" do
+      field_node
+      |> safe_query("option[phx-click]")
+      |> Enum.reduce(%{}, &put_option_selector(&2, root_node, &1))
+    else
+      %{}
+    end
+  end
+
+  defp put_option_selector(acc, root_node, option_node) do
+    case {attr(option_node, "value"), unique_selector(root_node, option_node)} do
+      {value, selector} when is_binary(value) and value != "" and is_binary(selector) and selector != "" ->
+        Map.put(acc, value, selector)
+
+      _ ->
+        acc
     end
   end
 
@@ -423,8 +450,8 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     |> Enum.find(&(node_tag(&1) == "form"))
   end
 
-  defp maybe_put_unique_selector(%{} = mapped, lazy_html, node) do
-    case unique_selector(lazy_html, node) do
+  defp maybe_put_unique_selector(%{} = mapped, query_root, node) do
+    case unique_selector(query_root, node) do
       nil -> mapped
       selector -> Map.put(mapped, :selector, selector)
     end
@@ -473,6 +500,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
       [
         if(is_binary(id) and id != "", do: ~s([id="#{css_attr_escape(id)}"])),
         if(attr_selector != "", do: "#{tag}#{attr_selector}"),
+        path_selector(node),
         tag
       ]
       |> Enum.filter(&is_binary/1)
@@ -480,6 +508,49 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
 
     Enum.find(candidates, &selector_unique?(lazy_html, &1))
   end
+
+  defp path_selector(node), do: path_selector(node, [], 0)
+
+  defp path_selector(_node, segments, depth) when depth >= 64 do
+    segments_to_selector(segments)
+  end
+
+  defp path_selector(node, segments, depth) do
+    tag = node_tag(node)
+
+    if is_binary(tag) and tag != "" do
+      id = attr(node, "id")
+      segment = path_segment(node, tag, id)
+      next_segments = [segment | segments]
+      path_selector_next(node, next_segments, id, depth)
+    else
+      segments_to_selector(segments)
+    end
+  end
+
+  defp path_segment(_node, _tag, id) when is_binary(id) and id != "" do
+    ~s([id="#{css_attr_escape(id)}"])
+  end
+
+  defp path_segment(node, tag, _id) do
+    case List.first(LazyHTML.nth_child(node)) do
+      n when is_integer(n) and n > 0 -> "#{tag}:nth-child(#{n})"
+      _ -> tag
+    end
+  end
+
+  defp path_selector_next(node, next_segments, id, depth) do
+    parent = LazyHTML.parent_node(node)
+
+    cond do
+      parent == node -> segments_to_selector(next_segments)
+      is_binary(id) and id != "" -> segments_to_selector(next_segments)
+      true -> path_selector(parent, next_segments, depth + 1)
+    end
+  end
+
+  defp segments_to_selector([]), do: nil
+  defp segments_to_selector(segments), do: Enum.join(segments, " > ")
 
   defp selector_unique?(lazy_html, selector) do
     lazy_html
@@ -638,14 +709,29 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   defp trigger_action_enabled?(_value), do: true
 
   defp same_node?(left, right) do
-    left_id = attr(left, "id")
-    right_id = attr(right, "id")
+    node_signature(left) == node_signature(right)
+  end
 
-    if is_binary(left_id) and left_id != "" and is_binary(right_id) and right_id != "" do
-      left_id == right_id
+  defp node_signature(node), do: node_signature(node, [], 0)
+
+  defp node_signature(_node, acc, depth) when depth >= 64 do
+    Enum.reverse(acc)
+  end
+
+  defp node_signature(node, acc, depth) do
+    tag = node_tag(node)
+
+    if is_binary(tag) and tag != "" do
+      signature = {tag, List.first(LazyHTML.nth_child(node)), attr(node, "id"), attr(node, "name")}
+      parent = LazyHTML.parent_node(node)
+
+      if parent == node do
+        Enum.reverse([signature | acc])
+      else
+        node_signature(parent, [signature | acc], depth + 1)
+      end
     else
-      node_tag(left) == node_tag(right) and node_text(left) == node_text(right) and
-        node_attrs(left) == node_attrs(right)
+      Enum.reverse(acc)
     end
   end
 end

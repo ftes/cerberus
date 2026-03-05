@@ -1,11 +1,11 @@
 ---
 # cerberus-6hq8
 title: PT live wrapped textarea label resolution
-status: todo
+status: completed
 type: bug
 priority: normal
 created_at: 2026-03-05T14:14:36Z
-updated_at: 2026-03-05T14:14:56Z
+updated_at: 2026-03-05T19:23:19Z
 parent: cerberus-zh82
 ---
 
@@ -31,3 +31,9 @@ Form field lookup likely prioritizes explicit label for attribute mapping and mi
 ## Acceptance
 - Unskip test/cerberus/phoenix_test/live_test.exs line 411.
 - Add first-class regression test under test/cerberus for wrapped textarea label resolution.
+
+## Summary of Changes
+- Updated HTML label-to-field resolution to support wrapped controls even when label for points to a missing id.
+- Normalized label matching text so nested control text does not contaminate label comparisons.
+- Unskipped and passed live wrapped textarea parity case in PhoenixTest import suite.
+- Validation: PORT 4321 mix test test/cerberus/phoenix_test/live_test.exs:410 and PORT 4322 mix test test/cerberus/phoenix_test.

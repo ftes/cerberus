@@ -123,8 +123,15 @@ defmodule Cerberus.Driver.Live.FormData do
     List.first(values)
   end
 
-  def select_value_for_update(_session, _field, _option, values, true, _route_kind) do
-    values
+  def select_value_for_update(session, field, option, values, true, _route_kind) do
+    selected_values =
+      if is_list(option) do
+        values
+      else
+        current_multi_select_values(session, field) ++ values
+      end
+
+    uniq_values(selected_values)
   end
 
   @spec upload_value_for_update(struct(), map(), map(), String.t(), atom()) :: term()
@@ -198,6 +205,25 @@ defmodule Cerberus.Driver.Live.FormData do
   defp checkbox_value_list(nil), do: []
   defp checkbox_value_list(value) when is_list(value), do: value
   defp checkbox_value_list(value), do: [value]
+
+  defp current_multi_select_values(session, field) do
+    defaults = form_defaults_for_change(session, field)
+    active = pruned_active_form_values(session, field)
+
+    active
+    |> Map.get(field.name, Map.get(defaults, field.name))
+    |> to_value_list()
+  end
+
+  defp to_value_list(nil), do: []
+  defp to_value_list(value) when is_list(value), do: Enum.map(value, &to_string/1)
+  defp to_value_list(value), do: [to_string(value)]
+
+  defp uniq_values(values) do
+    Enum.reduce(values, [], fn value, acc ->
+      if Enum.any?(acc, &(&1 == value)), do: acc, else: acc ++ [value]
+    end)
+  end
 
   defp ensure_checkbox_value(values, input_value) do
     if Enum.any?(values, &(&1 == input_value)) do

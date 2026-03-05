@@ -395,48 +395,7 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
   def handle_call({:recover_active_tab, tab_id}, _from, state) do
     state = refresh_known_context_ids(state)
-    candidate_ids = state.known_context_ids |> MapSet.to_list() |> Enum.sort()
-
-    preferred_id =
-      cond do
-        is_binary(tab_id) and tab_id in candidate_ids ->
-          tab_id
-
-        is_binary(state.active_browsing_context_id) and state.active_browsing_context_id in candidate_ids ->
-          state.active_browsing_context_id
-
-        true ->
-          List.first(candidate_ids)
-      end
-
-    case preferred_id do
-      nil ->
-        case open_and_activate_tab(state) do
-          {:ok, next_state, recovered_tab_id} ->
-            {next_state, response_tab_id} = rebind_requested_tab_alias(next_state, tab_id, recovered_tab_id)
-            {:reply, {:ok, response_tab_id}, next_state}
-
-          {:error, reason, details} ->
-            {:reply, {:error, reason, details}, state}
-        end
-
-      context_id ->
-        case ensure_context_attached(state, context_id) do
-          {:ok, next_state, recovered_tab_id} ->
-            {next_state, response_tab_id} = rebind_requested_tab_alias(next_state, tab_id, recovered_tab_id)
-            {:reply, {:ok, response_tab_id}, next_state}
-
-          {:error, _reason, _details} ->
-            case open_and_activate_tab(state) do
-              {:ok, next_state, recovered_tab_id} ->
-                {next_state, response_tab_id} = rebind_requested_tab_alias(next_state, tab_id, recovered_tab_id)
-                {:reply, {:ok, response_tab_id}, next_state}
-
-              {:error, reason, details} ->
-                {:reply, {:error, reason, details}, state}
-            end
-        end
-    end
+    recover_active_tab_reply(state, tab_id)
   end
 
   def handle_call({:set_user_agent, user_agent}, _from, state) do
@@ -849,6 +808,48 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     end
   end
 
+  defp recover_active_tab_reply(state, requested_tab_id) do
+    case recover_or_open_active_tab(state, requested_tab_id) do
+      {:ok, next_state, recovered_tab_id} ->
+        {next_state, response_tab_id} = rebind_requested_tab_alias(next_state, requested_tab_id, recovered_tab_id)
+        {:reply, {:ok, response_tab_id}, next_state}
+
+      {:error, reason, details} ->
+        {:reply, {:error, reason, details}, state}
+    end
+  end
+
+  defp recover_or_open_active_tab(state, requested_tab_id) do
+    case preferred_recovery_context_id(state, requested_tab_id) do
+      nil ->
+        open_and_activate_tab(state)
+
+      context_id ->
+        case ensure_context_attached(state, context_id) do
+          {:ok, _next_state, _recovered_tab_id} = success ->
+            success
+
+          {:error, _reason, _details} ->
+            open_and_activate_tab(state)
+        end
+    end
+  end
+
+  defp preferred_recovery_context_id(state, requested_tab_id) do
+    candidate_ids = state.known_context_ids |> MapSet.to_list() |> Enum.sort()
+
+    cond do
+      is_binary(requested_tab_id) and requested_tab_id in candidate_ids ->
+        requested_tab_id
+
+      is_binary(state.active_browsing_context_id) and state.active_browsing_context_id in candidate_ids ->
+        state.active_browsing_context_id
+
+      true ->
+        List.first(candidate_ids)
+    end
+  end
+
   defp rebind_requested_tab_alias(state, requested_tab_id, recovered_tab_id)
        when is_binary(requested_tab_id) and requested_tab_id != "" and requested_tab_id != recovered_tab_id do
     case Map.fetch(state.browsing_contexts, recovered_tab_id) do
@@ -858,7 +859,14 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
           |> Map.delete(requested_tab_id)
           |> Map.put(requested_tab_id, recovered_entry)
 
-        {%{state | browsing_contexts: browsing_contexts, active_browsing_context_id: requested_tab_id}, requested_tab_id}
+        {
+          %{
+            state
+            | browsing_contexts: browsing_contexts,
+              active_browsing_context_id: requested_tab_id
+          },
+          requested_tab_id
+        }
 
       :error ->
         {state, recovered_tab_id}

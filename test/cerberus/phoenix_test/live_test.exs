@@ -109,7 +109,6 @@ defmodule Cerberus.PhoenixTest.LiveTest do
       |> assert_has("h1", text: "Record deleted")
     end
 
-    @tag skip: "phoenix_test click_link ambiguity parity bug"
     test "raises error when there are multiple links with same text", %{conn: conn} do
       assert_raise ArgumentError, ~r/2 of them matched the text filter/, fn ->
         conn
@@ -323,14 +322,12 @@ defmodule Cerberus.PhoenixTest.LiveTest do
       end
     end
 
-    @tag skip: "phoenix_test wrapped button text parity bug"
     test "does not raise when clicking a button that contains text wrapped in another element", %{conn: conn} do
       conn
       |> visit("/live/index")
       |> click_button("An ID-less Span Wrapped")
     end
 
-    @tag skip: "phoenix_test wrapped-id duplicate button parity bug"
     test "does not raise when targetting duplicate button differentiated by wrapped ID", %{conn: conn} do
       conn
       |> visit("/live/index")
@@ -407,7 +404,6 @@ defmodule Cerberus.PhoenixTest.LiveTest do
       )
     end
 
-    @tag skip: "phoenix_test wrapped textarea label parity bug"
     test "can fill-in prefilled textareas where label wraps textarea", %{conn: conn} do
       conn
       |> visit("/live/index")
@@ -567,7 +563,6 @@ defmodule Cerberus.PhoenixTest.LiveTest do
       |> assert_has("#form-data", text: "[elf, dwarf]")
     end
 
-    @tag skip: "phoenix_test repeated multi-select parity bug"
     test "works for multiple select with repeated calls", %{conn: conn} do
       conn
       |> visit("/live/index")
@@ -577,7 +572,6 @@ defmodule Cerberus.PhoenixTest.LiveTest do
       |> assert_has("#form-data", text: "[elf, dwarf]")
     end
 
-    @tag skip: "phoenix_test select phx-click outside form parity bug"
     test "works with phx-click outside of forms", %{conn: conn} do
       conn
       |> visit("/live/index")
@@ -587,7 +581,6 @@ defmodule Cerberus.PhoenixTest.LiveTest do
       |> assert_has("#form-data", text: "selected: [dog]")
     end
 
-    @tag skip: "phoenix_test select phx-click multi-select parity bug"
     test "works with phx-click and multi-select", %{conn: conn} do
       conn
       |> visit("/live/index")
@@ -625,7 +618,6 @@ defmodule Cerberus.PhoenixTest.LiveTest do
       |> assert_has("#form-data", text: "favorite-character: Frodo")
     end
 
-    @tag skip: "phoenix_test invalid select option parity bug"
     test "raises an error if select option is neither in a form nor has a phx-click", %{conn: conn} do
       session = visit(conn, "/live/index")
 
@@ -685,7 +677,6 @@ defmodule Cerberus.PhoenixTest.LiveTest do
       |> assert_has("#form-data", text: "user:payer: on")
     end
 
-    @tag skip: "phoenix_test checkbox phx-click outside form parity bug"
     test "works with phx-click outside a form", %{conn: conn} do
       conn
       |> visit("/live/index")
@@ -713,7 +704,6 @@ defmodule Cerberus.PhoenixTest.LiveTest do
       |> assert_has("#form-data", text: "like-elixir: yes")
     end
 
-    @tag skip: "phoenix_test invalid checkbox missing-form validation parity bug"
     test "raises error if checkbox doesn't have phx-click or belong to form", %{conn: conn} do
       session = visit(conn, "/live/index")
 
@@ -750,7 +740,6 @@ defmodule Cerberus.PhoenixTest.LiveTest do
       |> assert_has("#form-data", text: "user:payer: off")
     end
 
-    @tag skip: "phoenix_test uncheck phx-click outside form parity bug"
     test "works with phx-click outside a form", %{conn: conn} do
       conn
       |> visit("/live/index")

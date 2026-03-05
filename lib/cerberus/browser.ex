@@ -252,20 +252,7 @@ defmodule Cerberus.Browser do
       when is_binary(expression) and (is_function(callback_or_opts, 1) or is_list(callback_or_opts)) do
     case evaluate_js_value(session, expression) do
       {:ok, value} ->
-        case callback_or_opts do
-          callback when is_function(callback, 1) ->
-            callback.(value)
-            session
-
-          opts ->
-            opts = Options.validate_return_result!(opts, "Browser.evaluate_js/3")
-
-            if Keyword.get(opts, :return_result, false) do
-              value
-            else
-              session
-            end
-        end
+        evaluate_js_result(value, session, callback_or_opts)
 
       {:unsupported, unsupported_session} ->
         Assertions.unsupported(unsupported_session, :evaluate_js)
@@ -274,6 +261,21 @@ defmodule Cerberus.Browser do
 
   def evaluate_js(_session, _expression, _callback_or_opts) do
     raise ArgumentError, "Browser.evaluate_js/3 expects an expression string and callback with arity 1 or keyword options"
+  end
+
+  defp evaluate_js_result(value, session, callback) when is_function(callback, 1) do
+    callback.(value)
+    session
+  end
+
+  defp evaluate_js_result(value, session, opts) when is_list(opts) do
+    opts = Options.validate_return_result!(opts, "Browser.evaluate_js/3")
+
+    if Keyword.get(opts, :return_result, false) do
+      value
+    else
+      session
+    end
   end
 
   @doc """
