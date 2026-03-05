@@ -955,10 +955,10 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   defp canonicalize_select_option_args(:select, args) do
     case split_select_option_args(args) do
       {:ok, prefix, maybe_opts} ->
-        with {:ok, option_value, remaining_opts} <- pop_keyword_ast(maybe_opts, :option),
-             {:ok, canonical_option_value} <- canonicalize_select_option_value(option_value) do
-          merged_opts = Keyword.put(remaining_opts, :option, canonical_option_value)
-          {:ok, build_value_args(prefix, merged_opts, [])}
+        with {:ok, option_value} <- keyword_ast_fetch_value(maybe_opts, :option),
+             {:ok, canonical_option_value} <- canonicalize_select_option_value(option_value),
+             {:ok, updated_opts} <- keyword_ast_replace_value(maybe_opts, :option, canonical_option_value) do
+          {:ok, build_value_args(prefix, updated_opts, [])}
         else
           _ -> :no_change
         end
@@ -981,14 +981,17 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   @spec canonicalize_select_option_value(Macro.t()) :: {:ok, Macro.t()} | :no_change
   defp canonicalize_select_option_value(option_value) do
     cond do
+      match?({:ok, _}, canonicalize_select_option_literal_ast(option_value)) ->
+        canonicalize_select_option_literal_ast(option_value)
+
       locator_expression_ast?(option_value) ->
         :no_change
 
       binary_literal_ast?(option_value) ->
-        {:ok, text_call_ast(binary_literal_value(option_value))}
+        {:ok, text_sigil_e_ast(binary_literal_value(option_value))}
 
       is_list(option_value) and option_value != [] and Enum.all?(option_value, &binary_literal_ast?/1) ->
-        {:ok, Enum.map(option_value, &text_call_ast(binary_literal_value(&1)))}
+        {:ok, Enum.map(option_value, &text_sigil_e_ast(binary_literal_value(&1)))}
 
       is_list(option_value) ->
         :no_change
@@ -997,6 +1000,57 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
         :no_change
     end
   end
+
+  @spec canonicalize_select_option_literal_ast(Macro.t()) :: {:ok, Macro.t()} | :no_change
+  defp canonicalize_select_option_literal_ast(option_value) do
+    case select_option_text_literal(option_value) do
+      {:ok, {value, exact?}} -> {:ok, text_sigil_ast(value, exact?)}
+      _ -> :no_change
+    end
+  end
+
+  @spec select_option_text_literal(Macro.t()) :: {:ok, {String.t(), boolean()}} | :error
+  defp select_option_text_literal({:text, _meta, args}) when is_list(args) do
+    case args do
+      [value] ->
+        if binary_literal_ast?(value) do
+          {:ok, {binary_literal_value(value), true}}
+        else
+          :error
+        end
+
+      [value, opts] ->
+        with true <- binary_literal_ast?(value),
+             true <- keyword_ast?(opts),
+             {:ok, exact?} <- select_option_exact_opt(normalize_keyword_ast(opts)) do
+          {:ok, {binary_literal_value(value), exact?}}
+        else
+          _ -> :error
+        end
+
+      _ ->
+        :error
+    end
+  end
+
+  defp select_option_text_literal({:__block__, _meta, [value]}), do: select_option_text_literal(value)
+  defp select_option_text_literal(_value), do: :error
+
+  @spec select_option_exact_opt(keyword()) :: {:ok, boolean()} | :error
+  defp select_option_exact_opt(opts) when is_list(opts) do
+    case Keyword.fetch(opts, :exact) do
+      {:ok, exact_value} ->
+        boolean_literal(exact_value)
+
+      :error ->
+        {:ok, true}
+    end
+  end
+
+  @spec boolean_literal(Macro.t()) :: {:ok, boolean()} | :error
+  defp boolean_literal(value) when is_boolean(value), do: {:ok, value}
+  defp boolean_literal({:__block__, _meta, [value]}), do: boolean_literal(value)
+  defp boolean_literal(_value), do: :error
 
   @spec canonicalize_scope_locator_args(
           atom(),
@@ -1128,6 +1182,12 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   end
 
   defp locator_arg_indexes_for(fun, [_, _, _, _]) when fun in [:assert_has, :refute_has], do: [2]
+
+  defp locator_arg_indexes_for(fun, [_, opts])
+       when fun in [:select, :choose, :check, :uncheck, :click, :submit] and is_list(opts) do
+    if keyword_ast?(opts), do: [0], else: [1]
+  end
+
   defp locator_arg_indexes_for(fun, [_]) when fun in @explicit_locator_calls, do: [0]
   defp locator_arg_indexes_for(fun, [_, _]) when fun in @explicit_locator_calls, do: [1]
   defp locator_arg_indexes_for(fun, [_, _, _]) when fun in @explicit_locator_calls, do: [1]
@@ -1255,8 +1315,14 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     {:sigil_l, [delimiter: "\""], [{:<<>>, [], [value]}, ~c"i"]}
   end
 
-  @spec text_call_ast(Macro.t()) :: Macro.t()
-  defp text_call_ast(value), do: {:text, [], [value]}
+  @spec text_sigil_e_ast(String.t()) :: Macro.t()
+  defp text_sigil_e_ast(value) when is_binary(value) do
+    {:sigil_l, [delimiter: "\""], [{:<<>>, [], [value]}, ~c"e"]}
+  end
+
+  @spec text_sigil_ast(String.t(), boolean()) :: Macro.t()
+  defp text_sigil_ast(value, true), do: text_sigil_e_ast(value)
+  defp text_sigil_ast(value, false), do: text_sigil_i_ast(value)
 
   @spec text_call_i_ast(Macro.t()) :: Macro.t()
   defp text_call_i_ast(value), do: {:text, [], [value, [exact: false]]}
@@ -1442,6 +1508,40 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     else
       :no_change
     end
+  end
+
+  @spec keyword_ast_fetch_value(keyword(), atom()) :: {:ok, Macro.t()} | :no_change
+  defp keyword_ast_fetch_value(keyword_ast, key) when is_list(keyword_ast) and is_atom(key) do
+    Enum.find_value(keyword_ast, :no_change, fn
+      {raw_key, value} ->
+        case keyword_key_atom(raw_key) do
+          {:ok, ^key} -> {:ok, value}
+          _ -> false
+        end
+
+      _other ->
+        false
+    end)
+  end
+
+  @spec keyword_ast_replace_value(keyword(), atom(), Macro.t()) :: {:ok, keyword()} | :no_change
+  defp keyword_ast_replace_value(keyword_ast, key, new_value) when is_list(keyword_ast) and is_atom(key) do
+    {updated_opts, replaced?} =
+      Enum.map_reduce(keyword_ast, false, fn
+        {raw_key, old_value} = entry, false ->
+          case keyword_key_atom(raw_key) do
+            {:ok, ^key} ->
+              {{raw_key, transfer_comment_metadata(new_value, old_value)}, true}
+
+            _ ->
+              {entry, false}
+          end
+
+        entry, replaced? ->
+          {entry, replaced?}
+      end)
+
+    if replaced?, do: {:ok, updated_opts}, else: :no_change
   end
 
   @spec keyword_ast?(term()) :: boolean()

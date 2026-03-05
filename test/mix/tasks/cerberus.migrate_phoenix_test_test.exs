@@ -141,7 +141,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTestTest do
     assert rewritten =~ ~s{Cerberus.assert_has(session, Cerberus.and_(Cerberus.css("#main"), ~l"Articles"i))}
     assert rewritten =~ ~s{Cerberus.refute_has(session, Cerberus.and_(Cerberus.css("#missing"), ~l"Nope"i))}
     assert rewritten =~ ~s{Cerberus.fill_in(session, ~l"Search term"i, "phoenix")}
-    assert rewritten =~ ~s{Cerberus.select(session, ~l"Role"i, option: text("admin"))}
+    assert rewritten =~ ~s{Cerberus.select(session, ~l"Role"i, option: ~l"admin"e)}
     refute output =~ "visit(conn, ...)"
     refute output =~ "Direct PhoenixTest.<function> call detected"
   end
@@ -174,6 +174,89 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTestTest do
              ~s{defp apply_action(session, opacity), do: select(session, ~l"Watermark opacity"i, option: opacity)}
 
     refute rewritten =~ ~s{option: text(opacity)}
+  end
+
+  test "write mode rewrites local select option strings without rewrite failures", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_select_option_string_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleSelectOptionStringTest do
+        import PhoenixTest
+
+        defp apply_action(conn), do: select(conn, "Unit", option: "Main")
+      end
+      """
+    )
+
+    output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ "import Cerberus"
+    assert rewritten =~ ~s{defp apply_action(conn), do: select(conn, ~l"Unit"i, option: ~l"Main"e)}
+    refute output =~ "File rewrite failed and was skipped"
+  end
+
+  test "write mode rewrites select text option locators to sigils", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_select_option_text_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleSelectOptionTextTest do
+        import PhoenixTest
+
+        defp apply_action(conn), do: select(conn, "Unit", option: text("Main", exact: false))
+      end
+      """
+    )
+
+    _output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ ~s{defp apply_action(conn), do: select(conn, ~l"Unit"i, option: ~l"Main"i)}
+    refute rewritten =~ ~s{option: text("Main", exact: false)}
+  end
+
+  test "write mode rewrites piped select locator and option literals", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_piped_select_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SamplePipedSelectTest do
+        import PhoenixTest
+
+        test "example", %{conn: conn} do
+          conn
+          |> visit("/offers/new")
+          |> select("Status", option: "complete")
+        end
+      end
+      """
+    )
+
+    _output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ ~r/\|> select\(\s*~l"Status"i,\s*option: ~l"complete"e\s*\)/s
+    refute rewritten =~ ~s{|> select("Status", option: ~l"complete"e)}
   end
 
   test "write mode rewrites click_link/click_button calls to click", %{tmp_dir: tmp_dir} do

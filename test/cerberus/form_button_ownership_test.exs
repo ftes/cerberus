@@ -24,8 +24,8 @@ defmodule Cerberus.FormButtonOwnershipTest do
       unquote(driver)
       |> driver_session(context)
       |> then(fn session ->
-        reset_locator = Cerberus.Locator.normalize(text: "Reset")
-        save_locator = Cerberus.Locator.normalize(text: "Save Owner Form")
+        reset_locator = Cerberus.Locator.normalize!(text: "Reset")
+        save_locator = Cerberus.Locator.normalize!(text: "Save Owner Form")
 
         session =
           session
@@ -92,8 +92,8 @@ defmodule Cerberus.FormButtonOwnershipTest do
     assert %{active_form: active_before} = session.form_data
     assert is_binary(active_before)
 
-    reset_locator = Cerberus.Locator.normalize(text: "Reset")
-    save_locator = Cerberus.Locator.normalize(text: "Save Owner Form")
+    reset_locator = Cerberus.Locator.normalize!(text: "Reset")
+    save_locator = Cerberus.Locator.normalize!(text: "Save Owner Form")
 
     assert {:error, after_reset, _observed, _reason} =
              submit_for_session(session, reset_locator, [])

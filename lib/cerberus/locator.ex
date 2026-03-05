@@ -29,6 +29,7 @@ defmodule Cerberus.Locator do
           opts: keyword()
         }
   @type input :: t() | keyword() | map() | [input()]
+  @type normalize_result :: {:ok, t()} | {:error, Exception.t()}
   @role_kind_map %{
     "button" => :button,
     "menuitem" => :button,
@@ -46,10 +47,27 @@ defmodule Cerberus.Locator do
     "heading" => :text
   }
 
-  @spec normalize(term()) :: t()
-  def normalize(%__MODULE__{} = locator), do: normalize_locator(locator, locator)
+  @doc "Normalizes locator input and returns `{:ok, locator}` or `{:error, reason}`."
+  @spec normalize(term()) :: normalize_result()
+  def normalize(locator) do
+    {:ok, do_normalize(locator)}
+  rescue
+    error in [InvalidLocatorError] ->
+      {:error, error}
+  end
 
-  def normalize(locator) when is_list(locator) do
+  @doc "Normalizes locator input and raises `Cerberus.InvalidLocatorError` on invalid input."
+  @spec normalize!(term()) :: t()
+  def normalize!(locator) do
+    case normalize(locator) do
+      {:ok, normalized_locator} -> normalized_locator
+      {:error, error} -> raise error
+    end
+  end
+
+  defp do_normalize(%__MODULE__{} = locator), do: normalize_locator(locator, locator)
+
+  defp do_normalize(locator) when is_list(locator) do
     if Keyword.keyword?(locator) do
       locator
       |> Map.new()
@@ -59,11 +77,11 @@ defmodule Cerberus.Locator do
     end
   end
 
-  def normalize(locator) when is_map(locator) do
+  defp do_normalize(locator) when is_map(locator) do
     normalize_map(locator, locator)
   end
 
-  def normalize(locator), do: raise(InvalidLocatorError, locator: locator)
+  defp do_normalize(locator), do: raise(InvalidLocatorError, locator: locator)
 
   @spec leaf(leaf_kind(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: t()
   def leaf(kind, value, opts \\ [])
@@ -103,7 +121,7 @@ defmodule Cerberus.Locator do
     |> maybe_put_opt(opts, :selector)
     |> maybe_put_opt(opts, :has)
     |> maybe_put_opt(opts, :has_not)
-    |> normalize()
+    |> normalize!()
   end
 
   @spec closest(input(), Options.closest_opts()) :: t()
@@ -122,7 +140,7 @@ defmodule Cerberus.Locator do
         raise ArgumentError, "closest/2 supports only :from option, got: #{inspect(extra)}"
     end
 
-    from_locator = normalize(from_locator_input)
+    from_locator = normalize!(from_locator_input)
 
     if Keyword.has_key?(from_locator.opts, :from) do
       raise ArgumentError, "closest/2 does not support nested :from locators"
@@ -147,27 +165,27 @@ defmodule Cerberus.Locator do
 
   @spec compose_not(input()) :: t()
   def compose_not(locator) do
-    %__MODULE__{kind: :not, value: [normalize(locator)], opts: []}
+    %__MODULE__{kind: :not, value: [normalize!(locator)], opts: []}
   end
 
   @spec put_has(input(), input()) :: t()
   def put_has(locator, has_locator) do
-    locator = normalize(locator)
-    has_locator = normalize(has_locator)
+    locator = normalize!(locator)
+    has_locator = normalize!(has_locator)
     %{locator | opts: Keyword.put(locator.opts, :has, normalize_nested_testid_exact(has_locator))}
   end
 
   @spec put_has_not(input(), input()) :: t()
   def put_has_not(locator, has_not_locator) do
-    locator = normalize(locator)
-    has_not_locator = normalize(has_not_locator)
+    locator = normalize!(locator)
+    has_not_locator = normalize!(has_not_locator)
     %{locator | opts: Keyword.put(locator.opts, :has_not, normalize_nested_testid_exact(has_not_locator))}
   end
 
   @spec put_from(input(), input()) :: t()
   def put_from(locator, from_locator) do
-    locator = normalize(locator)
-    from_locator = normalize(from_locator)
+    locator = normalize!(locator)
+    from_locator = normalize!(from_locator)
     ensure_no_nested_from!(from_locator, {locator, from_locator}, ":from")
     %{locator | opts: Keyword.put(locator.opts, :from, normalize_nested_testid_exact(from_locator))}
   end
@@ -191,7 +209,7 @@ defmodule Cerberus.Locator do
              :not
            ] do
     locator
-    |> normalize()
+    |> normalize!()
     |> contains_kind_recursive?(kind)
   end
 
@@ -230,7 +248,7 @@ defmodule Cerberus.Locator do
   @spec contains_has_filter?(input()) :: boolean()
   def contains_has_filter?(locator) do
     locator
-    |> normalize()
+    |> normalize!()
     |> contains_has_filter_recursive?()
   end
 
@@ -550,7 +568,7 @@ defmodule Cerberus.Locator do
   end
 
   defp normalize_has_locator!(value, original) do
-    has_locator = normalize(value)
+    has_locator = normalize!(value)
     ensure_no_nested_from!(has_locator, original, ":has")
     normalize_nested_testid_exact(has_locator)
   end
@@ -566,7 +584,7 @@ defmodule Cerberus.Locator do
   end
 
   defp normalize_from_locator!(value, original) do
-    from_locator = normalize(value)
+    from_locator = normalize!(value)
     ensure_no_nested_from!(from_locator, original, ":from")
     normalize_nested_testid_exact(from_locator)
   end
@@ -592,7 +610,7 @@ defmodule Cerberus.Locator do
     members =
       value
       |> compose_members!(kind, original)
-      |> Enum.map(&normalize/1)
+      |> Enum.map(&normalize!/1)
       |> Enum.flat_map(&flatten_composite_members(kind, &1))
 
     if length(members) < 2 do
@@ -605,7 +623,7 @@ defmodule Cerberus.Locator do
   end
 
   defp normalize_composite(:not, value, _original) do
-    member = normalize(value)
+    member = normalize!(value)
     %__MODULE__{kind: :not, value: [member], opts: []}
   end
 
@@ -777,8 +795,8 @@ defmodule Cerberus.Locator do
   end
 
   defp compose(kind, left, right) when kind in [:and, :or] do
-    left = normalize(left)
-    right = normalize(right)
+    left = normalize!(left)
+    right = normalize!(right)
 
     members = Enum.flat_map([left, right], &flatten_composite_members(kind, &1))
 
@@ -790,7 +808,7 @@ defmodule Cerberus.Locator do
     members =
       members
       |> compose_members!(kind, original)
-      |> Enum.map(&normalize_locator(normalize(&1), original))
+      |> Enum.map(&normalize_locator(normalize!(&1), original))
       |> Enum.flat_map(&flatten_composite_members(kind, &1))
 
     if length(members) < 2 do
@@ -806,16 +824,16 @@ defmodule Cerberus.Locator do
     member =
       case value do
         [%__MODULE__{} = locator_member] ->
-          normalize_locator(normalize(locator_member), original)
+          normalize_locator(normalize!(locator_member), original)
 
         [locator_member] ->
-          normalize(locator_member)
+          normalize!(locator_member)
 
         %__MODULE__{} = locator_member ->
-          normalize_locator(normalize(locator_member), original)
+          normalize_locator(normalize!(locator_member), original)
 
         locator_member ->
-          normalize(locator_member)
+          normalize!(locator_member)
       end
 
     %{locator | value: [member], opts: normalize_composite_opts(opts, original)}

@@ -705,7 +705,7 @@ defmodule Cerberus do
   """
   @spec within(arg, scope_locator_input(), (arg -> arg)) :: arg when arg: var
   def within(session, locator, callback) when not is_binary(locator) and is_function(callback, 1) do
-    normalized_locator = Locator.normalize(locator)
+    normalized_locator = Locator.normalize!(locator)
     driver_module_for_session!(session).within(session, normalized_locator, callback)
   end
 

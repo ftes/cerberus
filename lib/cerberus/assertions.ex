@@ -430,7 +430,7 @@ defmodule Cerberus.Assertions do
   end
 
   defp normalize_click_locator(locator_input, opts) do
-    locator = Locator.normalize(locator_input)
+    locator = Locator.normalize!(locator_input)
     opts = merge_locator_selector_opts(locator, opts)
     {locator, opts}
   end
@@ -456,7 +456,7 @@ defmodule Cerberus.Assertions do
   end
 
   defp normalize_form_action_locator(locator_input, opts) do
-    locator = Locator.normalize(locator_input)
+    locator = Locator.normalize!(locator_input)
     opts = merge_locator_selector_opts(locator, opts)
     {locator, opts}
   end
@@ -514,7 +514,7 @@ defmodule Cerberus.Assertions do
         {:ok, normalized} ->
           normalized
 
-        :error ->
+        {:error, _error} ->
           raise ArgumentError,
                 "select/3 invalid options: :option must be a text locator or list of text locators (for example ~l\"Transport\" or text(\"Transport\")); got: #{inspect(option_input)}"
       end
@@ -535,15 +535,13 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  @spec safe_normalize_locator(term()) :: {:ok, Locator.t()} | :error
+  @spec safe_normalize_locator(term()) :: {:ok, Locator.t()} | {:error, Exception.t()}
   defp safe_normalize_locator(locator_input) do
-    {:ok, Locator.normalize(locator_input)}
-  rescue
-    Cerberus.InvalidLocatorError -> :error
+    Locator.normalize(locator_input)
   end
 
   defp normalize_assert_locator(locator_input, opts) do
-    locator = Locator.normalize(locator_input)
+    locator = Locator.normalize!(locator_input)
     normalize_assert_locator_kind(locator, opts)
   end
 
@@ -556,7 +554,7 @@ defmodule Cerberus.Assertions do
   end
 
   defp normalize_submit_locator(locator_input, opts) do
-    locator = Locator.normalize(locator_input)
+    locator = Locator.normalize!(locator_input)
     opts = merge_locator_selector_opts(locator, opts)
     {locator, opts}
   end

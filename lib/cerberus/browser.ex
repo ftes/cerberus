@@ -148,7 +148,7 @@ defmodule Cerberus.Browser do
       @assert_dialog_args_error,
       &Options.validate_browser_assert_dialog!/1,
       fn browser_session, validated_opts ->
-        normalized_locator = Locator.normalize(locator)
+        normalized_locator = Locator.normalize!(locator)
 
         if normalized_locator.kind == :text do
           {:ok, Extensions.assert_dialog(browser_session, normalized_locator, validated_opts)}
