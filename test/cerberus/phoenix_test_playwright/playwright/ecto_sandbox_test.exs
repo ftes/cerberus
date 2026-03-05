@@ -32,7 +32,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Playwright.EctoSandboxTest do
 
     describe "delay: #{delay_ms}ms does not require ecto_sandbox_stop_owner_delay" do
       setup %{conn: conn} do
-        [conn: visit(conn, "/phoenix_test/playwright/pw/live/ecto?delay_ms=#{@delay_ms}")]
+        [conn: conn |> visit("/phoenix_test/playwright/pw/live/ecto?delay_ms=#{@delay_ms}") |> await_ecto_live_results()]
       end
 
       test "shows version", %{conn: conn} do
@@ -52,5 +52,12 @@ defmodule Cerberus.PhoenixTestPlaywright.Playwright.EctoSandboxTest do
   defp assert_loaded(session, text_value, opts \\ []) do
     exact? = Keyword.get(opts, :exact, true)
     assert_has(session, text(text_value, exact: exact?), timeout: 5_000)
+  end
+
+  defp await_ecto_live_results(session) do
+    session
+    |> assert_loaded("Version: PostgreSQL", exact: false)
+    |> assert_loaded("Long running: void")
+    |> assert_loaded("Delayed version: PostgreSQL", exact: false)
   end
 end
