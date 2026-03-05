@@ -199,11 +199,10 @@ defmodule Cerberus.PhoenixTest.StaticTest do
     end
 
     test "handles form submission via `data-method` & `data-to` attributes", %{conn: conn} do
-      assert_raise AssertionError, ~r/static driver does not support button clicks/, fn ->
-        conn
-        |> visit("/page/index")
-        |> click_button("Data-method Delete")
-      end
+      conn
+      |> visit("/page/index")
+      |> click_button("Data-method Delete")
+      |> assert_has("h1", text: "Record deleted")
     end
 
     test "does not remove active form if button isn't form's submit button", %{conn: conn} do
@@ -255,7 +254,7 @@ defmodule Cerberus.PhoenixTest.StaticTest do
     end
 
     test "raises error if trying to submit via `data-` attributes but incomplete", %{conn: conn} do
-      msg = ~r/static driver does not support button clicks/
+      msg = ~r/data-method element must define `data-to` or `href`/
 
       assert_raise AssertionError, msg, fn ->
         conn

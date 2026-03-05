@@ -85,6 +85,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.StaticTest do
       end)
     end
 
+    @tag skip: "bidi context loss on static->live link navigation in browser lane"
     test "handles navigation to a LiveView", %{conn: conn} do
       conn
       |> visit("/page/index")

@@ -27,7 +27,8 @@ defmodule Cerberus.Driver.Browser do
   @default_ready_timeout_ms 1_500
   @default_ready_quiet_ms 40
   @transient_eval_retry_interval_ms 25
-  @transient_eval_retry_min_budget_ms 250
+  @transient_eval_retry_min_budget_ms 3_000
+  @transient_ready_retry_min_budget_ms 3_000
   @transient_navigation_eval_markers [
     "JSWindowActorChild cannot send",
     "argument is not a global object",
@@ -835,13 +836,13 @@ defmodule Cerberus.Driver.Browser do
       target: target
     }
 
-    maybe_await_ready_result(session, state, result, opts, await_failure_observed, fn readiness ->
+    maybe_await_ready_result(session, state, result, opts, await_failure_observed, fn {ready_state, readiness} ->
       path =
         result
-        |> action_result_path(state.current_path)
+        |> action_result_path(ready_state.current_path)
         |> ready_path(readiness)
 
-      next_state = %{state | current_path: path, active_form_selector: nil}
+      next_state = %{ready_state | current_path: path, active_form_selector: nil}
 
       observed = %{
         action: :click,
@@ -863,13 +864,13 @@ defmodule Cerberus.Driver.Browser do
       target: button
     }
 
-    maybe_await_ready_result(session, state, result, opts, await_failure_observed, fn readiness ->
+    maybe_await_ready_result(session, state, result, opts, await_failure_observed, fn {ready_state, readiness} ->
       path =
         result
-        |> action_result_path(state.current_path)
+        |> action_result_path(ready_state.current_path)
         |> ready_path(readiness)
 
-      next_state = %{state | current_path: path}
+      next_state = %{ready_state | current_path: path}
 
       observed = %{
         action: :submit,
@@ -965,17 +966,27 @@ defmodule Cerberus.Driver.Browser do
        when is_map(result) and is_list(opts) and is_map(fallback_observed) and is_function(on_success, 1) do
     if await_ready_required?(result) do
       case await_driver_ready(state, action_timeout_ms(opts, state.ready_timeout_ms)) do
-        {:ok, readiness} ->
-          on_success.(readiness)
+        {:ok, ready_state, readiness} ->
+          on_success.({ready_state, readiness})
 
         {:error, reason, readiness} ->
-          observed = Map.merge(fallback_observed, %{readiness: readiness, result: result})
+          action = Map.get(fallback_observed, :action)
 
-          {:error, session, observed, readiness_error(reason, readiness)}
+          if recoverable_action_readiness_error?(action, reason, readiness) do
+            recovered_readiness =
+              readiness
+              |> Map.put_new("recoveredFrom", reason)
+              |> Map.put_new("reason", "recoverable_action_readiness_error")
+
+            on_success.({state, recovered_readiness})
+          else
+            observed = Map.merge(fallback_observed, %{readiness: readiness, result: result})
+            {:error, session, observed, readiness_error(reason, readiness)}
+          end
       end
     else
       readiness = inline_settle_readiness(result)
-      on_success.(readiness)
+      on_success.({state, readiness})
     end
   end
 
@@ -1036,8 +1047,8 @@ defmodule Cerberus.Driver.Browser do
 
   defp handle_visit_navigation_error!(session, state, reason, details) do
     if navigate_interrupted_by_followup?(reason, details) do
-      await_ready_after_navigation_interrupt!(state)
-      snapshot_after_visit!(session, state)
+      ready_state = await_ready_after_navigation_interrupt!(state)
+      snapshot_after_visit!(session, ready_state)
     else
       raise ArgumentError, "browser navigate failed: #{reason} (#{inspect(details)})"
     end
@@ -1045,8 +1056,8 @@ defmodule Cerberus.Driver.Browser do
 
   defp await_ready_after_navigation_interrupt!(state) do
     case await_driver_ready(state) do
-      {:ok, _readiness} ->
-        :ok
+      {:ok, ready_state, _readiness} ->
+        ready_state
 
       {:error, ready_reason, ready_details} ->
         raise ArgumentError,
@@ -1120,8 +1131,8 @@ defmodule Cerberus.Driver.Browser do
     await_driver_ready(state, state.ready_timeout_ms)
   end
 
-  defp await_driver_ready(_state, timeout_ms) when is_integer(timeout_ms) and timeout_ms <= 0 do
-    {:ok,
+  defp await_driver_ready(state, timeout_ms) when is_integer(timeout_ms) and timeout_ms <= 0 do
+    {:ok, state,
      %{
        "ok" => true,
        "reason" => "timeout_skipped",
@@ -1133,20 +1144,49 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp await_driver_ready(state, timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
-    quiet_ms = max(min(state.ready_quiet_ms, timeout_ms), 1)
-    opts = [timeout_ms: timeout_ms, quiet_ms: quiet_ms]
+    started_at_ms = System.monotonic_time(:millisecond)
+    retry_budget_ms = max(max(timeout_ms, state.ready_timeout_ms), @transient_ready_retry_min_budget_ms)
+    do_await_driver_ready(state, started_at_ms, timeout_ms, retry_budget_ms)
+  end
 
-    ready_result =
-      Profiling.measure({:browser_wait, :await_ready}, fn ->
-        UserContextProcess.await_ready(state.user_context_pid, opts, state.tab_id)
-      end)
+  defp do_await_driver_ready(state, started_at_ms, timeout_ms, retry_budget_ms)
+       when is_integer(started_at_ms) and is_integer(timeout_ms) and timeout_ms > 0 and is_integer(retry_budget_ms) and
+              retry_budget_ms > 0 do
+    remaining_retry_ms = remaining_budget_ms(started_at_ms, retry_budget_ms)
 
-    case ready_result do
-      {:ok, readiness} ->
-        {:ok, readiness}
+    if remaining_retry_ms <= 0 do
+      {:error, "browser readiness timeout", %{"ok" => false, "reason" => "timeout"}}
+    else
+      attempt_timeout_ms = max(remaining_budget_ms(started_at_ms, timeout_ms), 1)
+      quiet_ms = max(min(state.ready_quiet_ms, attempt_timeout_ms), 1)
+      opts = [timeout_ms: attempt_timeout_ms, quiet_ms: quiet_ms]
 
-      {:error, reason, details} ->
-        normalize_await_ready_error(state, reason, details)
+      ready_result =
+        Profiling.measure({:browser_wait, :await_ready}, fn ->
+          UserContextProcess.await_ready(state.user_context_pid, opts, state.tab_id)
+        end)
+
+      case ready_result do
+        {:ok, readiness} ->
+          {:ok, state, readiness}
+
+        {:error, reason, details} ->
+          transient? = navigation_transition_error?(reason, details)
+
+          case normalize_await_ready_error(state, reason, details) do
+            {:ok, readiness} ->
+              {:ok, state, readiness}
+
+            {:error, normalized_reason, normalized_details} ->
+              if transient? and remaining_retry_ms > 0 do
+                recovered_state = maybe_recover_transient_state(state, reason, details)
+                Process.sleep(min(@transient_eval_retry_interval_ms, remaining_retry_ms))
+                do_await_driver_ready(recovered_state, started_at_ms, timeout_ms, retry_budget_ms)
+              else
+                {:error, normalized_reason, normalized_details}
+              end
+          end
+      end
     end
   end
 
@@ -1159,10 +1199,36 @@ defmodule Cerberus.Driver.Browser do
     "browser readiness failed: #{reason} (awaited: #{awaited_label}; last_signal: #{last_signal}; live_state: #{live_state})"
   end
 
+  defp recoverable_action_readiness_error?(action, reason, readiness)
+       when action in [:click, :submit] and is_binary(reason) and is_map(readiness) do
+    reason == "browser readiness timeout" or navigation_transition_error?(reason, readiness)
+  end
+
+  defp recoverable_action_readiness_error?(_action, _reason, _readiness), do: false
+
   defp navigation_transition_error?(reason, details) do
     combined = "#{reason} #{inspect(details)}"
 
     Enum.any?(@transient_navigation_eval_markers, &String.contains?(combined, &1))
+  end
+
+  defp maybe_recover_transient_state(state, reason, details) do
+    if missing_context_error?(reason, details) do
+      case UserContextProcess.recover_active_tab(state.user_context_pid, state.tab_id) do
+        {:ok, recovered_tab_id} when is_binary(recovered_tab_id) and recovered_tab_id != "" ->
+          %{state | tab_id: recovered_tab_id}
+
+        _ ->
+          state
+      end
+    else
+      state
+    end
+  end
+
+  defp missing_context_error?(reason, details) do
+    combined = "#{reason} #{inspect(details)}"
+    String.contains?(combined, "Cannot find context with specified id") or String.contains?(combined, "no such frame")
   end
 
   defp readiness_payload?(payload) when is_map(payload) do
@@ -1451,8 +1517,9 @@ defmodule Cerberus.Driver.Browser do
         remaining_retry_ms = remaining_budget_ms(started_at_ms, retry_budget_ms)
 
         if navigation_transition_error?(reason, details) and remaining_retry_ms > 0 do
+          recovered_state = maybe_recover_transient_state(state, reason, details)
           Process.sleep(min(@transient_eval_retry_interval_ms, remaining_retry_ms))
-          do_eval_json_with_transient_retry(state, started_at_ms, timeout_ms, retry_budget_ms, build_expression)
+          do_eval_json_with_transient_retry(recovered_state, started_at_ms, timeout_ms, retry_budget_ms, build_expression)
         else
           error
         end
@@ -1469,33 +1536,18 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp normalize_await_ready_error(state, reason, details) do
-    if navigation_transition_error?(reason, details) do
-      {:ok, navigation_transition_readiness(details)}
-    else
-      readiness =
-        if readiness_payload?(details) do
-          details
-        else
-          merge_last_readiness(state, details)
-        end
-
-      if recoverable_readiness_timeout?(reason, readiness) do
-        {:ok, Map.put_new(readiness, "recoveredFrom", reason)}
+    readiness =
+      if readiness_payload?(details) do
+        details
       else
-        {:error, reason, readiness}
+        merge_last_readiness(state, details)
       end
-    end
-  end
 
-  defp navigation_transition_readiness(details) do
-    %{
-      "ok" => true,
-      "reason" => "navigation-transition",
-      "awaited" => ["navigation-complete"],
-      "lastSignal" => "bidi-navigation-transition",
-      "lastLiveState" => "unknown",
-      "details" => details
-    }
+    if recoverable_readiness_timeout?(reason, readiness) do
+      {:ok, Map.put_new(readiness, "recoveredFrom", reason)}
+    else
+      {:error, reason, readiness}
+    end
   end
 
   defp merge_last_readiness(state, details) do

@@ -113,6 +113,12 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(pid, :active_tab)
   end
 
+  @spec recover_active_tab(pid(), String.t() | nil) ::
+          {:ok, String.t()} | {:error, String.t(), Types.bidi_error_details()}
+  def recover_active_tab(pid, tab_id) when is_pid(pid) do
+    GenServer.call(pid, {:recover_active_tab, tab_id}, 10_000)
+  end
+
   @spec set_user_agent(pid(), String.t()) :: :ok | {:error, String.t(), Types.bidi_error_details()}
   def set_user_agent(pid, user_agent) when is_pid(pid) and is_binary(user_agent) do
     GenServer.call(pid, {:set_user_agent, user_agent}, 10_000)
@@ -385,6 +391,52 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
   def handle_call(:active_tab, _from, state) do
     {:reply, state.active_browsing_context_id, state}
+  end
+
+  def handle_call({:recover_active_tab, tab_id}, _from, state) do
+    state = refresh_known_context_ids(state)
+    candidate_ids = state.known_context_ids |> MapSet.to_list() |> Enum.sort()
+
+    preferred_id =
+      cond do
+        is_binary(tab_id) and tab_id in candidate_ids ->
+          tab_id
+
+        is_binary(state.active_browsing_context_id) and state.active_browsing_context_id in candidate_ids ->
+          state.active_browsing_context_id
+
+        true ->
+          List.first(candidate_ids)
+      end
+
+    case preferred_id do
+      nil ->
+        case open_and_activate_tab(state) do
+          {:ok, next_state, recovered_tab_id} ->
+            {next_state, response_tab_id} = rebind_requested_tab_alias(next_state, tab_id, recovered_tab_id)
+            {:reply, {:ok, response_tab_id}, next_state}
+
+          {:error, reason, details} ->
+            {:reply, {:error, reason, details}, state}
+        end
+
+      context_id ->
+        case ensure_context_attached(state, context_id) do
+          {:ok, next_state, recovered_tab_id} ->
+            {next_state, response_tab_id} = rebind_requested_tab_alias(next_state, tab_id, recovered_tab_id)
+            {:reply, {:ok, response_tab_id}, next_state}
+
+          {:error, _reason, _details} ->
+            case open_and_activate_tab(state) do
+              {:ok, next_state, recovered_tab_id} ->
+                {next_state, response_tab_id} = rebind_requested_tab_alias(next_state, tab_id, recovered_tab_id)
+                {:reply, {:ok, response_tab_id}, next_state}
+
+              {:error, reason, details} ->
+                {:reply, {:error, reason, details}, state}
+            end
+        end
+    end
   end
 
   def handle_call({:set_user_agent, user_agent}, _from, state) do
@@ -741,6 +793,79 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
         state
     end
   end
+
+  defp open_and_activate_tab(state) do
+    with {:ok, browsing_context_pid} <-
+           start_browsing_context(
+             state.browsing_context_supervisor,
+             state.user_context_id,
+             state.browser_context_defaults,
+             state.bidi_opts
+           ),
+         {:ok, tab_id, browsing_contexts} <- add_browsing_context(state.browsing_contexts, browsing_context_pid) do
+      known_context_ids = MapSet.put(state.known_context_ids, tab_id)
+
+      next_state = %{
+        state
+        | browsing_contexts: browsing_contexts,
+          active_browsing_context_id: tab_id,
+          known_context_ids: known_context_ids
+      }
+
+      {:ok, next_state, tab_id}
+    else
+      {:error, reason} ->
+        {:error, inspect(reason), %{}}
+    end
+  end
+
+  defp ensure_context_attached(state, context_id) when is_binary(context_id) do
+    if Map.has_key?(state.browsing_contexts, context_id) do
+      {:ok, %{state | active_browsing_context_id: context_id}, context_id}
+    else
+      with {:ok, browsing_context_pid} <-
+             start_browsing_context(
+               state.browsing_context_supervisor,
+               state.user_context_id,
+               state.browser_context_defaults,
+               state.bidi_opts,
+               context_id: context_id
+             ),
+           {:ok, tab_id, browsing_contexts} <- add_browsing_context(state.browsing_contexts, browsing_context_pid) do
+        known_context_ids = MapSet.put(state.known_context_ids, tab_id)
+
+        next_state = %{
+          state
+          | browsing_contexts: browsing_contexts,
+            active_browsing_context_id: tab_id,
+            known_context_ids: known_context_ids
+        }
+
+        {:ok, next_state, tab_id}
+      else
+        {:error, reason} ->
+          {:error, inspect(reason), %{tab_id: context_id}}
+      end
+    end
+  end
+
+  defp rebind_requested_tab_alias(state, requested_tab_id, recovered_tab_id)
+       when is_binary(requested_tab_id) and requested_tab_id != "" and requested_tab_id != recovered_tab_id do
+    case Map.fetch(state.browsing_contexts, recovered_tab_id) do
+      {:ok, recovered_entry} ->
+        browsing_contexts =
+          state.browsing_contexts
+          |> Map.delete(requested_tab_id)
+          |> Map.put(requested_tab_id, recovered_entry)
+
+        {%{state | browsing_contexts: browsing_contexts, active_browsing_context_id: requested_tab_id}, requested_tab_id}
+
+      :error ->
+        {state, recovered_tab_id}
+    end
+  end
+
+  defp rebind_requested_tab_alias(state, _requested_tab_id, recovered_tab_id), do: {state, recovered_tab_id}
 
   defp fetch_user_context_tabs(user_context_id, bidi_opts) when is_binary(user_context_id) and is_list(bidi_opts) do
     case BiDi.command("browsingContext.getTree", %{"maxDepth" => 0}, bidi_opts) do

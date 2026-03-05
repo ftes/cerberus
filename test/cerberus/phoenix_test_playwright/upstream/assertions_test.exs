@@ -25,7 +25,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     test "raises an error if the element cannot be found at all", %{conn: conn} do
       conn = visit(conn, "/page/index")
 
-      msg = ~r/Could not find element "#nonexistent-id"/
+      _msg = ~r/Could not find element "#nonexistent-id"/
 
       assert_raise AssertionError, fn ->
         assert_has(conn, "#nonexistent-id")
@@ -127,7 +127,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     test "raises an error if value cannot be found", %{conn: conn} do
       session = visit(conn, "/page/by_value")
 
-      msg = ~r/Could not find element.*input.*"does-not-exist"/
+      _msg = ~r/Could not find element.*input.*"does-not-exist"/
 
       assert_raise AssertionError, fn ->
         assert_has(session, "input", value: "does-not-exist")
@@ -148,7 +148,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     test "raises an error if label (with value) cannot be found", %{conn: conn} do
       session = visit(conn, "/page/by_value")
 
-      msg = ~r/Could not find.*input.*Halfling.*Frodo/
+      _msg = ~r/Could not find.*input.*Halfling.*Frodo/
 
       assert_raise AssertionError, fn ->
         assert_has(session, "input", label: "Halfling", value: "Frodo")
@@ -158,7 +158,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     test "raises an error if value (with label) cannot be found", %{conn: conn} do
       session = visit(conn, "/page/by_value")
 
-      msg = ~r/Could not find.*Hobbit.*Sam"/
+      _msg = ~r/Could not find.*Hobbit.*Sam"/
 
       assert_raise AssertionError, fn ->
         assert_has(session, "input", label: "Hobbit", value: "Sam")
@@ -176,7 +176,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     test "raises an error if the element cannot be found at all", %{conn: conn} do
       conn = visit(conn, "/page/index")
 
-      msg = ~r/Could not find element.*#nonexistent-id/
+      _msg = ~r/Could not find element.*#nonexistent-id/
 
       assert_raise AssertionError, fn ->
         assert_has(conn, "#nonexistent-id", text: "Main page")
@@ -188,7 +188,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     } do
       conn = visit(conn, "/page/index")
 
-      msg =
+      _msg =
         ignore_whitespace("""
         Could not find element "h1".*"Super page"
         """)
@@ -218,7 +218,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     end
 
     test "raises if title does not match expected value (Static)", %{conn: conn} do
-      msg =
+      _msg =
         ignore_whitespace("""
         Page title does not match
         """)
@@ -232,7 +232,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
 
     @tag skip: "phoenix_test_playwright live assertion snapshot stability bug"
     test "raises if title does not match expected value (Live)", %{conn: conn} do
-      msg =
+      _msg =
         ignore_whitespace("""
         Page title does not match
         """)
@@ -246,7 +246,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
 
     test "raises if title is contained but is not exactly the same as expected (with exact=true)",
          %{conn: conn} do
-      msg =
+      _msg =
         ignore_whitespace("""
         Page title does not match
         """)
@@ -263,7 +263,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     } do
       conn = visit(conn, "/page/index")
 
-      msg =
+      _msg =
         ignore_whitespace("""
         Could not find.*#multiple-items.*Frodo
         """)
@@ -285,7 +285,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     test "raises an error if count is more than expected count", %{conn: conn} do
       session = visit(conn, "/page/index")
 
-      msg =
+      _msg =
         ignore_whitespace("""
         Could not find element
         """)
@@ -298,7 +298,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     test "raises an error if count is less than expected count", %{conn: conn} do
       session = visit(conn, "/page/index")
 
-      msg =
+      _msg =
         ignore_whitespace("""
         Could not find element
         """)
@@ -316,7 +316,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     end
 
     test "raises if `exact` text doesn't match", %{conn: conn} do
-      msg =
+      _msg =
         ignore_whitespace("""
         Could not find element "h1".*"Main"
         """)
@@ -336,7 +336,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     end
 
     test "raises if it cannot find element at `at` position", %{conn: conn} do
-      msg =
+      _msg =
         ignore_whitespace("""
         Could not find element "#multiple-items li".*at: 2.*"Aragorn"
         """)
@@ -382,7 +382,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     end
 
     test "raises if element is found", %{conn: conn} do
-      msg =
+      _msg =
         ignore_whitespace("""
         Found element
         """)
@@ -396,7 +396,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
 
     @tag skip: "investigate"
     test "raises if title is found", %{conn: conn} do
-      msg =
+      _msg =
         ignore_whitespace("""
         Expected title not to be present but found: "PhoenixTest is the best!"
         """)
@@ -411,7 +411,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     test "raises an error if multiple elements are found", %{conn: conn} do
       conn = visit(conn, "/page/index")
 
-      msg =
+      _msg =
         ignore_whitespace("""
         Found element ".multiple_links"
         """)
@@ -424,7 +424,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     test "raises if there is one element and count is 1", %{conn: conn} do
       conn = visit(conn, "/page/index")
 
-      msg =
+      _msg =
         ignore_whitespace("""
         Found element "h1"
         """)
@@ -437,7 +437,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     test "raises if there are the same number of elements as refuted", %{conn: conn} do
       conn = visit(conn, "/page/index")
 
-      msg =
+      _msg =
         ignore_whitespace("""
         Found element ".multiple_links"
         """)
@@ -474,7 +474,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
 
     @tag skip: "investigate"
     test "raises if title matches value (Static)", %{conn: conn} do
-      msg =
+      _msg =
         ignore_whitespace("""
         Expected title not to be "PhoenixTest is the best!"
         """)
@@ -488,7 +488,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
 
     @tag skip: "investigate"
     test "raises if title matches value (Live)", %{conn: conn} do
-      msg =
+      _msg =
         ignore_whitespace("""
         Expected title not to be "PhoenixTest is the best!"
         """)
@@ -522,7 +522,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     test "raises an error if one element is found", %{conn: conn} do
       conn = visit(conn, "/page/index")
 
-      msg =
+      _msg =
         ignore_whitespace("""
         Found element
         """)
@@ -535,7 +535,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     test "raises an error if multiple elements are found", %{conn: conn} do
       conn = visit(conn, "/page/index")
 
-      msg =
+      _msg =
         ignore_whitespace("""
         Found element
         """)
@@ -552,7 +552,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     end
 
     test "raises if `exact` text makes refutation false", %{conn: conn} do
-      msg =
+      _msg =
         ignore_whitespace("""
         Found element "h1".*"Main"
         """)
@@ -578,7 +578,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
 
     @tag skip: "investigate"
     test "raises if it finds element at `at` position", %{conn: conn} do
-      msg =
+      _msg =
         ignore_whitespace("""
         Expected not to find any elements with selector "#multiple-items li" and text "Legolas" at position 2
 
@@ -617,7 +617,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     test "raises an error if value is found", %{conn: conn} do
       session = visit(conn, "/page/by_value")
 
-      msg = ~r/Found.*input.*Frodo/
+      _msg = ~r/Found.*input.*Frodo/
 
       assert_raise AssertionError, fn ->
         refute_has(session, "input", value: "Frodo")
@@ -637,7 +637,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     test "raises an error if label and value are found", %{conn: conn} do
       session = visit(conn, "/page/by_value")
 
-      msg = ~r/input.*Hobbit.*Frodo/
+      _msg = ~r/input.*Hobbit.*Frodo/
 
       assert_raise AssertionError, fn ->
         refute_has(session, "input", label: "Hobbit", value: "Frodo")
@@ -698,7 +698,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     end
 
     test "raises helpful error if path doesn't match" do
-      msg =
+      _msg =
         ignore_whitespace("""
         Expected path to be "/page/not-index" but got "/page/index"
         """)
@@ -711,7 +711,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     end
 
     test "raises helpful error if path doesn't have query params" do
-      msg =
+      _msg =
         ignore_whitespace("""
         Expected query params to be "details=true&foo=bar" but got nil
         """)
@@ -724,7 +724,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     end
 
     test "raises helpful error if query params don't match" do
-      msg =
+      _msg =
         ignore_whitespace("""
         Expected query params to be "goodbye=world&hi=bye" but got "hello=world&hi=bye"
         """)
@@ -739,7 +739,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     test "raises helpful error if path doesn't have query params with lists" do
       session = %Live{current_path: "/page/index?users[]=frodo&users[]=sam"}
 
-      msg = ~r/Expected query params to be "users\[\]=sam" but/
+      _msg = ~r/Expected query params to be "users\[\]=sam" but/
 
       assert_raise AssertionError, fn ->
         assert_path(session, "/page/index", query_params: %{"users" => ["sam"]})
@@ -761,7 +761,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     end
 
     test "raises helpful error if path matches" do
-      msg =
+      _msg =
         ignore_whitespace("""
         Expected path not to be "/page/index"
         """)
@@ -774,7 +774,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.AssertionsTest do
     end
 
     test "raises helpful error if query params MATCH" do
-      msg =
+      _msg =
         ignore_whitespace("""
         Expected query params not to be "hello=world&hi=bye"
         """)
