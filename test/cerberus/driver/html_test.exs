@@ -103,6 +103,31 @@ defmodule Cerberus.HtmlTest do
     assert %{"profile[name]" => "Aragorn"} = Html.form_defaults(doc, ~s(form[id="profile-form"]))
   end
 
+  test "form_defaults keeps selected option values instead of falling back to first options" do
+    html = """
+    <main>
+      <form id="settings-form">
+        <label for="week_ending_day">Week ending day</label>
+        <select id="week_ending_day" name="timecard_setting[week_ending_day]">
+          <option value="1">Monday</option>
+          <option value="7" selected>Sunday</option>
+        </select>
+
+        <label for="crew_reminder_day">Crew reminder day</label>
+        <select id="crew_reminder_day" name="timecard_setting[crew_reminder_day]">
+          <option value="1">Monday</option>
+          <option value="4" selected>Thursday</option>
+        </select>
+      </form>
+    </main>
+    """
+
+    assert %{
+             "timecard_setting[week_ending_day]" => "7",
+             "timecard_setting[crew_reminder_day]" => "4"
+           } = Html.form_defaults(html, ~s(form[id="settings-form"]))
+  end
+
   test "checkbox_unchecked_value finds hidden default for boolean checkboxes" do
     html = """
     <main>

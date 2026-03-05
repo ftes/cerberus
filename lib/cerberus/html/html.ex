@@ -1954,8 +1954,14 @@ defmodule Cerberus.Html do
   defp selected_option_values(node) do
     node
     |> enabled_options()
-    |> Enum.filter(&checked?/1)
+    |> Enum.filter(&selected_option?/1)
     |> Enum.map(&option_value/1)
+  end
+
+  defp selected_option?(node) do
+    node
+    |> attr("selected")
+    |> is_binary()
   end
 
   defp resolve_select_default_values(_node, _multiple?, selected_values) when selected_values != [] do
