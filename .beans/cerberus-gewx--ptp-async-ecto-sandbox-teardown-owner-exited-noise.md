@@ -1,11 +1,11 @@
 ---
 # cerberus-gewx
 title: PTP async Ecto sandbox teardown owner-exited noise
-status: todo
+status: in-progress
 type: bug
 priority: normal
 created_at: 2026-03-05T14:16:18Z
-updated_at: 2026-03-05T14:16:18Z
+updated_at: 2026-03-05T20:35:26Z
 parent: cerberus-vhzg
 ---
 

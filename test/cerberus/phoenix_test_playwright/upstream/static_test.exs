@@ -7,8 +7,6 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.StaticTest do
   alias Cerberus.TestSupport.PhoenixTestPlaywright.ActiveForm
   alias Cerberus.TestSupport.PhoenixTestPlaywright.Driver
 
-  @ws_endpoint Application.compile_env(:cerberus, :playwright, [])[:ws_endpoint]
-
   defp assert_compat_error(expected, fun) when is_function(fun, 0) do
     fun.()
     flunk("Expected an error matching #{inspect(expected)}")
@@ -511,8 +509,9 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.StaticTest do
       |> refute_has("#form-data", text: "race_2")
     end
 
-    if System.get_env("CI") || @ws_endpoint,
-      do: @tag(skip: "investigate")
+    if System.get_env("CI") ||
+         Application.compile_env(:cerberus, :playwright, [])[:ws_endpoint],
+       do: @tag(skip: "investigate")
 
     test "can target a label with exact: false", %{conn: conn} do
       conn
@@ -535,8 +534,9 @@ defmodule Cerberus.PhoenixTestPlaywright.Upstream.StaticTest do
       |> assert_has("#form-data", text: "race: human")
     end
 
-    if System.get_env("CI") || @ws_endpoint,
-      do: @tag(skip: "investigate")
+    if System.get_env("CI") ||
+         Application.compile_env(:cerberus, :playwright, [])[:ws_endpoint],
+       do: @tag(skip: "investigate")
 
     test "can target option with selector if multiple labels have same text", %{conn: conn} do
       conn

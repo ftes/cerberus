@@ -263,6 +263,16 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       }
     };
 
+    helper.dispatchElementClick = (element) => {
+      if (!element) return;
+
+      try {
+        element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      } catch (_error) {
+        element.dispatchEvent(new Event("click", { bubbles: true, cancelable: true }));
+      }
+    };
+
     helper.submitDataMethod = (target, element) => {
       const rawMethod =
         (target && typeof target.dataMethod === "string" ? target.dataMethod : "") ||
@@ -1523,6 +1533,9 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         if (target.disabled === true || element.disabled === true) return fail("field_disabled");
 
         element.checked = true;
+        if (typeof element.hasAttribute === "function" && element.hasAttribute("phx-click")) {
+          helper.dispatchElementClick(element);
+        }
         helper.dispatchInputChange(element);
         return { ok: true, target, value: element.value || "on", matchCount, path: helper.currentPath() };
       }

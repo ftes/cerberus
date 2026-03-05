@@ -547,7 +547,7 @@ defmodule Cerberus.Driver.Live do
     case active_form_submit_button(session) do
       {:ok, button} ->
         case route_kind(session) do
-          :live -> do_live_submit(session, button)
+          :live -> do_live_submit(session, preserve_live_active_form_button(button))
           :static -> do_submit(session, button)
         end
 
@@ -2104,7 +2104,7 @@ defmodule Cerberus.Driver.Live do
           transition: transition
         }
 
-        cleared_form_data = FormData.clear_submitted_form(session.form_data, button.form, button.form_selector)
+        cleared_form_data = submitted_form_data_after_success(session.form_data, button)
         {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
 
       {:error, failed_session, reason, details} ->
@@ -2132,7 +2132,7 @@ defmodule Cerberus.Driver.Live do
           transition: transition
         }
 
-        cleared_form_data = FormData.clear_submitted_form(session.form_data, button.form, button.form_selector)
+        cleared_form_data = submitted_form_data_after_success(session.form_data, button)
         {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
 
       {:error, failed_session, reason, details} ->
@@ -2171,7 +2171,7 @@ defmodule Cerberus.Driver.Live do
           transition: transition
         }
 
-        cleared_form_data = FormData.clear_submitted_form(session.form_data, button.form, button.form_selector)
+        cleared_form_data = submitted_form_data_after_success(session.form_data, button)
         {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
 
       {:error, failed_session, reason, details} ->
@@ -2219,8 +2219,24 @@ defmodule Cerberus.Driver.Live do
       transition: transition
     }
 
-    cleared_form_data = FormData.clear_submitted_form(session.form_data, button.form, button.form_selector)
+    cleared_form_data = submitted_form_data_after_success(session.form_data, button)
     {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
+  end
+
+  defp preserve_live_active_form_button(button) when is_map(button) do
+    if button[:form_phx_submit] do
+      Map.put(button, :preserve_active_form, true)
+    else
+      button
+    end
+  end
+
+  defp submitted_form_data_after_success(form_data, button) do
+    if button[:preserve_active_form] do
+      form_data
+    else
+      FormData.clear_submitted_form(form_data, button.form, button.form_selector)
+    end
   end
 
   defp select_in_static_mode(session, expected, option, opts) do
@@ -2422,10 +2438,7 @@ defmodule Cerberus.Driver.Live do
   defp do_live_choose(session, expected, opts) do
     case find_live_radio_field(session, expected, opts) do
       {:ok, field} ->
-        value = field[:input_value] || "on"
-        form_data = FormData.put_form_value(session.form_data, field.form, field.form_selector, field.name, value)
-        updated = %{session | form_data: form_data}
-        handle_live_choose_change(session, updated, field, value)
+        apply_live_radio_change(session, field)
 
       {:error, reason} ->
         live_choose_error(session, reason)
@@ -2453,6 +2466,13 @@ defmodule Cerberus.Driver.Live do
       {:ok, %{name: name, input_type: "radio"} = field} when is_binary(name) and name != "" ->
         {:ok, field}
 
+      {:ok, %{input_type: "radio"} = field} ->
+        if radio_click_without_name_supported?(field) do
+          {:ok, field}
+        else
+          {:error, "matched field does not include a name attribute"}
+        end
+
       {:ok, %{name: name}} when is_binary(name) and name != "" ->
         {:error, "matched field is not a radio input"}
 
@@ -2462,6 +2482,32 @@ defmodule Cerberus.Driver.Live do
       :error ->
         {:error, "no form field matched locator"}
     end
+  end
+
+  defp apply_live_radio_change(session, field) do
+    if radio_requires_phx_click?(field) and not field[:input_phx_click] do
+      raise ArgumentError, radio_click_contract_error()
+    end
+
+    value = field[:input_value] || "on"
+
+    form_data =
+      if radio_click_without_name_supported?(field) do
+        session.form_data
+      else
+        FormData.put_form_value(session.form_data, field.form, field.form_selector, field.name, value)
+      end
+
+    updated = %{session | form_data: form_data}
+
+    change_result =
+      if radio_requires_phx_click?(field) and field[:input_phx_click] do
+        trigger_live_radio_click(updated, field, value)
+      else
+        maybe_trigger_live_change(updated, field)
+      end
+
+    handle_live_choose_change_result(session, change_result, field, value)
   end
 
   defp handle_live_select_change(session, updated, field, option, value) do
@@ -2526,8 +2572,8 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp handle_live_choose_change(session, updated, field, value) do
-    case maybe_trigger_live_change(updated, field) do
+  defp handle_live_choose_change_result(session, change_result, field, value) do
+    case change_result do
       {:ok, changed_session, change} ->
         observed = %{
           action: :choose,
@@ -2781,11 +2827,23 @@ defmodule Cerberus.Driver.Live do
     checkbox_requires_phx_click?(field) and field[:input_phx_click] and not present_name?(field[:name])
   end
 
+  defp radio_requires_phx_click?(field) do
+    field[:form] in [nil, ""] and field[:form_selector] in [nil, ""]
+  end
+
+  defp radio_click_without_name_supported?(field) do
+    radio_requires_phx_click?(field) and field[:input_phx_click] and not present_name?(field[:name])
+  end
+
   defp present_name?(name) when is_binary(name), do: name != ""
   defp present_name?(_name), do: false
 
   defp checkbox_click_contract_error do
     "expected checkbox input to have a valid `phx-click` attribute or belong to a `form`"
+  end
+
+  defp radio_click_contract_error do
+    "expected radio input to have a valid `phx-click` attribute or belong to a `form` element"
   end
 
   defp maybe_trigger_live_change(%__MODULE__{} = session, field) do
@@ -2870,6 +2928,21 @@ defmodule Cerberus.Driver.Live do
         session.view
         |> element(scoped_selector(selector, Session.scope(session)))
         |> render_click(payload)
+
+      resolve_live_change_result(session, result, nil)
+    else
+      {:error, session, "live field click requires a resolvable field selector", %{field: field}}
+    end
+  end
+
+  defp trigger_live_radio_click(session, field, value) do
+    selector = field[:selector]
+
+    if is_binary(selector) and selector != "" do
+      result =
+        session.view
+        |> element(scoped_selector(selector, Session.scope(session)))
+        |> render_click(%{"value" => value})
 
       resolve_live_change_result(session, result, nil)
     else

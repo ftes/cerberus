@@ -149,6 +149,16 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       |> assert_has(text("contact: phone", exact: true))
     end
 
+    test "LiveView choose outside forms dispatches input phx-click payloads (#{driver})", context do
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/phoenix_test/live/index")
+      |> within(css("#not-a-form"), fn scoped ->
+        choose(scoped, label("Huey"))
+      end)
+      |> assert_has(text("value: huey", exact: true))
+    end
+
     test "LiveView select accumulates multi-select values across repeated calls (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
@@ -175,6 +185,19 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       |> assert_has(text("race: human", exact: true))
       |> assert_has(text("contact: mail", exact: true))
     end
+  end
+
+  test "LiveView choose outside forms without phx-click raises a contract error" do
+    live_session =
+      :phoenix
+      |> session()
+      |> visit("/phoenix_test/live/index")
+
+    assert_raise ArgumentError,
+                 ~r/have a valid `phx-click` attribute or belong to a `form` element/,
+                 fn ->
+                   choose(live_session, label("Invalid Radio Button"))
+                 end
   end
 
   defp driver_session(:phoenix, _context), do: session(:phoenix)

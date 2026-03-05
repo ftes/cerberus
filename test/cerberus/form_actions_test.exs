@@ -145,6 +145,19 @@ defmodule Cerberus.FormActionsTest do
     end
   end
 
+  test "submit/1 keeps active live form values when conditional fields are removed (phoenix)" do
+    :phoenix
+    |> session()
+    |> visit("/phoenix_test/live/index")
+    |> fill_in(label("To keep"), "this input should stay")
+    |> fill_in(label("To remove"), "this input will now be removed")
+    |> submit()
+    |> check(label("Hide to remove"))
+    |> submit()
+    |> assert_has("#form-data" |> css() |> text("this input should stay", exact: false))
+    |> refute_has("#form-data" |> css() |> text("this input will now be removed", exact: false))
+  end
+
   @tag skip: "browser submit-active-form-no-button parity bug"
   test "submit/1 parity for no-button live forms in browser driver" do
     :browser

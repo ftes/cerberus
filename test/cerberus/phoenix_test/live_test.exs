@@ -833,7 +833,6 @@ defmodule Cerberus.PhoenixTest.LiveTest do
       |> assert_has("#input-with-change-result", text: "value: Option 1")
     end
 
-    @tag skip: "phoenix_test choose phx-click outside form parity bug"
     test "works with a phx-click outside of a form", %{conn: conn} do
       conn
       |> visit("/live/index")
@@ -861,7 +860,6 @@ defmodule Cerberus.PhoenixTest.LiveTest do
       |> assert_has("#form-data", text: "elixir-yes: yes")
     end
 
-    @tag skip: "phoenix_test invalid radio missing-form validation parity bug"
     test "raises an error if radio is neither in a form nor has a phx-click", %{conn: conn} do
       session = visit(conn, "/live/index")
 
@@ -1087,7 +1085,6 @@ defmodule Cerberus.PhoenixTest.LiveTest do
       |> assert_has("#form-data", text: "button: save")
     end
 
-    @tag skip: "phoenix_test active form submit after field removal parity bug"
     test "handles inputs that get removed through other actions without raising error", %{conn: conn} do
       conn
       |> visit("/live/index")
@@ -1396,7 +1393,6 @@ defmodule Cerberus.PhoenixTest.LiveTest do
       |> assert_has("h1", text: "Main page", timeout: 250)
     end
 
-    @tag skip: "phoenix_test async multi-live redirect parity bug"
     test "can handle multiple LiveViews (redirect one to another) with async behavior", %{conn: conn} do
       conn
       |> visit("/live/async_page")
