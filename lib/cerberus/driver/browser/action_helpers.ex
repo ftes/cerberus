@@ -734,7 +734,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
             index,
             tag: "input",
             type: "file",
-            label: labels.get(element.id || "") || "",
+            label: helper.labelForControl(labels, element),
             placeholder: element.getAttribute("placeholder") || "",
             title: element.getAttribute("title") || "",
             ariaLabel: element.getAttribute("aria-label") || "",

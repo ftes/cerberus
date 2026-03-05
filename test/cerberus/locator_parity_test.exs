@@ -141,6 +141,18 @@ defmodule Cerberus.LocatorParityTest do
                        """ <>
                        @html_suffix
 
+  @inline_upload_label_html @html_prefix <>
+                              """
+                                <main>
+                                <form id="inline-upload">
+                                  <label>Inline Avatar
+                                    <input name="inline[avatar]" type="file" />
+                                  </label>
+                                </form>
+                              </main>
+                              """ <>
+                              @html_suffix
+
   @selector_only_html @html_prefix <>
                         """
                           <main>
@@ -643,6 +655,12 @@ defmodule Cerberus.LocatorParityTest do
       },
       # upload
       %{name: "upload file input by label", expect: :ok, run: &upload(&1, label("Avatar"), upload_path)},
+      %{
+        name: "upload wrapped label input",
+        html: @inline_upload_label_html,
+        expect: :ok,
+        run: &upload(&1, label("Inline Avatar"), upload_path)
+      },
       %{
         name: "upload on non-file field errors",
         expect: :error,
