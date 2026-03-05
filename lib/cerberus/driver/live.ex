@@ -786,19 +786,24 @@ defmodule Cerberus.Driver.Live do
   defp path_assertion_driver_for_session!(%__MODULE__{}), do: __MODULE__
   defp path_assertion_driver_for_session!(%StaticSession{}), do: StaticSession
 
-  defp click_live_button(session, %{dispatch_change: true} = button) do
+  defp click_live_button(session, %{dispatch_change: true} = button, _kind) do
     click_live_dispatch_change_button(session, button)
   end
 
-  defp click_live_button(session, %{data_method: method} = button) when is_binary(method) and method != "" do
+  defp click_live_button(session, %{data_method: method} = button, _kind) when is_binary(method) and method != "" do
     click_live_data_method(session, button, :button)
   end
 
-  defp click_live_button(session, button) do
+  defp click_live_button(session, button, kind) do
     result =
-      session.view
-      |> live_button_element(button, Session.scope(session))
-      |> render_click(%{})
+      try do
+        session.view
+        |> live_button_element(button, Session.scope(session))
+        |> render_click(%{})
+      rescue
+        error in ArgumentError ->
+          {:error, {:invalid_live_click, Exception.message(error)}}
+      end
 
     case result do
       rendered when is_binary(rendered) ->
@@ -814,6 +819,17 @@ defmodule Cerberus.Driver.Live do
         rendered = render(session.view)
         path = to_request_path(to, session.current_path)
         click_live_button_rendered(session, button, rendered, :live_patch, path)
+
+      {:error, {:invalid_live_click, reason}} ->
+        observed = %{
+          action: :button,
+          clicked: button.text,
+          path: session.current_path,
+          result: reason,
+          transition: session_transition(session)
+        }
+
+        {:error, session, observed, no_clickable_error(kind)}
 
       other ->
         observed = %{
@@ -1612,10 +1628,22 @@ defmodule Cerberus.Driver.Live do
 
   defp click_or_error_for_button(session, button, kind) do
     if live_route?(session) do
-      if submit_button_match?(button) do
-        click_live_submit_button(session, button)
-      else
-        click_live_button(session, button)
+      cond do
+        Map.get(button, :disabled) ->
+          observed = %{
+            action: :button,
+            clicked: button.text,
+            path: session.current_path,
+            transition: session_transition(session)
+          }
+
+          {:error, session, observed, no_clickable_error(kind)}
+
+        submit_button_match?(button) ->
+          click_live_submit_button(session, button)
+
+        true ->
+          click_live_button(session, button, kind)
       end
     else
       observed = %{
