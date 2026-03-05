@@ -31,18 +31,19 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   @spec find_form_field(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
           {:ok, map()} | :error
   def find_form_field(html, expected, opts, scope \\ nil) when is_binary(html) do
-    case parse_document(html) do
-      {:ok, lazy_html} ->
-        case Html.find_form_field(lazy_html, expected, opts, scope) do
-          {:ok, field} ->
-            {:ok, Map.merge(field, form_field_live_flags(lazy_html, field, scope))}
-
-          :error ->
-            :error
-        end
-
+    with {:ok, lazy_html} <- parse_document(html),
+         {:ok, field} <- find_form_field_with_fallback(lazy_html, expected, opts, scope) do
+      {:ok, Map.merge(field, form_field_live_flags(lazy_html, field, scope))}
+    else
       _ ->
         :error
+    end
+  end
+
+  defp find_form_field_with_fallback(lazy_html, expected, opts, scope) do
+    case Html.find_form_field(lazy_html, expected, opts, scope) do
+      {:ok, field} -> {:ok, field}
+      :error -> find_form_field_without_name(lazy_html, expected, opts, scope)
     end
   end
 
@@ -209,6 +210,114 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   defp clickable_attr_match_value(node, :aria_label, _fallback), do: attr(node, "aria-label") || ""
   defp clickable_attr_match_value(node, :testid, _fallback), do: attr(node, "data-testid") || ""
   defp clickable_attr_match_value(_node, _match_by, fallback), do: fallback
+
+  defp find_form_field_without_name(lazy_html, expected, opts, scope) do
+    matches =
+      lazy_html
+      |> scoped_nodes(scope)
+      |> Enum.flat_map(&find_nameless_matches_in_root(&1, expected, opts))
+      |> Enum.filter(&Query.matches_state_filters?(&1, opts))
+
+    case Query.pick_match(matches, opts) do
+      {:ok, match} -> {:ok, match}
+      {:error, _reason} -> :error
+    end
+  end
+
+  defp find_nameless_matches_in_root(root_node, expected, opts) do
+    selector = selector_opt(opts)
+
+    root_node
+    |> safe_query("input[type='checkbox'][phx-click],input[type='radio'][phx-click]")
+    |> Enum.flat_map(&build_nameless_match_list(root_node, &1, expected, opts, selector))
+  end
+
+  defp build_nameless_match_list(root_node, field_node, expected, opts, selector) do
+    label_text = field_label_text(root_node, field_node)
+
+    if nameless_field_match?(root_node, field_node, label_text, expected, opts, selector) do
+      [build_nameless_field_match(root_node, field_node, label_text)]
+    else
+      []
+    end
+  end
+
+  defp nameless_field_match?(root_node, field_node, label_text, expected, opts, selector) do
+    nameless_field?(field_node) and
+      is_binary(label_text) and
+      label_text != "" and
+      Query.match_text?(label_text, expected, opts) and
+      node_matches_selector?(root_node, field_node, selector) and
+      Html.node_matches_locator_filters?(field_node, opts)
+  end
+
+  defp nameless_field?(field_node) do
+    case attr(field_node, "name") do
+      name when is_binary(name) -> name == ""
+      _ -> true
+    end
+  end
+
+  defp build_nameless_field_match(root_node, field_node, label_text) do
+    form_node = field_form_node(root_node, field_node)
+    form_id = attr_or_nil(form_node, "id")
+
+    %{
+      id: attr(field_node, "id"),
+      label: label_text,
+      name: nil,
+      selector: unique_selector(root_node, field_node),
+      input_type: field_input_type(field_node),
+      input_value: attr(field_node, "value") || "on",
+      input_checked: phx_boolean_attr?(attr(field_node, "checked")),
+      input_disabled: phx_boolean_attr?(attr(field_node, "disabled")),
+      input_readonly: phx_boolean_attr?(attr(field_node, "readonly")),
+      form: form_id,
+      form_selector: form_selector(root_node, form_node, form_id)
+    }
+  end
+
+  defp field_label_text(root_node, field_node) do
+    case attr(field_node, "id") do
+      id when is_binary(id) and id != "" ->
+        case root_node |> safe_query(~s(label[for="#{css_attr_escape(id)}"])) |> Enum.at(0) do
+          nil -> wrapped_field_label_text(root_node, field_node)
+          label_node -> node_text(label_node)
+        end
+
+      _ ->
+        wrapped_field_label_text(root_node, field_node)
+    end
+  end
+
+  defp wrapped_field_label_text(root_node, field_node) do
+    root_node
+    |> safe_query("label")
+    |> Enum.find_value(fn label_node ->
+      if label_node
+         |> safe_query("*")
+         |> Enum.any?(&same_node?(&1, field_node)) do
+        node_text(label_node)
+      end
+    end)
+  end
+
+  defp field_form_node(root_node, field_node) do
+    root_node
+    |> safe_query("form")
+    |> Enum.find(fn form_node ->
+      form_node
+      |> safe_query("*")
+      |> Enum.any?(&same_node?(&1, field_node))
+    end)
+  end
+
+  defp field_input_type(field_node) do
+    case node_tag(field_node) do
+      "input" -> String.downcase(attr(field_node, "type") || "text")
+      other -> other
+    end
+  end
 
   defp form_field_live_flags(lazy_html, field, scope) do
     defaults = %{

@@ -236,11 +236,7 @@ defmodule Cerberus.Driver.Live do
 
     case find_clickable_link(session, expected, match_opts, kind) do
       {:ok, link} when is_binary(link.href) ->
-        if live_route?(session) do
-          click_live_link(session, link)
-        else
-          click_link_via_visit(session, link, :click)
-        end
+        click_resolved_link(session, link)
 
       :error ->
         case find_clickable_button(session, expected, match_opts, kind) do
@@ -258,6 +254,17 @@ defmodule Cerberus.Driver.Live do
 
             {:error, session, observed, no_clickable_error(kind)}
         end
+    end
+  end
+
+  defp click_resolved_link(session, link) do
+    if live_route?(session) do
+      case click_live_data_method(session, link, :link) do
+        :not_data_method -> click_live_link(session, link)
+        result -> result
+      end
+    else
+      click_link_via_visit(session, link, :click)
     end
   end
 
@@ -1622,6 +1629,10 @@ defmodule Cerberus.Driver.Live do
   defp blank_to_nil(value) when is_binary(value), do: if(String.trim(value) == "", do: nil, else: value)
   defp blank_to_nil(_), do: nil
 
+  defp data_method_target(element) do
+    blank_to_nil(Map.get(element, :data_to)) || blank_to_nil(Map.get(element, :href))
+  end
+
   defp locator_match_opts(%Locator{opts: locator_opts}, opts) do
     Keyword.merge(locator_opts, opts)
   end
@@ -1639,6 +1650,9 @@ defmodule Cerberus.Driver.Live do
 
           {:error, session, observed, no_clickable_error(kind)}
 
+        present_attr?(Map.get(button, :data_method)) ->
+          click_live_data_method(session, button, :button)
+
         submit_button_match?(button) ->
           click_live_submit_button(session, button)
 
@@ -1654,6 +1668,85 @@ defmodule Cerberus.Driver.Live do
       }
 
       {:error, session, observed, click_button_error(kind)}
+    end
+  end
+
+  defp click_live_data_method(session, element, action) do
+    with {:ok, normalized_method} <- live_data_method_action(element, action),
+         {:ok, target} <- data_method_target_result(element) do
+      do_click_live_data_method(session, element, action, normalized_method, target)
+    else
+      :not_data_method ->
+        :not_data_method
+
+      {:error, :missing_target} ->
+        live_data_method_target_error(session, element, action)
+    end
+  end
+
+  defp live_data_method_action(element, action) do
+    method = blank_to_nil(Map.get(element, :data_method))
+    data_to = blank_to_nil(Map.get(element, :data_to))
+
+    cond do
+      not is_binary(method) -> :not_data_method
+      action == :link and not is_binary(data_to) -> :not_data_method
+      true -> {:ok, normalize_submit_method(method)}
+    end
+  end
+
+  defp data_method_target_result(element) do
+    case data_method_target(element) do
+      target when is_binary(target) -> {:ok, target}
+      _ -> {:error, :missing_target}
+    end
+  end
+
+  defp live_data_method_target_error(session, element, action) do
+    observed = %{
+      action: action,
+      clicked: element[:text] || "",
+      path: session.current_path,
+      transition: session_transition(session)
+    }
+
+    {:error, session, observed, "data-method element must define `data-to` or `href`"}
+  end
+
+  defp do_click_live_data_method(session, element, action, method, target) do
+    case follow_form_request(session, method, target, %{}) do
+      {:ok, updated, _transition} ->
+        transition =
+          transition(
+            route_kind(session),
+            driver_kind(updated),
+            :click,
+            session.current_path,
+            Session.current_path(updated)
+          )
+
+        observed = %{
+          action: action,
+          clicked: element[:text] || "",
+          method: method,
+          path: Session.current_path(updated),
+          texts: Html.texts(updated.html, :any, Session.scope(updated)),
+          transition: transition
+        }
+
+        {:ok, update_last_result(updated, :click, observed), observed}
+
+      {:error, failed_session, reason, details} ->
+        observed = %{
+          action: action,
+          clicked: element[:text] || "",
+          method: method,
+          path: session.current_path,
+          details: details,
+          transition: session_transition(session)
+        }
+
+        {:error, failed_session, observed, reason}
     end
   end
 
@@ -2595,6 +2688,13 @@ defmodule Cerberus.Driver.Live do
       {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
         {:ok, field}
 
+      {:ok, %{input_type: "checkbox"} = field} ->
+        if checkbox_click_without_name_supported?(field) do
+          {:ok, field}
+        else
+          {:error, "matched field does not include a name attribute"}
+        end
+
       {:ok, %{name: name}} when is_binary(name) and name != "" ->
         {:error, "matched field is not a checkbox"}
 
@@ -2611,11 +2711,25 @@ defmodule Cerberus.Driver.Live do
       raise ArgumentError, checkbox_click_contract_error()
     end
 
-    value = FormData.toggled_checkbox_value(session, field, checked?)
-    form_data = FormData.put_form_value(session.form_data, field.form, field.form_selector, field.name, value)
-    updated = %{session | form_data: form_data}
+    {change_result, _value} =
+      if checkbox_click_without_name_supported?(field) do
+        {trigger_live_checkbox_click(session, field, checked?), nil}
+      else
+        value = FormData.toggled_checkbox_value(session, field, checked?)
+        form_data = FormData.put_form_value(session.form_data, field.form, field.form_selector, field.name, value)
+        updated = %{session | form_data: form_data}
 
-    case maybe_trigger_live_change(updated, field) do
+        change_result =
+          if checkbox_requires_phx_click?(field) and field[:input_phx_click] do
+            trigger_live_checkbox_click(updated, field, checked?)
+          else
+            maybe_trigger_live_change(updated, field)
+          end
+
+        {change_result, value}
+      end
+
+    case change_result do
       {:ok, changed_session, change} ->
         observed = %{
           action: op,
@@ -2662,6 +2776,13 @@ defmodule Cerberus.Driver.Live do
   defp checkbox_requires_phx_click?(field) do
     field[:form] in [nil, ""] and field[:form_selector] in [nil, ""]
   end
+
+  defp checkbox_click_without_name_supported?(field) do
+    checkbox_requires_phx_click?(field) and field[:input_phx_click] and not present_name?(field[:name])
+  end
+
+  defp present_name?(name) when is_binary(name), do: name != ""
+  defp present_name?(_name), do: false
 
   defp checkbox_click_contract_error do
     "expected checkbox input to have a valid `phx-click` attribute or belong to a `form`"
@@ -2732,6 +2853,23 @@ defmodule Cerberus.Driver.Live do
         session.view
         |> element(scoped_selector(selector, Session.scope(session)))
         |> render_click(%{})
+
+      resolve_live_change_result(session, result, nil)
+    else
+      {:error, session, "live field click requires a resolvable field selector", %{field: field}}
+    end
+  end
+
+  defp trigger_live_checkbox_click(session, field, checked?) do
+    selector = field[:selector]
+
+    if is_binary(selector) and selector != "" do
+      payload = if(checked?, do: %{}, else: %{"value" => ""})
+
+      result =
+        session.view
+        |> element(scoped_selector(selector, Session.scope(session)))
+        |> render_click(payload)
 
       resolve_live_change_result(session, result, nil)
     else

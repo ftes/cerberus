@@ -1,11 +1,11 @@
 ---
 # cerberus-9f29
 title: PT live checkbox and uncheck non-form parity
-status: in-progress
+status: completed
 type: bug
 priority: normal
 created_at: 2026-03-05T14:14:56Z
-updated_at: 2026-03-05T19:36:23Z
+updated_at: 2026-03-05T19:56:37Z
 parent: cerberus-zh82
 ---
 
@@ -33,3 +33,13 @@ Checkbox resolution for outside-form controls does not consistently map label to
 ## Acceptance
 - Unskip lines 689, 717, 754, 789, 798, 812.
 - Add first-class regression coverage outside phoenix_test import tree for non-form checkbox phx-click and label value mapping.
+
+## Summary of Changes
+- Fixed live checkbox/uncheck parity for outside-form phx-click controls and unified contract validation.
+- Implemented nameless field fallback in LiveViewHTML for phx-click checkbox/radio controls so label-only lookups resolve via for/id labels.
+- Removed temporary debug instrumentation from LiveViewHTML fallback path.
+- Added outside-form checkbox click dispatch in live driver so phx-click events fire consistently on check/uncheck.
+- Added first-class regression coverage in test/cerberus/live_checkbox_behavior_test.exs for outside-form toggle flow, nameless label-to-input phx-value behavior, and invalid contract errors.
+- Verified with targeted tests and full PT suite:
+  - PORT=4350 mix test live_test lines 785,798
+  - PORT=4354 and PORT=4358 mix test test/cerberus/phoenix_test (372 tests, 0 failures, 4 skipped)

@@ -618,23 +618,39 @@ defmodule Cerberus.Driver.Static do
   end
 
   defp maybe_submit_clicked_button(session, expected, match_opts, kind, button) do
-    case Html.find_submit_button(session.html, expected, match_opts, Session.scope(session)) do
-      {:ok, submit_button} ->
-        do_submit(session, submit_button)
+    case click_static_data_method(session, button, :button) do
+      :not_data_method ->
+        case Html.find_submit_button(session.html, expected, match_opts, Session.scope(session)) do
+          {:ok, submit_button} ->
+            do_submit(session, submit_button)
 
-      :error ->
-        observed = %{
-          action: :button,
-          clicked: button.text,
-          path: session.current_path,
-          transition: session_transition(session)
-        }
+          :error ->
+            observed = %{
+              action: :button,
+              clicked: button.text,
+              path: session.current_path,
+              transition: session_transition(session)
+            }
 
-        {:error, session, observed, click_button_error(kind)}
+            {:error, session, observed, click_button_error(kind)}
+        end
+
+      result ->
+        result
     end
   end
 
-  defp click_static_link(session, %{href: href} = link) when is_binary(href) and href != "" do
+  defp click_static_link(session, link) do
+    case click_static_data_method(session, link, :link) do
+      :not_data_method ->
+        click_static_link_via_href(session, link)
+
+      result ->
+        result
+    end
+  end
+
+  defp click_static_link_via_href(session, %{href: href} = link) when is_binary(href) and href != "" do
     updated = visit(session, href, [])
     transition = transition(:static, driver_kind(updated), :click, session.current_path, Session.current_path(updated))
 
@@ -649,7 +665,7 @@ defmodule Cerberus.Driver.Static do
     {:ok, update_last_result(updated, :click, observed), observed}
   end
 
-  defp click_static_link(session, link) do
+  defp click_static_link_via_href(session, link) do
     observed = %{
       action: :link,
       path: session.current_path,
@@ -658,6 +674,78 @@ defmodule Cerberus.Driver.Static do
     }
 
     {:error, session, observed, "link does not define href"}
+  end
+
+  defp click_static_data_method(session, element, action) do
+    with {:ok, normalized_method} <- static_data_method_action(element, action),
+         {:ok, target} <- data_method_target_result(element) do
+      do_click_static_data_method(session, element, action, normalized_method, target)
+    else
+      :not_data_method ->
+        :not_data_method
+
+      {:error, :missing_target} ->
+        static_data_method_target_error(session, element, action)
+    end
+  end
+
+  defp static_data_method_action(element, action) do
+    method = blank_to_nil(Map.get(element, :data_method))
+    data_to = blank_to_nil(Map.get(element, :data_to))
+
+    cond do
+      not is_binary(method) -> :not_data_method
+      action == :link and not is_binary(data_to) -> :not_data_method
+      true -> {:ok, normalize_submit_method(method)}
+    end
+  end
+
+  defp data_method_target_result(element) do
+    case data_method_target(element) do
+      target when is_binary(target) -> {:ok, target}
+      _ -> {:error, :missing_target}
+    end
+  end
+
+  defp static_data_method_target_error(session, element, action) do
+    observed = %{
+      action: action,
+      clicked: element[:text] || "",
+      path: session.current_path,
+      transition: session_transition(session)
+    }
+
+    {:error, session, observed, "data-method element must define `data-to` or `href`"}
+  end
+
+  defp do_click_static_data_method(session, element, action, method, target) do
+    case follow_form_request(session, method, target, %{}) do
+      {:ok, updated, _transition} ->
+        transition =
+          transition(:static, driver_kind(updated), :click, session.current_path, Session.current_path(updated))
+
+        observed = %{
+          action: action,
+          clicked: element[:text] || "",
+          method: method,
+          path: Session.current_path(updated),
+          transition: transition
+        }
+
+        {:ok, update_last_result(updated, :click, observed), observed}
+
+      {:error, failed_session, reason, details} ->
+        observed = %{
+          action: action,
+          clicked: element[:text] || "",
+          method: method,
+          path: session.current_path,
+          details: details,
+          transition: session_transition(session)
+        }
+
+        {:error, failed_session, observed, reason}
+    end
   end
 
   defp active_form_submit_button(session) do
@@ -873,6 +961,13 @@ defmodule Cerberus.Driver.Static do
   end
 
   defp normalize_submit_method(nil), do: "get"
+
+  defp blank_to_nil(value) when is_binary(value), do: if(String.trim(value) == "", do: nil, else: value)
+  defp blank_to_nil(_), do: nil
+
+  defp data_method_target(element) do
+    blank_to_nil(Map.get(element, :data_to)) || blank_to_nil(Map.get(element, :href))
+  end
 
   defp assert_timeout_for_live(session) do
     static_default = SessionConfig.default_assert_timeout_ms()

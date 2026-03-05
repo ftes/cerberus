@@ -1,11 +1,11 @@
 ---
 # cerberus-efct
 title: Browser live select parity gap for option phx-click and repeated multi-select
-status: todo
+status: completed
 type: bug
 priority: normal
 created_at: 2026-03-05T19:36:00Z
-updated_at: 2026-03-05T19:36:03Z
+updated_at: 2026-03-05T20:01:57Z
 parent: cerberus-zh82
 ---
 
@@ -34,3 +34,18 @@ Browser action helper select path likely sets DOM selected state but does not mi
 - Align browser select action semantics with live semantics for non-form option phx-click dispatch.
 - Ensure repeated multi-select calls merge and preserve previously selected values for subsequent submits.
 - Add first-class browser regression coverage for both flows.
+
+## Summary of Changes
+- Reproduced browser-only live select parity failures with first-class browser variants in test/cerberus/live_select_regression_test.exs.
+- Added browser regression coverage for:
+  - live multi-select repeated scalar calls preserving cumulative values.
+  - outside-form select option phx-click dispatch.
+- Fixed browser action helper select semantics:
+  - Added optionListInput payload from browser driver to preserve scalar-vs-list intent.
+  - For multi-select, preserve cached prior selections on repeated scalar select calls.
+  - Added per-path multi-select cache invalidation to avoid stale carry-over.
+  - Dispatch click events for matched option elements with phx-click bindings.
+- Verified:
+  - PORT=4365 mix test test/cerberus/live_select_regression_test.exs (6 tests, 0 failures)
+  - PORT=4366 mix test combined first-class regression files (15 tests, 0 failures)
+  - PORT=4367 mix test test/cerberus/phoenix_test (372 tests, 0 failures, 4 skipped)

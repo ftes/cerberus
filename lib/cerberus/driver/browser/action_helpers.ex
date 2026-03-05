@@ -87,6 +87,30 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
     };
 
     helper.currentPath = () => window.location.pathname + window.location.search;
+    helper.multiSelectCache = new Map();
+    helper.multiSelectCachePath = helper.currentPath();
+
+    helper.refreshMultiSelectCache = () => {
+      const path = helper.currentPath();
+
+      if (helper.multiSelectCachePath !== path) {
+        helper.multiSelectCache.clear();
+        helper.multiSelectCachePath = path;
+      }
+    };
+
+    helper.multiSelectCacheKey = (element) => {
+      if (!element) return "";
+
+      const formSelector = helper.formSelector(element);
+      const fieldName =
+        (typeof element.getAttribute === "function" ? element.getAttribute("name") : "") ||
+        (typeof element.getAttribute === "function" ? element.getAttribute("id") : "") ||
+        helper.uniqueSelector(element) ||
+        "";
+
+      return `${helper.currentPath()}::${formSelector}::${fieldName}`;
+    };
 
     helper.liveRoots = () => {
       try {
@@ -227,6 +251,68 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
     helper.dispatchInputChange = (field) => {
       field.dispatchEvent(new Event("input", { bubbles: true }));
       field.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+
+    helper.dispatchOptionClick = (option) => {
+      if (!option) return;
+
+      try {
+        option.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      } catch (_error) {
+        option.dispatchEvent(new Event("click", { bubbles: true, cancelable: true }));
+      }
+    };
+
+    helper.submitDataMethod = (target, element) => {
+      const rawMethod =
+        (target && typeof target.dataMethod === "string" ? target.dataMethod : "") ||
+        (element && typeof element.getAttribute === "function" ? element.getAttribute("data-method") || "" : "");
+      const method = String(rawMethod).trim().toLowerCase();
+
+      if (!method) return { ok: false, reason: "data_method_missing" };
+
+      const rawTarget =
+        (target && typeof target.dataTo === "string" ? target.dataTo : "") ||
+        (element && typeof element.getAttribute === "function" ? element.getAttribute("data-to") || "" : "") ||
+        (target && typeof target.href === "string" ? target.href : "") ||
+        (element && typeof element.getAttribute === "function" ? element.getAttribute("href") || "" : "");
+      const action = String(rawTarget || "").trim();
+
+      if (!action) return { ok: false, reason: "data_method_target_missing" };
+
+      const metaCsrf =
+        typeof document.querySelector === "function"
+          ? (document.querySelector("meta[name='csrf-token']") || {}).content || ""
+          : "";
+      const csrfToken =
+        String(metaCsrf || "").trim() ||
+        (target && typeof target.dataCsrf === "string" ? target.dataCsrf : "") ||
+        (element && typeof element.getAttribute === "function" ? element.getAttribute("data-csrf") || "" : "");
+
+      const form = document.createElement("form");
+      form.style.display = "none";
+      form.method = method === "get" ? "get" : "post";
+      form.action = action;
+
+      if (form.method !== "get" && method !== "post") {
+        const hiddenMethod = document.createElement("input");
+        hiddenMethod.type = "hidden";
+        hiddenMethod.name = "_method";
+        hiddenMethod.value = method;
+        form.appendChild(hiddenMethod);
+      }
+
+      if (form.method !== "get" && typeof csrfToken === "string" && csrfToken.trim() !== "") {
+        const hiddenCsrf = document.createElement("input");
+        hiddenCsrf.type = "hidden";
+        hiddenCsrf.name = "_csrf_token";
+        hiddenCsrf.value = csrfToken.trim();
+        form.appendChild(hiddenCsrf);
+      }
+
+      document.body.appendChild(form);
+      form.submit();
+      return { ok: true };
     };
 
     helper.scrollTargetIntoView = (element) => {
@@ -579,6 +665,9 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
                   formSelector: helper.formSelector(element),
                   href: element.getAttribute("href") || "",
                   resolvedHref: element.href || "",
+                  dataMethod: element.getAttribute("data-method") || "",
+                  dataTo: element.getAttribute("data-to") || "",
+                  dataCsrf: element.getAttribute("data-csrf") || "",
                   checked: false,
                   disabled: false,
                   readonly: false,
@@ -633,6 +722,9 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
                   testid: element.getAttribute("data-testid") || "",
                   type: (element.getAttribute("type") || "submit").toLowerCase(),
                   formSelector: helper.formSelector(element),
+                  dataMethod: element.getAttribute("data-method") || "",
+                  dataTo: element.getAttribute("data-to") || "",
+                  dataCsrf: element.getAttribute("data-csrf") || "",
                   checked: false,
                   disabled: element.disabled === true,
                   readonly: element.readOnly === true || element.hasAttribute("readonly"),
@@ -1288,6 +1380,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
     helper.performResolved = (resolved, options) => {
       const target = resolved && resolved.target ? resolved.target : null;
       const op = options && options.op ? options.op : "click";
+      helper.refreshMultiSelectCache();
 
       if (!target || !target.__el) {
         return {
@@ -1360,6 +1453,21 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
         if (element.multiple) {
           const selectedValues = new Set();
+          const replaceExistingSelections = options && options.optionListInput === true;
+          const cacheKey = helper.multiSelectCacheKey(element);
+          const cachedValues = helper.multiSelectCache.get(cacheKey);
+
+          if (!replaceExistingSelections) {
+            if (Array.isArray(cachedValues)) {
+              for (const cachedValue of cachedValues) {
+                selectedValues.add(String(cachedValue));
+              }
+            }
+
+            for (const selectedOption of Array.from(element.selectedOptions || [])) {
+              selectedValues.add(selectedOption.value || helper.normalize(selectedOption.textContent, true));
+            }
+          }
 
           for (const option of matched) {
             selectedValues.add(option.value || helper.normalize(option.textContent, true));
@@ -1369,6 +1477,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
             const value = option.value || helper.normalize(option.textContent, true);
             option.selected = selectedValues.has(value);
           }
+
+          helper.multiSelectCache.set(cacheKey, Array.from(selectedValues));
         } else {
           for (const option of Array.from(element.options || [])) {
             option.selected = false;
@@ -1377,6 +1487,14 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           if (matched[0]) {
             matched[0].selected = true;
             element.value = matched[0].value || helper.normalize(matched[0].textContent, true);
+          }
+
+          helper.multiSelectCache.delete(helper.multiSelectCacheKey(element));
+        }
+
+        for (const option of matched) {
+          if (typeof option.hasAttribute === "function" && option.hasAttribute("phx-click")) {
+            helper.dispatchOptionClick(option);
           }
         }
 
@@ -1460,6 +1578,30 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       }
 
       try {
+        if (target.kind === "button") {
+          const submission = helper.submitDataMethod(target, element);
+
+          if (submission && submission.ok === true) {
+            return { ok: true, target, matchCount, path: helper.currentPath() };
+          }
+
+          if (submission && submission.reason === "data_method_target_missing") {
+            return fail("data_method_target_missing");
+          }
+        }
+
+        if (target.kind === "link" && target.dataMethod && target.dataTo) {
+          const submission = helper.submitDataMethod(target, element);
+
+          if (submission && submission.ok === true) {
+            return { ok: true, target, matchCount, path: helper.currentPath() };
+          }
+
+          if (submission && submission.reason === "data_method_target_missing") {
+            return fail("data_method_target_missing");
+          }
+        }
+
         element.click();
         return { ok: true, target, matchCount, path: helper.currentPath() };
       } catch (error) {

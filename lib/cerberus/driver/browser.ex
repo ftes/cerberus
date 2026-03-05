@@ -49,6 +49,7 @@ defmodule Cerberus.Driver.Browser do
     "field_not_checkbox" => "matched field is not a checkbox",
     "target_detached" => "matched target is no longer attached",
     "target_not_visible" => "matched element is not visible",
+    "data_method_target_missing" => "data-method element must define `data-to` or `href`",
     "option_not_found" => "browser select failed: option_not_found",
     "option_disabled" => "browser select failed: option_disabled",
     "select_not_multiple" => "browser select failed: select_not_multiple",
@@ -570,8 +571,16 @@ defmodule Cerberus.Driver.Browser do
   defp do_resolved_select(session, state, expected, option, opts) do
     exact_option = Keyword.get(opts, :exact_option, true)
     option_values = option |> List.wrap() |> Enum.map(&to_string/1)
+    option_list_input = is_list(option)
 
-    case perform_action(session, state, :select, expected, opts, %{option: option_values, exactOption: exact_option}) do
+    case perform_action(
+           session,
+           state,
+           :select,
+           expected,
+           opts,
+           %{option: option_values, exactOption: exact_option, optionListInput: option_list_input}
+         ) do
       {:ok, %{"target" => field} = result} when is_map(field) ->
         select_result(session, state, field, option, result)
 

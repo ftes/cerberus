@@ -774,7 +774,6 @@ defmodule Cerberus.PhoenixTest.LiveTest do
       |> assert_has("#form-data", text: "like-elixir: no")
     end
 
-    @tag skip: "phoenix_test invalid uncheck missing-form validation parity bug"
     test "raises error if checkbox doesn't have phx-click or belong to form", %{conn: conn} do
       session = visit(conn, "/live/index")
 
@@ -783,7 +782,6 @@ defmodule Cerberus.PhoenixTest.LiveTest do
       end
     end
 
-    @tag skip: "phoenix_test checkbox phx-value label resolution parity bug"
     test "sends phx-value when phx-click attribute used", %{conn: conn} do
       conn
       |> visit("/live/index")
@@ -797,7 +795,6 @@ defmodule Cerberus.PhoenixTest.LiveTest do
       |> assert_has("#checkbox-phx-click-values-abc-value", text: "Unchecked")
     end
 
-    @tag skip: "phoenix_test checkbox phx-click JS value label resolution parity bug"
     test "sends phx-click JS command value when attribute used", %{conn: conn} do
       conn
       |> visit("/live/index")
