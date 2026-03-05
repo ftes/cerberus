@@ -1454,10 +1454,11 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         if (element.multiple) {
           const selectedValues = new Set();
           const replaceExistingSelections = options && options.optionListInput === true;
+          const preserveLiveSelections = !replaceExistingSelections && helper.inLiveRoot(element);
           const cacheKey = helper.multiSelectCacheKey(element);
           const cachedValues = helper.multiSelectCache.get(cacheKey);
 
-          if (!replaceExistingSelections) {
+          if (preserveLiveSelections) {
             if (Array.isArray(cachedValues)) {
               for (const cachedValue of cachedValues) {
                 selectedValues.add(String(cachedValue));
@@ -1478,7 +1479,11 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
             option.selected = selectedValues.has(value);
           }
 
-          helper.multiSelectCache.set(cacheKey, Array.from(selectedValues));
+          if (preserveLiveSelections) {
+            helper.multiSelectCache.set(cacheKey, Array.from(selectedValues));
+          } else {
+            helper.multiSelectCache.delete(cacheKey);
+          }
         } else {
           for (const option of Array.from(element.options || [])) {
             option.selected = false;

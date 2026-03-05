@@ -1680,6 +1680,14 @@ defmodule Cerberus.Html do
     Enum.find_value(nodes, :error, fn node -> field_node_to_map(root_node, node) end)
   end
 
+  defp field_match(nodes, root_node) do
+    nodes
+    |> Enum.to_list()
+    |> field_match(root_node)
+  rescue
+    Protocol.UndefinedError -> :error
+  end
+
   defp label_text_for_matching(label_node) do
     label_text = node_text(label_node)
 

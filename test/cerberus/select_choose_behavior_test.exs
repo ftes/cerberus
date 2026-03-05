@@ -149,14 +149,14 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       |> assert_has(text("contact: phone", exact: true))
     end
 
-    test "LiveView select replaces multi-select values across repeated calls (#{driver})", context do
+    test "LiveView select accumulates multi-select values across repeated calls (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/controls")
       |> select(label("Race 2"), option: ~l"Elf"e)
       |> assert_has(text("race_2: [elf]", exact: true))
       |> select(label("Race 2"), option: ~l"Dwarf"e)
-      |> assert_has(text("race_2: [dwarf]", exact: true))
+      |> assert_has(text("race_2: [elf,dwarf]", exact: true))
     end
 
     test "LiveView select accepts full multi-select values list (#{driver})", context do
