@@ -94,6 +94,9 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     :has_not
   ]
   @label_locator_variable_calls [:fill_in, :select, :choose, :check, :uncheck, :upload]
+  @exact_option_action_calls [:click, :fill_in, :select, :choose, :check, :uncheck, :submit, :upload]
+  @exact_option_assertion_calls [:assert_has, :refute_has]
+  @exact_option_locator_calls @exact_option_action_calls ++ @exact_option_assertion_calls
   @locator_helper_funs [
     :text,
     :label,
@@ -896,7 +899,8 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
           fn acc -> canonicalize_scope_locator_args(fun, acc, scope_builder, assertion_scope_builder) end,
           fn acc -> canonicalize_click_alias_scope_args(fun, source_fun, acc, click_alias_scope_builder) end,
           fn acc -> canonicalize_explicit_locator_args(fun, source_fun, acc) end,
-          fn acc -> canonicalize_label_variable_locator_args(fun, acc) end
+          fn acc -> canonicalize_label_variable_locator_args(fun, acc) end,
+          fn acc -> canonicalize_locator_exact_option_args(fun, acc) end
         ],
         {args, false},
         fn transform, {acc, changed?} ->
@@ -1132,6 +1136,171 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   end
 
   defp canonicalize_label_variable_locator_args(_fun, _args), do: :no_change
+
+  @spec canonicalize_locator_exact_option_args(atom(), [Macro.t()]) :: canonicalize_result()
+  defp canonicalize_locator_exact_option_args(fun, args) when fun in @exact_option_locator_calls do
+    with {:ok, opts_index, opts} <- trailing_opts_with_exact(args),
+         {:ok, exact_value_ast, opts_without_exact} <- keyword_ast_pop_value(opts, :exact),
+         {:ok, source_exact?} <- boolean_literal(exact_value_ast),
+         {:ok, locator_index} <- locator_index_for_exact_option(fun, args, opts_index) do
+      exact? = normalize_exact_for_fun(fun, source_exact?)
+      args_without_exact = update_args_for_popped_opts(args, opts_index, opts_without_exact)
+      {:ok, maybe_apply_exact_to_locator_arg(args_without_exact, locator_index, exact?)}
+    else
+      _ -> :no_change
+    end
+  end
+
+  defp canonicalize_locator_exact_option_args(_fun, _args), do: :no_change
+
+  @spec trailing_opts_with_exact([Macro.t()]) :: {:ok, non_neg_integer(), keyword()} | :error
+  defp trailing_opts_with_exact(args) when is_list(args) and args != [] do
+    opts_index = length(args) - 1
+    opts = Enum.at(args, opts_index)
+
+    cond do
+      is_nil(opts) ->
+        :error
+
+      keyword_ast?(opts) and keyword_ast_has_key?(opts, :exact) ->
+        {:ok, opts_index, opts}
+
+      true ->
+        :error
+    end
+  end
+
+  defp trailing_opts_with_exact(_args), do: :error
+
+  @spec locator_index_for_exact_option(atom(), [Macro.t()], non_neg_integer()) ::
+          {:ok, non_neg_integer()} | :error
+  defp locator_index_for_exact_option(fun, args, opts_index) when fun in @exact_option_assertion_calls do
+    assertion_locator_index_for_exact_option(args, opts_index)
+  end
+
+  defp locator_index_for_exact_option(fun, args, opts_index) do
+    fun
+    |> locator_arg_indexes_for(args)
+    |> Enum.reject(&(&1 == opts_index))
+    |> List.first()
+    |> case do
+      nil -> :error
+      index -> {:ok, index}
+    end
+  end
+
+  @spec assertion_locator_index_for_exact_option([Macro.t()], non_neg_integer()) ::
+          {:ok, non_neg_integer()} | :error
+  defp assertion_locator_index_for_exact_option([_locator, _opts], 1), do: {:ok, 0}
+  defp assertion_locator_index_for_exact_option([_session, _locator, _opts], 2), do: {:ok, 1}
+  defp assertion_locator_index_for_exact_option([_session, _scope, _locator, _opts], 3), do: {:ok, 2}
+  defp assertion_locator_index_for_exact_option(_args, _opts_index), do: :error
+
+  @spec normalize_exact_for_fun(atom(), boolean()) :: boolean()
+  defp normalize_exact_for_fun(fun, source_exact?) when fun in @exact_option_action_calls, do: not source_exact?
+  defp normalize_exact_for_fun(_fun, source_exact?), do: source_exact?
+
+  @spec update_args_for_popped_opts([Macro.t()], non_neg_integer(), keyword()) :: [Macro.t()]
+  defp update_args_for_popped_opts(args, opts_index, []), do: List.delete_at(args, opts_index)
+
+  defp update_args_for_popped_opts(args, opts_index, opts_without_exact),
+    do: List.replace_at(args, opts_index, opts_without_exact)
+
+  @spec maybe_apply_exact_to_locator_arg([Macro.t()], non_neg_integer(), boolean()) :: [Macro.t()]
+  defp maybe_apply_exact_to_locator_arg(args, locator_index, exact?) do
+    case Enum.fetch(args, locator_index) do
+      {:ok, locator} ->
+        case locator_with_exact(locator, exact?) do
+          {:ok, updated_locator} -> List.replace_at(args, locator_index, updated_locator)
+          :no_change -> args
+        end
+
+      :error ->
+        args
+    end
+  end
+
+  @spec locator_with_exact(Macro.t(), boolean()) :: {:ok, Macro.t()} | :no_change
+  defp locator_with_exact(locator, exact?) do
+    cond do
+      binary_literal_ast?(locator) ->
+        {:ok, text_sigil_ast(binary_literal_value(locator), exact?)}
+
+      match?({:ok, _}, text_sigil_with_exact(locator, exact?)) ->
+        text_sigil_with_exact(locator, exact?)
+
+      match?({:ok, _}, text_call_with_exact(locator, exact?)) ->
+        text_call_with_exact(locator, exact?)
+
+      match?({:ok, _}, and_locator_with_exact(locator, exact?)) ->
+        and_locator_with_exact(locator, exact?)
+
+      true ->
+        :no_change
+    end
+  end
+
+  @spec and_locator_with_exact(Macro.t(), boolean()) :: {:ok, Macro.t()} | :no_change
+  defp and_locator_with_exact({:and_, meta, [left, right]}, exact?) do
+    case locator_with_exact(right, exact?) do
+      {:ok, updated_right} -> {:ok, {:and_, meta, [left, updated_right]}}
+      :no_change -> :no_change
+    end
+  end
+
+  defp and_locator_with_exact({{:., dot_meta, [module_ast, :and_]}, call_meta, [left, right]}, exact?) do
+    case locator_with_exact(right, exact?) do
+      {:ok, updated_right} ->
+        {:ok, {{:., dot_meta, [module_ast, :and_]}, call_meta, [left, updated_right]}}
+
+      :no_change ->
+        :no_change
+    end
+  end
+
+  defp and_locator_with_exact(_locator, _exact?), do: :no_change
+
+  @spec text_sigil_with_exact(Macro.t(), boolean()) :: {:ok, Macro.t()} | :no_change
+  defp text_sigil_with_exact({:sigil_l, meta, [body, modifiers]}, exact?) when is_list(modifiers) do
+    if Enum.any?(modifiers, &(&1 in [?r, ?c, ?a, ?t])) do
+      :no_change
+    else
+      normalized_mods = modifiers |> Enum.reject(&(&1 in [?e, ?i])) |> Kernel.++([if(exact?, do: ?e, else: ?i)])
+      {:ok, {:sigil_l, meta, [body, normalized_mods]}}
+    end
+  end
+
+  defp text_sigil_with_exact({:__block__, meta, [value]}, exact?) do
+    case text_sigil_with_exact(value, exact?) do
+      {:ok, updated} -> {:ok, {:__block__, meta, [updated]}}
+      :no_change -> :no_change
+    end
+  end
+
+  defp text_sigil_with_exact(_locator, _exact?), do: :no_change
+
+  @spec text_call_with_exact(Macro.t(), boolean()) :: {:ok, Macro.t()} | :no_change
+  defp text_call_with_exact({:text, meta, [value]}, exact?) do
+    {:ok, {:text, meta, [value, [exact: exact?]]}}
+  end
+
+  defp text_call_with_exact({:text, meta, [value, opts]}, exact?) when is_list(opts) do
+    normalized_opts =
+      opts
+      |> normalize_keyword_ast()
+      |> Keyword.put(:exact, exact?)
+
+    {:ok, {:text, meta, [value, normalized_opts]}}
+  end
+
+  defp text_call_with_exact({:__block__, meta, [value]}, exact?) do
+    case text_call_with_exact(value, exact?) do
+      {:ok, updated} -> {:ok, {:__block__, meta, [updated]}}
+      :no_change -> :no_change
+    end
+  end
+
+  defp text_call_with_exact(_locator, _exact?), do: :no_change
 
   @spec reduce_label_variable_locator_arg_index(non_neg_integer(), {[Macro.t()], boolean()}) ::
           {[Macro.t()], boolean()}
@@ -1508,6 +1677,37 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     else
       :no_change
     end
+  end
+
+  @spec keyword_ast_pop_value(keyword(), atom()) :: {:ok, Macro.t(), keyword()} | :no_change
+  defp keyword_ast_pop_value(keyword_ast, key) when is_list(keyword_ast) and is_atom(key) do
+    {updated_opts, pop_result} =
+      Enum.map_reduce(keyword_ast, :not_found, fn
+        {raw_key, value}, :not_found ->
+          case keyword_key_atom(raw_key) do
+            {:ok, ^key} -> {nil, {:found, value}}
+            _ -> {{raw_key, value}, :not_found}
+          end
+
+        {raw_key, value}, pop_result ->
+          {{raw_key, value}, pop_result}
+
+        entry, pop_result ->
+          {entry, pop_result}
+      end)
+
+    case pop_result do
+      {:found, value} ->
+        {:ok, value, Enum.reject(updated_opts, &is_nil/1)}
+
+      :not_found ->
+        :no_change
+    end
+  end
+
+  @spec keyword_ast_has_key?(keyword(), atom()) :: boolean()
+  defp keyword_ast_has_key?(keyword_ast, key) when is_list(keyword_ast) and is_atom(key) do
+    match?({:ok, _value}, keyword_ast_fetch_value(keyword_ast, key))
   end
 
   @spec keyword_ast_fetch_value(keyword(), atom()) :: {:ok, Macro.t()} | :no_change

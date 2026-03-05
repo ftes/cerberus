@@ -259,6 +259,70 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTestTest do
     refute rewritten =~ ~s{|> select("Status", option: ~l"complete"e)}
   end
 
+  test "write mode rewrites action exact options into locator sigils", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_action_exact_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleActionExactTest do
+        import PhoenixTest
+
+        test "example", %{conn: conn} do
+          conn
+          |> visit("/choose")
+          |> choose("Test A", exact: false)
+          |> choose("Test B", exact: true)
+        end
+      end
+      """
+    )
+
+    _output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ ~r/\|> choose\(\s*~l"Test A"e\s*\)/s
+    assert rewritten =~ ~r/\|> choose\(\s*~l"Test B"i\s*\)/s
+    refute rewritten =~ "exact:"
+  end
+
+  test "write mode rewrites assertion exact options into locator sigils", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_assert_exact_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleAssertExactTest do
+        import PhoenixTest
+
+        test "example", %{conn: conn} do
+          conn
+          |> visit("/articles")
+          |> assert_has("#main", text: "Articles", exact: true)
+          |> refute_has("#main", text: "Nope", exact: false)
+        end
+      end
+      """
+    )
+
+    _output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ ~r/\|> assert_has\(\s*and_\(\s*css\("#main"\),\s*~l"Articles"e\s*\)\s*\)/s
+    assert rewritten =~ ~r/\|> refute_has\(\s*and_\(\s*css\("#main"\),\s*~l"Nope"i\s*\)\s*\)/s
+    refute rewritten =~ "exact:"
+  end
+
   test "write mode rewrites click_link/click_button calls to click", %{tmp_dir: tmp_dir} do
     file = Path.join(tmp_dir, "sample_click_aliases_test.exs")
 
