@@ -133,3 +133,19 @@ MIX_ENV=test mix cerberus.migrate_phoenix_test --write test/my_app_web/features
 It performs safe rewrites, reports manual follow-ups, and defaults to dry-run diff output.
 
 Migration verification docs are maintainer-focused and kept in the repository under `docs/migration-verification*.md`.
+
+## PhoenixTest Shim
+
+For incremental migrations, Cerberus also ships a compatibility facade:
+
+```elixir
+use Cerberus.PhoenixTestShim
+```
+
+`Cerberus.PhoenixTestShim` keeps familiar PhoenixTest call shapes for common
+navigation, assertions, and action helpers, while delegating to Cerberus under
+the hood.
+
+Use the shim as a bridge. For long-term code clarity and full feature parity,
+prefer migrating to native Cerberus APIs (manually or with
+`mix cerberus.migrate_phoenix_test`).
