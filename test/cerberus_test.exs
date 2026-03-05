@@ -243,6 +243,14 @@ defmodule CerberusTest do
     assert_has(checked, text("Selected Items: one,two", exact: true))
   end
 
+  test "select requires explicit locator options" do
+    assert_raise ArgumentError, ~r/:option must be a text locator or list of text locators/, fn ->
+      session()
+      |> visit("/controls")
+      |> select(label("Race"), option: "Dwarf")
+    end
+  end
+
   test "upload requires explicit locators and accepts explicit text locators" do
     jpg = "test/support/files/elixir.jpg"
 
@@ -315,7 +323,7 @@ defmodule CerberusTest do
     assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
       session()
       |> visit("/controls")
-      |> select(label("Race"), option: "Elf", timeout: -1)
+      |> select(label("Race"), option: ~l"Elf"e, timeout: -1)
     end
 
     assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
@@ -423,7 +431,7 @@ defmodule CerberusTest do
     static_session =
       session()
       |> visit("/controls")
-      |> select(label("Race"), option: "Elf")
+      |> select(label("Race"), option: ~l"Elf"e)
       |> choose(label("Email Choice"))
       |> submit(text("Save Controls"))
 
@@ -434,7 +442,7 @@ defmodule CerberusTest do
     live_session =
       session()
       |> visit("/live/controls")
-      |> select(label("Race"), option: "Dwarf")
+      |> select(label("Race"), option: ~l"Dwarf"e)
       |> choose(label("Phone Choice"))
 
     assert live_session.current_path == "/live/controls"
@@ -666,7 +674,7 @@ defmodule CerberusTest do
       :browser
       |> session()
       |> visit("/controls")
-      |> select(label("Race"), option: "Dwarf")
+      |> select(label("Race"), option: ~l"Dwarf"e)
       |> choose(label("Email Choice"))
       |> submit(text("Save Controls"))
 

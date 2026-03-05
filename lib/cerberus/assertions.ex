@@ -13,14 +13,13 @@ defmodule Cerberus.Assertions do
   alias Cerberus.Session
   alias ExUnit.AssertionError
 
-  @type locator_input :: Locator.t() | keyword() | map()
-  @type assert_locator_input :: locator_input() | String.t() | Regex.t()
+  @type locator_input :: Locator.input()
+  @type select_option_locator_input :: Locator.input()
+  @type select_option_locator_list :: [select_option_locator_input()]
+  @type select_option_input :: select_option_locator_input() | select_option_locator_list()
 
   defguardp is_locator_input(input)
             when is_list(input) or (is_map(input) and not is_struct(input, Regex))
-
-  defguardp is_assert_locator_input(input)
-            when is_binary(input) or is_struct(input, Regex) or is_locator_input(input)
 
   @spec click(arg, locator_input(), Driver.click_opts()) :: arg when arg: var
   def click(session, locator_input, opts \\ []) when is_locator_input(locator_input) and is_list(opts) do
@@ -61,6 +60,7 @@ defmodule Cerberus.Assertions do
   @spec select(arg, locator_input(), Driver.select_opts()) :: arg when arg: var
   def select(session, locator_input, opts \\ []) when is_locator_input(locator_input) and is_list(opts) do
     {locator, opts} = normalize_select_locator(locator_input, opts)
+    opts = normalize_select_option_opts!(opts)
     opts = Options.validate_select!(opts)
     driver = driver_module_for_session!(session)
     result = profile_driver_operation(session, :select, fn -> driver.select(session, locator, opts) end)
@@ -202,9 +202,8 @@ defmodule Cerberus.Assertions do
         )
   end
 
-  @spec assert_has(arg, assert_locator_input(), Driver.assert_opts()) :: arg when arg: var
-  def assert_has(session, locator_input, call_opts \\ [])
-      when is_assert_locator_input(locator_input) and is_list(call_opts) do
+  @spec assert_has(arg, locator_input(), Driver.assert_opts()) :: arg when arg: var
+  def assert_has(session, locator_input, call_opts \\ []) when is_locator_input(locator_input) and is_list(call_opts) do
     call_has_timeout = Keyword.has_key?(call_opts, :timeout)
     {locator, call_opts} = normalize_assert_locator(locator_input, call_opts)
     validated_opts = call_opts |> Options.validate_assert!("assert_has/3") |> prune_nil_match_by_opt()
@@ -222,9 +221,8 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  @spec refute_has(arg, assert_locator_input(), Driver.assert_opts()) :: arg when arg: var
-  def refute_has(session, locator_input, call_opts \\ [])
-      when is_assert_locator_input(locator_input) and is_list(call_opts) do
+  @spec refute_has(arg, locator_input(), Driver.assert_opts()) :: arg when arg: var
+  def refute_has(session, locator_input, call_opts \\ []) when is_locator_input(locator_input) and is_list(call_opts) do
     call_has_timeout = Keyword.has_key?(call_opts, :timeout)
     {locator, call_opts} = normalize_assert_locator(locator_input, call_opts)
     validated_opts = call_opts |> Options.validate_assert!("refute_has/3") |> prune_nil_match_by_opt()
@@ -461,6 +459,87 @@ defmodule Cerberus.Assertions do
     locator = Locator.normalize(locator_input)
     opts = merge_locator_selector_opts(locator, opts)
     {locator, opts}
+  end
+
+  @spec normalize_select_option_opts!(keyword()) :: keyword()
+  defp normalize_select_option_opts!(opts) when is_list(opts) do
+    case Keyword.fetch(opts, :option) do
+      {:ok, option_input} ->
+        {normalized_option, exact_option} = normalize_select_option_input!(option_input)
+        opts = Keyword.put(opts, :option, normalized_option)
+
+        if Keyword.has_key?(opts, :exact_option) do
+          opts
+        else
+          Keyword.put(opts, :exact_option, exact_option)
+        end
+
+      :error ->
+        opts
+    end
+  end
+
+  @spec normalize_select_option_input!(select_option_input()) :: {String.t() | [String.t()], boolean()}
+  defp normalize_select_option_input!(option_input) when is_list(option_input) do
+    if Keyword.keyword?(option_input) do
+      normalize_select_option_locator!(option_input)
+    else
+      if option_input == [] do
+        raise ArgumentError, "select/3 invalid options: :option list must contain at least one value"
+      end
+
+      normalized = Enum.map(option_input, &normalize_select_option_locator!/1)
+      values = Enum.map(normalized, &elem(&1, 0))
+      exact_flags = normalized |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
+
+      case exact_flags do
+        [exact_option] ->
+          {values, exact_option}
+
+        _ ->
+          raise ArgumentError,
+                "select/3 invalid options: :option locators must use a consistent :exact setting when selecting multiple values"
+      end
+    end
+  end
+
+  defp normalize_select_option_input!(option_input) do
+    normalize_select_option_locator!(option_input)
+  end
+
+  @spec normalize_select_option_locator!(select_option_locator_input()) :: {String.t(), boolean()}
+  defp normalize_select_option_locator!(option_input) do
+    locator =
+      case safe_normalize_locator(option_input) do
+        {:ok, normalized} ->
+          normalized
+
+        :error ->
+          raise ArgumentError,
+                "select/3 invalid options: :option must be a text locator or list of text locators (for example ~l\"Transport\" or text(\"Transport\")); got: #{inspect(option_input)}"
+      end
+
+    case locator do
+      %Locator{kind: :text, value: value, opts: locator_opts} when is_binary(value) and value != "" ->
+        {value, Keyword.get(locator_opts, :exact, true)}
+
+      %Locator{kind: :text, value: value} when is_binary(value) ->
+        raise ArgumentError, "select/3 invalid options: :option text locators must use non-empty text values"
+
+      %Locator{kind: :text, value: %Regex{}} ->
+        raise ArgumentError, "select/3 invalid options: :option text locators do not support regex values"
+
+      %Locator{kind: kind} ->
+        raise ArgumentError,
+              "select/3 invalid options: :option must be a text locator or list of text locators, got locator kind #{inspect(kind)}"
+    end
+  end
+
+  @spec safe_normalize_locator(term()) :: {:ok, Locator.t()} | :error
+  defp safe_normalize_locator(locator_input) do
+    {:ok, Locator.normalize(locator_input)}
+  rescue
+    Cerberus.InvalidLocatorError -> :error
   end
 
   defp normalize_assert_locator(locator_input, opts) do

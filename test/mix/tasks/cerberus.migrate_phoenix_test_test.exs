@@ -1,4 +1,4 @@
-defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
+defmodule Mix.Tasks.Cerberus.MigratePhoenixTestTest do
   use ExUnit.Case, async: true
 
   import ExUnit.CaptureIO
@@ -141,9 +141,39 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     assert rewritten =~ ~s{Cerberus.assert_has(session, Cerberus.and_(Cerberus.css("#main"), ~l"Articles"i))}
     assert rewritten =~ ~s{Cerberus.refute_has(session, Cerberus.and_(Cerberus.css("#missing"), ~l"Nope"i))}
     assert rewritten =~ ~s{Cerberus.fill_in(session, ~l"Search term"i, "phoenix")}
-    assert rewritten =~ ~s{Cerberus.select(session, ~l"Role"i, option: "admin")}
+    assert rewritten =~ ~s{Cerberus.select(session, ~l"Role"i, option: text("admin"))}
     refute output =~ "visit(conn, ...)"
     refute output =~ "Direct PhoenixTest.<function> call detected"
+  end
+
+  test "write mode keeps non-literal select option values unchanged", %{tmp_dir: tmp_dir} do
+    file = Path.join(tmp_dir, "sample_select_option_variable_test.exs")
+
+    File.write!(
+      file,
+      """
+      defmodule SampleSelectOptionVariableTest do
+        import PhoenixTest
+
+        defp apply_action(session, opacity), do: select(session, "Watermark opacity", option: opacity)
+      end
+      """
+    )
+
+    _output =
+      capture_io(fn ->
+        Mix.Task.reenable(@task)
+        Mix.Task.run(@task, ["--write", file])
+      end)
+
+    rewritten = File.read!(file)
+
+    assert rewritten =~ "import Cerberus"
+
+    assert rewritten =~
+             ~s{defp apply_action(session, opacity), do: select(session, ~l"Watermark opacity"i, option: opacity)}
+
+    refute rewritten =~ ~s{option: text(opacity)}
   end
 
   test "write mode rewrites click_link/click_button calls to click", %{tmp_dir: tmp_dir} do
@@ -710,9 +740,15 @@ defmodule Mix.Tasks.Igniter.Cerberus.MigratePhoenixTestTest do
     refute rewritten_migration_ready =~ "click_link("
     refute rewritten_migration_ready =~ "click_button("
     assert rewritten_feature_case =~ "|> session()"
-    assert rewritten_feature_case =~ ~r/\|> assert_has\(\s*and_\(\s*css\("h1"\),\s*expected\s*\)\s*\)/s
+
+    assert rewritten_feature_case =~
+             ~r/\|> assert_has\(\s*and_\(\s*css\("h1"\),\s*text\(expected,\s*exact:\s*false\)\s*\)\s*\)/s
+
     assert rewritten_form_fill =~ ~s{Cerberus.fill_in(session, ~l"Search term"i, value)}
-    assert rewritten_form_fill =~ ~s{Cerberus.assert_has(session, Cerberus.and_(Cerberus.css("body"), expected))}
+
+    assert rewritten_form_fill =~
+             ~r/Cerberus\.assert_has\(\s*session,\s*Cerberus\.and_\(\s*Cerberus\.css\("body"\),\s*(?:Cerberus\.)?text\(expected,\s*exact:\s*false\)\s*\)\s*\)/s
+
     assert rewritten_support_feature_case =~ "import Cerberus"
     refute rewritten_support_feature_case =~ "import PhoenixTest"
   end

@@ -6,13 +6,13 @@ defmodule MigrationFixtureWeb.PtSelectTest do
   test "pt_select", %{conn: conn} do
     conn
     |> visit("/select")
-    |> select_role("Wizard")
+    |> select_wizard_role()
     |> submit_selection()
     |> assert_selected_role("wizard")
   end
 
-  defp select_role(session, option_text) do
-    select(session, "Role", option: option_text)
+  defp select_wizard_role(session) do
+    select(session, "Role", option: "Wizard")
   end
 
   defp assert_selected_role(session, expected_value) do

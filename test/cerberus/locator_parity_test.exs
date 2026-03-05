@@ -317,7 +317,7 @@ defmodule Cerberus.LocatorParityTest do
   defp parity_cases(upload_path) do
     [
       # text matching
-      %{name: "assert_has text inexact", expect: :ok, run: &assert_has(&1, text("Article"))},
+      %{name: "assert_has text inexact", expect: :ok, run: &assert_has(&1, text("Article", exact: false))},
       %{name: "assert_has text exact", expect: :ok, run: &assert_has(&1, text("Articles", exact: true))},
       %{name: "assert_has text regex", expect: :ok, run: &assert_has(&1, text(~r/Arti\wles?/))},
       %{name: "assert_has multiline normalized text", expect: :ok, run: &assert_has(&1, text("Alpha Beta", exact: true))},
@@ -424,34 +424,34 @@ defmodule Cerberus.LocatorParityTest do
         run: &fill_in(&1, label("Inline Email"), "wrapped@example.com")
       },
       # select
-      %{name: "select label locator", expect: :ok, run: &select(&1, label("Language"), option: "Elixir")},
+      %{name: "select label locator", expect: :ok, run: &select(&1, label("Language"), option: ~l"Elixir"e)},
       %{
         name: "select role combobox locator",
         expect: :ok,
-        run: &select(&1, role(:combobox, name: "Language"), option: "Erlang")
+        run: &select(&1, role(:combobox, name: "Language"), option: ~l"Erlang"e)
       },
       %{
         name: "select role listbox locator",
         expect: :ok,
-        run: &select(&1, role(:listbox, name: "Language"), option: "Elixir")
+        run: &select(&1, role(:listbox, name: "Language"), option: ~l"Elixir"e)
       },
-      %{name: "select css locator", expect: :ok, run: &select(&1, css("#language_select"), option: "Erlang")},
+      %{name: "select css locator", expect: :ok, run: &select(&1, css("#language_select"), option: ~l"Erlang"e)},
       %{
         name: "select exact_option false supports substring",
         expect: :ok,
-        run: &select(&1, label("Language"), option: "Elix", exact_option: false)
+        run: &select(&1, label("Language"), option: ~l"Elix"e, exact_option: false)
       },
       %{
         name: "select disabled option errors",
         expect: :error,
         error_module: AssertionError,
-        run: &select(&1, label("Language"), option: "Rust")
+        run: &select(&1, label("Language"), option: ~l"Rust"e)
       },
       %{
         name: "select option missing errors",
         expect: :error,
         error_module: AssertionError,
-        run: &select(&1, label("Language"), option: "Missing")
+        run: &select(&1, label("Language"), option: ~l"Missing"e)
       },
       # check/uncheck/choose
       %{name: "check checkbox by label", expect: :ok, run: &check(&1, label("Two"))},
@@ -510,52 +510,52 @@ defmodule Cerberus.LocatorParityTest do
         name: "submit supports same-element and composition with testid",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, "Run Search" |> button() |> testid("submit-secondary-button"))
+        run: &submit(&1, "Run Search" |> button(exact: false) |> testid("submit-secondary-button"))
       },
       %{
         name: "submit and composition does not treat descendant marker as same element",
         html: @chained_locator_html,
         expect: :error,
         error_module: AssertionError,
-        run: &submit(&1, "Run Search" |> button() |> testid("submit-secondary-marker"))
+        run: &submit(&1, "Run Search" |> button(exact: false) |> testid("submit-secondary-marker"))
       },
       %{
         name: "submit supports has testid nested locator filter",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, "Run Search" |> button() |> has(testid("submit-secondary-marker")))
+        run: &submit(&1, "Run Search" |> button(exact: false) |> has(testid("submit-secondary-marker")))
       },
       %{
         name: "submit supports has text nested locator filter",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, "Run Search" |> button() |> has(text("secondary", exact: true)))
+        run: &submit(&1, "Run Search" |> button(exact: false) |> has(text("secondary", exact: true)))
       },
       %{
         name: "submit has filter errors when nested locator does not match",
         html: @chained_locator_html,
         expect: :error,
         error_module: AssertionError,
-        run: &submit(&1, "Run Search" |> button() |> has(testid("missing-marker")))
+        run: &submit(&1, "Run Search" |> button(exact: false) |> has(testid("missing-marker")))
       },
       %{
         name: "submit supports has css nested locator filter",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, "Run Search" |> button() |> has(css(".kind-secondary")))
+        run: &submit(&1, "Run Search" |> button(exact: false) |> has(css(".kind-secondary")))
       },
       %{
         name: "submit supports has_not nested locator filter",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, "Run Search" |> button() |> has_not(testid("submit-secondary-marker")))
+        run: &submit(&1, "Run Search" |> button(exact: false) |> has_not(testid("submit-secondary-marker")))
       },
       %{
         name: "submit has_not filter errors when nested locator still matches",
         html: @chained_locator_html,
         expect: :error,
         error_module: AssertionError,
-        run: &submit(&1, "Run Search" |> button() |> has_not(css("span")))
+        run: &submit(&1, "Run Search" |> button(exact: false) |> has_not(css("span")))
       },
       %{
         name: "submit supports nested and composition inside has",
@@ -565,7 +565,7 @@ defmodule Cerberus.LocatorParityTest do
           &submit(
             &1,
             "Run Search"
-            |> button()
+            |> button(exact: false)
             |> has(and_(testid("submit-secondary-marker"), text("secondary", exact: true)))
           )
       },
@@ -577,7 +577,7 @@ defmodule Cerberus.LocatorParityTest do
           &submit(
             &1,
             "Run Search"
-            |> button()
+            |> button(exact: false)
             |> has(or_(testid("submit-primary-marker"), testid("submit-secondary-marker")))
           )
       },
@@ -585,7 +585,7 @@ defmodule Cerberus.LocatorParityTest do
         name: "submit supports A and not B boolean composition",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, and_(button("Run Search"), not_(testid("submit-secondary-button"))))
+        run: &submit(&1, and_(button("Run Search", exact: false), not_(testid("submit-secondary-button"))))
       },
       %{
         name: "submit supports not(A and B) boolean composition",
@@ -595,8 +595,8 @@ defmodule Cerberus.LocatorParityTest do
           &submit(
             &1,
             and_(
-              button("Run Search"),
-              not_(and_(button("Run Search"), testid("submit-secondary-button")))
+              button("Run Search", exact: false),
+              not_(and_(button("Run Search", exact: false), testid("submit-secondary-button")))
             )
           )
       },
@@ -611,19 +611,19 @@ defmodule Cerberus.LocatorParityTest do
         name: "assert_has supports has locator option",
         html: @chained_locator_html,
         expect: :ok,
-        run: &assert_has(&1, has(button("Apply"), text("secondary", exact: true)))
+        run: &assert_has(&1, has(button("Apply", exact: false), text("secondary", exact: true)))
       },
       %{
         name: "assert_has supports has_not locator option",
         html: @chained_locator_html,
         expect: :ok,
-        run: &assert_has(&1, has_not(button("Apply"), text("secondary", exact: true)))
+        run: &assert_has(&1, has_not(button("Apply", exact: false), text("secondary", exact: true)))
       },
       %{
         name: "assert_has supports composed css and text locator assertions",
         html: @chained_locator_html,
         expect: :ok,
-        run: &assert_has(&1, and_(css("#apply-secondary"), text("Apply")))
+        run: &assert_has(&1, and_(css("#apply-secondary"), text("Apply", exact: false)))
       },
       %{
         name: "fill_in supports same-element and composition with css",
@@ -665,8 +665,16 @@ defmodule Cerberus.LocatorParityTest do
       # sigil-rich cases
       %{name: "sigil css locator for fill_in", expect: :ok, run: &fill_in(&1, ~l"#search_q"c, "sigil css")},
       %{name: "sigil testid locator for fill_in", expect: :ok, run: &fill_in(&1, ~l"search-input"t, "sigil testid")},
-      %{name: "sigil role locator for select", expect: :ok, run: &select(&1, ~l"combobox:Language"r, option: "Elixir")},
-      %{name: "sigil role locator for listbox", expect: :ok, run: &select(&1, ~l"listbox:Language"r, option: "Erlang")},
+      %{
+        name: "sigil role locator for select",
+        expect: :ok,
+        run: &select(&1, ~l"combobox:Language"r, option: ~l"Elixir"e)
+      },
+      %{
+        name: "sigil role locator for listbox",
+        expect: :ok,
+        run: &select(&1, ~l"listbox:Language"r, option: ~l"Erlang"e)
+      },
       %{name: "sigil role exact assertion", expect: :ok, run: &assert_has(&1, ~l"button:Increment"re)},
       %{
         name: "invalid mixed locator sigil modifiers raise",
@@ -679,59 +687,59 @@ defmodule Cerberus.LocatorParityTest do
         name: "count filters on assertions support exact count",
         html: @count_position_html,
         expect: :ok,
-        run: &assert_has(&1, title("Alpha"), count: 2)
+        run: &assert_has(&1, title("Alpha", exact: false), count: 2)
       },
       %{
         name: "count filters on assertions support min/max",
         html: @count_position_html,
         expect: :ok,
-        run: &assert_has(&1, title("Alpha"), min: 2, max: 2)
+        run: &assert_has(&1, title("Alpha", exact: false), min: 2, max: 2)
       },
       %{
         name: "count filters on assertions support between tuple",
         html: @count_position_html,
         expect: :ok,
-        run: &assert_has(&1, title("Alpha"), between: {1, 2})
+        run: &assert_has(&1, title("Alpha", exact: false), between: {1, 2})
       },
       %{
         name: "count filters on assertions support between range",
         html: @count_position_html,
         expect: :ok,
-        run: &assert_has(&1, title("Alpha"), between: 2..3)
+        run: &assert_has(&1, title("Alpha", exact: false), between: 2..3)
       },
       %{
         name: "count filters on assertions fail when count mismatches",
         html: @count_position_html,
         expect: :error,
         error_module: AssertionError,
-        run: &assert_has(&1, title("Alpha"), count: 3)
+        run: &assert_has(&1, title("Alpha", exact: false), count: 3)
       },
       %{
         name: "refute_has with count filter passes when constraints are not satisfied",
         html: @count_position_html,
         expect: :ok,
-        run: &refute_has(&1, title("Alpha"), count: 3)
+        run: &refute_has(&1, title("Alpha", exact: false), count: 3)
       },
       %{
         name: "refute_has with count filter fails when constraints are satisfied",
         html: @count_position_html,
         expect: :error,
         error_module: AssertionError,
-        run: &refute_has(&1, title("Alpha"), count: 2)
+        run: &refute_has(&1, title("Alpha", exact: false), count: 2)
       },
       %{
         name: "assert_has rejects position filters",
         html: @count_position_html,
         expect: :error,
         error_module: ArgumentError,
-        run: &assert_has(&1, title("Alpha"), first: true)
+        run: &assert_has(&1, title("Alpha", exact: false), first: true)
       },
       %{
         name: "assert_has validates between bounds",
         html: @count_position_html,
         expect: :error,
         error_module: ArgumentError,
-        run: &assert_has(&1, title("Alpha"), between: {2, 1})
+        run: &assert_has(&1, title("Alpha", exact: false), between: {2, 1})
       },
       %{
         name: "fill_in supports first count-position filter",
@@ -808,27 +816,27 @@ defmodule Cerberus.LocatorParityTest do
         name: "select supports first count-position filter",
         html: @count_position_html,
         expect: :ok,
-        run: &select(&1, label("Pet"), option: "Dog", first: true, count: 2)
+        run: &select(&1, label("Pet"), option: ~l"Dog"e, first: true, count: 2)
       },
       %{
         name: "select supports last count-position filter",
         html: @count_position_html,
         expect: :ok,
-        run: &select(&1, label("Pet"), option: "Fish", last: true, between: {2, 2})
+        run: &select(&1, label("Pet"), option: ~l"Fish"e, last: true, between: {2, 2})
       },
       %{
         name: "select fails when position is out of bounds",
         html: @count_position_html,
         expect: :error,
         error_module: AssertionError,
-        run: &select(&1, label("Pet"), option: "Dog", nth: 3)
+        run: &select(&1, label("Pet"), option: ~l"Dog"e, nth: 3)
       },
       %{
         name: "select fails when count filter mismatches",
         html: @count_position_html,
         expect: :error,
         error_module: AssertionError,
-        run: &select(&1, label("Pet"), option: "Dog", count: 1)
+        run: &select(&1, label("Pet"), option: ~l"Dog"e, count: 1)
       },
       # selector-only disambiguation snippet
       %{

@@ -126,6 +126,7 @@ session()
 ```
 
 Locator sigil quick look:
+- `~l"Save"` exact text (default)
 - `~l"Save"e` exact text
 - `~l"Save"i` inexact text
 - `~l"button:Save"r` role form (`ROLE:NAME`)
@@ -134,7 +135,6 @@ Locator sigil quick look:
 - `~l"save-button"t` testid form (`exact: true` default)
 - at most one kind modifier (`r`, `c`, `a`, or `t`)
 - `e` and `i` are mutually exclusive
-- plain text `~l` locators require either `e` or `i`
 - `r` requires `ROLE:NAME`
 - regex values are supported for text-like locators and role names, but cannot be combined with `exact: true|false`
 

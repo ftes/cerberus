@@ -9,7 +9,7 @@ defmodule Cerberus.CrossDriverTextTest do
       |> session()
       |> visit("/articles")
       |> assert_has(text: "Articles")
-      |> assert_has(~r/articles index/i)
+      |> assert_has(text(~r/articles index/i))
       |> refute_has(text: "500 Internal Server Error")
       |> assert_has([text: "Hidden helper text"], visible: false)
     end

@@ -233,7 +233,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       |> submit(button(~r/^Run/), first: true)
       |> assert_path("/search/results", query: [q: "shire"])
       |> visit("/search")
-      |> fill_in(label("Search term"), "gondor", last: true)
+      |> fill_in(label("Search term", exact: false), "gondor", last: true)
       |> submit(button(~r/^Run/), last: true)
       |> assert_path("/search/nested/results", query: [nested_q: "gondor"])
     end
@@ -288,14 +288,14 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/live/controls")
-        |> select(label("Disabled select"), option: "Cannot submit", disabled: false, timeout: 0)
+        |> select(label("Disabled select"), option: ~l"Cannot submit"e, disabled: false, timeout: 0)
       end
 
       assert_raise ExUnit.AssertionError, ~r/matched select field is disabled/, fn ->
         unquote(driver)
         |> driver_session(context)
         |> visit("/live/controls")
-        |> select(label("Disabled select"), option: "Cannot submit", disabled: true, timeout: 0)
+        |> select(label("Disabled select"), option: ~l"Cannot submit"e, disabled: true, timeout: 0)
       end
     end
   end

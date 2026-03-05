@@ -1,4 +1,4 @@
-defmodule Mix.Tasks.Cerberus.InstallTasksTest do
+defmodule Mix.Tasks.Cerberus.InstallTest do
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureIO

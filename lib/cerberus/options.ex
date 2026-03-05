@@ -413,7 +413,8 @@ defmodule Cerberus.Options do
     option: [
       type: :any,
       required: true,
-      doc: "Option text to select; for multi-select inputs pass all desired values on each call."
+      doc:
+        ~s{Text locator (`~l"..."e`/`text("...", exact: true)`) or list of text locators to select; for multi-select inputs pass all desired values on each call.}
     ],
     exact_option: [type: :boolean, default: true, doc: "Requires exact option-text matches unless disabled."],
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],

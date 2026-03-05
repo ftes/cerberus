@@ -6,13 +6,18 @@ defmodule Cerberus.LocatorTest do
   alias Cerberus.InvalidLocatorError
   alias Cerberus.Locator
 
-  test "normalizes string text locator" do
-    assert %Locator{kind: :text, value: "Saved"} = Locator.normalize("Saved")
+  test "rejects bare string locator input" do
+    assert_raise InvalidLocatorError, fn ->
+      Locator.normalize("Saved")
+    end
   end
 
-  test "normalizes regex text locator" do
+  test "rejects bare regex locator input" do
     regex = ~r/Sav(ed|ing)/
-    assert %Locator{kind: :text, value: ^regex} = Locator.normalize(regex)
+
+    assert_raise InvalidLocatorError, fn ->
+      Locator.normalize(regex)
+    end
   end
 
   test "rejects exact option when text-like locator value is regex" do
@@ -57,10 +62,8 @@ defmodule Cerberus.LocatorTest do
     end
   end
 
-  test "~l text locators require explicit exactness mode" do
-    assert_raise InvalidLocatorError, ~r/require e or i modifier/, fn ->
-      ~l"Saved"
-    end
+  test "~l text locators default to exact matching when no mode modifier is provided" do
+    assert %Locator{kind: :text, value: "Saved", opts: [exact: true]} = ~l"Saved"
   end
 
   test "~l supports exact/inexact modifiers" do
@@ -72,13 +75,15 @@ defmodule Cerberus.LocatorTest do
   end
 
   test "~l supports role modifier using ROLE:NAME syntax" do
-    assert %Locator{kind: :role, value: "Increment", opts: [role: "button"]} = ~l"button:Increment"r
-    assert %Locator{kind: :role, value: "Counter", opts: [role: "link"]} = ~l"link:Counter"r
-    assert %Locator{kind: :role, value: "Search term", opts: [role: "textbox"]} = ~l"textbox:Search term"r
-    assert %Locator{kind: :role, value: "Race 2", opts: [role: "listbox"]} = ~l"listbox:Race 2"r
-    assert %Locator{kind: :role, value: "Age", opts: [role: "spinbutton"]} = ~l"spinbutton:Age"r
-    assert %Locator{kind: :role, value: "Tab Primary", opts: [role: "tab"]} = ~l"tab:Tab Primary"r
-    assert %Locator{kind: :role, value: "Menu Secondary", opts: [role: "menuitem"]} = ~l"menuitem:Menu Secondary"r
+    assert %Locator{kind: :role, value: "Increment", opts: [role: "button", exact: true]} = ~l"button:Increment"r
+    assert %Locator{kind: :role, value: "Counter", opts: [role: "link", exact: true]} = ~l"link:Counter"r
+    assert %Locator{kind: :role, value: "Search term", opts: [role: "textbox", exact: true]} = ~l"textbox:Search term"r
+    assert %Locator{kind: :role, value: "Race 2", opts: [role: "listbox", exact: true]} = ~l"listbox:Race 2"r
+    assert %Locator{kind: :role, value: "Age", opts: [role: "spinbutton", exact: true]} = ~l"spinbutton:Age"r
+    assert %Locator{kind: :role, value: "Tab Primary", opts: [role: "tab", exact: true]} = ~l"tab:Tab Primary"r
+
+    assert %Locator{kind: :role, value: "Menu Secondary", opts: [role: "menuitem", exact: true]} =
+             ~l"menuitem:Menu Secondary"r
   end
 
   test "~l supports css selector modifier" do
@@ -149,7 +154,7 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :label, value: "Email"} = label_has_locator
 
     role_has_locator = Locator.normalize(text: "Save", has: role(:button, name: "Submit")).opts[:has]
-    assert %Locator{kind: :role, value: "Submit", opts: [role: "button"]} = role_has_locator
+    assert %Locator{kind: :role, value: "Submit", opts: [role: "button", exact: true]} = role_has_locator
   end
 
   test "supports nested has locators" do
@@ -241,34 +246,34 @@ defmodule Cerberus.LocatorTest do
   end
 
   test "preserves role locator kind and metadata" do
-    assert %Locator{kind: :role, value: "Increment", opts: [role: "button"]} =
+    assert %Locator{kind: :role, value: "Increment", opts: [role: "button", exact: true]} =
              Locator.normalize(role: :button, name: "Increment")
 
-    assert %Locator{kind: :role, value: "Tab Primary", opts: [role: "tab"]} =
+    assert %Locator{kind: :role, value: "Tab Primary", opts: [role: "tab", exact: true]} =
              Locator.normalize(role: :tab, name: "Tab Primary")
 
-    assert %Locator{kind: :role, value: "Menu Secondary", opts: [role: "menuitem"]} =
+    assert %Locator{kind: :role, value: "Menu Secondary", opts: [role: "menuitem", exact: true]} =
              Locator.normalize(role: :menuitem, name: "Menu Secondary")
 
-    assert %Locator{kind: :role, value: "Counter", opts: [role: "link"]} =
+    assert %Locator{kind: :role, value: "Counter", opts: [role: "link", exact: true]} =
              Locator.normalize(role: "link", name: "Counter")
 
-    assert %Locator{kind: :role, value: "Search term", opts: [role: "textbox"]} =
+    assert %Locator{kind: :role, value: "Search term", opts: [role: "textbox", exact: true]} =
              Locator.normalize(role: :textbox, name: "Search term")
 
-    assert %Locator{kind: :role, value: "Race 2", opts: [role: "listbox"]} =
+    assert %Locator{kind: :role, value: "Race 2", opts: [role: "listbox", exact: true]} =
              Locator.normalize(role: :listbox, name: "Race 2")
 
-    assert %Locator{kind: :role, value: "Age", opts: [role: "spinbutton"]} =
+    assert %Locator{kind: :role, value: "Age", opts: [role: "spinbutton", exact: true]} =
              Locator.normalize(role: :spinbutton, name: "Age")
 
-    assert %Locator{kind: :role, value: "Email updates", opts: [role: "checkbox"]} =
+    assert %Locator{kind: :role, value: "Email updates", opts: [role: "checkbox", exact: true]} =
              Locator.normalize(role: :checkbox, name: "Email updates")
 
-    assert %Locator{kind: :role, value: "Logo", opts: [role: "img"]} =
+    assert %Locator{kind: :role, value: "Logo", opts: [role: "img", exact: true]} =
              Locator.normalize(role: :img, name: "Logo")
 
-    assert %Locator{kind: :role, value: "Dashboard", opts: [role: "heading"]} =
+    assert %Locator{kind: :role, value: "Dashboard", opts: [role: "heading", exact: true]} =
              Locator.normalize(role: :heading, name: "Dashboard")
   end
 

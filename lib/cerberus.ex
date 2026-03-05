@@ -644,6 +644,7 @@ defmodule Cerberus do
   Builds a locator using `~l`.
 
   Supported forms:
+  - `~l"text"` exact text (default)
   - `~l"text"e` exact text
   - `~l"text"i` inexact text
   - `~l"ROLE:NAME"r` role locator form
@@ -654,7 +655,6 @@ defmodule Cerberus do
   Rules:
   - use at most one locator-kind modifier (`r`, `c`, `a`, or `t`)
   - `e` and `i` are mutually exclusive
-  - plain text `~l` locators require either `e` or `i`
   - `r` requires `ROLE:NAME` input
   """
   @spec sigil_l(String.t(), charlist()) :: Locator.t()
@@ -869,10 +869,10 @@ defmodule Cerberus do
   Bare string/regex shorthand is not supported.
 
   For multi-select fields, pass the full desired selection on every call
-  (`option: ["Elf", "Dwarf"]`). Each `select/3` call replaces the selection
+  (`option: [~l"Elf"e, ~l"Dwarf"e]`). Each `select/3` call replaces the selection
   with the provided option value(s).
-  Sigil examples: `select(session, ~l"#race_select"c, option: "Elf")`,
-  `select(session, ~l"race-select"t, option: "Elf")`.
+  Sigil examples: `select(session, ~l"#race_select"c, option: ~l"Elf"e)`,
+  `select(session, ~l"race-select"t, option: ~l"Elf"e)`.
   """
   @spec select(arg, locator_input()) :: arg when arg: var
   def select(session, locator), do: select(session, locator, [])

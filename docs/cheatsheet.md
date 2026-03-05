@@ -22,7 +22,7 @@
 | Visit page | `visit(session, "/articles")` |
 | Click link/button | `click(session, ~l"link:Counter"r)` |
 | Fill input | `fill_in(session, label("Search term"), "Aragorn")` |
-| Select option | `select(session, label("Race"), option: "Elf")` |
+| Select option | `select(session, label("Race"), option: ~l"Elf"e)` |
 | Choose radio | `choose(session, label("Email Choice"))` |
 | Check checkbox | `check(session, label("Accept Terms"))` |
 | Uncheck checkbox | `uncheck(session, label("Receive updates"))` |
@@ -95,6 +95,7 @@ Default strategy:
 
 | Locator | Meaning |
 | --- | --- |
+| `~l"Save"` | exact text (default) |
 | `~l"Save"e` | exact text |
 | `~l"Save"i` | inexact text |
 | `~l"button:Save"r` | role-style locator |
@@ -106,7 +107,6 @@ Default strategy:
 Rules:
 - at most one kind modifier (`r`, `c`, `a`, or `t`)
 - `e` and `i` are mutually exclusive
-- plain text `~l` locators require either `e` or `i`
 - `r` requires `ROLE:NAME`
 - regex values are supported for text-like locators and role names, but cannot be combined with `exact: true|false`
 

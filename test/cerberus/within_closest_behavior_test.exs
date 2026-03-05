@@ -21,7 +21,7 @@ defmodule Cerberus.WithinClosestBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/field-wrapper-errors")
-      |> assert_has(has(closest(css(".fieldset"), from: label("Email")), text("can't be blank")))
+      |> assert_has(has(closest(css(".fieldset"), from: label("Email")), text("can't be blank", exact: false)))
       |> assert_has(has_not(closest(css(".fieldset"), from: label("Email")), text("Outer wrapper error")))
     end
 

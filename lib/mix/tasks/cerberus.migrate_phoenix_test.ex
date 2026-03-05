@@ -75,6 +75,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   @rewritable_assertions_calls [:assert_has, :refute_has, :assert_path, :refute_path]
   @canonical_text_assertions [:assert_has, :refute_has]
   @canonical_labeled_value_keys %{fill_in: :with}
+  @dynamic_locator_wrap_calls [:assert_has, :refute_has, :and_, :or_, :not_, :has, :has_not]
   @explicit_locator_calls [
     :assert_has,
     :refute_has,
@@ -85,7 +86,12 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     :check,
     :uncheck,
     :submit,
-    :upload
+    :upload,
+    :and_,
+    :or_,
+    :not_,
+    :has,
+    :has_not
   ]
   @label_locator_variable_calls [:fill_in, :select, :choose, :check, :uncheck, :upload]
   @locator_helper_funs [
@@ -287,7 +293,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   @spec migrate_file(term(), String.t(), boolean()) :: migration_result()
   defp migrate_file(igniter, file, dry_run) do
     original = File.read!(file)
-    {rewritten, warnings} = rewrite_content(file, original)
+    {rewritten, warnings} = safe_rewrite_content(file, original)
     print_warnings(file, warnings)
     warning_count = length(warnings)
 
@@ -306,6 +312,19 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     end
   end
 
+  @spec safe_rewrite_content(String.t(), String.t()) :: {String.t(), warning_messages()}
+  defp safe_rewrite_content(file, original) do
+    rewrite_content(file, original)
+  rescue
+    error ->
+      {
+        original,
+        [
+          "File rewrite failed and was skipped: #{Exception.message(error)}"
+        ]
+      }
+  end
+
   @spec persist_migrated_file(term(), String.t(), String.t()) :: term()
   defp persist_migrated_file(igniter, file, rewritten) do
     Igniter.update_file(
@@ -314,6 +333,10 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
       &update_source_content(&1, rewritten),
       source_handler: Rewrite.Source.Ex
     )
+  rescue
+    _ ->
+      File.write!(file, rewritten)
+      igniter
   end
 
   @spec update_source_content(Source.t(), String.t()) :: Source.t()
@@ -345,8 +368,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
             updated =
               content
               |> append_cerberus_endpoint_config(endpoint_ast)
-              |> Code.format_string!()
-              |> IO.iodata_to_binary()
+              |> safe_format_source()
 
             {updated, warnings}
 
@@ -379,8 +401,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
         updated =
           content
           |> append_test_helper_endpoint_put_env(endpoint_ast)
-          |> Code.format_string!()
-          |> IO.iodata_to_binary()
+          |> safe_format_source()
 
         {updated, warnings}
 
@@ -592,8 +613,16 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   defp render_rewritten_content(_content, canonical_ast, true) do
     canonical_ast
     |> Sourceror.to_string()
+    |> safe_format_source()
+  end
+
+  @spec safe_format_source(String.t()) :: String.t()
+  defp safe_format_source(source) when is_binary(source) do
+    source
     |> Code.format_string!()
     |> IO.iodata_to_binary()
+  rescue
+    _ -> source
   end
 
   @spec rewrite_node(Macro.t(), RewriteState.t()) :: {Macro.t(), RewriteState.t()}
@@ -863,6 +892,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
         [
           fn acc -> canonicalize_text_assertion_args(fun, acc) end,
           fn acc -> canonicalize_labeled_value_call_args(fun, acc) end,
+          fn acc -> canonicalize_select_option_args(fun, acc) end,
           fn acc -> canonicalize_scope_locator_args(fun, acc, scope_builder, assertion_scope_builder) end,
           fn acc -> canonicalize_click_alias_scope_args(fun, source_fun, acc, click_alias_scope_builder) end,
           fn acc -> canonicalize_explicit_locator_args(fun, source_fun, acc) end,
@@ -918,6 +948,53 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
       {:ok, build_value_args(prefix, value, merged_opts)}
     else
       _ -> :no_change
+    end
+  end
+
+  @spec canonicalize_select_option_args(atom(), [Macro.t()]) :: canonicalize_result()
+  defp canonicalize_select_option_args(:select, args) do
+    case split_select_option_args(args) do
+      {:ok, prefix, maybe_opts} ->
+        with {:ok, option_value, remaining_opts} <- pop_keyword_ast(maybe_opts, :option),
+             {:ok, canonical_option_value} <- canonicalize_select_option_value(option_value) do
+          merged_opts = Keyword.put(remaining_opts, :option, canonical_option_value)
+          {:ok, build_value_args(prefix, merged_opts, [])}
+        else
+          _ -> :no_change
+        end
+
+      :error ->
+        :no_change
+    end
+  end
+
+  defp canonicalize_select_option_args(_fun, _args), do: :no_change
+
+  @spec split_select_option_args([Macro.t()]) :: {:ok, [Macro.t()], keyword()} | :error
+  defp split_select_option_args([locator, maybe_opts]) when is_list(maybe_opts), do: {:ok, [locator], maybe_opts}
+
+  defp split_select_option_args([session, locator, maybe_opts]) when is_list(maybe_opts),
+    do: {:ok, [session, locator], maybe_opts}
+
+  defp split_select_option_args(_args), do: :error
+
+  @spec canonicalize_select_option_value(Macro.t()) :: {:ok, Macro.t()} | :no_change
+  defp canonicalize_select_option_value(option_value) do
+    cond do
+      locator_expression_ast?(option_value) ->
+        :no_change
+
+      binary_literal_ast?(option_value) ->
+        {:ok, text_call_ast(binary_literal_value(option_value))}
+
+      is_list(option_value) and option_value != [] and Enum.all?(option_value, &binary_literal_ast?/1) ->
+        {:ok, Enum.map(option_value, &text_call_ast(binary_literal_value(&1)))}
+
+      is_list(option_value) ->
+        :no_change
+
+      true ->
+        :no_change
     end
   end
 
@@ -1038,6 +1115,10 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   defp locator_arg_indexes_for(:fill_in, [_, _, third]), do: if(keyword_ast?(third), do: [0], else: [1])
   defp locator_arg_indexes_for(:fill_in, [_, _, _, _]), do: [1]
 
+  defp locator_arg_indexes_for(fun, [_, _]) when fun in [:and_, :or_, :has, :has_not], do: [0, 1]
+  defp locator_arg_indexes_for(:not_, [_]), do: [0]
+  defp locator_arg_indexes_for(:not_, [_, _]), do: [0, 1]
+
   defp locator_arg_indexes_for(:upload, [_, _]), do: [0]
   defp locator_arg_indexes_for(:upload, [_, _, third]), do: if(keyword_ast?(third), do: [0], else: [1])
   defp locator_arg_indexes_for(:upload, [_, _, _, _]), do: [1]
@@ -1096,7 +1177,7 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
     end
   end
 
-  defp explicit_locator_ast(arg, _fun, _source_fun) do
+  defp explicit_locator_ast(arg, fun, _source_fun) do
     cond do
       locator_expression_ast?(arg) ->
         :no_change
@@ -1107,8 +1188,14 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
       regex_literal_ast?(arg) ->
         {:ok, [text: arg]}
 
+      bare_variable_ast?(arg) and fun in @label_locator_variable_calls ->
+        :no_change
+
       keyword_ast?(arg) ->
         :no_change
+
+      fun in @dynamic_locator_wrap_calls ->
+        {:ok, text_call_i_ast(arg)}
 
       true ->
         :no_change
@@ -1167,6 +1254,12 @@ defmodule Mix.Tasks.Cerberus.MigratePhoenixTest do
   defp text_sigil_i_ast(value) when is_binary(value) do
     {:sigil_l, [delimiter: "\""], [{:<<>>, [], [value]}, ~c"i"]}
   end
+
+  @spec text_call_ast(Macro.t()) :: Macro.t()
+  defp text_call_ast(value), do: {:text, [], [value]}
+
+  @spec text_call_i_ast(Macro.t()) :: Macro.t()
+  defp text_call_i_ast(value), do: {:text, [], [value, [exact: false]]}
 
   @spec regex_literal_ast?(Macro.t()) :: boolean()
   defp regex_literal_ast?({:sigil_r, _meta, [_body, _mods]}), do: true
