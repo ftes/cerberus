@@ -6,6 +6,7 @@ defmodule Cerberus.Fixtures.Router do
 
   alias Cerberus.Fixtures.LiveSandbox
   alias Cerberus.Fixtures.PhoenixTest.LayoutView, as: PhoenixTestLayoutView
+  alias Cerberus.Fixtures.PhoenixTestPlaywright
   alias Cerberus.Fixtures.PhoenixTestPlaywright.LayoutView, as: PhoenixTestPlaywrightLayoutView
 
   pipeline :browser do
@@ -106,8 +107,8 @@ defmodule Cerberus.Fixtures.Router do
     get("/js-script-console-error", PageController, :js_script_console_error)
   end
 
-  scope "/phoenix_test/playwright", Cerberus.Fixtures.PhoenixTestPlaywright do
-    pipe_through(:phoenix_test_playwright_browser_csrf)
+  scope "/phoenix_test/playwright", PhoenixTestPlaywright do
+    pipe_through(:phoenix_test_playwright_browser)
 
     post("/page/create_record", PageController, :create)
     put("/page/update_record", PageController, :update)
@@ -117,6 +118,10 @@ defmodule Cerberus.Fixtures.Router do
     post("/page/redirect_to_liveview", PageController, :redirect_to_liveview)
     post("/page/redirect_to_static", PageController, :redirect_to_static)
     get("/page/:page", PageController, :show)
+  end
+
+  scope "/phoenix_test/playwright", PhoenixTestPlaywright do
+    pipe_through(:phoenix_test_playwright_browser_csrf)
 
     live_session :phoenix_test_playwright_live_pages,
       layout: {PhoenixTestPlaywrightLayoutView, :app},

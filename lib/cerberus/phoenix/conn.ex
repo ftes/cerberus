@@ -144,11 +144,15 @@ defmodule Cerberus.Phoenix.Conn do
 
   defp recycle_preserving_headers(conn) do
     conn
-    |> recycle(all_headers(conn))
+    |> recycle(headers_to_preserve(conn))
     |> preserve_private(conn)
   end
 
-  defp all_headers(conn), do: Enum.map(conn.req_headers, &elem(&1, 0))
+  defp headers_to_preserve(conn) do
+    conn.req_headers
+    |> Enum.map(&elem(&1, 0))
+    |> Enum.reject(&(String.downcase(&1) == "cookie"))
+  end
 
   defp preserve_private(conn, source_conn) do
     Enum.reduce(@private_keys_to_preserve, conn, fn key, acc ->

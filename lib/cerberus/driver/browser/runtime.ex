@@ -1089,10 +1089,28 @@ defmodule Cerberus.Driver.Browser.Runtime do
   end
 
   defp first_existing_path(paths) when is_list(paths) do
-    Enum.find(paths, fn
-      path when is_binary(path) -> File.exists?(path)
-      _ -> false
+    Enum.find_value(paths, fn
+      path when is_binary(path) ->
+        path = Path.expand(path)
+
+        if File.exists?(path) do
+          resolve_existing_path(path)
+        end
+
+      _ ->
+        nil
     end)
+  end
+
+  defp resolve_existing_path(path) when is_binary(path) do
+    case :file.read_link_all(String.to_charlist(path)) do
+      {:ok, resolved} ->
+        resolved = List.to_string(resolved)
+        if File.exists?(resolved), do: resolved, else: path
+
+      _ ->
+        path
+    end
   end
 
   defp stable_binary_path(name) when is_binary(name) do
