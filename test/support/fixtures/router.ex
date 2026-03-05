@@ -107,7 +107,7 @@ defmodule Cerberus.Fixtures.Router do
   end
 
   scope "/phoenix_test/playwright", Cerberus.Fixtures.PhoenixTestPlaywright do
-    pipe_through(:phoenix_test_playwright_browser)
+    pipe_through(:phoenix_test_playwright_browser_csrf)
 
     post("/page/create_record", PageController, :create)
     put("/page/update_record", PageController, :update)
