@@ -26,7 +26,7 @@ defmodule Cerberus.AssertionFilterSemanticsTest do
     end
 
     test "assert_has with label-only locator fails when label text is missing (#{driver})", context do
-      assert_raise ExUnit.AssertionError, ~r/expected text not found/, fn ->
+      assert_raise ExUnit.AssertionError, ~r/expected (text|locator) not found/, fn ->
         unquote(driver)
         |> driver_session(context)
         |> visit("/live/form-change")

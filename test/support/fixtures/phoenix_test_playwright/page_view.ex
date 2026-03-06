@@ -174,6 +174,11 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PageView do
       Prefilled notes
       </textarea>
 
+      <label for="readonly_notes">Readonly notes</label>
+      <textarea id="readonly_notes" name="readonly_notes" rows="3" cols="33" readonly>
+      Immutable notes
+      </textarea>
+
       <label for="disabled_textarea">Disabled textaread</label>
       <textarea id="disabled_textarea" name="disabled_textarea" rows="5" cols="33" disabled>
       Prefilled content

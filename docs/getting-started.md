@@ -83,6 +83,17 @@ Scoped assertion overloads use explicit scope and locator arguments:
 - `assert_has(session, scope_locator, locator, opts \\ [])`
 - `refute_has(session, scope_locator, locator, opts \\ [])`
 
+State assertions are available as direct helpers:
+
+```elixir
+session()
+|> visit("/phoenix_test/page/index")
+|> assert_checked(~l"Mail Choice"l)
+|> refute_checked(~l"Email Choice"l)
+|> assert_disabled(~l"Disabled textaread"l)
+|> assert_readonly(~l"Readonly notes"l)
+```
+
 ## Locator Basics (Phoenix/LiveView First)
 
 A locator is how Cerberus finds elements for actions and assertions.

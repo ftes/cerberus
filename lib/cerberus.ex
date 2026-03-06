@@ -973,6 +973,126 @@ defmodule Cerberus do
   end
 
   @doc """
+  Asserts that at least one element matched by `locator` is checked.
+
+  ## Options
+
+  #{@assert_options_doc}
+  """
+  @spec assert_checked(arg, Locator.t()) :: arg when arg: var
+  def assert_checked(session, locator), do: assert_checked(session, locator, [])
+
+  @spec assert_checked(arg, Locator.t(), Options.assert_opts()) :: arg when arg: var
+  def assert_checked(session, locator, opts) when is_list(opts) do
+    Assertions.assert_checked(session, locator, opts)
+  end
+
+  @doc """
+  Refutes that any element matched by `locator` is checked.
+
+  ## Options
+
+  #{@assert_options_doc}
+  """
+  @spec refute_checked(arg, Locator.t()) :: arg when arg: var
+  def refute_checked(session, locator), do: refute_checked(session, locator, [])
+
+  @spec refute_checked(arg, Locator.t(), Options.assert_opts()) :: arg when arg: var
+  def refute_checked(session, locator, opts) when is_list(opts) do
+    Assertions.refute_checked(session, locator, opts)
+  end
+
+  @doc """
+  Asserts that at least one element matched by `locator` is disabled.
+
+  ## Options
+
+  #{@assert_options_doc}
+  """
+  @spec assert_disabled(arg, Locator.t()) :: arg when arg: var
+  def assert_disabled(session, locator), do: assert_disabled(session, locator, [])
+
+  @spec assert_disabled(arg, Locator.t(), Options.assert_opts()) :: arg when arg: var
+  def assert_disabled(session, locator, opts) when is_list(opts) do
+    Assertions.assert_disabled(session, locator, opts)
+  end
+
+  @doc """
+  Refutes that any element matched by `locator` is disabled.
+
+  ## Options
+
+  #{@assert_options_doc}
+  """
+  @spec refute_disabled(arg, Locator.t()) :: arg when arg: var
+  def refute_disabled(session, locator), do: refute_disabled(session, locator, [])
+
+  @spec refute_disabled(arg, Locator.t(), Options.assert_opts()) :: arg when arg: var
+  def refute_disabled(session, locator, opts) when is_list(opts) do
+    Assertions.refute_disabled(session, locator, opts)
+  end
+
+  @doc """
+  Asserts that at least one element matched by `locator` is selected.
+
+  ## Options
+
+  #{@assert_options_doc}
+  """
+  @spec assert_selected(arg, Locator.t()) :: arg when arg: var
+  def assert_selected(session, locator), do: assert_selected(session, locator, [])
+
+  @spec assert_selected(arg, Locator.t(), Options.assert_opts()) :: arg when arg: var
+  def assert_selected(session, locator, opts) when is_list(opts) do
+    Assertions.assert_selected(session, locator, opts)
+  end
+
+  @doc """
+  Refutes that any element matched by `locator` is selected.
+
+  ## Options
+
+  #{@assert_options_doc}
+  """
+  @spec refute_selected(arg, Locator.t()) :: arg when arg: var
+  def refute_selected(session, locator), do: refute_selected(session, locator, [])
+
+  @spec refute_selected(arg, Locator.t(), Options.assert_opts()) :: arg when arg: var
+  def refute_selected(session, locator, opts) when is_list(opts) do
+    Assertions.refute_selected(session, locator, opts)
+  end
+
+  @doc """
+  Asserts that at least one element matched by `locator` is readonly.
+
+  ## Options
+
+  #{@assert_options_doc}
+  """
+  @spec assert_readonly(arg, Locator.t()) :: arg when arg: var
+  def assert_readonly(session, locator), do: assert_readonly(session, locator, [])
+
+  @spec assert_readonly(arg, Locator.t(), Options.assert_opts()) :: arg when arg: var
+  def assert_readonly(session, locator, opts) when is_list(opts) do
+    Assertions.assert_readonly(session, locator, opts)
+  end
+
+  @doc """
+  Refutes that any element matched by `locator` is readonly.
+
+  ## Options
+
+  #{@assert_options_doc}
+  """
+  @spec refute_readonly(arg, Locator.t()) :: arg when arg: var
+  def refute_readonly(session, locator), do: refute_readonly(session, locator, [])
+
+  @spec refute_readonly(arg, Locator.t(), Options.assert_opts()) :: arg when arg: var
+  def refute_readonly(session, locator, opts) when is_list(opts) do
+    Assertions.refute_readonly(session, locator, opts)
+  end
+
+  @doc """
   Asserts that the current value of a form field matched by `locator` equals `expected`.
 
   String values use exact matching. Regex values are matched against the current field value.

@@ -1707,7 +1707,11 @@ defmodule Cerberus.Driver.Browser do
     Keyword.has_key?(locator_opts, :has) or
       Keyword.has_key?(locator_opts, :has_not) or
       Keyword.has_key?(locator_opts, :from) or
-      Keyword.has_key?(locator_opts, :visible)
+      Keyword.has_key?(locator_opts, :visible) or
+      Keyword.has_key?(locator_opts, :checked) or
+      Keyword.has_key?(locator_opts, :disabled) or
+      Keyword.has_key?(locator_opts, :selected) or
+      Keyword.has_key?(locator_opts, :readonly)
   end
 
   defp eval_json_transient_read(state, expression, timeout_ms \\ 0)

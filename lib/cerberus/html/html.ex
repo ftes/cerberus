@@ -514,13 +514,36 @@ defmodule Cerberus.Html do
   end
 
   defp scope_target_state(node, root_node, hidden_nodes \\ nil) do
+    state_node = state_source_node(root_node, node)
+
     %{
-      checked: checked?(node),
-      disabled: disabled?(node),
-      readonly: readonly?(node),
-      selected: selected?(node, input_type(node)),
+      checked: checked?(state_node),
+      disabled: disabled?(state_node),
+      readonly: readonly?(state_node),
+      selected: selected?(state_node, input_type(state_node)),
       visible: scope_target_visible?(root_node, node, hidden_nodes)
     }
+  end
+
+  defp state_source_node(root_node, node) do
+    if node_tag(node) == "label" do
+      label_state_control_node(root_node, node) || node
+    else
+      node
+    end
+  end
+
+  defp label_state_control_node(root_node, label_node) do
+    fallback = Enum.find(safe_query(label_node, "input,textarea,select,option,button"), &form_control_node?/1)
+
+    case attr_or_nil(label_node, "for") do
+      value when is_binary(value) and value != "" ->
+        selector = ~s([id="#{css_attr_escape(value)}"])
+        Enum.find(safe_query(root_node, selector), &form_control_node?/1) || fallback
+
+      _ ->
+        fallback
+    end
   end
 
   defp locator_without_from(%Locator{} = locator) do
@@ -598,8 +621,6 @@ defmodule Cerberus.Html do
   defp within_locator_match_value(root_node, node, %Locator{kind: :label}) do
     if form_control_node?(node) do
       field_label_for_node(root_node, node)
-    else
-      node_text(node)
     end
   end
 
@@ -660,7 +681,7 @@ defmodule Cerberus.Html do
   defp within_query_selector(%Locator{kind: :text}), do: "*"
   defp within_query_selector(%Locator{kind: :link}), do: "a[href]"
   defp within_query_selector(%Locator{kind: :button}), do: button_selector()
-  defp within_query_selector(%Locator{kind: :label}), do: "label"
+  defp within_query_selector(%Locator{kind: :label}), do: "input,textarea,select"
 
   defp within_query_selector(%Locator{kind: :placeholder}),
     do: "input[placeholder],textarea[placeholder],select[placeholder]"

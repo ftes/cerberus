@@ -14,6 +14,7 @@ defmodule Cerberus.Assertions do
   alias ExUnit.AssertionError
 
   @type select_option_input :: Locator.t() | [Locator.t()]
+  @type state_filter_key :: :checked | :disabled | :selected | :readonly
 
   defguardp is_locator_input(input) when is_struct(input, Locator)
   defguardp is_value_expected(expected) when is_binary(expected) or is_struct(expected, Regex)
@@ -201,78 +202,152 @@ defmodule Cerberus.Assertions do
 
   @spec assert_has(arg, Locator.t(), Driver.assert_opts()) :: arg when arg: var
   def assert_has(session, locator_input, call_opts \\ []) when is_locator_input(locator_input) and is_list(call_opts) do
-    call_has_timeout = Keyword.has_key?(call_opts, :timeout)
-    {locator, call_opts} = normalize_assert_locator(locator_input, call_opts)
-    validated_opts = call_opts |> Options.validate_assert!("assert_has/3") |> prune_nil_match_by_opt()
-    {validated_timeout, driver_opts} = Keyword.pop(validated_opts, :timeout, 0)
-    timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
-    message_opts = Keyword.put(driver_opts, :timeout, timeout)
-
-    if match?(%BrowserSession{}, session) do
-      browser_opts = Keyword.put(driver_opts, :timeout, timeout)
-      run_assertion!(session, :assert_has, locator, locator_input, browser_opts, message_opts)
-    else
-      LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
-        run_assertion!(timed_session, :assert_has, locator, locator_input, driver_opts, message_opts)
-      end)
-    end
+    run_locator_assertion_with_timeout(
+      session,
+      :assert_has,
+      locator_input,
+      call_opts,
+      "assert_has/3",
+      &normalize_assert_locator/2
+    )
   end
 
   @spec refute_has(arg, Locator.t(), Driver.assert_opts()) :: arg when arg: var
   def refute_has(session, locator_input, call_opts \\ []) when is_locator_input(locator_input) and is_list(call_opts) do
-    call_has_timeout = Keyword.has_key?(call_opts, :timeout)
-    {locator, call_opts} = normalize_assert_locator(locator_input, call_opts)
-    validated_opts = call_opts |> Options.validate_assert!("refute_has/3") |> prune_nil_match_by_opt()
-    {validated_timeout, driver_opts} = Keyword.pop(validated_opts, :timeout, 0)
-    timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
-    message_opts = Keyword.put(driver_opts, :timeout, timeout)
+    run_locator_assertion_with_timeout(
+      session,
+      :refute_has,
+      locator_input,
+      call_opts,
+      "refute_has/3",
+      &normalize_assert_locator/2
+    )
+  end
 
-    if match?(%BrowserSession{}, session) do
-      browser_opts = Keyword.put(driver_opts, :timeout, timeout)
-      run_assertion!(session, :refute_has, locator, locator_input, browser_opts, message_opts)
-    else
-      LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
-        run_assertion!(timed_session, :refute_has, locator, locator_input, driver_opts, message_opts)
-      end)
-    end
+  @spec assert_checked(arg, Locator.t(), Driver.assert_opts()) :: arg when arg: var
+  def assert_checked(session, locator_input, call_opts \\ [])
+      when is_locator_input(locator_input) and is_list(call_opts) do
+    run_state_assertion_with_timeout(session, :assert_has, locator_input, call_opts, :checked, "assert_checked/3")
+  end
+
+  @spec refute_checked(arg, Locator.t(), Driver.assert_opts()) :: arg when arg: var
+  def refute_checked(session, locator_input, call_opts \\ [])
+      when is_locator_input(locator_input) and is_list(call_opts) do
+    run_state_assertion_with_timeout(session, :refute_has, locator_input, call_opts, :checked, "refute_checked/3")
+  end
+
+  @spec assert_disabled(arg, Locator.t(), Driver.assert_opts()) :: arg when arg: var
+  def assert_disabled(session, locator_input, call_opts \\ [])
+      when is_locator_input(locator_input) and is_list(call_opts) do
+    run_state_assertion_with_timeout(session, :assert_has, locator_input, call_opts, :disabled, "assert_disabled/3")
+  end
+
+  @spec refute_disabled(arg, Locator.t(), Driver.assert_opts()) :: arg when arg: var
+  def refute_disabled(session, locator_input, call_opts \\ [])
+      when is_locator_input(locator_input) and is_list(call_opts) do
+    run_state_assertion_with_timeout(session, :refute_has, locator_input, call_opts, :disabled, "refute_disabled/3")
+  end
+
+  @spec assert_selected(arg, Locator.t(), Driver.assert_opts()) :: arg when arg: var
+  def assert_selected(session, locator_input, call_opts \\ [])
+      when is_locator_input(locator_input) and is_list(call_opts) do
+    run_state_assertion_with_timeout(session, :assert_has, locator_input, call_opts, :selected, "assert_selected/3")
+  end
+
+  @spec refute_selected(arg, Locator.t(), Driver.assert_opts()) :: arg when arg: var
+  def refute_selected(session, locator_input, call_opts \\ [])
+      when is_locator_input(locator_input) and is_list(call_opts) do
+    run_state_assertion_with_timeout(session, :refute_has, locator_input, call_opts, :selected, "refute_selected/3")
+  end
+
+  @spec assert_readonly(arg, Locator.t(), Driver.assert_opts()) :: arg when arg: var
+  def assert_readonly(session, locator_input, call_opts \\ [])
+      when is_locator_input(locator_input) and is_list(call_opts) do
+    run_state_assertion_with_timeout(session, :assert_has, locator_input, call_opts, :readonly, "assert_readonly/3")
+  end
+
+  @spec refute_readonly(arg, Locator.t(), Driver.assert_opts()) :: arg when arg: var
+  def refute_readonly(session, locator_input, call_opts \\ [])
+      when is_locator_input(locator_input) and is_list(call_opts) do
+    run_state_assertion_with_timeout(session, :refute_has, locator_input, call_opts, :readonly, "refute_readonly/3")
   end
 
   @spec assert_value(arg, Locator.t(), String.t() | Regex.t(), Driver.assert_value_opts()) :: arg when arg: var
   def assert_value(session, locator_input, expected, call_opts \\ [])
       when is_locator_input(locator_input) and is_value_expected(expected) and is_list(call_opts) do
-    call_has_timeout = Keyword.has_key?(call_opts, :timeout)
-    {locator, call_opts} = normalize_locator_and_opts(locator_input, call_opts)
-    validated_opts = Options.validate_assert_value!(call_opts, "assert_value/4")
-    {validated_timeout, driver_opts} = Keyword.pop(validated_opts, :timeout, 0)
-    timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
-    message_opts = Keyword.put(driver_opts, :timeout, timeout)
-
-    if match?(%BrowserSession{}, session) do
-      browser_opts = Keyword.put(driver_opts, :timeout, timeout)
-      run_value_assertion!(session, :assert_value, locator, expected, locator_input, browser_opts, message_opts)
-    else
-      LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
-        run_value_assertion!(timed_session, :assert_value, locator, expected, locator_input, driver_opts, message_opts)
-      end)
-    end
+    run_value_assertion_with_timeout(session, :assert_value, locator_input, expected, call_opts, "assert_value/4")
   end
 
   @spec refute_value(arg, Locator.t(), String.t() | Regex.t(), Driver.assert_value_opts()) :: arg when arg: var
   def refute_value(session, locator_input, expected, call_opts \\ [])
       when is_locator_input(locator_input) and is_value_expected(expected) and is_list(call_opts) do
+    run_value_assertion_with_timeout(session, :refute_value, locator_input, expected, call_opts, "refute_value/4")
+  end
+
+  @spec run_locator_assertion_with_timeout(
+          Session.t(),
+          :assert_has | :refute_has,
+          Locator.t(),
+          keyword(),
+          String.t(),
+          (Locator.t(), keyword() -> {Locator.t(), keyword()})
+        ) :: Session.t()
+  defp run_locator_assertion_with_timeout(session, op, locator_input, call_opts, op_name, normalize_fun)
+       when op in [:assert_has, :refute_has] and is_function(normalize_fun, 2) and is_list(call_opts) do
     call_has_timeout = Keyword.has_key?(call_opts, :timeout)
-    {locator, call_opts} = normalize_locator_and_opts(locator_input, call_opts)
-    validated_opts = Options.validate_assert_value!(call_opts, "refute_value/4")
+    {locator, call_opts} = normalize_fun.(locator_input, call_opts)
+    validated_opts = call_opts |> Options.validate_assert!(op_name) |> prune_nil_match_by_opt()
     {validated_timeout, driver_opts} = Keyword.pop(validated_opts, :timeout, 0)
     timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
     message_opts = Keyword.put(driver_opts, :timeout, timeout)
 
     if match?(%BrowserSession{}, session) do
       browser_opts = Keyword.put(driver_opts, :timeout, timeout)
-      run_value_assertion!(session, :refute_value, locator, expected, locator_input, browser_opts, message_opts)
+      run_assertion!(session, op, locator, locator_input, browser_opts, message_opts)
     else
       LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
-        run_value_assertion!(timed_session, :refute_value, locator, expected, locator_input, driver_opts, message_opts)
+        run_assertion!(timed_session, op, locator, locator_input, driver_opts, message_opts)
+      end)
+    end
+  end
+
+  @spec run_state_assertion_with_timeout(
+          Session.t(),
+          :assert_has | :refute_has,
+          Locator.t(),
+          keyword(),
+          state_filter_key(),
+          String.t()
+        ) :: Session.t()
+  defp run_state_assertion_with_timeout(session, op, locator_input, call_opts, state_key, op_name)
+       when op in [:assert_has, :refute_has] and state_key in [:checked, :disabled, :selected, :readonly] do
+    normalize_fun = fn input, opts -> normalize_state_assert_locator(input, opts, state_key) end
+    run_locator_assertion_with_timeout(session, op, locator_input, call_opts, op_name, normalize_fun)
+  end
+
+  @spec run_value_assertion_with_timeout(
+          Session.t(),
+          :assert_value | :refute_value,
+          Locator.t(),
+          String.t() | Regex.t(),
+          keyword(),
+          String.t()
+        ) :: Session.t()
+  defp run_value_assertion_with_timeout(session, op, locator_input, expected, call_opts, op_name)
+       when op in [:assert_value, :refute_value] and is_value_expected(expected) and is_list(call_opts) do
+    call_has_timeout = Keyword.has_key?(call_opts, :timeout)
+    {locator, call_opts} = normalize_locator_and_opts(locator_input, call_opts)
+    validated_opts = Options.validate_assert_value!(call_opts, op_name)
+    {validated_timeout, driver_opts} = Keyword.pop(validated_opts, :timeout, 0)
+    timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
+    message_opts = Keyword.put(driver_opts, :timeout, timeout)
+
+    if match?(%BrowserSession{}, session) do
+      browser_opts = Keyword.put(driver_opts, :timeout, timeout)
+      run_value_assertion!(session, op, locator, expected, locator_input, browser_opts, message_opts)
+    else
+      LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
+        run_value_assertion!(timed_session, op, locator, expected, locator_input, driver_opts, message_opts)
       end)
     end
   end
@@ -586,7 +661,16 @@ defmodule Cerberus.Assertions do
     end
   end
 
+  @spec normalize_state_assert_locator(Locator.t(), keyword(), state_filter_key()) :: {Locator.t(), keyword()}
+  defp normalize_state_assert_locator(locator_input, opts, state_key)
+       when state_key in [:checked, :disabled, :selected, :readonly] do
+    {locator, opts} = normalize_locator_and_opts(locator_input, opts)
+    state_locator = %{locator | opts: Keyword.put(locator.opts, state_key, true)}
+    {state_locator, opts}
+  end
+
   defp normalize_assert_locator_simple_kind(%Locator{kind: :text} = locator, opts), do: {locator, opts}
+  defp normalize_assert_locator_simple_kind(%Locator{kind: :label} = locator, opts), do: {locator, opts}
 
   defp normalize_assert_locator_simple_kind(%Locator{kind: :role, value: value} = locator, opts) do
     role_match_by = Locator.resolved_kind(locator)
@@ -595,7 +679,7 @@ defmodule Cerberus.Assertions do
   end
 
   defp normalize_assert_locator_simple_kind(%Locator{kind: kind, value: value} = locator, opts)
-       when kind in [:label, :placeholder, :title, :alt, :aria_label] do
+       when kind in [:placeholder, :title, :alt, :aria_label] do
     {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, kind)}, opts}
   end
 
@@ -610,7 +694,12 @@ defmodule Cerberus.Assertions do
   defp locator_assertion_requires_locator_engine?(%Locator{opts: locator_opts}) do
     Keyword.has_key?(locator_opts, :has) or
       Keyword.has_key?(locator_opts, :has_not) or
-      Keyword.has_key?(locator_opts, :from)
+      Keyword.has_key?(locator_opts, :from) or
+      Keyword.has_key?(locator_opts, :visible) or
+      Keyword.has_key?(locator_opts, :checked) or
+      Keyword.has_key?(locator_opts, :disabled) or
+      Keyword.has_key?(locator_opts, :selected) or
+      Keyword.has_key?(locator_opts, :readonly)
   end
 
   defp prune_nil_match_by_opt(opts) do

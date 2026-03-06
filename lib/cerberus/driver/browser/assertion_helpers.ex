@@ -716,7 +716,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         case "button":
           return helper.buttonSelector;
         case "label":
-          return "label";
+          return "input,textarea,select";
         case "placeholder":
           return "input[placeholder],textarea[placeholder],select[placeholder]";
         case "title":
@@ -738,19 +738,40 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       }
     };
 
+    helper.stateElementForLocator = (element) => {
+      if (!(element instanceof Element)) return element;
+
+      const tag = (element.tagName || "").toLowerCase();
+      if (tag !== "label") return element;
+
+      if (element.control instanceof Element) return element.control;
+
+      const forId = element.getAttribute("for");
+      if (typeof forId === "string" && forId.trim() !== "") {
+        const byId = element.ownerDocument && element.ownerDocument.getElementById(forId);
+        if (byId instanceof Element) return byId;
+      }
+
+      const nested = element.querySelector("input,textarea,select,option,button");
+      if (nested instanceof Element) return nested;
+
+      return element;
+    };
+
     helper.matchesLocatorStateFilters = (element, opts) => {
       if (!opts || typeof opts !== "object") return true;
 
-      const tag = (element.tagName || "").toLowerCase();
-      const checked = element.checked === true;
+      const stateElement = helper.stateElementForLocator(element);
+      const tag = (stateElement.tagName || "").toLowerCase();
+      const checked = stateElement.checked === true;
       const selected =
         tag === "option"
-          ? element.selected === true
+          ? stateElement.selected === true
           : tag === "select"
-            ? Array.from(element.options || []).some((option) => option.selected === true)
+            ? Array.from(stateElement.options || []).some((option) => option.selected === true)
             : checked;
-      const disabled = element.disabled === true;
-      const readonly = element.readOnly === true || element.hasAttribute("readonly");
+      const disabled = stateElement.disabled === true;
+      const readonly = stateElement.readOnly === true || stateElement.hasAttribute("readonly");
       const visible = !helper.isHidden(element);
 
       if (typeof opts.checked === "boolean" && checked !== opts.checked) return false;
@@ -776,7 +797,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           if (!helper.isButtonLikeElement(element)) return null;
           return helper.buttonText(element, hidden);
         case "label":
-          if (tag === "label") return hidden ? element.textContent : element.innerText || element.textContent;
           if (tag === "input" || tag === "textarea" || tag === "select") {
             return helper.labelForControl(element, hidden, context);
           }

@@ -31,6 +31,12 @@
 | Bypass browser actionability checks | `click(session, ~l"button:Hidden Action"r, force: true)` |
 | Assert text present | `assert_has(session, ~l"Articles"e)` |
 | Assert text absent | `refute_has(session, ~l"Error"e)` |
+| Assert checked state | `assert_checked(session, ~l"Mail Choice"l)` |
+| Refute checked state | `refute_checked(session, ~l"Email Choice"l)` |
+| Assert disabled state | `assert_disabled(session, ~l"Disabled textaread"l)` |
+| Refute disabled state | `refute_disabled(session, ~l"Notes"l)` |
+| Assert readonly state | `assert_readonly(session, ~l"Readonly notes"l)` |
+| Refute readonly state | `refute_readonly(session, ~l"Notes"l)` |
 | Assert scoped text | `assert_has(session, ~l"#secondary-panel"c, ~l"Status: secondary"e)` |
 | Refute scoped text | `refute_has(session, ~l"#secondary-panel"c, ~l"Status: primary"e)` |
 | Assert path/query | `assert_path(session, "/search/results", query: %{q: "Aragorn"}, timeout: 500)` |
