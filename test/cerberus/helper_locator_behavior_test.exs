@@ -3,14 +3,13 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
 
   import Cerberus
 
-  @shared_browser_session_boot_timeout_ms 30_000
-  @shared_browser_session_stop_timeout_ms 5_000
+  alias Cerberus.TestSupport.SharedBrowserSession
 
   setup_all do
-    {owner_pid, browser_session} = start_shared_browser_session!()
+    {owner_pid, browser_session} = SharedBrowserSession.start!()
 
     on_exit(fn ->
-      stop_shared_browser_session(owner_pid)
+      SharedBrowserSession.stop(owner_pid)
     end)
 
     {:ok, shared_browser_session: browser_session}
@@ -300,54 +299,5 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
     end
   end
 
-  defp driver_session(:phoenix, _context), do: session(:phoenix)
-  defp driver_session(:browser, context), do: context.shared_browser_session
-
-  defp start_shared_browser_session! do
-    parent = self()
-
-    owner_pid =
-      spawn_link(fn ->
-        try do
-          browser_session = session(:browser)
-          send(parent, {:shared_browser_session_ready, self(), browser_session})
-
-          receive do
-            :stop -> :ok
-          end
-        rescue
-          error ->
-            send(parent, {:shared_browser_session_failed, self(), error, __STACKTRACE__})
-        end
-      end)
-
-    receive do
-      {:shared_browser_session_ready, ^owner_pid, browser_session} ->
-        {owner_pid, browser_session}
-
-      {:shared_browser_session_failed, ^owner_pid, error, stacktrace} ->
-        reraise(error, stacktrace)
-    after
-      @shared_browser_session_boot_timeout_ms ->
-        Process.exit(owner_pid, :kill)
-
-        raise "timed out starting shared browser session after #{@shared_browser_session_boot_timeout_ms}ms"
-    end
-  end
-
-  defp stop_shared_browser_session(owner_pid) when is_pid(owner_pid) do
-    if Process.alive?(owner_pid) do
-      ref = Process.monitor(owner_pid)
-      send(owner_pid, :stop)
-
-      receive do
-        {:DOWN, ^ref, :process, ^owner_pid, _reason} -> :ok
-      after
-        @shared_browser_session_stop_timeout_ms ->
-          Process.exit(owner_pid, :kill)
-      end
-    end
-
-    :ok
-  end
+  defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)
 end

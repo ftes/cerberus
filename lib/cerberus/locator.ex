@@ -265,14 +265,11 @@ defmodule Cerberus.Locator do
   @spec sigil(String.t(), charlist()) :: t()
   def sigil(value, modifiers) when is_binary(value) and is_list(modifiers) do
     sigil_opts = parse_sigil_modifiers!(value, modifiers)
-    ensure_text_sigil_mode!(sigil_opts, value, modifiers)
     base_locator = sigil_base_locator!(sigil_opts, value, modifiers)
     opts = Keyword.merge(base_locator.opts, sigil_locator_opts(base_locator.kind, sigil_opts.exact))
 
     %{base_locator | opts: opts}
   end
-
-  defp ensure_text_sigil_mode!(_sigil_opts, _value, _modifiers), do: :ok
 
   defp sigil_base_locator!(%{kind: :text}, value, _modifiers), do: %__MODULE__{kind: :text, value: value}
 
@@ -324,10 +321,6 @@ defmodule Cerberus.Locator do
     end
   end
 
-  defp key_value(locator_map, key) when is_atom(key) do
-    Map.get(locator_map, key, Map.get(locator_map, Atom.to_string(key), :__missing__))
-  end
-
   defp ensure_text_value!(name, value, original) do
     if is_binary(value) or is_struct(value, Regex) do
       :ok
@@ -348,46 +341,46 @@ defmodule Cerberus.Locator do
     end
   end
 
-  defp locator_opts(locator_map, original) do
+  defp locator_opts(opts, original) when is_list(opts) do
     []
-    |> maybe_put_exact(locator_map, original)
-    |> maybe_put_has(locator_map, original)
-    |> maybe_put_has_not(locator_map, original)
-    |> maybe_put_from(locator_map, original)
+    |> maybe_put_exact(opts, original)
+    |> maybe_put_has(opts, original)
+    |> maybe_put_has_not(opts, original)
+    |> maybe_put_from(opts, original)
   end
 
-  defp maybe_put_exact(opts, locator_map, original) do
-    case key_value(locator_map, :exact) do
-      :__missing__ ->
-        opts
+  defp maybe_put_exact(normalized_opts, source_opts, original) do
+    case Keyword.fetch(source_opts, :exact) do
+      :error ->
+        normalized_opts
 
-      exact when is_boolean(exact) ->
-        Keyword.put(opts, :exact, exact)
+      {:ok, exact} when is_boolean(exact) ->
+        Keyword.put(normalized_opts, :exact, exact)
 
-      _other ->
+      {:ok, _other} ->
         raise InvalidLocatorError,
           locator: original,
           message: "invalid locator #{inspect(original)}; :exact must be a boolean"
     end
   end
 
-  defp maybe_put_has(opts, locator_map, original) do
-    case key_value(locator_map, :has) do
-      :__missing__ ->
-        opts
+  defp maybe_put_has(normalized_opts, source_opts, original) do
+    case Keyword.fetch(source_opts, :has) do
+      :error ->
+        normalized_opts
 
-      has_locator_input ->
-        Keyword.put(opts, :has, normalize_has_locator!(has_locator_input, original))
+      {:ok, has_locator_input} ->
+        Keyword.put(normalized_opts, :has, normalize_has_locator!(has_locator_input, original))
     end
   end
 
-  defp maybe_put_has_not(opts, locator_map, original) do
-    case key_value(locator_map, :has_not) do
-      :__missing__ ->
-        opts
+  defp maybe_put_has_not(normalized_opts, source_opts, original) do
+    case Keyword.fetch(source_opts, :has_not) do
+      :error ->
+        normalized_opts
 
-      has_not_locator_input ->
-        Keyword.put(opts, :has_not, normalize_has_locator!(has_not_locator_input, original))
+      {:ok, has_not_locator_input} ->
+        Keyword.put(normalized_opts, :has_not, normalize_has_locator!(has_not_locator_input, original))
     end
   end
 
@@ -397,13 +390,13 @@ defmodule Cerberus.Locator do
     normalize_nested_testid_exact(has_locator)
   end
 
-  defp maybe_put_from(opts, locator_map, original) do
-    case key_value(locator_map, :from) do
-      :__missing__ ->
-        opts
+  defp maybe_put_from(normalized_opts, source_opts, original) do
+    case Keyword.fetch(source_opts, :from) do
+      :error ->
+        normalized_opts
 
-      from_locator_input ->
-        Keyword.put(opts, :from, normalize_from_locator!(from_locator_input, original))
+      {:ok, from_locator_input} ->
+        Keyword.put(normalized_opts, :from, normalize_from_locator!(from_locator_input, original))
     end
   end
 
@@ -443,15 +436,10 @@ defmodule Cerberus.Locator do
 
   defp flatten_composite_members(_kind, locator), do: [locator]
 
-  defp ensure_only_keys!(locator_map, original, allowed_atom_keys) do
-    allowed =
-      allowed_atom_keys
-      |> Enum.flat_map(fn key -> [key, Atom.to_string(key)] end)
-      |> MapSet.new()
-
-    case locator_map |> Map.keys() |> Enum.reject(&MapSet.member?(allowed, &1)) do
+  defp ensure_only_keys!(opts, original, allowed_keys) when is_list(opts) do
+    case opts |> Keyword.keys() |> Enum.uniq() |> Kernel.--(allowed_keys) do
       [] ->
-        :ok
+        opts
 
       extra ->
         raise InvalidLocatorError,
@@ -737,9 +725,14 @@ defmodule Cerberus.Locator do
   end
 
   defp normalize_leaf_constructor_opts(opts, original) when is_list(opts) do
-    opts_map = Map.new(opts)
-    ensure_only_keys!(opts_map, original, [:exact, :from])
-    locator_opts(opts_map, original)
+    if Keyword.keyword?(opts) do
+      ensure_only_keys!(opts, original, [:exact, :from])
+      locator_opts(opts, original)
+    else
+      raise InvalidLocatorError,
+        locator: original,
+        message: "invalid locator #{inspect(original)}; :opts must be a keyword list"
+    end
   end
 
   defp normalize_leaf_constructor_opts(_opts, original) do
@@ -749,9 +742,14 @@ defmodule Cerberus.Locator do
   end
 
   defp normalize_leaf_opts(opts, original) when is_list(opts) do
-    opts_map = Map.new(opts)
-    ensure_only_keys!(opts_map, original, [:exact, :has, :has_not, :from])
-    locator_opts(opts_map, original)
+    if Keyword.keyword?(opts) do
+      ensure_only_keys!(opts, original, [:exact, :has, :has_not, :from])
+      locator_opts(opts, original)
+    else
+      raise InvalidLocatorError,
+        locator: original,
+        message: "invalid locator #{inspect(original)}; :opts must be a keyword list"
+    end
   end
 
   defp normalize_leaf_opts(_opts, original) do
@@ -761,22 +759,27 @@ defmodule Cerberus.Locator do
   end
 
   defp normalize_role_opts(opts, original) when is_list(opts) do
-    opts_map = Map.new(opts)
-    ensure_only_keys!(opts_map, original, [:role, :exact, :has, :has_not, :from])
+    if Keyword.keyword?(opts) do
+      ensure_only_keys!(opts, original, [:role, :exact, :has, :has_not, :from])
 
-    role_name =
-      case key_value(opts_map, :role) do
-        :__missing__ ->
-          raise InvalidLocatorError,
-            locator: original,
-            message: "invalid locator #{inspect(original)}; :role locator is missing :role metadata"
+      role_name =
+        case Keyword.fetch(opts, :role) do
+          :error ->
+            raise InvalidLocatorError,
+              locator: original,
+              message: "invalid locator #{inspect(original)}; :role locator is missing :role metadata"
 
-        role ->
-          normalize_role_name!(role, original)
-      end
+          {:ok, role} ->
+            normalize_role_name!(role, original)
+        end
 
-    resolve_role_kind!(role_name, original)
-    opts_map |> locator_opts(original) |> Keyword.put(:role, role_name)
+      resolve_role_kind!(role_name, original)
+      opts |> locator_opts(original) |> Keyword.put(:role, role_name)
+    else
+      raise InvalidLocatorError,
+        locator: original,
+        message: "invalid locator #{inspect(original)}; :opts must be a keyword list"
+    end
   end
 
   defp normalize_role_opts(_opts, original) do
@@ -786,13 +789,18 @@ defmodule Cerberus.Locator do
   end
 
   defp normalize_composite_opts(opts, original) when is_list(opts) do
-    opts_map = Map.new(opts)
-    ensure_only_keys!(opts_map, original, [:has, :has_not, :from])
+    if Keyword.keyword?(opts) do
+      ensure_only_keys!(opts, original, [:has, :has_not, :from])
 
-    []
-    |> maybe_put_has(opts_map, original)
-    |> maybe_put_has_not(opts_map, original)
-    |> maybe_put_from(opts_map, original)
+      []
+      |> maybe_put_has(opts, original)
+      |> maybe_put_has_not(opts, original)
+      |> maybe_put_from(opts, original)
+    else
+      raise InvalidLocatorError,
+        locator: original,
+        message: "invalid locator #{inspect(original)}; composed locator opts must be a keyword list"
+    end
   end
 
   defp normalize_composite_opts(_opts, original) do

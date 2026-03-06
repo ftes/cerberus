@@ -728,9 +728,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         case "testid":
           return "[data-testid]";
         case "scope": {
-          const members = Array.isArray(locator.members)
-            ? locator.members
-            : (Array.isArray(locator.value) ? locator.value : []);
+          const members = Array.isArray(locator.members) ? locator.members : [];
 
           if (members.length === 0) return "*";
           return helper.locatorQuerySelector(members[members.length - 1]);
@@ -811,8 +809,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
       if (opts.has && !helper.elementHasLocator(element, opts.has, context)) return false;
 
-      const hasNot = opts.has_not || opts.hasNot;
-      if (hasNot && helper.elementHasLocator(element, hasNot, context)) return false;
+      if (opts.has_not && helper.elementHasLocator(element, opts.has_not, context)) return false;
 
       return true;
     };
@@ -824,26 +821,20 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       if (!kind) return false;
 
       if (kind === "not") {
-        const members = Array.isArray(locator.members)
-          ? locator.members
-          : (Array.isArray(locator.value) ? locator.value : []);
+        const members = Array.isArray(locator.members) ? locator.members : [];
         if (members.length !== 1) return false;
 
         return !helper.matchesLocator(element, members[0], hidden, context) && helper.matchesLocatorCommonOpts(element, locator, context);
       }
 
       if (kind === "scope") {
-        const members = Array.isArray(locator.members)
-          ? locator.members
-          : (Array.isArray(locator.value) ? locator.value : []);
+        const members = Array.isArray(locator.members) ? locator.members : [];
 
         return helper.scopeMembersMatch(element, hidden, members, context) && helper.matchesLocatorCommonOpts(element, locator, context);
       }
 
       if (kind === "and" || kind === "or") {
-        const members = Array.isArray(locator.members)
-          ? locator.members
-          : (Array.isArray(locator.value) ? locator.value : []);
+        const members = Array.isArray(locator.members) ? locator.members : [];
         if (members.length === 0) return false;
 
         const memberMatch =
