@@ -28,4 +28,18 @@ defmodule Cerberus.BrowserUserAgentForSandboxTest do
     assert metadata.owner == self()
     assert metadata.repo == repo
   end
+
+  test "user_agent_for_sandbox/2 reuses current process when repo is already shared" do
+    repo = Repo
+    owner = EctoSandbox.start_owner!(repo, shared: true)
+
+    on_exit(fn ->
+      EctoSandbox.stop_owner(owner)
+    end)
+
+    metadata = repo |> user_agent_for_sandbox(%{async: false}) |> PhoenixSandbox.decode_metadata()
+
+    assert metadata.owner == self()
+    assert metadata.repo == repo
+  end
 end
