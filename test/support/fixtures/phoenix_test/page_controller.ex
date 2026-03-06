@@ -1,7 +1,7 @@
 defmodule Cerberus.Fixtures.PhoenixTest.PageController do
   use Phoenix.Controller, formats: [html: "View"]
 
-  plug(:put_layout, {Cerberus.Fixtures.PhoenixTest.LayoutView, :app})
+  plug(:put_layout, html: {Cerberus.Fixtures.PhoenixTest.LayoutView, :app})
 
   def show(conn, %{"redirect_to" => path}) do
     conn
