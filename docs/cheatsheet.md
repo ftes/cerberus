@@ -138,6 +138,9 @@ Use `Cerberus.Browser` only with `session(:browser)`.
 | Evaluate JS (assert result) | `Browser.evaluate_js(session, "(() => 42)()", fn value -> assert value == 42 end)` |
 | Cookie lookup | `Browser.cookie(session, "_my_cookie")` |
 | Cookie callback | `Browser.cookie(session, "_my_cookie", fn cookie -> assert cookie end)` |
+| Bulk cookie add | `Browser.add_cookies(session, [[name: "feature", value: "on"]])` |
+| Clear cookies | `Browser.clear_cookies(session)` |
+| Seed Phoenix session | `Browser.add_session_cookie(session, [value: %{user_id: user.id}], MyAppWeb.Endpoint.session_options())` |
 
 > #### Warning
 >

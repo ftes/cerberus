@@ -9,6 +9,8 @@ defmodule Cerberus.Fixtures.Endpoint do
     same_site: "Lax"
   ]
 
+  def session_options, do: @session_options
+
   socket("/live", Phoenix.LiveView.Socket,
     websocket: [connect_info: [:user_agent, session: @session_options]],
     longpoll: [connect_info: [:user_agent, session: @session_options]]

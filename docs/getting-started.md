@@ -268,6 +268,14 @@ png =
 cookie(session, "_cerberus_fixture_key", fn entry ->
   assert entry
 end)
+
+session
+|> add_session_cookie(
+  [value: %{session_user: "alice"}],
+  Cerberus.Fixtures.Endpoint.session_options()
+)
+|> visit("/session/user")
+|> assert_has(~l"Session user: alice"e)
 ```
 
 ## Step 8: Per-Test Browser Overrides

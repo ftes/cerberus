@@ -70,6 +70,7 @@ defmodule Cerberus.Driver.Browser do
           tab_id: String.t(),
           browser_name: :chrome | :firefox,
           bidi_opts: keyword(),
+          endpoint: module() | nil,
           base_url: String.t(),
           assert_timeout_ms: non_neg_integer(),
           ready_timeout_ms: pos_integer(),
@@ -85,6 +86,7 @@ defmodule Cerberus.Driver.Browser do
             tab_id: nil,
             browser_name: :chrome,
             bidi_opts: [],
+            endpoint: nil,
             base_url: nil,
             assert_timeout_ms: 0,
             ready_timeout_ms: @default_ready_timeout_ms,
@@ -129,6 +131,7 @@ defmodule Cerberus.Driver.Browser do
       tab_id: tab_id,
       browser_name: browser_name,
       bidi_opts: session_bidi_opts,
+      endpoint: Keyword.get(opts, :endpoint) || Application.get_env(:cerberus, :endpoint),
       base_url: base_url,
       assert_timeout_ms:
         SessionConfig.assert_timeout_from_opts!(opts, SessionConfig.live_browser_assert_timeout_default_ms()),

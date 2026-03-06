@@ -317,6 +317,20 @@ defmodule Cerberus.Options do
 
   @type cookie_same_site_opt :: :strict | :lax | :none | String.t()
 
+  @type browser_cookie_arg_key ::
+          :name | :value | :url | :domain | :path | :http_only | :secure | :same_site | :expires
+  @type browser_cookie_arg_value ::
+          String.t() | boolean() | cookie_same_site_opt() | integer() | float()
+  @type browser_cookie_arg :: [{browser_cookie_arg_key(), browser_cookie_arg_value()}]
+  @type browser_clear_cookies_opts :: [
+          timeout: non_neg_integer()
+        ]
+  @type session_cookie_value :: %{optional(atom() | String.t()) => term()}
+  @type browser_session_cookie_arg_key :: :value | :url | :domain | :path | :http_only | :secure | :same_site
+  @type browser_session_cookie_arg_value ::
+          session_cookie_value() | String.t() | boolean() | cookie_same_site_opt()
+  @type browser_session_cookie_arg :: [{browser_session_cookie_arg_key(), browser_session_cookie_arg_value()}]
+
   @type browser_add_cookie_opts :: [
           domain: String.t(),
           path: String.t(),
@@ -575,6 +589,10 @@ defmodule Cerberus.Options do
     same_site: [type: :any, default: :lax, doc: "Cookie sameSite policy (:strict, :lax, :none)."]
   ]
 
+  @browser_clear_cookies_opts_schema [
+    timeout: [type: :non_neg_integer, default: 0, doc: "Maximum wait time in milliseconds."]
+  ]
+
   @return_result_opts_schema [
     return_result: [type: :boolean, default: false, doc: "When true, returns the computed value instead of the session."]
   ]
@@ -626,6 +644,9 @@ defmodule Cerberus.Options do
 
   @spec browser_add_cookie_schema() :: keyword()
   def browser_add_cookie_schema, do: @browser_add_cookie_opts_schema
+
+  @spec browser_clear_cookies_schema() :: keyword()
+  def browser_clear_cookies_schema, do: @browser_clear_cookies_opts_schema
 
   @spec return_result_schema() :: keyword()
   def return_result_schema, do: @return_result_opts_schema
@@ -776,6 +797,91 @@ defmodule Cerberus.Options do
     |> validate_optional_string!("Browser.add_cookie/4", :domain)
     |> validate_optional_string!("Browser.add_cookie/4", :path)
     |> validate_cookie_same_site!("Browser.add_cookie/4")
+  end
+
+  @spec validate_browser_cookie_arg!(browser_cookie_arg(), String.t()) :: browser_cookie_arg()
+  def validate_browser_cookie_arg!(cookie, op_name) when is_list(cookie) do
+    cookie
+    |> validate_known!(
+      [
+        name: [type: :any],
+        value: [type: :any],
+        url: [type: :any],
+        domain: [type: :any],
+        path: [type: :any],
+        http_only: [type: :any],
+        secure: [type: :any],
+        same_site: [type: :any],
+        expires: [type: :any]
+      ],
+      op_name
+    )
+    |> validate_required_non_empty_string!(op_name, :name)
+    |> validate_required_non_empty_string!(op_name, :value)
+    |> validate_optional_non_empty_string!(op_name, :url)
+    |> validate_optional_string!(op_name, :domain)
+    |> validate_optional_string!(op_name, :path)
+    |> validate_optional_boolean_opt!(op_name, :http_only)
+    |> validate_optional_boolean_opt!(op_name, :secure)
+    |> validate_optional_cookie_same_site!(op_name)
+    |> validate_optional_cookie_expiry!(op_name)
+  end
+
+  def validate_browser_cookie_arg!(_cookie, op_name) do
+    raise ArgumentError, "#{op_name} expects each cookie to be a keyword list"
+  end
+
+  @spec validate_browser_session_cookie_arg!(browser_session_cookie_arg(), String.t()) ::
+          browser_session_cookie_arg()
+  def validate_browser_session_cookie_arg!(cookie, op_name) when is_list(cookie) do
+    cookie
+    |> validate_known!(
+      [
+        value: [type: :any],
+        url: [type: :any],
+        domain: [type: :any],
+        path: [type: :any],
+        http_only: [type: :any],
+        secure: [type: :any],
+        same_site: [type: :any]
+      ],
+      op_name
+    )
+    |> validate_required_map!(op_name, :value)
+    |> validate_optional_non_empty_string!(op_name, :url)
+    |> validate_optional_string!(op_name, :domain)
+    |> validate_optional_string!(op_name, :path)
+    |> validate_optional_boolean_opt!(op_name, :http_only)
+    |> validate_optional_boolean_opt!(op_name, :secure)
+    |> validate_optional_cookie_same_site!(op_name)
+  end
+
+  def validate_browser_session_cookie_arg!(_cookie, op_name) do
+    raise ArgumentError, "#{op_name} expects cookie args as a keyword list"
+  end
+
+  @spec validate_browser_clear_cookies!(keyword()) :: browser_clear_cookies_opts()
+  def validate_browser_clear_cookies!(opts) do
+    validate!(opts, @browser_clear_cookies_opts_schema, "Browser.clear_cookies/2")
+  end
+
+  @spec validate_plug_session_options!(keyword(), String.t()) :: keyword()
+  def validate_plug_session_options!(session_options, op_name) when is_list(session_options) do
+    session_options
+    |> validate_required_atom!(op_name, :store)
+    |> validate_required_non_empty_string!(op_name, :key)
+    |> validate_required_non_empty_string!(op_name, :signing_salt)
+    |> validate_optional_non_empty_string!(op_name, :encryption_salt)
+    |> validate_optional_string!(op_name, :domain)
+    |> validate_optional_string!(op_name, :path)
+    |> validate_optional_boolean_opt!(op_name, :http_only)
+    |> validate_optional_boolean_opt!(op_name, :secure)
+    |> validate_optional_cookie_same_site!(op_name)
+    |> validate_cookie_store!(op_name)
+  end
+
+  def validate_plug_session_options!(_session_options, op_name) do
+    raise ArgumentError, "#{op_name} expects Plug.Session options as a keyword list"
   end
 
   @spec validate_return_result!(keyword(), String.t()) :: return_result_opts()
@@ -962,12 +1068,31 @@ defmodule Cerberus.Options do
 
   defp validate_cookie_same_site!(opts, op_name) do
     case Keyword.get(opts, :same_site) do
-      same_site when same_site in [:strict, :lax, :none, "strict", "lax", "none"] ->
+      same_site
+      when same_site in [:strict, :lax, :none, "strict", "lax", "none", "Strict", "Lax", "None"] ->
         opts
 
       other ->
         raise ArgumentError,
               "#{op_name} invalid options: :same_site must be one of :strict, :lax, :none, \"strict\", \"lax\", or \"none\" (got #{inspect(other)})"
+    end
+  end
+
+  defp validate_optional_cookie_same_site!(opts, op_name) do
+    if Keyword.has_key?(opts, :same_site), do: validate_cookie_same_site!(opts, op_name), else: opts
+  end
+
+  defp validate_optional_cookie_expiry!(opts, op_name) do
+    case Keyword.get(opts, :expires) do
+      nil ->
+        opts
+
+      value when (is_integer(value) and value >= 0) or (is_float(value) and value >= 0.0) ->
+        opts
+
+      other ->
+        raise ArgumentError,
+              "#{op_name} invalid options: :expires must be a non-negative integer or float (got #{inspect(other)})"
     end
   end
 
@@ -989,6 +1114,63 @@ defmodule Cerberus.Options do
 
       _ ->
         raise ArgumentError, "#{op_name} invalid options: :#{key} must be a boolean or nil"
+    end
+  end
+
+  defp validate_optional_boolean_opt!(opts, op_name, key) do
+    case Keyword.get(opts, key) do
+      nil ->
+        opts
+
+      value when is_boolean(value) ->
+        opts
+
+      _other ->
+        raise ArgumentError, "#{op_name} invalid options: :#{key} must be a boolean or nil"
+    end
+  end
+
+  defp validate_required_non_empty_string!(opts, op_name, key) do
+    case Keyword.get(opts, key) do
+      value when is_binary(value) ->
+        if String.trim(value) == "" do
+          raise ArgumentError, "#{op_name} invalid options: :#{key} must be a non-empty string"
+        else
+          opts
+        end
+
+      _other ->
+        raise ArgumentError, "#{op_name} invalid options: :#{key} must be a non-empty string"
+    end
+  end
+
+  defp validate_required_map!(opts, op_name, key) do
+    case Keyword.get(opts, key) do
+      value when is_map(value) ->
+        opts
+
+      other ->
+        raise ArgumentError, "#{op_name} invalid options: :#{key} must be a map (got #{inspect(other)})"
+    end
+  end
+
+  defp validate_required_atom!(opts, op_name, key) do
+    case Keyword.get(opts, key) do
+      value when is_atom(value) ->
+        opts
+
+      other ->
+        raise ArgumentError, "#{op_name} invalid options: :#{key} must be an atom (got #{inspect(other)})"
+    end
+  end
+
+  defp validate_cookie_store!(opts, op_name) do
+    case Keyword.get(opts, :store) do
+      :cookie ->
+        opts
+
+      other ->
+        raise ArgumentError, "#{op_name} invalid session options: :store must be :cookie (got #{inspect(other)})"
     end
   end
 

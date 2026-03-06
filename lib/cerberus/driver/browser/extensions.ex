@@ -189,38 +189,42 @@ defmodule Cerberus.Driver.Browser.Extensions do
       Enum.find(cookies, & &1.session)
   end
 
+  @spec add_cookies(BrowserSession.t(), [Options.browser_cookie_arg()]) :: BrowserSession.t()
+  def add_cookies(%BrowserSession{} = session, cookies) when is_list(cookies) do
+    Enum.each(cookies, fn cookie_args ->
+      cookie =
+        cookie_args
+        |> build_remote_cookie(session, "add_cookies/2")
+        |> put_expiry(cookie_args)
+
+      set_cookie(session, cookie, "add_cookies")
+    end)
+
+    session
+  end
+
   @spec add_cookie(BrowserSession.t(), String.t(), String.t(), Options.browser_add_cookie_opts()) ::
           BrowserSession.t()
   def add_cookie(%BrowserSession{} = session, name, value, opts \\ [])
       when is_binary(name) and is_binary(value) and is_list(opts) do
-    name = non_empty_text!(name, "add_cookie/4 name")
-    domain = Keyword.get(opts, :domain) || host_from_base_url(session.base_url)
-    path = Keyword.get(opts, :path, "/")
-    http_only = Keyword.get(opts, :http_only, false)
-    secure = Keyword.get(opts, :secure, false)
-    same_site = normalize_same_site(Keyword.get(opts, :same_site, :lax))
+    cookie =
+      [name: name, value: value]
+      |> Keyword.merge(opts)
+      |> build_remote_cookie(session, "add_cookie/4")
 
-    cookie = %{
-      "name" => name,
-      "value" => %{"type" => "string", "value" => value},
-      "domain" => domain,
-      "path" => path,
-      "httpOnly" => http_only,
-      "secure" => secure,
-      "sameSite" => same_site
-    }
+    set_cookie(session, cookie, "add_cookie")
+  end
 
-    params = %{
-      "cookie" => cookie,
-      "partition" => %{"type" => "context", "context" => session.tab_id}
-    }
+  @spec clear_cookies(BrowserSession.t()) :: BrowserSession.t()
+  def clear_cookies(%BrowserSession{} = session) do
+    params = %{"partition" => %{"type" => "context", "context" => session.tab_id}}
 
-    case BiDi.command("storage.setCookie", params, bidi_opts(session)) do
+    case BiDi.command("storage.deleteCookies", params, bidi_opts(session)) do
       {:ok, _} ->
         session
 
       {:error, reason, details} ->
-        raise ArgumentError, "browser add_cookie failed: #{reason} (#{inspect(details)})"
+        raise ArgumentError, "browser clear_cookies failed: #{reason} (#{inspect(details)})"
     end
   end
 
@@ -678,15 +682,84 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  defp normalize_same_site(value) when value in [:lax, "lax", :strict, "strict", :none, "none"] do
-    value
-    |> to_string()
-    |> String.downcase()
+  defp build_remote_cookie(cookie_args, %BrowserSession{} = session, op_name) when is_list(cookie_args) do
+    name = non_empty_text!(Keyword.fetch!(cookie_args, :name), "#{op_name} cookie :name")
+    value = non_empty_text!(Keyword.fetch!(cookie_args, :value), "#{op_name} cookie :value")
+    url = Keyword.get(cookie_args, :url)
+    domain = Keyword.get(cookie_args, :domain) || cookie_domain_from_url(url) || host_from_base_url(session.base_url)
+    path = Keyword.get(cookie_args, :path) || cookie_path_from_url(url) || "/"
+    http_only = Keyword.get(cookie_args, :http_only, false)
+    secure = Keyword.get(cookie_args, :secure, false)
+    same_site = normalize_same_site(Keyword.get(cookie_args, :same_site, :lax))
+
+    %{
+      "name" => name,
+      "value" => %{"type" => "string", "value" => value},
+      "domain" => domain,
+      "path" => path,
+      "httpOnly" => http_only,
+      "secure" => secure,
+      "sameSite" => same_site
+    }
+  end
+
+  defp put_expiry(cookie, cookie_args) when is_map(cookie) and is_list(cookie_args) do
+    case Keyword.get(cookie_args, :expires) do
+      nil -> cookie
+      expires -> Map.put(cookie, "expiry", expires)
+    end
+  end
+
+  defp set_cookie(%BrowserSession{} = session, cookie, op_name) when is_map(cookie) do
+    params = %{
+      "cookie" => cookie,
+      "partition" => %{"type" => "context", "context" => session.tab_id}
+    }
+
+    case BiDi.command("storage.setCookie", params, bidi_opts(session)) do
+      {:ok, _} ->
+        session
+
+      {:error, reason, details} ->
+        raise ArgumentError, "browser #{op_name} failed: #{reason} (#{inspect(details)})"
+    end
+  end
+
+  defp cookie_domain_from_url(url) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{host: host} when is_binary(host) and host != "" -> host
+      _ -> raise ArgumentError, "could not infer cookie domain from url: #{inspect(url)}"
+    end
+  end
+
+  defp cookie_domain_from_url(nil), do: nil
+
+  defp cookie_path_from_url(url) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{path: path} when is_binary(path) and path != "" -> path
+      %URI{} -> "/"
+    end
+  end
+
+  defp cookie_path_from_url(nil), do: nil
+
+  defp normalize_same_site(value) when is_atom(value) or is_binary(value) do
+    normalized =
+      value
+      |> to_string()
+      |> String.downcase()
+
+    if normalized in ["lax", "strict", "none"] do
+      normalized
+    else
+      raise ArgumentError,
+            "add_cookie/4 :same_site must be :lax, :strict, :none (or equivalent strings), got: #{inspect(value)}"
+    end
   end
 
   defp normalize_same_site(value) do
     raise ArgumentError,
-          "add_cookie/4 :same_site must be :lax, :strict, :none (or lowercase strings), got: #{inspect(value)}"
+          "add_cookie/4 :same_site must be :lax, :strict, :none (or equivalent strings), got: #{inspect(value)}"
   end
 
   defp dialog_prompt_params(context_id, "prompt"), do: %{"context" => context_id, "accept" => true, "userText" => ""}

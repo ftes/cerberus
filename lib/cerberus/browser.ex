@@ -31,6 +31,9 @@ defmodule Cerberus.Browser do
   @assert_dialog_args_error "Browser.assert_dialog/3 expects a text locator and options as a keyword list"
   @with_popup_args_error "Browser.with_popup/4 expects trigger callback arity 1, callback arity 2, and options as a keyword list"
   @add_cookie_args_error "Browser.add_cookie/4 expects cookie name and value strings and options as a keyword list"
+  @add_cookies_args_error "Browser.add_cookies/2 expects a list of cookie keyword lists"
+  @clear_cookies_args_error "Browser.clear_cookies/2 expects options as a keyword list"
+  @add_session_cookie_args_error "Browser.add_session_cookie/3 expects cookie args as a keyword list and Plug.Session options as a keyword list"
   @screenshot_options_doc NimbleOptions.docs(Options.screenshot_schema())
   @type_options_doc NimbleOptions.docs(Options.browser_type_schema())
   @press_options_doc NimbleOptions.docs(Options.browser_press_schema())
@@ -38,6 +41,7 @@ defmodule Cerberus.Browser do
   @assert_dialog_options_doc NimbleOptions.docs(Options.browser_assert_dialog_schema())
   @with_popup_options_doc NimbleOptions.docs(Options.browser_with_popup_schema())
   @add_cookie_options_doc NimbleOptions.docs(Options.browser_add_cookie_schema())
+  @clear_cookies_options_doc NimbleOptions.docs(Options.browser_clear_cookies_schema())
   @return_result_options_doc NimbleOptions.docs(Options.return_result_schema())
 
   @doc """
@@ -408,6 +412,68 @@ defmodule Cerberus.Browser do
     )
   end
 
+  @doc """
+  Adds cookies to the active browser context.
+
+  This follows Playwright's bulk cookie shape: each cookie is a keyword list with
+  `:name`, `:value`, and optional `:url` or `:domain`/`:path` fields.
+  When `:url`/`:domain` are omitted, Cerberus falls back to the browser session base URL.
+  """
+  @spec add_cookies(session, [Options.browser_cookie_arg()]) :: session when session: var
+  def add_cookies(session, cookies) when is_list(cookies) do
+    browser_only_list(session, :add_cookies, cookies, @add_cookies_args_error, fn browser_session ->
+      validated_cookies = Enum.map(cookies, &Options.validate_browser_cookie_arg!(&1, "Browser.add_cookies/2"))
+      Extensions.add_cookies(browser_session, validated_cookies)
+    end)
+  end
+
+  def add_cookies(_session, _cookies) do
+    raise ArgumentError, @add_cookies_args_error
+  end
+
+  @doc """
+  Removes all cookies from the active browser context.
+
+  ## Options
+
+  #{@clear_cookies_options_doc}
+  """
+  @spec clear_cookies(session, Options.browser_clear_cookies_opts()) :: session when session: var
+  def clear_cookies(session, opts \\ [])
+
+  def clear_cookies(session, opts) do
+    browser_only(
+      session,
+      :clear_cookies,
+      opts,
+      @clear_cookies_args_error,
+      &Options.validate_browser_clear_cookies!/1,
+      fn browser_session, _validated_opts ->
+        {:ok, Extensions.clear_cookies(browser_session)}
+      end
+    )
+  end
+
+  @doc """
+  Adds a Phoenix `Plug.Session` cookie to the active browser context.
+
+  `session_options` must match the options used by `plug Plug.Session` in your endpoint
+  or router. For example: `MyAppWeb.Endpoint.session_options()`.
+  """
+  @spec add_session_cookie(session, Options.browser_session_cookie_arg(), keyword()) :: session when session: var
+  def add_session_cookie(session, cookie, session_options) when is_list(cookie) and is_list(session_options) do
+    browser_only_list(session, :add_session_cookie, cookie, @add_session_cookie_args_error, fn browser_session ->
+      validated_cookie = Options.validate_browser_session_cookie_arg!(cookie, "Browser.add_session_cookie/3")
+      validated_session_options = Options.validate_plug_session_options!(session_options, "Browser.add_session_cookie/3")
+      cookie_args = encode_session_cookie!(browser_session, validated_cookie, validated_session_options)
+      Extensions.add_cookies(browser_session, [cookie_args])
+    end)
+  end
+
+  def add_session_cookie(_session, _cookie, _session_options) do
+    raise ArgumentError, @add_session_cookie_args_error
+  end
+
   defp evaluate_js_value(%BrowserSession{} = session, expression) when is_binary(expression) do
     {:ok, Extensions.evaluate_js(session, expression)}
   end
@@ -448,6 +514,61 @@ defmodule Cerberus.Browser do
     :ok
   end
 
+  defp encode_session_cookie!(%BrowserSession{} = session, cookie, session_options)
+       when is_list(cookie) and is_list(session_options) do
+    secret_key_base = session_secret_key_base!(session, "Browser.add_session_cookie/3")
+
+    conn =
+      "GET"
+      |> Plug.Test.conn("/")
+      |> then(&%{&1 | secret_key_base: secret_key_base})
+      |> Plug.Session.call(Plug.Session.init(session_options))
+      |> Plug.Conn.fetch_session()
+      |> put_session_values!(Keyword.fetch!(cookie, :value))
+      |> Plug.Conn.send_resp(200, "")
+
+    encoded_value =
+      case get_in(conn.resp_cookies, [session_options[:key], :value]) do
+        value when is_binary(value) and value != "" -> value
+        _other -> raise ArgumentError, "Browser.add_session_cookie/3 failed to encode session cookie"
+      end
+
+    [
+      name: session_options[:key],
+      value: encoded_value,
+      url: Keyword.get(cookie, :url),
+      domain: Keyword.get(cookie, :domain) || Keyword.get(session_options, :domain),
+      path: Keyword.get(cookie, :path) || Keyword.get(session_options, :path) || "/",
+      http_only: Keyword.get(cookie, :http_only, Keyword.get(session_options, :http_only, true)),
+      secure: Keyword.get(cookie, :secure, Keyword.get(session_options, :secure, false)),
+      same_site: Keyword.get(cookie, :same_site, Keyword.get(session_options, :same_site, :lax))
+    ]
+  end
+
+  defp put_session_values!(conn, values) when is_map(values) do
+    Enum.reduce(values, conn, fn {key, value}, acc -> Plug.Conn.put_session(acc, key, value) end)
+  end
+
+  defp session_secret_key_base!(%BrowserSession{endpoint: endpoint}, op_name) when is_atom(endpoint) do
+    if function_exported?(endpoint, :config, 1) do
+      case endpoint.config(:secret_key_base) do
+        value when is_binary(value) and value != "" ->
+          value
+
+        _other ->
+          raise ArgumentError, "#{op_name} requires #{inspect(endpoint)} to configure :secret_key_base"
+      end
+    else
+      raise ArgumentError,
+            "#{op_name} requires a browser session endpoint with :secret_key_base; start session(:browser, endpoint: MyAppWeb.Endpoint) or configure :cerberus, :endpoint"
+    end
+  end
+
+  defp session_secret_key_base!(_session, op_name) do
+    raise ArgumentError,
+          "#{op_name} requires a browser session endpoint with :secret_key_base; start session(:browser, endpoint: MyAppWeb.Endpoint) or configure :cerberus, :endpoint"
+  end
+
   defp browser_only(session, op, opts, invalid_args_message, validator, fun)
        when is_list(opts) and is_function(validator, 1) and is_function(fun, 2) do
     case session do
@@ -465,6 +586,20 @@ defmodule Cerberus.Browser do
   end
 
   defp browser_only(_session, _op, _opts, invalid_args_message, _validator, _fun) do
+    raise ArgumentError, invalid_args_message
+  end
+
+  defp browser_only_list(session, op, args, _invalid_args_message, fun) when is_list(args) and is_function(fun, 1) do
+    case session do
+      %BrowserSession{} = browser_session ->
+        fun.(browser_session)
+
+      _other ->
+        Assertions.unsupported(session, op)
+    end
+  end
+
+  defp browser_only_list(_session, _op, _args, invalid_args_message, _fun) do
     raise ArgumentError, invalid_args_message
   end
 
@@ -499,6 +634,7 @@ defmodule Cerberus.Browser do
 
   defp already_checked_out_match_error?(%MatchError{term: term}), do: contains_already_owner_or_allowed?(term)
 
+  defp contains_already_owner_or_allowed?(:already_shared), do: true
   defp contains_already_owner_or_allowed?({:already, reason}) when reason in [:owner, :allowed], do: true
 
   defp contains_already_owner_or_allowed?(term) when is_tuple(term) do

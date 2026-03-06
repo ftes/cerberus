@@ -5,6 +5,7 @@ defmodule Cerberus.BrowserExtensionsTest do
   import Cerberus.Browser
 
   alias Cerberus.Driver.Browser.UserContextProcess
+  alias Cerberus.Fixtures.Endpoint
   alias ExUnit.AssertionError
 
   test "browser-only APIs are explicit unsupported on static and live sessions" do
@@ -121,7 +122,7 @@ defmodule Cerberus.BrowserExtensionsTest do
     evaluate_js(session, "window.scrollY", &assert(&1 > 0))
   end
 
-  test "evaluate_js and cookie helpers cover add_cookie and session cookie semantics" do
+  test "evaluate_js and cookie helpers cover add_cookies, clear_cookies, and session cookie semantics" do
     session =
       :browser
       |> session()
@@ -140,7 +141,15 @@ defmodule Cerberus.BrowserExtensionsTest do
       )
     )
 
-    session = add_cookie(session, "cerberus-browser-cookie", "cookie-value")
+    session =
+      add_cookies(session, [
+        [name: "cerberus-browser-cookie", value: "cookie-value"],
+        [
+          name: "cerberus-browser-url-cookie",
+          value: "url-cookie-value",
+          url: Endpoint.url() <> "/articles"
+        ]
+      ])
 
     cookie = cookie(session, "cerberus-browser-cookie")
     assert cookie
@@ -163,17 +172,26 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     assert_receive {:cookies_callback, entries}
     assert Enum.any?(entries, &(&1.name == "cerberus-browser-cookie" and &1.value == "cookie-value"))
+    assert Enum.any?(entries, &(&1.name == "cerberus-browser-url-cookie" and &1.value == "url-cookie-value"))
 
     session =
       session
-      |> visit("/session/user/alice")
+      |> clear_cookies()
+      |> add_session_cookie(
+        [value: %{session_user: "alice"}],
+        Endpoint.session_options()
+      )
       |> visit("/session/user")
+
+    refute cookie(session, "cerberus-browser-cookie")
 
     fixture_session_cookie = session_cookie(session)
     assert fixture_session_cookie
     assert fixture_session_cookie.name == "_cerberus_fixture_key"
     assert fixture_session_cookie.http_only
     assert fixture_session_cookie.session
+
+    assert_has(session, text("Session user: alice", exact: true))
 
     assert session_cookie(session, fn entry ->
              send(self(), {:session_cookie_callback, entry})
@@ -214,6 +232,18 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     assert_raise ArgumentError, ~r/Browser.add_cookie\/4 invalid options/, fn ->
       add_cookie(session, "cerberus-browser-cookie", "cookie-value", path: "")
+    end
+
+    assert_raise ArgumentError, ~r/Browser.add_cookies\/2 invalid options: :name must be a non-empty string/, fn ->
+      add_cookies(session, [[value: "cookie-value"]])
+    end
+
+    assert_raise ArgumentError, ~r/Browser.clear_cookies\/2 invalid options/, fn ->
+      clear_cookies(session, timeout: -1)
+    end
+
+    assert_raise ArgumentError, ~r/Browser.add_session_cookie\/3 invalid options: :value must be a map/, fn ->
+      add_session_cookie(session, [value: "bad"], Endpoint.session_options())
     end
   end
 
