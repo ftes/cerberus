@@ -16,6 +16,21 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     {:ok, shared_browser_session: browser_session}
   end
 
+  test "browser visit on live routes performs await_ready", context do
+    :browser
+    |> SharedBrowserSession.driver_session(context)
+    |> visit("/live/counter")
+    |> then(fn updated ->
+      readiness = updated.last_result.observed.readiness
+      assert is_map(readiness)
+      assert updated.last_result.observed.driver == Browser
+      refute readiness["reason"] == "in-action-settle"
+      refute readiness["skippedAwaitReady"] == true
+      updated
+    end)
+    |> assert_has(text("Count: 0", exact: true), timeout: 0)
+  end
+
   test "browser click on live non-navigation actions still performs await_ready", context do
     :browser
     |> SharedBrowserSession.driver_session(context)

@@ -365,7 +365,8 @@ defmodule Cerberus.Driver.Browser do
 
     case navigate_browser(state, url) do
       {:ok, _} ->
-        snapshot_after_visit!(session, state)
+        {ready_state, readiness} = await_ready_after_visit!(state)
+        snapshot_after_visit!(session, ready_state, readiness)
 
       {:error, reason, details} ->
         handle_visit_navigation_error!(session, state, reason, details)
@@ -1088,10 +1089,10 @@ defmodule Cerberus.Driver.Browser do
     end)
   end
 
-  defp snapshot_after_visit!(session, state) do
+  defp snapshot_after_visit!(session, state, readiness) do
     case with_snapshot(state) do
       {state, snapshot} ->
-        update_session(session, state, :visit, %{path: snapshot.path, title: snapshot.title})
+        update_session(session, state, :visit, %{path: snapshot.path, title: snapshot.title, readiness: readiness})
 
       {:error, reason, details} ->
         raise ArgumentError,
@@ -1101,17 +1102,28 @@ defmodule Cerberus.Driver.Browser do
 
   defp handle_visit_navigation_error!(session, state, reason, details) do
     if navigate_interrupted_by_followup?(reason, details) do
-      ready_state = await_ready_after_navigation_interrupt!(state)
-      snapshot_after_visit!(session, ready_state)
+      {ready_state, readiness} = await_ready_after_navigation_interrupt!(state)
+      snapshot_after_visit!(session, ready_state, readiness)
     else
       raise ArgumentError, "browser navigate failed: #{reason} (#{inspect(details)})"
     end
   end
 
+  defp await_ready_after_visit!(state) do
+    case await_driver_ready(state) do
+      {:ok, ready_state, readiness} ->
+        {ready_state, readiness}
+
+      {:error, ready_reason, ready_details} ->
+        raise ArgumentError,
+              "browser visit readiness failed: #{ready_reason} (#{inspect(ready_details)})"
+    end
+  end
+
   defp await_ready_after_navigation_interrupt!(state) do
     case await_driver_ready(state) do
-      {:ok, ready_state, _readiness} ->
-        ready_state
+      {:ok, ready_state, readiness} ->
+        {ready_state, readiness}
 
       {:error, ready_reason, ready_details} ->
         raise ArgumentError,
