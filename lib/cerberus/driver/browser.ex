@@ -1044,7 +1044,7 @@ defmodule Cerberus.Driver.Browser do
       on_success.({state, recovered_readiness})
     else
       observed = Map.merge(fallback_observed, %{readiness: readiness, result: result})
-      {:error, session, observed, readiness_error(reason, readiness)}
+      {:error, session, observed, action_readiness_error(reason, readiness)}
     end
   end
 
@@ -1126,8 +1126,7 @@ defmodule Cerberus.Driver.Browser do
 
           {state, recovered_readiness}
         else
-          raise ArgumentError,
-                "browser visit readiness failed: #{ready_reason} (#{inspect(ready_details)})"
+          raise ArgumentError, visit_readiness_error(ready_reason, ready_details)
         end
     end
   end
@@ -1322,13 +1321,34 @@ defmodule Cerberus.Driver.Browser do
     {:error, normalized_reason, normalized_details}
   end
 
-  defp readiness_error(reason, readiness) do
+  defp action_readiness_error(reason, readiness) do
+    readiness_error_for_phase("browser action", "post-action readiness", reason, readiness)
+  end
+
+  defp visit_readiness_error(reason, readiness) do
+    readiness_error_for_phase("browser visit", "post-navigation readiness", reason, readiness)
+  end
+
+  defp readiness_error_for_phase(prefix, phase, reason, readiness)
+       when is_binary(prefix) and is_binary(phase) and is_binary(reason) and is_map(readiness) do
+    base = format_readiness_failure(reason, readiness)
+
+    case Map.get(readiness, "path") do
+      path when is_binary(path) and path != "" ->
+        "#{prefix} reached #{path} but #{phase} failed: #{base}"
+
+      _ ->
+        "#{prefix} #{phase} failed: #{base}"
+    end
+  end
+
+  defp format_readiness_failure(reason, readiness) do
     awaited = Map.get(readiness, "awaited", [])
     awaited_label = if is_list(awaited), do: Enum.join(awaited, ", "), else: inspect(awaited)
     last_signal = Map.get(readiness, "lastSignal", "unknown")
     live_state = Map.get(readiness, "lastLiveState", "unknown")
 
-    "browser readiness failed: #{reason} (awaited: #{awaited_label}; last_signal: #{last_signal}; live_state: #{live_state})"
+    "#{reason} (awaited: #{awaited_label}; last_signal: #{last_signal}; live_state: #{live_state})"
   end
 
   defp recoverable_action_readiness_error?(action, reason, readiness)

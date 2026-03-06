@@ -162,6 +162,15 @@ defmodule Cerberus.Driver.Static do
 
       :error ->
         case find_clickable_button(session, expected, match_opts, kind) do
+          {:ok, %{disabled: true}} ->
+            observed = %{
+              action: :button,
+              path: session.current_path,
+              transition: session_transition(session)
+            }
+
+            {:error, session, observed, "matched field is disabled"}
+
           {:ok, button} ->
             maybe_submit_clicked_button(session, expected, match_opts, kind, button)
 
@@ -184,6 +193,10 @@ defmodule Cerberus.Driver.Static do
     {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
+      {:ok, %{input_disabled: true}} ->
+        observed = %{action: :fill_in, path: session.current_path, transition: session_transition(session)}
+        {:error, session, observed, "matched field is disabled"}
+
       {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
         updated =
           %{
@@ -247,6 +260,10 @@ defmodule Cerberus.Driver.Static do
     {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
+      {:ok, %{input_disabled: true}} ->
+        observed = %{action: :upload, path: session.current_path, transition: session_transition(session)}
+        {:error, session, observed, "matched field is disabled"}
+
       {:ok, %{name: name, input_type: "file"} = field} when is_binary(name) and name != "" ->
         file = UploadFile.read!(path)
         value = FormData.upload_value_for_update(session, field, file, path)
@@ -296,6 +313,10 @@ defmodule Cerberus.Driver.Static do
     {expected, match_opts} = LocatorOps.submit(locator, opts)
 
     case Html.find_submit_button(session.html, expected, match_opts, Session.scope(session)) do
+      {:ok, %{disabled: true}} ->
+        observed = %{action: :submit, path: session.current_path, transition: session_transition(session)}
+        {:error, session, observed, "matched field is disabled"}
+
       {:ok, button} ->
         do_submit(session, button)
 
@@ -1245,6 +1266,10 @@ defmodule Cerberus.Driver.Static do
 
   defp toggle_checkbox(session, expected, opts, checked?, op) do
     case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+      {:ok, %{input_disabled: true}} ->
+        observed = %{action: op, path: session.current_path, transition: session_transition(session)}
+        {:error, session, observed, "matched field is disabled"}
+
       {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
         value = FormData.toggled_checkbox_value(session, field, checked?)
 
@@ -1280,6 +1305,10 @@ defmodule Cerberus.Driver.Static do
 
   defp choose_radio(session, expected, opts) do
     case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+      {:ok, %{input_disabled: true}} ->
+        observed = %{action: :choose, path: session.current_path, transition: session_transition(session)}
+        {:error, session, observed, "matched field is disabled"}
+
       {:ok, %{name: name, input_type: "radio"} = field} when is_binary(name) and name != "" ->
         value = field[:input_value] || "on"
 

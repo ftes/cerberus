@@ -1,0 +1,286 @@
+# Migrate From PhoenixTest
+
+This is not a full API reference. It is a short list of things that were unexpectedly important while migrating real PhoenixTest and PhoenixTest.Playwright tests.
+
+The focus here is:
+- what was easy to miss
+- what was different from the old test style
+- what would have saved time on a second migration pass
+
+This intentionally ignores bugs that were fixed in Cerberus during migration and focuses on migration workflow and expectations.
+
+## Start With The Right Split
+
+Treat migrations as two different jobs:
+- non-browser PhoenixTest tests
+- browser PhoenixTest.Playwright tests
+
+They may look similar in the old code, but the setup and failure modes are different enough that it is better to migrate them differently from the start.
+
+## Non-Browser: Prefer `ConnCase` + `session(conn)`
+
+For non-browser tests, the straightforward path was:
+
+```elixir
+use MyAppWeb.ConnCase, async: true
+
+import Cerberus
+
+conn = log_in_user(user)
+
+conn
+|> session()
+|> visit(~p"/some/path")
+|> assert_has(~l"Some text"e)
+```
+
+What helped:
+- do not add browser sandbox `user_agent` wiring
+- do not add browser helpers unless the test really is browser-backed
+- keep using app-level conn login helpers for non-browser tests
+
+If the test starts from a logged-in conn already, keep it that way.
+
+## Browser: Do Not Try To Reuse Conn Login
+
+The biggest practical difference was authentication.
+
+For browser tests, logging in through the browser UI was the reliable migration path. Trying to reuse conn-based login patterns from non-browser tests was the wrong direction.
+
+The useful shape was:
+
+```elixir
+use MyAppWeb.ConnCase, async: true
+
+import Cerberus
+import MyAppWeb.Cerberus
+
+setup context do
+  user = user_fixture()
+
+  metadata = Cerberus.Browser.user_agent_for_sandbox(MyApp.Repo, context)
+
+  session =
+    session(:browser, user_agent: metadata)
+    |> log_in(user)
+
+  [session: session]
+end
+```
+
+What helped:
+- keep browser auth in a small support helper
+- make that helper do UI login, not conn login
+- pass real test `context` into browser sandbox metadata
+
+One specific thing that would have saved time:
+- if the browser lands on `/` after login, do not assume auth failed just because the next assertion or action fails
+- in our migration, that often meant login had already succeeded and the real problem was post-navigation readiness or a dependent LiveView control that was not actionable yet
+
+## Browser Sandbox Setup Is A Module Setup Concern
+
+For browser modules using `ConnCase`, the test process already has SQL sandbox setup. The browser still needs metadata for websocket/browser access.
+
+What would have helped to know upfront:
+- non-browser tests do not need `user_agent`
+- browser tests do need it
+- the simplest pattern is to compute metadata from the test `context` and create the browser session from that
+- this still works fine from `ConnCase, async: false`; the sandbox may already be checked out or shared for the test process, and Cerberus can reuse that owner state
+
+Keep this in support code so the test body stays focused on behavior.
+
+## Use Locator Sigils Early
+
+Using sigils consistently made migrations easier:
+- `~l"... "l` for label locators
+- `~l"... "r` for role locators
+- `~l"... "e` for exact text
+- `~l"... "i` for inexact text
+- `~l"... "c` for CSS
+
+This was easier to read and easier to review than mixing sigils and older string selectors.
+
+If doing the migration again, I would switch to sigils immediately instead of partially converting and then normalizing later.
+
+## Prefer Role/Label-Based Locators Over Old PhoenixTest Habits
+
+Old PhoenixTest tests often leaned on:
+- `click_button("Save")`
+- `click_link("Timecards")`
+- `assert_has(selector, text: "...")`
+
+The Cerberus version was cleaner when rewritten directly to role/label locators instead of trying to preserve the old shape.
+
+Examples:
+
+```elixir
+click(~l"button:Save"r)
+click(~l"link:Timecards"r)
+fill_in(~l"Email"l, "new@example.com")
+```
+
+This is especially important now that legacy link/button locator styles are gone.
+
+## Do Not Carry Over `text:` Assertion Style
+
+PhoenixTest code often combined selector and text like:
+
+```elixir
+assert_has("#selector", text: "Main")
+```
+
+In Cerberus, it was usually better to rewrite the assertion intentionally rather than mechanically:
+
+```elixir
+assert_has(and_(~l"#selector"c, ~l"Main"e))
+```
+
+or, when text scoping was the real goal:
+
+```elixir
+within(~l"#selector"c, &assert_has(&1, ~l"Main"e))
+```
+
+That choice matters. Some migrations failed because the original PhoenixTest assertion was really relying on scoped text semantics, not just selector matching.
+
+## Exact vs Inexact Text Matters More Than Expected
+
+PhoenixTest assertions often read like exact text checks, but many of them are effectively substring checks in practice.
+
+What helped:
+- start with exact text when the UI text is stable and isolated
+- switch to inexact text when asserting row content, labels inside larger cells, or content mixed with formatting
+
+Example:
+
+```elixir
+assert_has(~l"Construction Assistant"i)
+```
+
+instead of assuming exact text will always match the rendered fragment.
+
+## `within/3` Is Often The Right Rewrite
+
+Several migrated assertions became clearer once rewritten as scoped assertions instead of compound selector guesses.
+
+This was especially useful for:
+- filters
+- form fields
+- selected-option assertions
+- table fragments
+
+If a PhoenixTest assertion was really saying “inside this section, assert X”, rewrite it that way directly.
+
+## Browser Tests Sometimes Need App-Specific Helpers
+
+A small support module was worth it.
+
+Useful helpers included:
+- `log_in/2`
+- `browser_session/1`
+- `within_field/4`
+- `assert_has_selected/4`
+
+That kept migrated tests from filling up with repeated setup or field-container logic.
+
+If migrating again, I would create the support module earlier instead of waiting for the second or third browser file.
+
+## `assert_value` Is A Better Mental Model Than `assert_has(..., value: ...)`
+
+PhoenixTest has patterns like asserting a field via `value: ...`.
+
+In Cerberus, the clearer migration target was:
+
+```elixir
+assert_value(~l"New job title"l, "")
+```
+
+This maps better to browser semantics and avoids mixing text assertions with current input value checks.
+
+If a migrated test is really about the current JS-visible field value, use `assert_value`, not `assert_has`.
+
+## Dependent LiveView Controls Were A Repeated Migration Friction Point
+
+A pattern that came up repeatedly in browser tests:
+- select field A
+- LiveView updates
+- field B becomes enabled or repopulated
+- next action on field B happens too early
+
+What would have helped to know upfront:
+- this is a common migration hotspot
+- if an action fails because the target control is still disabled, the test may need an intermediate wait/assertion today
+- that wait should be minimal and clearly about enabled state, not a broad custom sleep
+
+Example shape:
+
+```elixir
+|> select(~l"Department"l, option: ~l"Production"e)
+|> within_field("Job title", &assert_has(&1, ~l"select:not([disabled])"c))
+|> select(~l"Job title"l, option: ~l"Rushes Runner"e)
+```
+
+This is not the ideal long-term browser API, but it is a useful migration technique when a dependent control becomes actionable asynchronously.
+
+After the actionability work in Cerberus, I would now try the direct action first and only add the minimal enabled-state assertion if the remaining app/test case still truly needs it.
+
+## Use Failure Shape To Classify The Problem
+
+Several migration failures looked similar at first but had different causes.
+
+What would have helped:
+- `no ... matched locator` usually means locator rewrite or scoping is wrong
+- `matched field is disabled` usually means a dependent control has not become actionable yet
+- a failure immediately after browser login redirect does not necessarily mean login failed
+
+That would have shortened a lot of debugging loops during migration.
+
+## Migrate Vertically, Not Mechanically
+
+The most efficient migration style was:
+- pick one file
+- convert setup first
+- convert the smallest passing slice
+- run targeted tests
+- then migrate the next tests in that file
+
+Trying to do a broad syntax conversion first and only run later made it harder to tell whether a failure was:
+- setup
+- selector semantics
+- browser readiness
+- assertion semantics
+
+Small vertical slices were much easier to debug.
+
+## Tag Migrated Coverage Explicitly
+
+It helped to tag migrated tests consistently, preferably at module or describe level where possible.
+
+That made it easier to:
+- rerun migrated slices
+- compare Cerberus coverage against remaining PhoenixTest coverage
+- track migration progress during partial conversion
+
+## Practical Checklist
+
+If doing another migration pass, I would follow this order:
+
+1. Split browser and non-browser work.
+2. For non-browser, use `ConnCase` and `session(conn)`.
+3. For browser, set up a support helper with UI login and browser sandbox metadata from test `context`.
+4. Rewrite selectors directly to sigil locators.
+5. Rewrite `text:` assertions intentionally, often with `within/3`.
+6. Use `assert_value` for actual field values.
+7. Add tiny app-specific helpers early when patterns repeat.
+8. Run small targeted slices with random `PORT=4xxx`.
+9. Expect dependent LiveView controls to be a migration hotspot.
+10. If a browser test lands on `/`, verify whether auth already succeeded before changing the login helper.
+
+## What Would Have Saved The Most Time
+
+If I had to do the migration again, the biggest time savers would have been:
+- knowing upfront that browser auth should be via UI, not conn
+- using a support `Cerberus` helper module from the start
+- rewriting assertions semantically instead of mechanically preserving PhoenixTest shapes
+- treating dependent disabled-to-enabled controls as a normal migration concern in browser tests
+- using sigil locators consistently from the first edit

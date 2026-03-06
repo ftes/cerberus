@@ -75,6 +75,16 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> assert_has(text("Disconnected Live Root", exact: true), timeout: 0)
   end
 
+  test "browser visit reports post-navigation readiness failure with reached path", context do
+    assert_raise ArgumentError,
+                 ~r/browser visit reached \/browser\/readiness\/busy-live-root but post-navigation readiness failed: browser readiness timeout/,
+                 fn ->
+                   :browser
+                   |> SharedBrowserSession.driver_session(context)
+                   |> visit("/browser/readiness/busy-live-root")
+                 end
+  end
+
   test "browser click on live non-navigation actions still performs await_ready", context do
     :browser
     |> SharedBrowserSession.driver_session(context)

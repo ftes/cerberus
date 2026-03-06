@@ -384,6 +384,20 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       return { ok: true };
     };
 
+    helper.retryableActionFailure = (result, options) => {
+      if (!result || result.ok === true) return false;
+      if (options && options.force === true) return false;
+
+      const op = options && options.op ? options.op : "click";
+      const reason = result.reason || "";
+
+      if (reason === "field_disabled") {
+        return ["fill_in", "select", "choose", "check", "uncheck", "upload", "click", "submit"].includes(op);
+      }
+
+      return false;
+    };
+
     helper.regexFromExpected = (payload) => {
       if (!payload || payload.type !== "regex") return null;
 
@@ -1509,6 +1523,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
       if (op === "fill_in") {
         if (target.kind !== "field") return fail("field_fill_failed");
+        if (target.disabled === true || element.disabled === true) return fail("field_disabled");
 
         try {
           const value = String(options && options.value !== undefined && options.value !== null ? options.value : "");
@@ -1672,6 +1687,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
       if (op === "submit") {
         if (target.kind !== "button") return fail("submit_target_failed");
+        if (target.disabled === true || element.disabled === true) return fail("field_disabled");
 
         try {
           element.click();
@@ -1687,6 +1703,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
       try {
         if (target.kind === "button") {
+          if (target.disabled === true || element.disabled === true) return fail("field_disabled");
+
           const submission = helper.submitDataMethod(target, element);
 
           if (submission && submission.ok === true) {
@@ -1730,25 +1748,31 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       let postActionSettleMs = 0;
 
       const readyTimeoutMs = Number(options && options.readyTimeoutMs);
+      const timeoutMs = Math.max(0, Number(options && options.timeoutMs || 0));
       if (Number.isFinite(readyTimeoutMs) && readyTimeoutMs > 0) {
         const waitStartedAt = now();
         await helper.waitForLiveConnected(readyTimeoutMs, 50);
         waitForLiveMs = now() - waitStartedAt;
       }
 
-      const resolveStartedAt = now();
-      const resolved = await helper.resolveInternal(options);
-      resolveMs = now() - resolveStartedAt;
-
       let result = null;
+      const deadline = Date.now() + timeoutMs;
 
-      if (!resolved || resolved.ok !== true) {
-        result = resolved || { ok: false, reason: "action_resolve_failed", path: helper.currentPath() };
-      } else {
+      while (true) {
+        const remaining = Math.max(0, deadline - Date.now());
+        const resolveStartedAt = now();
+        const resolved = await helper.resolveInternal({ ...options, timeoutMs: remaining });
+        resolveMs += now() - resolveStartedAt;
+
+        if (!resolved || resolved.ok !== true) {
+          result = resolved || { ok: false, reason: "action_resolve_failed", path: helper.currentPath() };
+          break;
+        }
+
         const prePath = helper.currentPath();
         const performStartedAt = now();
         result = helper.performResolved(resolved, options);
-        performResolvedMs = now() - performStartedAt;
+        performResolvedMs += now() - performStartedAt;
 
         if (result && result.ok === true) {
           const op = options && options.op ? options.op : "click";
@@ -1760,12 +1784,19 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           if (settleEligible) {
             const settleStartedAt = now();
             settle = await helper.waitForLiveSettled(readyTimeoutMs, 40, 25);
-            postActionSettleMs = now() - settleStartedAt;
+            postActionSettleMs += now() - settleStartedAt;
           }
 
           result.settle = settle;
           result.needsAwaitReady = helper.needsAwaitReady(options, result, prePath, settle);
+          break;
         }
+
+        if (!helper.retryableActionFailure(result, options) || remaining <= 0) {
+          break;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, Math.min(50, Math.max(remaining, 1))));
       }
 
       if (!result || typeof result !== "object") {

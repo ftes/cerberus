@@ -386,6 +386,9 @@ defmodule Cerberus.Fixtures.PageController do
             <label for="controls_age">Age</label>
             <input id="controls_age" type="number" name="age" value="33" data-testid="controls-age-input" />
 
+            <label for="controls_disabled_name">Disabled name</label>
+            <input id="controls_disabled_name" type="text" name="disabled_name" value="" disabled />
+
             <label for="controls_race_2">Race 2</label>
             <select id="controls_race_2" name="race_2[]" multiple data-testid="controls-race-2-select">
               <option value="elf">Elf</option>
@@ -405,11 +408,19 @@ defmodule Cerberus.Fixtures.PageController do
               <label for="controls_contact_mail">Mail Choice</label>
             </fieldset>
 
+            <label for="controls_disabled_notify">Disabled notify</label>
+            <input type="checkbox" id="controls_disabled_notify" name="disabled_notify" value="yes" disabled />
+
+            <label for="controls_disabled_contact">Disabled contact</label>
+            <input type="radio" id="controls_disabled_contact" name="disabled_contact" value="pager" disabled />
+
             <label for="controls_disabled_select">Disabled select</label>
             <select id="controls_disabled_select" name="disabled_select" disabled>
               <option value="cannot_submit">Cannot submit</option>
             </select>
 
+            <button type="button" disabled>Disabled Action</button>
+            <button type="submit" disabled>Disabled Save Controls</button>
             <button type="submit" data-testid="save-controls">Save Controls</button>
           </form>
         </main>
@@ -722,6 +733,48 @@ defmodule Cerberus.Fixtures.PageController do
             disconnected root
           </div>
           <h1>Disconnected Live Root</h1>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def busy_live_root(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Busy Live Root</title>
+        <script>
+          (() => {
+            let ticks = 0;
+
+            const start = () => {
+              const target = document.getElementById("busy-live-root-ticks");
+              if (!target) return;
+
+              setInterval(() => {
+                ticks += 1;
+                target.textContent = String(ticks);
+              }, 5);
+            };
+
+            if (document.readyState === "loading") {
+              document.addEventListener("DOMContentLoaded", start, { once: true });
+            } else {
+              start();
+            }
+          })();
+        </script>
+      </head>
+      <body>
+        <main>
+          <div data-phx-session="busy-root" id="busy-root" class="phx-connected">
+            connected root
+          </div>
+          <h1>Busy Live Root</h1>
+          <p id="busy-live-root-ticks">0</p>
         </main>
       </body>
     </html>

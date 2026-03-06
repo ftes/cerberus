@@ -4,7 +4,7 @@ defmodule Cerberus.Fixtures.SelectControlsLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, form_data: %{}, target: [])}
+    {:ok, assign(socket, form_data: %{}, target: [], noop_clicks: 0)}
   end
 
   @impl true
@@ -17,6 +17,11 @@ defmodule Cerberus.Fixtures.SelectControlsLive do
   def handle_event("save", params, socket) do
     target = normalize_target(params["_target"])
     {:noreply, assign(socket, form_data: params, target: target)}
+  end
+
+  @impl true
+  def handle_event("noop", _params, socket) do
+    {:noreply, update(socket, :noop_clicks, &(&1 + 1))}
   end
 
   @impl true
@@ -36,6 +41,9 @@ defmodule Cerberus.Fixtures.SelectControlsLive do
 
         <label for="live_controls_age">Age</label>
         <input id="live_controls_age" type="number" name="age" value={Map.get(@form_data, "age", "33")} />
+
+        <label for="live_controls_disabled_name">Disabled name</label>
+        <input id="live_controls_disabled_name" type="text" name="disabled_name" value="" disabled />
 
         <label for="live_controls_race_2">Race 2</label>
         <select id="live_controls_race_2" name="race_2[]" multiple data-testid="live-race-2-select">
@@ -75,11 +83,19 @@ defmodule Cerberus.Fixtures.SelectControlsLive do
           <label for="live_controls_contact_mail">Mail Choice</label>
         </fieldset>
 
+        <label for="live_controls_disabled_notify">Disabled notify</label>
+        <input type="checkbox" id="live_controls_disabled_notify" name="disabled_notify" value="yes" disabled />
+
+        <label for="live_controls_disabled_contact">Disabled contact</label>
+        <input type="radio" id="live_controls_disabled_contact" name="disabled_contact" value="pager" disabled />
+
         <label for="live_controls_disabled_select">Disabled select</label>
         <select id="live_controls_disabled_select" name="disabled_select" disabled>
           <option value="cannot_submit">Cannot submit</option>
         </select>
 
+        <button type="button" phx-click="noop" disabled>Disabled Action</button>
+        <button type="submit" disabled>Disabled Save Live Controls</button>
         <button type="submit" title="Save live controls" data-testid="save-live-controls">
           Save Live Controls
         </button>
@@ -92,6 +108,7 @@ defmodule Cerberus.Fixtures.SelectControlsLive do
         <p>race_2: [<%= @form_data |> Map.get("race_2", []) |> List.wrap() |> Enum.join(",") %>]</p>
         <p>contact: <%= Map.get(@form_data, "contact", "") %></p>
         <p>disabled_select: <%= Map.get(@form_data, "disabled_select", "") %></p>
+        <p>noop_clicks: <%= @noop_clicks %></p>
       </div>
     </main>
     """

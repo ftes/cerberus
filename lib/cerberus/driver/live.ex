@@ -239,20 +239,31 @@ defmodule Cerberus.Driver.Live do
         click_resolved_link(session, link)
 
       :error ->
-        case find_clickable_button(session, expected, match_opts, kind) do
-          {:ok, button} ->
-            click_or_error_for_button(session, button, kind)
+        case wait_for_live_clickable_button(session, expected, match_opts, kind) do
+          {:ok, action_session, button} ->
+            click_or_error_for_button(action_session, button, kind)
 
-          :error ->
+          {:error, action_session, "no button matched locator"} ->
             observed = %{
               action: :click,
-              path: session.current_path,
-              candidate_values: click_candidate_values(session, match_opts, kind),
-              texts: Html.texts(session.html, :any, Session.scope(session)),
-              transition: session_transition(session)
+              path: action_session.current_path,
+              candidate_values: click_candidate_values(action_session, match_opts, kind),
+              texts: Html.texts(action_session.html, :any, Session.scope(action_session)),
+              transition: session_transition(action_session)
             }
 
-            {:error, session, observed, no_clickable_error(kind)}
+            {:error, action_session, observed, no_clickable_error(kind)}
+
+          {:error, action_session, reason} ->
+            observed = %{
+              action: :click,
+              path: action_session.current_path,
+              candidate_values: click_candidate_values(action_session, match_opts, kind),
+              texts: Html.texts(action_session.html, :any, Session.scope(action_session)),
+              transition: session_transition(action_session)
+            }
+
+            {:error, action_session, observed, reason}
         end
     end
   end
@@ -275,7 +286,20 @@ defmodule Cerberus.Driver.Live do
 
     case route_kind(session) do
       :live ->
-        do_live_fill_in(session, expected, value, match_opts)
+        case wait_for_live_form_field(session, expected, match_opts, :fill_in) do
+          {:ok, action_session, field} ->
+            do_live_fill_in(action_session, field, value)
+
+          {:error, failed_session, reason} ->
+            observed = %{
+              action: :fill_in,
+              path: failed_session.current_path,
+              candidate_values: field_candidate_values(failed_session, match_opts),
+              transition: session_transition(failed_session)
+            }
+
+            {:error, failed_session, observed, reason}
+        end
 
       :static ->
         case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
@@ -325,7 +349,13 @@ defmodule Cerberus.Driver.Live do
 
     case route_kind(session) do
       :live ->
-        do_live_select(session, expected, option, match_opts)
+        case wait_for_live_form_field(session, expected, match_opts, :select) do
+          {:ok, action_session, field} ->
+            do_live_select(action_session, field, option, match_opts)
+
+          {:error, failed_session, reason} ->
+            live_select_error(failed_session, option, reason)
+        end
 
       :static ->
         select_in_static_mode(session, expected, option, match_opts)
@@ -339,7 +369,13 @@ defmodule Cerberus.Driver.Live do
 
     case route_kind(session) do
       :live ->
-        do_live_choose(session, expected, match_opts)
+        case wait_for_live_form_field(session, expected, match_opts, :choose) do
+          {:ok, action_session, field} ->
+            do_live_choose(action_session, field)
+
+          {:error, failed_session, reason} ->
+            live_choose_error(failed_session, reason)
+        end
 
       :static ->
         choose_in_static_mode(session, expected, match_opts)
@@ -353,7 +389,14 @@ defmodule Cerberus.Driver.Live do
 
     case route_kind(session) do
       :live ->
-        do_live_toggle_checkbox(session, expected, match_opts, true, :check)
+        case wait_for_live_form_field(session, expected, match_opts, :check) do
+          {:ok, action_session, field} ->
+            do_live_toggle_checkbox(action_session, field, true, :check)
+
+          {:error, failed_session, reason} ->
+            observed = checkbox_error_observed(failed_session, :check)
+            {:error, failed_session, observed, reason}
+        end
 
       :static ->
         case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
@@ -412,7 +455,14 @@ defmodule Cerberus.Driver.Live do
 
     case route_kind(session) do
       :live ->
-        do_live_toggle_checkbox(session, expected, match_opts, false, :uncheck)
+        case wait_for_live_form_field(session, expected, match_opts, :uncheck) do
+          {:ok, action_session, field} ->
+            do_live_toggle_checkbox(action_session, field, false, :uncheck)
+
+          {:error, failed_session, reason} ->
+            observed = checkbox_error_observed(failed_session, :uncheck)
+            {:error, failed_session, observed, reason}
+        end
 
       :static ->
         case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
@@ -471,28 +521,19 @@ defmodule Cerberus.Driver.Live do
 
     case route_kind(session) do
       :live ->
-        case LiveViewHTML.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
-          {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
-            do_live_upload(session, field, path)
+        case wait_for_live_form_field(session, expected, match_opts, :upload) do
+          {:ok, action_session, field} ->
+            do_live_upload(action_session, field, path)
 
-          {:ok, _field} ->
+          {:error, failed_session, reason} ->
             observed = %{
               action: :upload,
-              path: session.current_path,
-              transition: session_transition(session)
+              path: failed_session.current_path,
+              candidate_values: field_candidate_values(failed_session, match_opts),
+              transition: session_transition(failed_session)
             }
 
-            {:error, session, observed, "matched upload field does not include a name attribute"}
-
-          :error ->
-            observed = %{
-              action: :upload,
-              path: session.current_path,
-              candidate_values: field_candidate_values(session, match_opts),
-              transition: session_transition(session)
-            }
-
-            {:error, session, observed, "no file input matched locator"}
+            {:error, failed_session, observed, reason}
         end
 
       :static ->
@@ -507,19 +548,19 @@ defmodule Cerberus.Driver.Live do
 
     case route_kind(session) do
       :live ->
-        case LiveViewHTML.find_submit_button(session.html, expected, match_opts, Session.scope(session)) do
-          {:ok, button} ->
-            do_live_submit(session, button)
+        case wait_for_live_submit_button(session, expected, match_opts) do
+          {:ok, action_session, button} ->
+            do_live_submit(action_session, button)
 
-          :error ->
+          {:error, failed_session, reason} ->
             observed = %{
               action: :submit,
-              path: session.current_path,
-              candidate_values: submit_candidate_values(session, match_opts),
-              transition: session_transition(session)
+              path: failed_session.current_path,
+              candidate_values: submit_candidate_values(failed_session, match_opts),
+              transition: session_transition(failed_session)
             }
 
-            {:error, session, observed, "no submit button matched locator"}
+            {:error, failed_session, observed, reason}
         end
 
       :static ->
@@ -1761,7 +1802,7 @@ defmodule Cerberus.Driver.Live do
             transition: session_transition(session)
           }
 
-          {:error, session, observed, no_clickable_error(kind)}
+          {:error, session, observed, "matched field is disabled"}
 
         present_attr?(Map.get(button, :data_method)) ->
           click_live_data_method(session, button, :button)
@@ -2525,77 +2566,29 @@ defmodule Cerberus.Driver.Live do
       {:error, session, observed, Exception.message(error)}
   end
 
-  defp do_live_select(session, expected, option, opts) do
-    with {:ok, field} <- find_live_select_field(session, expected, opts),
-         {:ok, %{values: values, multiple?: multiple?}} <-
-           Html.select_values(session.html, field, option, opts, Session.scope(session)) do
-      if select_requires_option_click?(field) and not select_has_option_clicks?(field) do
-        raise ArgumentError, select_option_click_contract_error()
-      end
+  defp do_live_select(session, field, option, opts) do
+    case Html.select_values(session.html, field, option, opts, Session.scope(session)) do
+      {:ok, %{values: values, multiple?: multiple?}} ->
+        if select_requires_option_click?(field) and not select_has_option_clicks?(field) do
+          raise ArgumentError, select_option_click_contract_error()
+        end
 
-      value = FormData.select_value_for_update(session, field, option, values, multiple?, :live)
-      form_data = FormData.put_form_value(session.form_data, field.form, field.form_selector, field.name, value)
-      updated = %{session | form_data: form_data}
+        value = FormData.select_value_for_update(session, field, option, values, multiple?, :live)
+        form_data = FormData.put_form_value(session.form_data, field.form, field.form_selector, field.name, value)
+        updated = %{session | form_data: form_data}
 
-      if select_requires_option_click?(field) do
-        handle_live_select_option_clicks(session, updated, field, option, value, values)
-      else
-        handle_live_select_change(session, updated, field, option, value)
-      end
-    else
+        if select_requires_option_click?(field) do
+          handle_live_select_option_clicks(session, updated, field, option, value, values)
+        else
+          handle_live_select_change(session, updated, field, option, value)
+        end
+
       {:error, reason} ->
         live_select_error(session, option, reason)
     end
   end
 
-  defp do_live_choose(session, expected, opts) do
-    case find_live_radio_field(session, expected, opts) do
-      {:ok, field} ->
-        apply_live_radio_change(session, field)
-
-      {:error, reason} ->
-        live_choose_error(session, reason)
-    end
-  end
-
-  defp find_live_select_field(session, expected, opts) do
-    case LiveViewHTML.find_form_field(session.html, expected, opts, Session.scope(session)) do
-      {:ok, %{name: name, input_type: "select"} = field} when is_binary(name) and name != "" ->
-        {:ok, field}
-
-      {:ok, %{name: name}} when is_binary(name) and name != "" ->
-        {:error, "matched field is not a select element"}
-
-      {:ok, _field} ->
-        {:error, "matched field does not include a name attribute"}
-
-      :error ->
-        {:error, "no form field matched locator"}
-    end
-  end
-
-  defp find_live_radio_field(session, expected, opts) do
-    case LiveViewHTML.find_form_field(session.html, expected, opts, Session.scope(session)) do
-      {:ok, %{name: name, input_type: "radio"} = field} when is_binary(name) and name != "" ->
-        {:ok, field}
-
-      {:ok, %{input_type: "radio"} = field} ->
-        if radio_click_without_name_supported?(field) do
-          {:ok, field}
-        else
-          {:error, "matched field does not include a name attribute"}
-        end
-
-      {:ok, %{name: name}} when is_binary(name) and name != "" ->
-        {:error, "matched field is not a radio input"}
-
-      {:ok, _field} ->
-        {:error, "matched field does not include a name attribute"}
-
-      :error ->
-        {:error, "no form field matched locator"}
-    end
-  end
+  defp do_live_choose(session, field), do: apply_live_radio_change(session, field)
 
   defp apply_live_radio_change(session, field) do
     if radio_requires_phx_click?(field) and not field[:input_phx_click] do
@@ -2777,93 +2770,172 @@ defmodule Cerberus.Driver.Live do
     {:error, session, observed, reason}
   end
 
-  defp do_live_fill_in(session, expected, value, opts) do
-    case LiveViewHTML.find_form_field(session.html, expected, opts, Session.scope(session)) do
-      {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
-        form_data = FormData.put_form_value(session.form_data, field.form, field.form_selector, name, value)
-        updated = %{session | form_data: form_data}
+  defp do_live_fill_in(session, %{name: name} = field, value) when is_binary(name) and name != "" do
+    form_data = FormData.put_form_value(session.form_data, field.form, field.form_selector, name, value)
+    updated = %{session | form_data: form_data}
 
-        case maybe_trigger_live_change(updated, field) do
-          {:ok, changed_session, change} ->
-            observed = %{
-              action: :fill_in,
-              path: Session.current_path(changed_session),
-              field: field,
-              value: value,
-              phx_change: change.triggered,
-              target: change.target,
-              transition: change.transition || session_transition(changed_session)
-            }
+    case maybe_trigger_live_change(updated, field) do
+      {:ok, changed_session, change} ->
+        observed = %{
+          action: :fill_in,
+          path: Session.current_path(changed_session),
+          field: field,
+          value: value,
+          phx_change: change.triggered,
+          target: change.target,
+          transition: change.transition || session_transition(changed_session)
+        }
 
-            {:ok, update_last_result(changed_session, :fill_in, observed), observed}
+        {:ok, update_last_result(changed_session, :fill_in, observed), observed}
 
-          {:error, failed_session, reason, details} ->
-            observed = %{
-              action: :fill_in,
-              path: session.current_path,
-              field: field,
-              value: value,
-              details: details,
-              transition: session_transition(session)
-            }
-
-            {:error, failed_session, observed, reason}
-        end
-
-      {:ok, _field} ->
+      {:error, failed_session, reason, details} ->
         observed = %{
           action: :fill_in,
           path: session.current_path,
+          field: field,
+          value: value,
+          details: details,
           transition: session_transition(session)
         }
 
-        {:error, session, observed, "matched field does not include a name attribute"}
-
-      :error ->
-        observed = %{
-          action: :fill_in,
-          path: session.current_path,
-          candidate_values: field_candidate_values(session, opts),
-          transition: session_transition(session)
-        }
-
-        {:error, session, observed, "no form field matched locator"}
+        {:error, failed_session, observed, reason}
     end
   end
 
-  defp do_live_toggle_checkbox(session, expected, opts, checked?, op) do
-    case find_checkbox_field(session, expected, opts) do
-      {:ok, field} ->
-        apply_live_checkbox_change(session, field, checked?, op)
+  defp do_live_toggle_checkbox(session, field, checked?, op) do
+    apply_live_checkbox_change(session, field, checked?, op)
+  end
+
+  defp live_action_timeout_ms(session, opts), do: Keyword.get(opts, :timeout, session.assert_timeout_ms)
+
+  defp wait_for_live_form_field(session, expected, opts, op) do
+    finder = fn refreshed ->
+      case LiveViewHTML.find_form_field(refreshed.html, expected, opts, Session.scope(refreshed)) do
+        {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
+          live_field_actionability(field, op)
+
+        {:ok, %{input_type: "checkbox"} = field} ->
+          if checkbox_click_without_name_supported?(field) do
+            live_field_actionability(field, op)
+          else
+            {:error, "matched field does not include a name attribute"}
+          end
+
+        {:ok, %{input_type: "radio"} = field} ->
+          if radio_click_without_name_supported?(field) do
+            live_field_actionability(field, op)
+          else
+            {:error, "matched field does not include a name attribute"}
+          end
+
+        {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
+          {:error, live_field_type_error(op, field)}
+
+        {:ok, _field} ->
+          {:error, live_field_missing_name_error(op)}
+
+        :error ->
+          {:error, live_field_not_found_error(op)}
+      end
+    end
+
+    wait_for_live_actionable(session, live_action_timeout_ms(session, opts), finder)
+  end
+
+  defp wait_for_live_submit_button(session, expected, opts) do
+    finder = fn refreshed ->
+      case LiveViewHTML.find_submit_button(refreshed.html, expected, opts, Session.scope(refreshed)) do
+        {:ok, %{disabled: true}} -> {:retry, "matched field is disabled"}
+        {:ok, button} -> {:ok, button}
+        :error -> {:error, "no submit button matched locator"}
+      end
+    end
+
+    wait_for_live_actionable(session, live_action_timeout_ms(session, opts), finder)
+  end
+
+  defp wait_for_live_clickable_button(session, expected, opts, kind) do
+    finder = fn refreshed ->
+      case find_clickable_button(refreshed, expected, opts, kind) do
+        {:ok, %{disabled: true}} -> {:retry, "matched field is disabled"}
+        {:ok, button} -> {:ok, button}
+        :error -> {:error, "no button matched locator"}
+      end
+    end
+
+    wait_for_live_actionable(session, live_action_timeout_ms(session, opts), finder)
+  end
+
+  defp wait_for_live_actionable(session, timeout_ms, finder) when is_function(finder, 1) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    do_wait_for_live_actionable(session, deadline, nil, finder)
+  end
+
+  defp do_wait_for_live_actionable(session, deadline, pending_reason, finder) when is_function(finder, 1) do
+    refreshed = with_latest_html(session)
+
+    case finder.(refreshed) do
+      {:ok, candidate} ->
+        {:ok, refreshed, candidate}
+
+      {:retry, reason} ->
+        if live_action_time_remaining?(deadline) do
+          Process.sleep(25)
+          do_wait_for_live_actionable(refreshed, deadline, reason, finder)
+        else
+          {:error, refreshed, reason}
+        end
 
       {:error, reason} ->
-        observed = checkbox_error_observed(session, op)
-        {:error, session, observed, reason}
-    end
-  end
-
-  defp find_checkbox_field(session, expected, opts) do
-    case LiveViewHTML.find_form_field(session.html, expected, opts, Session.scope(session)) do
-      {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
-        {:ok, field}
-
-      {:ok, %{input_type: "checkbox"} = field} ->
-        if checkbox_click_without_name_supported?(field) do
-          {:ok, field}
+        if pending_reason && live_action_retryable_reason?(reason) && live_action_time_remaining?(deadline) do
+          Process.sleep(25)
+          do_wait_for_live_actionable(refreshed, deadline, pending_reason, finder)
         else
-          {:error, "matched field does not include a name attribute"}
+          {:error, refreshed, pending_reason || reason}
         end
-
-      {:ok, %{name: name}} when is_binary(name) and name != "" ->
-        {:error, "matched field is not a checkbox"}
-
-      {:ok, _field} ->
-        {:error, "matched field does not include a name attribute"}
-
-      :error ->
-        {:error, "no form field matched locator"}
     end
   end
+
+  defp live_action_time_remaining?(deadline) do
+    System.monotonic_time(:millisecond) < deadline
+  end
+
+  defp live_action_retryable_reason?(reason) do
+    reason in ["no form field matched locator", "no submit button matched locator", "no button matched locator"]
+  end
+
+  defp live_field_disabled_reason(%{input_disabled: true}, :select), do: "matched select field is disabled"
+  defp live_field_disabled_reason(%{input_disabled: true}, _op), do: "matched field is disabled"
+  defp live_field_disabled_reason(_field, _op), do: nil
+
+  defp live_field_actionability(field, op) do
+    cond do
+      reason = live_field_type_error(op, field) ->
+        {:error, reason}
+
+      reason = live_field_disabled_reason(field, op) ->
+        {:retry, reason}
+
+      true ->
+        {:ok, field}
+    end
+  end
+
+  defp live_field_not_found_error(:upload), do: "no file input matched locator"
+  defp live_field_not_found_error(_op), do: "no form field matched locator"
+
+  defp live_field_missing_name_error(:upload), do: "matched upload field does not include a name attribute"
+  defp live_field_missing_name_error(_op), do: "matched field does not include a name attribute"
+
+  defp live_field_type_error(:select, %{input_type: "select"}), do: nil
+  defp live_field_type_error(:select, _field), do: "matched field is not a select element"
+  defp live_field_type_error(:choose, %{input_type: "radio"}), do: nil
+  defp live_field_type_error(:choose, _field), do: "matched field is not a radio input"
+  defp live_field_type_error(op, %{input_type: "checkbox"}) when op in [:check, :uncheck], do: nil
+  defp live_field_type_error(op, _field) when op in [:check, :uncheck], do: "matched field is not a checkbox"
+  defp live_field_type_error(:upload, %{input_type: "file"}), do: nil
+  defp live_field_type_error(:upload, _field), do: "matched field is not a file input"
+  defp live_field_type_error(_op, _field), do: nil
 
   defp apply_live_checkbox_change(session, field, checked?, op) do
     if checkbox_requires_phx_click?(field) and not field[:input_phx_click] do

@@ -168,6 +168,11 @@ Element-targeting actions also support position filters:
 Browser actions additionally support:
 - `force: true` (bypass browser actionability checks for the targeted action)
 
+Default actionability behavior:
+- browser actions wait for matched controls to become enabled before acting
+- live actions retry briefly when a matched form control is still disabled after a preceding LiveView update
+- static actions do not wait; disabled controls fail immediately
+
 Example:
 
 ```elixir

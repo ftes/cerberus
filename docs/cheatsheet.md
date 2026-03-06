@@ -42,6 +42,11 @@
 | Assert path/query | `assert_path(session, "/search/results", query: %{q: "Aragorn"}, timeout: 500)` |
 | Scope to subtree | `within(session, ~l"#secondary-panel"c, fn s -> ... end)` |
 
+Actionability defaults:
+- browser waits for matched controls to become enabled
+- live retries briefly when a matched form control is still disabled after a LiveView update
+- static fails immediately on disabled controls
+
 Browser assertion execution model:
 - `assert_has`/`refute_has` and path assertions use in-browser wait loops.
 - Cerberus adds bounded transient eval retries for navigation/context-reset races.
