@@ -112,6 +112,11 @@ defmodule Cerberus.Driver.Browser.Config do
     max(timeout_ms, 1_000) + 5_000
   end
 
+  @spec action_command_timeout_ms(non_neg_integer()) :: pos_integer()
+  def action_command_timeout_ms(timeout_ms) when is_integer(timeout_ms) and timeout_ms >= 0 do
+    command_timeout_ms(timeout_ms * 3)
+  end
+
   @spec text_expectation_payload(String.t() | Regex.t()) :: Types.bidi_params()
   def text_expectation_payload(%Regex{source: source, opts: opts}) do
     %{"type" => "regex", "source" => source, "opts" => opts}

@@ -51,7 +51,7 @@ defmodule Cerberus.Driver do
   @callback assert_value(session_t(), Locator.t(), String.t() | Regex.t(), assert_value_opts()) :: op_ok() | op_error()
   @callback refute_value(session_t(), Locator.t(), String.t() | Regex.t(), assert_value_opts()) :: op_ok() | op_error()
   @callback assert_download(session_t(), String.t(), assert_download_opts()) :: session_t()
-  @callback default_assert_timeout_ms(session_t()) :: non_neg_integer()
+  @callback default_timeout_ms(session_t()) :: non_neg_integer()
   @callback run_path_assertion(session_t(), String.t() | Regex.t(), path_opts(), non_neg_integer(), path_operation()) ::
               session_t()
   @callback assert_path(session_t(), String.t() | Regex.t(), path_opts()) :: op_ok() | op_error()

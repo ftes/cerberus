@@ -6,7 +6,7 @@ defmodule Cerberus.BrowserTimeoutAssertionsTest do
 
   test "browser defaults use 500ms assertion timeout and wait for async text" do
     session = session(:browser)
-    assert session.assert_timeout_ms == 500
+    assert session.timeout_ms == 500
 
     session
     |> visit("/live/async_page")
@@ -36,6 +36,15 @@ defmodule Cerberus.BrowserTimeoutAssertionsTest do
     |> visit("/live/async_page")
     |> click(role(:button, name: "Async redirect!"))
     |> assert_path("/articles", timeout: 2_000)
+  end
+
+  test "browser session timeout is used for action waits when call timeout is absent" do
+    :browser
+    |> session(timeout_ms: 600)
+    |> visit("/live/actionability/delayed")
+    |> select(~l"Category"l, option: ~l"Advanced"e)
+    |> select(~l"Role"l, option: ~l"Analyst"e)
+    |> assert_has(text("role: analyst", exact: true))
   end
 
   test "browser assert_path falls back to direct URL checks when helper is missing" do

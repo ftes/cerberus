@@ -1,45 +1,48 @@
 defmodule Cerberus.Session.Config do
   @moduledoc false
 
-  @default_assert_timeout_ms 0
-  @default_live_browser_assert_timeout_ms 500
+  @default_timeout_ms 0
+  @default_live_timeout_ms 500
+  @default_browser_timeout_ms 500
 
-  @spec assert_timeout_from_opts!(keyword()) :: non_neg_integer()
-  def assert_timeout_from_opts!(opts) when is_list(opts) do
-    assert_timeout_from_opts!(opts, @default_assert_timeout_ms)
-  end
+  @type driver_kind :: :static | :live | :browser
 
-  @spec assert_timeout_from_opts!(keyword(), non_neg_integer()) :: non_neg_integer()
-  def assert_timeout_from_opts!(opts, fallback_default)
-      when is_list(opts) and is_integer(fallback_default) and fallback_default >= 0 do
-    if Keyword.has_key?(opts, :assert_timeout_ms) do
-      case Keyword.get(opts, :assert_timeout_ms) do
-        timeout when is_integer(timeout) and timeout >= 0 ->
-          timeout
-
-        timeout ->
-          raise ArgumentError, ":assert_timeout_ms must be a non-negative integer, got: #{inspect(timeout)}"
-      end
+  @spec timeout_from_opts!(keyword(), driver_kind()) :: {non_neg_integer(), boolean()}
+  def timeout_from_opts!(opts, driver) when is_list(opts) and driver in [:static, :live, :browser] do
+    if Keyword.has_key?(opts, :timeout_ms) do
+      {normalize_timeout_ms!(Keyword.get(opts, :timeout_ms)), true}
     else
-      default_assert_timeout_ms(fallback_default)
+      {default_timeout_ms(driver), false}
     end
   end
 
-  @spec default_assert_timeout_ms() :: non_neg_integer()
-  def default_assert_timeout_ms do
-    default_assert_timeout_ms(@default_assert_timeout_ms)
+  @spec default_timeout_ms(driver_kind()) :: non_neg_integer()
+  def default_timeout_ms(driver) when driver in [:static, :live, :browser] do
+    fallback =
+      case driver do
+        :static -> @default_timeout_ms
+        :live -> @default_live_timeout_ms
+        :browser -> @default_browser_timeout_ms
+      end
+
+    global_timeout =
+      :cerberus
+      |> Application.get_env(:timeout_ms)
+      |> normalize_non_negative_integer(fallback)
+
+    driver_timeout =
+      :cerberus
+      |> Application.get_env(driver, [])
+      |> Keyword.get(:timeout_ms)
+
+    normalize_non_negative_integer(driver_timeout, global_timeout)
   end
 
-  @spec default_assert_timeout_ms(non_neg_integer()) :: non_neg_integer()
-  def default_assert_timeout_ms(fallback_default) when is_integer(fallback_default) and fallback_default >= 0 do
-    :cerberus
-    |> Application.get_env(:assert_timeout_ms)
-    |> normalize_non_negative_integer(fallback_default)
-  end
+  @spec normalize_timeout_ms!(term()) :: non_neg_integer()
+  def normalize_timeout_ms!(timeout) when is_integer(timeout) and timeout >= 0, do: timeout
 
-  @spec live_browser_assert_timeout_default_ms() :: non_neg_integer()
-  def live_browser_assert_timeout_default_ms do
-    default_assert_timeout_ms(@default_live_browser_assert_timeout_ms)
+  def normalize_timeout_ms!(timeout) do
+    raise ArgumentError, ":timeout_ms must be a non-negative integer, got: #{inspect(timeout)}"
   end
 
   defp normalize_non_negative_integer(value, _default) when is_integer(value) and value >= 0, do: value

@@ -595,6 +595,13 @@ defmodule Cerberus.Fixtures.PageController do
             <button id="offscreen-action" type="button">Offscreen Action</button>
             <p id="offscreen-action-result">Offscreen action result: pending</p>
           </section>
+
+          <section>
+            <h2>Labels</h2>
+            <label id="checkbox-label" for="label-checkbox">Label checkbox</label>
+            <input id="label-checkbox" type="checkbox" />
+            <p id="label-click-result">Label click result: unchecked</p>
+          </section>
         </main>
 
         <script>
@@ -616,6 +623,8 @@ defmodule Cerberus.Fixtures.PageController do
             const hiddenActionResult = document.getElementById("hidden-action-result");
             const offscreenActionButton = document.getElementById("offscreen-action");
             const offscreenActionResult = document.getElementById("offscreen-action-result");
+            const labelCheckbox = document.getElementById("label-checkbox");
+            const labelClickResult = document.getElementById("label-click-result");
 
             keyboardInput.addEventListener("input", () => {
               keyboardValue.textContent = "Keyboard value: " + keyboardInput.value;
@@ -664,6 +673,12 @@ defmodule Cerberus.Fixtures.PageController do
 
             offscreenActionButton.addEventListener("click", () => {
               offscreenActionResult.textContent = "Offscreen action result: clicked";
+            });
+
+            labelCheckbox.addEventListener("change", () => {
+              labelClickResult.textContent = labelCheckbox.checked
+                ? "Label click result: checked"
+                : "Label click result: unchecked";
             });
           })();
         </script>
@@ -775,6 +790,75 @@ defmodule Cerberus.Fixtures.PageController do
           </div>
           <h1>Busy Live Root</h1>
           <p id="busy-live-root-ticks">0</p>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def long_action_budget(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Long Action Budget</title>
+        <script>
+          (() => {
+            const connectDelayMs = 2800;
+            const enableDelayMs = 5600;
+            const settleDelayMs = 2800;
+
+            const onReady = () => {
+              const root = document.getElementById("long-action-root");
+              const select = document.getElementById("long-action-select");
+              const status = document.getElementById("long-action-status");
+              if (!root || !select || !status) return;
+
+              window.setTimeout(() => {
+                root.classList.remove("phx-disconnected");
+                root.classList.add("phx-connected");
+                status.textContent = "connected";
+              }, connectDelayMs);
+
+              window.setTimeout(() => {
+                select.disabled = false;
+                status.textContent = "enabled";
+              }, enableDelayMs);
+
+              select.addEventListener("change", () => {
+                const startedAt = Date.now();
+                status.textContent = "settling";
+
+                const interval = window.setInterval(() => {
+                  status.textContent = `settling-${Date.now() - startedAt}`;
+
+                  if (Date.now() - startedAt >= settleDelayMs) {
+                    window.clearInterval(interval);
+                    status.textContent = "selected";
+                  }
+                }, 25);
+              });
+            };
+
+            if (document.readyState === "loading") {
+              document.addEventListener("DOMContentLoaded", onReady, { once: true });
+            } else {
+              onReady();
+            }
+          })();
+        </script>
+      </head>
+      <body>
+        <main>
+          <div data-phx-session="long-action-root" id="long-action-root" class="phx-disconnected">
+            <label for="long-action-select">Slow role</label>
+            <select id="long-action-select" name="role" disabled>
+              <option value="">Choose</option>
+              <option value="analyst">Analyst</option>
+            </select>
+            <p id="long-action-status">booting</p>
+          </div>
         </main>
       </body>
     </html>

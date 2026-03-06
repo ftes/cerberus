@@ -241,8 +241,9 @@ session()
 
 > #### Tip
 >
-> Live and browser assertion APIs default to a `500ms` timeout budget (`assert_*` and `refute_*`, including path assertions).
-> You can override per call (`timeout: ...`), per session (`session(assert_timeout_ms: ...)`), or globally (`config :cerberus, :assert_timeout_ms, ...`).
+> Timeouts are unified across assertions, actions, and path assertions.
+> Default timeout precedence is: global all-driver config, then global per-driver config, then session `timeout_ms`, then call `timeout: ...`.
+> The built-in defaults are `0ms` for static and `500ms` for live/browser.
 > In browser mode, text/path assertions run wait loops in browser JS and Cerberus adds bounded transient eval retries for navigation/context-reset races.
 
 ## Step 7: Browser-Only Extensions

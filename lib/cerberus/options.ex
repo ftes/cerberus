@@ -66,7 +66,7 @@ defmodule Cerberus.Options do
   @type session_common_opts :: [
           endpoint: module(),
           conn: Plug.Conn.t() | nil,
-          assert_timeout_ms: non_neg_integer()
+          timeout_ms: non_neg_integer()
         ]
   @type browser_override_opts :: [
           viewport: {pos_integer(), pos_integer()} | %{width: pos_integer(), height: pos_integer()} | keyword() | nil,
@@ -99,7 +99,7 @@ defmodule Cerberus.Options do
         ]
   @type session_browser_opts :: [
           endpoint: module(),
-          assert_timeout_ms: non_neg_integer(),
+          timeout_ms: non_neg_integer(),
           ready_timeout_ms: pos_integer(),
           ready_quiet_ms: pos_integer(),
           user_agent: String.t() | nil,
@@ -493,12 +493,12 @@ defmodule Cerberus.Options do
   @session_common_opts_schema [
     endpoint: [type: :any, doc: "Endpoint module override."],
     conn: [type: :any, doc: "Seed Plug.Conn for session state."],
-    assert_timeout_ms: [type: :non_neg_integer, doc: "Default assertion timeout in milliseconds."]
+    timeout_ms: [type: :non_neg_integer, doc: "Default timeout in milliseconds."]
   ]
 
   @session_browser_opts_schema [
     endpoint: [type: :any, doc: "Endpoint module override."],
-    assert_timeout_ms: [type: :non_neg_integer, doc: "Default assertion timeout in milliseconds."],
+    timeout_ms: [type: :non_neg_integer, doc: "Default timeout in milliseconds."],
     ready_timeout_ms: [type: :pos_integer, doc: "Browser readiness timeout in milliseconds."],
     ready_quiet_ms: [type: :pos_integer, doc: "Browser readiness quiet window in milliseconds."],
     user_agent: [type: :any, doc: "Top-level user-agent override for browser session context."],

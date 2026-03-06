@@ -8,8 +8,10 @@
 | Real browser behavior | `session(:browser)` |
 | Explicit browser lane | `session(:chrome)` or `session(:firefox)` |
 | Default project lane policy | Chrome-first (CI and regular local runs) |
-| Live/browser assertion timeout default | `500ms` (override with `session(assert_timeout_ms: 300)`) |
+| Unified default timeout | Static `0ms`, live/browser `500ms` |
+| Per-session timeout override | `session(timeout_ms: 300)` or `session(:browser, timeout_ms: 300)` |
 | Browser ready timeout default | `session(:browser, ready_timeout_ms: 2200)` |
+| Per-driver timeout config | `config :cerberus, :live, timeout_ms: 700` |
 | Global headed mode | `config :cerberus, :browser, headless: false` |
 | Global slow motion | `config :cerberus, :browser, slow_mo: 120` |
 | Global remote runtime | `config :cerberus, :browser, webdriver_url: "http://127.0.0.1:4444"` |

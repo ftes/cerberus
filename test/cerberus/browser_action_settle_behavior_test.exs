@@ -102,6 +102,14 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> assert_has(text("Count: 1", exact: true))
   end
 
+  test "browser actions budget enough time for live connect resolve and settle phases", context do
+    :browser
+    |> SharedBrowserSession.driver_session(context)
+    |> visit("/browser/actionability/long-budget")
+    |> select(~l"Slow role"l, option: ~l"Analyst"e, timeout: 3_000)
+    |> assert_has(text("selected", exact: true), timeout: 0)
+  end
+
   test "browser submit on live non-navigation forms still performs await_ready", context do
     :browser
     |> SharedBrowserSession.driver_session(context)

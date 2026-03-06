@@ -55,7 +55,11 @@ In those cases, prefer `Browser.with_popup/4` and assert both `main` and `popup`
 You can configure defaults once:
 
 ```elixir
-config :cerberus, :assert_timeout_ms, 300
+config :cerberus, :timeout_ms, 300
+
+config :cerberus, :live, timeout_ms: 700
+
+config :cerberus, :browser, timeout_ms: 900
 
 config :cerberus, :browser,
   ready_timeout_ms: 2_200,
@@ -70,14 +74,16 @@ config :cerberus, :browser,
 ```
 
 Override precedence is:
-- call opts (`assert_has(..., timeout: ...)`)
-- session opts (`session(assert_timeout_ms: ...)`, `session(:browser, ready_timeout_ms: ...)`, `session(:browser, ready_quiet_ms: ...)`, context overrides in `session(:browser, browser: [...])`)
-- app config
-- hardcoded fallback
+- global all-driver config (`config :cerberus, :timeout_ms, ...`)
+- global per-driver config (`config :cerberus, :static | :live | :browser, timeout_ms: ...`)
+- session opts (`session(timeout_ms: ...)`, `session(:browser, ready_timeout_ms: ...)`, `session(:browser, ready_quiet_ms: ...)`, context overrides in `session(:browser, browser: [...])`)
+- call opts (`assert_has(..., timeout: ...)`, `click(..., timeout: ...)`, `assert_path(..., timeout: ...)`)
 
-Assertion-timeout fallback:
-- Live and Browser assertions (`assert_*`/`refute_*`, including `assert_path`/`refute_path`) default to `500ms`.
-- Static assertions remain immediate unless you pass explicit call/session/app timeout overrides.
+Unified timeout defaults:
+- Static defaults to `0ms`.
+- Live defaults to `500ms`.
+- Browser defaults to `500ms`.
+- The same default timeout applies to assertions, actions, and path assertions.
 
 Option scopes:
 - Per-session context options: `ready_timeout_ms`, `ready_quiet_ms`, `user_agent`, `browser: [viewport: ..., user_agent: ..., popup_mode: :allow | :same_tab, init_script: ... | init_scripts: [...]]`.

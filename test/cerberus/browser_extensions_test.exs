@@ -122,6 +122,14 @@ defmodule Cerberus.BrowserExtensionsTest do
     evaluate_js(session, "window.scrollY", &assert(&1 > 0))
   end
 
+  test "click can target plain label elements in the browser" do
+    :browser
+    |> session()
+    |> visit("/browser/extensions")
+    |> click(css("#checkbox-label"))
+    |> assert_has(text("Label click result: checked", exact: true))
+  end
+
   test "evaluate_js and cookie helpers cover add_cookies, clear_cookies, and session cookie semantics" do
     session =
       :browser

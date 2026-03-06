@@ -27,11 +27,15 @@ defmodule Cerberus.TimeoutDefaultsTest do
   end
 
   setup do
-    previous_assert_timeout = Application.get_env(:cerberus, :assert_timeout_ms)
+    previous_timeout = Application.get_env(:cerberus, :timeout_ms)
+    previous_static_config = Application.get_env(:cerberus, :static, [])
+    previous_live_config = Application.get_env(:cerberus, :live, [])
     previous_browser_config = Application.get_env(:cerberus, :browser, [])
 
     on_exit(fn ->
-      Application.put_env(:cerberus, :assert_timeout_ms, previous_assert_timeout)
+      Application.put_env(:cerberus, :timeout_ms, previous_timeout)
+      Application.put_env(:cerberus, :static, previous_static_config)
+      Application.put_env(:cerberus, :live, previous_live_config)
       Application.put_env(:cerberus, :browser, previous_browser_config)
     end)
 
@@ -39,37 +43,66 @@ defmodule Cerberus.TimeoutDefaultsTest do
   end
 
   test "app-level assertion timeout default is used when call/session overrides are absent" do
-    Application.put_env(:cerberus, :assert_timeout_ms, 300)
+    Application.put_env(:cerberus, :timeout_ms, 300)
 
     session()
     |> visit("/live/async_page")
     |> assert_has(text("Title loaded async"))
   end
 
-  test "session-level assert_timeout_ms overrides app-level default" do
-    Application.put_env(:cerberus, :assert_timeout_ms, 0)
+  test "session-level timeout_ms overrides app-level default" do
+    Application.put_env(:cerberus, :timeout_ms, 0)
 
-    [assert_timeout_ms: 300]
+    [timeout_ms: 300]
     |> session()
     |> visit("/live/async_page")
     |> assert_has(text("Title loaded async"))
   end
 
   test "call timeout overrides session and app defaults" do
-    Application.put_env(:cerberus, :assert_timeout_ms, 300)
+    Application.put_env(:cerberus, :timeout_ms, 300)
 
     assert_raise AssertionError, ~r/timeout: 0/, fn ->
-      [assert_timeout_ms: 300]
+      [timeout_ms: 300]
       |> session()
       |> visit("/live/async_page")
       |> assert_has(text("Title loaded async"), timeout: 0)
     end
   end
 
-  test "session constructor rejects invalid assert_timeout_ms override" do
-    assert_raise ArgumentError, ~r/session\/1 invalid options:.*assert_timeout_ms/, fn ->
-      session(assert_timeout_ms: -1)
+  test "session constructor rejects invalid timeout_ms override" do
+    assert_raise ArgumentError, ~r/session\/1 invalid options:.*timeout_ms/, fn ->
+      session(timeout_ms: -1)
     end
+  end
+
+  test "per-driver config overrides global timeout config" do
+    Application.put_env(:cerberus, :timeout_ms, 300)
+    Application.put_env(:cerberus, :static, timeout_ms: 120)
+    Application.put_env(:cerberus, :live, timeout_ms: 700)
+    Application.put_env(:cerberus, :browser, timeout_ms: 900)
+
+    assert session().timeout_ms == 120
+    assert :phoenix |> session() |> visit("/live/async_page") |> Map.fetch!(:timeout_ms) == 700
+    assert session(:browser).timeout_ms == 900
+  end
+
+  test "driver transitions re-resolve default timeout unless session override was explicit" do
+    Application.put_env(:cerberus, :timeout_ms, 300)
+    Application.put_env(:cerberus, :static, timeout_ms: 120)
+    Application.put_env(:cerberus, :live, timeout_ms: 700)
+
+    assert session() |> visit("/live/async_page") |> Map.fetch!(:timeout_ms) == 700
+    assert [timeout_ms: 450] |> session() |> visit("/live/async_page") |> Map.fetch!(:timeout_ms) == 450
+  end
+
+  test "session timeout default is used for live action waits when call timeout is absent" do
+    :phoenix
+    |> session(timeout_ms: 600)
+    |> visit("/live/actionability/delayed")
+    |> select(~l"Category"l, option: ~l"Advanced"e)
+    |> select(~l"Role"l, option: ~l"Analyst"e)
+    |> assert_has(text("role: analyst", exact: true))
   end
 
   test "browser session constructor rejects invalid ready timeout options before driver startup" do

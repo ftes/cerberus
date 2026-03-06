@@ -72,7 +72,8 @@ defmodule Cerberus.Driver.Browser do
           bidi_opts: keyword(),
           endpoint: module() | nil,
           base_url: String.t(),
-          assert_timeout_ms: non_neg_integer(),
+          timeout_ms: non_neg_integer(),
+          timeout_overridden?: boolean(),
           ready_timeout_ms: pos_integer(),
           ready_quiet_ms: pos_integer(),
           browser_context_defaults: browser_context_defaults(),
@@ -88,7 +89,8 @@ defmodule Cerberus.Driver.Browser do
             bidi_opts: [],
             endpoint: nil,
             base_url: nil,
-            assert_timeout_ms: 0,
+            timeout_ms: 0,
+            timeout_overridden?: false,
             ready_timeout_ms: @default_ready_timeout_ms,
             ready_quiet_ms: @default_ready_quiet_ms,
             browser_context_defaults: @empty_browser_context_defaults,
@@ -102,6 +104,7 @@ defmodule Cerberus.Driver.Browser do
     owner = self()
     context_defaults = browser_context_defaults(opts)
     browser_name = Runtime.browser_name(opts)
+    {timeout_ms, timeout_overridden?} = SessionConfig.timeout_from_opts!(opts, :browser)
     session_bidi_opts = session_bidi_opts(opts, browser_name)
     ensure_popup_mode_supported!(browser_name, context_defaults.popup_mode)
 
@@ -133,8 +136,8 @@ defmodule Cerberus.Driver.Browser do
       bidi_opts: session_bidi_opts,
       endpoint: Keyword.get(opts, :endpoint) || Application.get_env(:cerberus, :endpoint),
       base_url: base_url,
-      assert_timeout_ms:
-        SessionConfig.assert_timeout_from_opts!(opts, SessionConfig.live_browser_assert_timeout_default_ms()),
+      timeout_ms: timeout_ms,
+      timeout_overridden?: timeout_overridden?,
       ready_timeout_ms: ready_timeout_ms(opts),
       ready_quiet_ms: ready_quiet_ms(opts),
       browser_context_defaults: context_defaults
@@ -324,7 +327,7 @@ defmodule Cerberus.Driver.Browser do
   end
 
   @impl true
-  def default_assert_timeout_ms(%__MODULE__{} = session), do: session.assert_timeout_ms
+  def default_timeout_ms(%__MODULE__{} = session), do: session.timeout_ms
 
   @impl true
   def run_path_assertion(%__MODULE__{} = session, expected, opts, timeout, op) when op in [:assert_path, :refute_path] do
@@ -458,7 +461,7 @@ defmodule Cerberus.Driver.Browser do
   @impl true
   def assert_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
     state = state!(session)
-    timeout_ms = assertion_timeout_ms(opts)
+    timeout_ms = assertion_timeout_ms(session, opts)
     match_opts = locator_match_opts(locator, Keyword.delete(opts, :timeout))
     visible = assertion_visibility(opts, locator)
     assertion_runner = if(locator_assertion_requires_locator_engine?(locator), do: :locator, else: :text)
@@ -475,7 +478,7 @@ defmodule Cerberus.Driver.Browser do
   @impl true
   def assert_has(%__MODULE__{} = session, %Locator{} = locator, opts) do
     state = state!(session)
-    timeout_ms = assertion_timeout_ms(opts)
+    timeout_ms = assertion_timeout_ms(session, opts)
     match_opts = locator_match_opts(locator, Keyword.delete(opts, :timeout))
     visible = assertion_visibility(opts, locator)
 
@@ -491,7 +494,7 @@ defmodule Cerberus.Driver.Browser do
   @impl true
   def refute_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
     state = state!(session)
-    timeout_ms = assertion_timeout_ms(opts)
+    timeout_ms = assertion_timeout_ms(session, opts)
     match_opts = locator_match_opts(locator, Keyword.delete(opts, :timeout))
     visible = assertion_visibility(opts, locator)
     assertion_runner = if(locator_assertion_requires_locator_engine?(locator), do: :locator, else: :text)
@@ -508,7 +511,7 @@ defmodule Cerberus.Driver.Browser do
   @impl true
   def refute_has(%__MODULE__{} = session, %Locator{} = locator, opts) do
     state = state!(session)
-    timeout_ms = assertion_timeout_ms(opts)
+    timeout_ms = assertion_timeout_ms(session, opts)
     match_opts = locator_match_opts(locator, Keyword.delete(opts, :timeout))
     visible = assertion_visibility(opts, locator)
 
@@ -525,7 +528,7 @@ defmodule Cerberus.Driver.Browser do
   def assert_value(%__MODULE__{} = session, %Locator{} = locator, expected, opts)
       when (is_binary(expected) or is_struct(expected, Regex)) and is_list(opts) do
     state = state!(session)
-    timeout_ms = assertion_timeout_ms(opts)
+    timeout_ms = assertion_timeout_ms(session, opts)
     {field_expected, match_opts} = LocatorOps.form(locator, Keyword.delete(opts, :timeout))
 
     case run_value_assertion_by_mode(state, field_expected, match_opts, expected, timeout_ms, :assert) do
@@ -541,7 +544,7 @@ defmodule Cerberus.Driver.Browser do
   def refute_value(%__MODULE__{} = session, %Locator{} = locator, expected, opts)
       when (is_binary(expected) or is_struct(expected, Regex)) and is_list(opts) do
     state = state!(session)
-    timeout_ms = assertion_timeout_ms(opts)
+    timeout_ms = assertion_timeout_ms(session, opts)
     {field_expected, match_opts} = LocatorOps.form(locator, Keyword.delete(opts, :timeout))
 
     case run_value_assertion_by_mode(state, field_expected, match_opts, expected, timeout_ms, :refute) do
@@ -668,10 +671,10 @@ defmodule Cerberus.Driver.Browser do
 
   defp perform_action(session, state, op, expected, opts, extra_payload \\ %{})
        when is_list(opts) and is_map(extra_payload) do
-    timeout_ms = action_timeout_ms(opts, state.ready_timeout_ms)
+    timeout_ms = action_timeout_ms(state, opts)
     payload = build_action_payload(state, op, expected, opts, timeout_ms, extra_payload)
 
-    case eval_json(state, Expressions.action_perform(payload), command_timeout_ms(timeout_ms)) do
+    case eval_json(state, Expressions.action_perform(payload), action_command_timeout_ms(timeout_ms)) do
       {:ok, result} ->
         action_perform_result(session, state, op, opts, result)
 
@@ -1015,7 +1018,7 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp maybe_await_ready(session, state, result, opts, fallback_observed, on_success) do
-    case await_driver_ready(state, action_timeout_ms(opts, state.ready_timeout_ms)) do
+    case await_driver_ready(state, action_timeout_ms(state, opts)) do
       {:ok, ready_state, readiness} ->
         on_success.({ready_state, readiness})
 
@@ -1675,7 +1678,7 @@ defmodule Cerberus.Driver.Browser do
 
   defp run_path_assertion(session, expected, opts, op) when op in [:assert_path, :refute_path] do
     state = state!(session)
-    timeout_ms = path_timeout_ms(opts)
+    timeout_ms = path_timeout_ms(state, opts)
     exact = Keyword.fetch!(opts, :exact)
     expected_query = Cerberus.Path.normalize_expected_query(Keyword.get(opts, :query))
 
@@ -1927,7 +1930,8 @@ defmodule Cerberus.Driver.Browser do
         tab_id: state.tab_id,
         browser_name: state.browser_name,
         base_url: state.base_url,
-        assert_timeout_ms: state.assert_timeout_ms,
+        timeout_ms: state.timeout_ms,
+        timeout_overridden?: session.timeout_overridden?,
         ready_timeout_ms: state.ready_timeout_ms,
         ready_quiet_ms: state.ready_quiet_ms,
         browser_context_defaults: state.browser_context_defaults,
@@ -2081,21 +2085,38 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp assertion_timeout_ms(opts), do: Config.assertion_timeout_ms(opts)
-  defp path_timeout_ms(opts), do: Config.path_timeout_ms(opts)
-
-  defp action_timeout_ms(opts, fallback_timeout_ms)
-       when is_list(opts) and is_integer(fallback_timeout_ms) and fallback_timeout_ms > 0 do
+  defp assertion_timeout_ms(%__MODULE__{} = session, opts) when is_list(opts) do
     case Keyword.fetch(opts, :timeout) do
       {:ok, timeout_ms} when is_integer(timeout_ms) and timeout_ms >= 0 ->
         timeout_ms
 
       _other ->
-        fallback_timeout_ms
+        session.timeout_ms
+    end
+  end
+
+  defp action_timeout_ms(%__MODULE__{} = session, opts) when is_list(opts) do
+    case Keyword.fetch(opts, :timeout) do
+      {:ok, timeout_ms} when is_integer(timeout_ms) and timeout_ms >= 0 ->
+        timeout_ms
+
+      _other ->
+        session.timeout_ms
+    end
+  end
+
+  defp path_timeout_ms(%__MODULE__{} = session, opts) when is_list(opts) do
+    case Keyword.fetch(opts, :timeout) do
+      {:ok, timeout_ms} when is_integer(timeout_ms) and timeout_ms >= 0 ->
+        timeout_ms
+
+      _other ->
+        session.timeout_ms
     end
   end
 
   defp command_timeout_ms(timeout_ms), do: Config.command_timeout_ms(timeout_ms)
+  defp action_command_timeout_ms(timeout_ms), do: Config.action_command_timeout_ms(timeout_ms)
   defp text_expectation_payload(expected), do: Config.text_expectation_payload(expected)
   defp path_expectation_payload(expected), do: Config.path_expectation_payload(expected)
   defp visibility_mode(visible), do: Config.visibility_mode(visible)

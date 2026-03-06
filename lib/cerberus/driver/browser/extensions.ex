@@ -251,7 +251,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
   defp extension_timeout_ms(%BrowserSession{} = session, opts) when is_list(opts) do
     case Keyword.get(opts, :timeout) do
       timeout when is_integer(timeout) and timeout > 0 -> timeout
-      _ -> session.ready_timeout_ms
+      _ -> session.timeout_ms
     end
   end
 

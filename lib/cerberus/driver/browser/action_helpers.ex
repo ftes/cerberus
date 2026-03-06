@@ -741,6 +741,30 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
               )
           : [];
 
+      const labels =
+        kind === "any"
+          ? helper.queryWithinRoots(roots, "label").map((element, index) =>
+              helper.attachElement(
+                {
+                  kind: "label",
+                  index,
+                  tag: "label",
+                  text: helper.normalize(element.textContent, true),
+                  title: element.getAttribute("title") || "",
+                  ariaLabel: element.getAttribute("aria-label") || "",
+                  alt: "",
+                  testid: element.getAttribute("data-testid") || "",
+                  formSelector: helper.formSelector(element),
+                  checked: false,
+                  disabled: false,
+                  readonly: false,
+                  selected: false
+                },
+                element
+              )
+            )
+          : [];
+
       const buttons =
         kind === "link"
           ? []
@@ -768,7 +792,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
               )
             );
 
-      return links.concat(clickables).concat(buttons);
+      return links.concat(clickables).concat(labels).concat(buttons);
     };
 
     helper.submitCandidates = (roots) => {
@@ -1697,7 +1721,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         }
       }
 
-      if (target.kind !== "button" && target.kind !== "link" && target.kind !== "clickable") {
+      if (target.kind !== "button" && target.kind !== "link" && target.kind !== "clickable" && target.kind !== "label") {
         return fail("click_target_failed");
       }
 

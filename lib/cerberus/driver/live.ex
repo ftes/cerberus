@@ -31,7 +31,8 @@ defmodule Cerberus.Driver.Live do
   @type t :: %__MODULE__{
           endpoint: module(),
           conn: Plug.Conn.t() | nil,
-          assert_timeout_ms: non_neg_integer(),
+          timeout_ms: non_neg_integer(),
+          timeout_overridden?: boolean(),
           view: term() | nil,
           html: String.t(),
           form_data: map(),
@@ -42,7 +43,8 @@ defmodule Cerberus.Driver.Live do
 
   defstruct endpoint: nil,
             conn: nil,
-            assert_timeout_ms: 0,
+            timeout_ms: 0,
+            timeout_overridden?: false,
             view: nil,
             html: "",
             form_data: %{active_form: nil, active_form_selector: nil, values: %{}},
@@ -52,11 +54,13 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def new_session(opts \\ []) do
+    {timeout_ms, timeout_overridden?} = SessionConfig.timeout_from_opts!(opts, :live)
+
     %__MODULE__{
       endpoint: Conn.endpoint!(opts),
       conn: initial_conn(opts),
-      assert_timeout_ms:
-        SessionConfig.assert_timeout_from_opts!(opts, SessionConfig.live_browser_assert_timeout_default_ms())
+      timeout_ms: timeout_ms,
+      timeout_overridden?: timeout_overridden?
     }
   end
 
@@ -66,7 +70,8 @@ defmodule Cerberus.Driver.Live do
     new_session(
       endpoint: session.endpoint,
       conn: Conn.fork_tab_conn(session.conn),
-      assert_timeout_ms: session.assert_timeout_ms
+      timeout_ms: session.timeout_ms,
+      timeout_overridden?: session.timeout_overridden?
     )
   end
 
@@ -184,7 +189,8 @@ defmodule Cerberus.Driver.Live do
         %StaticSession{
           endpoint: session.endpoint,
           conn: conn,
-          assert_timeout_ms: session.assert_timeout_ms,
+          timeout_ms: timeout_for_driver(session, :static),
+          timeout_overridden?: session.timeout_overridden?,
           html: html,
           form_data: session.form_data,
           scope: session.scope,
@@ -824,7 +830,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   @impl true
-  def default_assert_timeout_ms(%__MODULE__{} = session), do: session.assert_timeout_ms
+  def default_timeout_ms(%__MODULE__{} = session), do: session.timeout_ms
 
   @impl true
   def run_path_assertion(%__MODULE__{} = session, expected, opts, timeout, op) when op in [:assert_path, :refute_path] do
@@ -868,7 +874,7 @@ defmodule Cerberus.Driver.Live do
       expected: expected,
       query: Cerberus.Path.normalize_expected_query(Keyword.get(opts, :query)),
       exact: exact,
-      timeout: Keyword.get(opts, :timeout, 0),
+      timeout: Keyword.get(opts, :timeout, session.timeout_ms),
       path_match?: Cerberus.Path.match_path?(actual_path, expected, exact: exact),
       query_match?: Cerberus.Path.query_matches?(actual_path, Keyword.get(opts, :query))
     }
@@ -2806,7 +2812,10 @@ defmodule Cerberus.Driver.Live do
     apply_live_checkbox_change(session, field, checked?, op)
   end
 
-  defp live_action_timeout_ms(session, opts), do: Keyword.get(opts, :timeout, session.assert_timeout_ms)
+  defp live_action_timeout_ms(session, opts), do: Keyword.get(opts, :timeout, session.timeout_ms)
+
+  defp timeout_for_driver(%{timeout_overridden?: true, timeout_ms: timeout_ms}, _driver), do: timeout_ms
+  defp timeout_for_driver(_session, driver), do: SessionConfig.default_timeout_ms(driver)
 
   defp wait_for_live_form_field(session, expected, opts, op) do
     finder = fn refreshed ->
@@ -3303,7 +3312,8 @@ defmodule Cerberus.Driver.Live do
         %StaticSession{
           endpoint: session.endpoint,
           conn: conn,
-          assert_timeout_ms: session.assert_timeout_ms,
+          timeout_ms: timeout_for_driver(session, :static),
+          timeout_overridden?: session.timeout_overridden?,
           html: conn.resp_body || "",
           form_data: session.form_data,
           scope: session.scope,
@@ -3426,6 +3436,8 @@ defmodule Cerberus.Driver.Live do
         %__MODULE__{
           endpoint: session.endpoint,
           conn: conn,
+          timeout_ms: timeout_for_driver(session, :live),
+          timeout_overridden?: session.timeout_overridden?,
           view: view,
           html: html,
           form_data: Map.get(session, :form_data),
@@ -3440,6 +3452,8 @@ defmodule Cerberus.Driver.Live do
         %StaticSession{
           endpoint: session.endpoint,
           conn: conn,
+          timeout_ms: timeout_for_driver(session, :static),
+          timeout_overridden?: session.timeout_overridden?,
           html: conn.resp_body || "",
           form_data: Map.get(session, :form_data),
           scope: session.scope,
@@ -3464,6 +3478,8 @@ defmodule Cerberus.Driver.Live do
     %StaticSession{
       endpoint: session.endpoint,
       conn: conn,
+      timeout_ms: timeout_for_driver(session, :static),
+      timeout_overridden?: session.timeout_overridden?,
       html: conn.resp_body || "",
       form_data: Map.get(session, :form_data),
       scope: session.scope,

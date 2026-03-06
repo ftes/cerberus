@@ -182,6 +182,7 @@ defmodule Cerberus.Fixtures.Router do
     get("/browser/link/semantics", PageController, :browser_link_semantics)
     get("/browser/readiness/disconnected-live-root", PageController, :disconnected_live_root)
     get("/browser/readiness/busy-live-root", PageController, :busy_live_root)
+    get("/browser/actionability/long-budget", PageController, :long_action_budget)
     get("/browser/readiness/mixed-live-roots", PageController, :mixed_live_roots)
     get("/browser/readiness/source", PageController, :mixed_live_roots_source)
     get("/browser/popup/auto", PageController, :popup_auto)

@@ -1173,7 +1173,7 @@ defmodule Cerberus do
   defp resolve_path_timeout(_session, true, validated_timeout), do: validated_timeout
 
   defp resolve_path_timeout(session, false, _validated_timeout),
-    do: driver_module_for_session!(session).default_assert_timeout_ms(session)
+    do: driver_module_for_session!(session).default_timeout_ms(session)
 
   defp dispatch_tab_operation!(session, operation, args \\ []) when operation in [:open_tab, :switch_tab, :close_tab] do
     driver = driver_module_for_session!(session)

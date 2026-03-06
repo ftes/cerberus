@@ -11,7 +11,7 @@ defmodule Cerberus.LiveTimeoutAssertionsTest do
 
     session
     |> then(fn live_session ->
-      assert live_session.assert_timeout_ms == 500
+      assert live_session.timeout_ms == 500
       live_session
     end)
     |> click(role(:button, name: "Async navigate!"))

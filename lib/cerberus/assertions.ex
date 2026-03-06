@@ -550,11 +550,9 @@ defmodule Cerberus.Assertions do
   end
 
   defp resolve_assert_timeout(_session, true, validated_timeout), do: validated_timeout
-  defp resolve_assert_timeout(%LiveSession{assert_timeout_ms: timeout}, false, _validated_timeout), do: timeout
-
-  defp resolve_assert_timeout(%BrowserSession{assert_timeout_ms: timeout}, false, _validated_timeout), do: timeout
-
-  defp resolve_assert_timeout(_session, false, _validated_timeout), do: 0
+  defp resolve_assert_timeout(%StaticSession{timeout_ms: timeout}, false, _validated_timeout), do: timeout
+  defp resolve_assert_timeout(%LiveSession{timeout_ms: timeout}, false, _validated_timeout), do: timeout
+  defp resolve_assert_timeout(%BrowserSession{timeout_ms: timeout}, false, _validated_timeout), do: timeout
 
   defp profile_driver_operation(session, op, fun) when is_atom(op) and is_function(fun, 0) do
     Profiling.measure({:driver_operation, driver_kind(session), op}, fun)
