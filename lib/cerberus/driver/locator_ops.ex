@@ -40,7 +40,7 @@ defmodule Cerberus.Driver.LocatorOps do
     |> Keyword.put(:locator, locator)
   end
 
-  defp clickable_shape(opts, %Locator{kind: kind}) when kind in [:and, :or, :not] do
+  defp clickable_shape(opts, %Locator{kind: kind}) when kind in [:scope, :and, :or, :not] do
     {"", opts}
   end
 
@@ -49,8 +49,8 @@ defmodule Cerberus.Driver.LocatorOps do
     clickable_shape(opts, %{locator | kind: resolved_kind})
   end
 
-  defp clickable_shape(opts, %Locator{kind: :css, value: selector}) do
-    {"", ensure_selector_opt(opts, selector)}
+  defp clickable_shape(opts, %Locator{kind: :css, value: _selector}) do
+    {"", opts}
   end
 
   defp clickable_shape(opts, %Locator{kind: :link, value: expected}) do
@@ -86,8 +86,8 @@ defmodule Cerberus.Driver.LocatorOps do
     {expected, opts}
   end
 
-  defp form_shape(opts, %Locator{kind: :css, value: selector}) do
-    {"", ensure_selector_opt(opts, selector)}
+  defp form_shape(opts, %Locator{kind: :css, value: _selector}) do
+    {"", opts}
   end
 
   defp form_shape(opts, %Locator{kind: :role} = locator) do
@@ -95,7 +95,7 @@ defmodule Cerberus.Driver.LocatorOps do
     form_shape(opts, %{locator | kind: resolved_kind})
   end
 
-  defp form_shape(opts, %Locator{kind: kind}) when kind in [:and, :or, :not] do
+  defp form_shape(opts, %Locator{kind: kind}) when kind in [:scope, :and, :or, :not] do
     {"", opts}
   end
 
@@ -131,13 +131,6 @@ defmodule Cerberus.Driver.LocatorOps do
       opts
     else
       Keyword.put(opts, :exact, default)
-    end
-  end
-
-  defp ensure_selector_opt(opts, selector) when is_list(opts) and is_binary(selector) do
-    case Keyword.get(opts, :selector) do
-      nil -> Keyword.put(opts, :selector, selector)
-      _ -> opts
     end
   end
 

@@ -163,7 +163,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/selector-edge")
-      |> click(:button |> role(name: "Apply") |> has(testid("apply-secondary-marker")))
+      |> click(:button |> role(name: "Apply") |> filter(has: testid("apply-secondary-marker")))
       |> assert_has(text("Selected: secondary", exact: true))
     end
 
@@ -171,7 +171,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/selector-edge")
-      |> click(:button |> role(name: "Apply") |> has_not(testid("apply-secondary-marker")))
+      |> click(:button |> role(name: "Apply") |> filter(has_not: testid("apply-secondary-marker")))
       |> assert_has(text("Selected: primary", exact: true))
     end
 
@@ -186,7 +186,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/selector-edge")
-      |> click(:button |> role(name: "Apply") |> has(testid("apply-secondary-marker")))
+      |> click(:button |> role(name: "Apply") |> filter(has: testid("apply-secondary-marker")))
       |> assert_has(text("Selected: secondary", exact: true))
     end
 

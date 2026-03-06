@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAssert && window.__cerberusAssert.__version === 8) return;
+    if (window.__cerberusAssert && window.__cerberusAssert.__version === 9) return;
 
     const helper = {};
-    helper.__version = 8;
+    helper.__version = 9;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -455,7 +455,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const mode = options.mode || "assert";
       const normalizeWs = options.normalizeWs !== false;
       const exact = options.exact === true;
-      const selector = options.selector || null;
       const matchBy = options.matchBy || "text";
       const prefilterSelector = helper.selectorForMatchBy(matchBy);
       const needsHiddenState = visibility !== "all" || helper.isTextLikeMatchBy(matchBy);
@@ -466,7 +465,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const context = { altCache: new Map() };
       let matchCount = 0;
 
-      helper.eachCandidateElement(roots, selector, prefilterSelector, (element) => {
+      helper.eachCandidateElement(roots, null, prefilterSelector, (element) => {
         const hidden = needsHiddenState ? helper.isHidden(element) : false;
         if (visibility !== "all" && !helper.selectedVisibility(visibility, hidden)) return true;
 
@@ -501,7 +500,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const mode = options.mode || "assert";
       const normalizeWs = options.normalizeWs !== false;
       const exact = options.exact === true;
-      const selector = options.selector || null;
       const matchBy = options.matchBy || "text";
       const prefilterSelector = helper.selectorForMatchBy(matchBy);
       const roots = helper.resolveRoots(options.scopeSelector || null);
@@ -513,7 +511,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const visibleSet = new Set();
       const hiddenSet = new Set();
 
-      helper.eachCandidateElement(roots, selector, prefilterSelector, (element) => {
+      helper.eachCandidateElement(roots, null, prefilterSelector, (element) => {
         const hidden = helper.isHidden(element);
         const value = helper.valueForMatch(element, hidden, matchBy, normalizeWs, context);
         if (!value) return true;
@@ -703,11 +701,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
     helper.locatorQuerySelector = (locator) => {
       if (!locator || typeof locator !== "object") return "*";
 
-      const opts = helper.locatorOpts(locator);
-      if (typeof opts.selector === "string" && opts.selector.trim() !== "") {
-        return opts.selector;
-      }
-
       const kind = helper.locatorKind(locator);
 
       switch (kind) {
@@ -734,6 +727,14 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           return "[alt],img[alt],input[type='image'][alt],[role='img'][alt],button,a[href]";
         case "testid":
           return "[data-testid]";
+        case "scope": {
+          const members = Array.isArray(locator.members)
+            ? locator.members
+            : (Array.isArray(locator.value) ? locator.value : []);
+
+          if (members.length === 0) return "*";
+          return helper.locatorQuerySelector(members[members.length - 1]);
+        }
         default:
           return "*";
       }
@@ -808,10 +809,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
       if (!helper.matchesLocatorStateFilters(element, opts)) return false;
 
-      if (typeof opts.selector === "string" && opts.selector.trim() !== "") {
-        if (!helper.matchesSelector(element, opts.selector)) return false;
-      }
-
       if (opts.has && !helper.elementHasLocator(element, opts.has, context)) return false;
 
       const hasNot = opts.has_not || opts.hasNot;
@@ -827,14 +824,26 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       if (!kind) return false;
 
       if (kind === "not") {
-        const members = Array.isArray(locator.members) ? locator.members : [];
+        const members = Array.isArray(locator.members)
+          ? locator.members
+          : (Array.isArray(locator.value) ? locator.value : []);
         if (members.length !== 1) return false;
 
         return !helper.matchesLocator(element, members[0], hidden, context) && helper.matchesLocatorCommonOpts(element, locator, context);
       }
 
+      if (kind === "scope") {
+        const members = Array.isArray(locator.members)
+          ? locator.members
+          : (Array.isArray(locator.value) ? locator.value : []);
+
+        return helper.scopeMembersMatch(element, hidden, members, context) && helper.matchesLocatorCommonOpts(element, locator, context);
+      }
+
       if (kind === "and" || kind === "or") {
-        const members = Array.isArray(locator.members) ? locator.members : [];
+        const members = Array.isArray(locator.members)
+          ? locator.members
+          : (Array.isArray(locator.value) ? locator.value : []);
         if (members.length === 0) return false;
 
         const memberMatch =
@@ -885,6 +894,43 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
     helper.containsNodeOrSame = (container, node) => {
       if (!container || !node) return false;
       return container === node || (typeof container.contains === "function" && container.contains(node));
+    };
+
+    helper.strictDescendant = (container, node) => {
+      if (!container || !node) return false;
+      return container !== node && helper.containsNodeOrSame(container, node);
+    };
+
+    helper.scopeMembersMatch = (element, hidden, members, context) => {
+      if (!element || !Array.isArray(members) || members.length < 2) return false;
+
+      const targetLocator = members[members.length - 1];
+      if (!helper.matchesLocator(element, targetLocator, hidden, context)) return false;
+
+      const scopeMembers = members.slice(0, -1);
+      const scopeLocator =
+        scopeMembers.length === 1
+          ? scopeMembers[0]
+          : { kind: "scope", members: scopeMembers, opts: {} };
+
+      const scopeSelector = helper.locatorQuerySelector(scopeLocator);
+      const doc = element.ownerDocument || document;
+      if (!doc || typeof doc.querySelectorAll !== "function") return false;
+
+      let scopeNodes = [];
+
+      try {
+        scopeNodes = Array.from(doc.querySelectorAll(scopeSelector));
+      } catch (_error) {
+        return false;
+      }
+
+      return scopeNodes.some((scopeNode) => {
+        if (!helper.strictDescendant(scopeNode, element)) return false;
+
+        const scopeHidden = helper.isHidden(scopeNode);
+        return helper.matchesLocator(scopeNode, scopeLocator, scopeHidden, context);
+      });
     };
 
     helper.scopeCandidateIsClosestForFrom = (candidate, candidates, fromNode) => {

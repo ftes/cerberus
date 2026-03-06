@@ -700,8 +700,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp locator_assertion_requires_locator_engine?(%Locator{opts: locator_opts}) do
-    Keyword.has_key?(locator_opts, :selector) or
-      Keyword.has_key?(locator_opts, :has) or
+    Keyword.has_key?(locator_opts, :has) or
       Keyword.has_key?(locator_opts, :has_not) or
       Keyword.has_key?(locator_opts, :from)
   end
@@ -1415,8 +1414,7 @@ defmodule Cerberus.Driver.Live do
       not Keyword.get(opts, :first, false) and
       not Keyword.get(opts, :last, false) and
       is_nil(Keyword.get(opts, :index)) and
-      is_nil(Keyword.get(opts, :nth)) and
-      is_nil(Keyword.get(opts, :selector))
+      is_nil(Keyword.get(opts, :nth))
   end
 
   defp simple_link_locator?(%Locator{kind: :role} = locator), do: Locator.resolved_kind(locator) == :link

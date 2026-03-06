@@ -713,7 +713,6 @@ defmodule Cerberus.Driver.Browser do
       %{
         op: Atom.to_string(op),
         scopeSelector: action_scope_selector(state, opts),
-        selector: Keyword.get(opts, :selector),
         locator: action_locator_payload(opts),
         expected: text_expectation_payload(expected),
         exact: Keyword.get(opts, :exact, false),
@@ -784,7 +783,7 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp locator_payload(%Locator{kind: kind, value: members, opts: opts}) when kind in [:and, :or, :not] do
+  defp locator_payload(%Locator{kind: kind, value: members, opts: opts}) when kind in [:scope, :and, :or, :not] do
     %{
       kind: Atom.to_string(kind),
       members: Enum.map(members, &locator_payload/1),
@@ -813,7 +812,6 @@ defmodule Cerberus.Driver.Browser do
       role: Keyword.get(opts, :role),
       exact: Keyword.get(opts, :exact),
       normalizeWs: Keyword.get(opts, :normalize_ws),
-      selector: Keyword.get(opts, :selector),
       has: nested_locator_payload(Keyword.get(opts, :has)),
       has_not: nested_locator_payload(Keyword.get(opts, :has_not)),
       from: nested_locator_payload(Keyword.get(opts, :from)),
@@ -1382,7 +1380,6 @@ defmodule Cerberus.Driver.Browser do
 
     %{
       scopeSelector: Session.scope(state),
-      selector: Keyword.get(match_opts, :selector),
       expected: text_expectation_payload(expected),
       exact: Keyword.get(match_opts, :exact, false),
       normalizeWs: Keyword.get(match_opts, :normalize_ws, true),
@@ -1562,8 +1559,7 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp locator_assertion_requires_locator_engine?(%Locator{opts: locator_opts}) do
-    Keyword.has_key?(locator_opts, :selector) or
-      Keyword.has_key?(locator_opts, :has) or
+    Keyword.has_key?(locator_opts, :has) or
       Keyword.has_key?(locator_opts, :has_not) or
       Keyword.has_key?(locator_opts, :from)
   end

@@ -168,9 +168,10 @@ session() # or session(conn)
 You can compose locators when simple label/role/testid matching is not enough.
 
 Common advanced patterns:
-- same-element AND (pipe composition): `role(:button, name: "Run Search") |> testid("submit-secondary-button")`
-- descendant requirement: `role(:button, name: "Run Search") |> has(testid("submit-secondary-marker"))`
-- descendant exclusion: `role(:button, name: "Run Search") |> has_not(testid("submit-secondary-marker"))`
+- scope chaining (descendant query): `css("#search-form") |> role(:button, name: "Run Search")`
+- same-element intersection: `and_(role(:button, name: "Run Search"), testid("submit-secondary-button"))`
+- descendant requirement: `role(:button, name: "Run Search") |> filter(has: testid("submit-secondary-marker"))`
+- descendant exclusion: `role(:button, name: "Run Search") |> filter(has_not: testid("submit-secondary-marker"))`
 - OR alternatives: `or_(css("#primary"), css("#secondary"))`
 - boolean algebra: `and_(role(:button, name: "Run Search"), not_(testid("submit-secondary-button")))`
 - negated conjunction: `not_(and_(role(:button, name: "Run Search"), testid("submit-secondary-button")))`
@@ -178,7 +179,7 @@ Common advanced patterns:
 ```elixir
 session()
 |> visit("/live/selector-edge")
-|> click(role(:button, name: "Apply") |> testid("apply-secondary-button"))
+|> click(and_(role(:button, name: "Apply"), testid("apply-secondary-button")))
 |> assert_has(~l"Selected: secondary"e)
 ```
 
@@ -232,8 +233,8 @@ import Cerberus.Browser
 session =
   session(:browser)
   |> visit("/browser/extensions")
-  |> type("hello", selector: "#keyboard-input")
-  |> press("Enter", selector: "#press-input")
+  |> type(css("#keyboard-input"), "hello")
+  |> press(css("#press-input"), "Enter")
 
 evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), 10)", fn _ -> :ok end)
 evaluate_js(session, "window.__cerberusMarker = 'ready'")
@@ -271,7 +272,7 @@ Use this when one test needs different browser characteristics (for example mobi
 SQL sandbox user-agent helper:
 
 ```elixir
-metadata = Cerberus.sql_sandbox_user_agent(MyApp.Repo, context)
+metadata = Cerberus.Browser.user_agent_for_sandbox(MyApp.Repo, context)
 
 session(:browser, user_agent: metadata)
 ```

@@ -69,7 +69,7 @@ possible candidates:
 
 A locator is the way Cerberus finds elements or text in the UI.
 
-Use composable locator functions when matching needs structure (`label`, `role`, `text`, `has`, `and_`, `closest`, ...).
+Use composable locator functions when matching needs structure (`label`, `role`, `text`, `filter`, `and_`, `closest`, ...).
 Use `~l` sigil shorthand for common one-liners:
 - `~l"Save"` means exact text match by default
 - `~l"Save"i` means inexact text match
@@ -79,7 +79,7 @@ Use `~l` sigil shorthand for common one-liners:
 
 Use `testid(...)` when text/role is ambiguous, and CSS for structural targeting only.
 
-For locator forms and advanced composition (`~l` modifiers, `and_`, `or_`, `not_`, `has`, `has_not`, `closest`), see:
+For locator forms and advanced composition (`~l` modifiers, `and_`, `or_`, `not_`, `filter`, `closest`), see:
 - [Cheat Sheet](docs/cheatsheet.md)
 - [Getting Started](docs/getting-started.md)
 
@@ -104,6 +104,7 @@ png =
 ## Browser Tests
 
 Start in Phoenix mode (static/live) for fast feedback, then switch to browser mode when you add JS-dependent behavior (custom snippets, dialogs, drag/drop, popup flows). In many tests this is just changing `session()` to `session(:browser)`.
+Browser readiness auto-detects LiveView roots (`[data-phx-session]`) and only waits for `phx-connected` when a LiveView is present.
 
 Install Chrome with:
 

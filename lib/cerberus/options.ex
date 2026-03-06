@@ -14,10 +14,8 @@ defmodule Cerberus.Options do
   @type select_value :: String.t() | [String.t()]
   @type between_filter :: {non_neg_integer(), non_neg_integer()} | Range.t() | nil
   @type text_match_opts :: [exact: boolean(), normalize_ws: boolean()]
-  @type selector_filter_opts :: [selector: String.t() | nil]
   @type locator_leaf_opts :: [
           exact: boolean(),
-          selector: String.t() | nil,
           has: locator_nested_input() | nil,
           has_not: locator_nested_input() | nil,
           from: locator_nested_input() | nil
@@ -25,7 +23,6 @@ defmodule Cerberus.Options do
   @type role_locator_opts :: [
           name: role_locator_name(),
           exact: boolean(),
-          selector: String.t() | nil,
           has: locator_nested_input() | nil,
           has_not: locator_nested_input() | nil
         ]
@@ -49,7 +46,6 @@ defmodule Cerberus.Options do
   @type locator_filter_opts :: [
           exact: boolean(),
           normalize_ws: boolean(),
-          selector: String.t() | nil,
           checked: boolean() | nil,
           disabled: boolean() | nil,
           selected: boolean() | nil,
@@ -132,7 +128,6 @@ defmodule Cerberus.Options do
 
   @type click_opts :: [
           timeout: non_neg_integer(),
-          selector: String.t() | nil,
           checked: boolean() | nil,
           disabled: boolean() | nil,
           selected: boolean() | nil,
@@ -159,7 +154,6 @@ defmodule Cerberus.Options do
 
   @type fill_in_opts :: [
           timeout: non_neg_integer(),
-          selector: String.t() | nil,
           checked: boolean() | nil,
           disabled: boolean() | nil,
           selected: boolean() | nil,
@@ -176,7 +170,6 @@ defmodule Cerberus.Options do
 
   @type check_opts :: [
           timeout: non_neg_integer(),
-          selector: String.t() | nil,
           checked: boolean() | nil,
           disabled: boolean() | nil,
           selected: boolean() | nil,
@@ -195,7 +188,6 @@ defmodule Cerberus.Options do
           option: select_value(),
           exact_option: boolean(),
           timeout: non_neg_integer(),
-          selector: String.t() | nil,
           checked: boolean() | nil,
           disabled: boolean() | nil,
           selected: boolean() | nil,
@@ -212,7 +204,6 @@ defmodule Cerberus.Options do
 
   @type choose_opts :: [
           timeout: non_neg_integer(),
-          selector: String.t() | nil,
           checked: boolean() | nil,
           disabled: boolean() | nil,
           selected: boolean() | nil,
@@ -229,7 +220,6 @@ defmodule Cerberus.Options do
 
   @type upload_opts :: [
           timeout: non_neg_integer(),
-          selector: String.t() | nil,
           checked: boolean() | nil,
           disabled: boolean() | nil,
           selected: boolean() | nil,
@@ -246,7 +236,6 @@ defmodule Cerberus.Options do
 
   @type submit_opts :: [
           timeout: non_neg_integer(),
-          selector: String.t() | nil,
           checked: boolean() | nil,
           disabled: boolean() | nil,
           selected: boolean() | nil,
@@ -279,16 +268,12 @@ defmodule Cerberus.Options do
           timeout: non_neg_integer()
         ]
 
-  @type browser_selector_opts :: [selector: String.t() | nil]
-
   @type browser_type_opts :: [
-          selector: String.t() | nil,
           clear: boolean(),
           timeout: non_neg_integer()
         ]
 
   @type browser_press_opts :: [
-          selector: String.t() | nil,
           timeout: non_neg_integer()
         ]
 
@@ -321,7 +306,6 @@ defmodule Cerberus.Options do
 
   @click_opts_schema [
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],
-    selector: [type: :any, default: nil, doc: "Limits matching to elements that satisfy the CSS selector."],
     checked: [type: :any, default: nil, doc: "Requires matched elements to be checked/unchecked."],
     disabled: [type: :any, default: nil, doc: "Requires matched elements to be disabled/enabled."],
     selected: [type: :any, default: nil, doc: "Requires matched elements to be selected/unselected."],
@@ -360,7 +344,6 @@ defmodule Cerberus.Options do
 
   @fill_in_opts_schema [
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],
-    selector: [type: :any, default: nil, doc: "Limits field lookup to elements that satisfy the CSS selector."],
     checked: [type: :any, default: nil, doc: "Requires matched fields to be checked/unchecked."],
     disabled: [type: :any, default: nil, doc: "Requires matched fields to be disabled/enabled."],
     selected: [type: :any, default: nil, doc: "Requires matched fields to be selected/unselected."],
@@ -377,11 +360,6 @@ defmodule Cerberus.Options do
 
   @submit_opts_schema [
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],
-    selector: [
-      type: :any,
-      default: nil,
-      doc: "Limits submit control lookup to elements that satisfy the CSS selector."
-    ],
     checked: [type: :any, default: nil, doc: "Requires matched submit controls to be checked/unchecked."],
     disabled: [type: :any, default: nil, doc: "Requires matched submit controls to be disabled/enabled."],
     selected: [type: :any, default: nil, doc: "Requires matched submit controls to be selected/unselected."],
@@ -398,7 +376,6 @@ defmodule Cerberus.Options do
 
   @upload_opts_schema [
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],
-    selector: [type: :any, default: nil, doc: "Limits file-input lookup to elements that satisfy the CSS selector."],
     checked: [type: :any, default: nil, doc: "Requires matched file inputs to be checked/unchecked."],
     disabled: [type: :any, default: nil, doc: "Requires matched file inputs to be disabled/enabled."],
     selected: [type: :any, default: nil, doc: "Requires matched file inputs to be selected/unselected."],
@@ -422,7 +399,6 @@ defmodule Cerberus.Options do
     ],
     exact_option: [type: :boolean, default: true, doc: "Requires exact option-text matches unless disabled."],
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],
-    selector: [type: :any, default: nil, doc: "Limits select lookup to elements that satisfy the CSS selector."],
     checked: [type: :any, default: nil, doc: "Requires matched selects to be checked/unchecked."],
     disabled: [type: :any, default: nil, doc: "Requires matched selects to be disabled/enabled."],
     selected: [type: :any, default: nil, doc: "Requires matched selects to be selected/unselected."],
@@ -524,13 +500,11 @@ defmodule Cerberus.Options do
   ]
 
   @browser_type_opts_schema [
-    selector: [type: :any, default: nil, doc: "Limits typing target to elements that satisfy the CSS selector."],
     clear: [type: :boolean, default: false, doc: "Clears the field before typing."],
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."]
   ]
 
   @browser_press_opts_schema [
-    selector: [type: :any, default: nil, doc: "Limits keypress target to elements that satisfy the CSS selector."],
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."]
   ]
 
@@ -624,7 +598,6 @@ defmodule Cerberus.Options do
   def validate_click!(opts) do
     opts
     |> validate!(@click_opts_schema, "click/3")
-    |> validate_selector!("click/3")
     |> validate_state_filters!("click/3")
     |> validate_match_filters!("click/3", true)
   end
@@ -637,7 +610,6 @@ defmodule Cerberus.Options do
   def validate_fill_in!(opts) do
     opts
     |> validate!(@fill_in_opts_schema, "fill_in/4")
-    |> validate_selector!("fill_in/4")
     |> validate_state_filters!("fill_in/4")
     |> validate_match_filters!("fill_in/4", true)
   end
@@ -646,7 +618,6 @@ defmodule Cerberus.Options do
   def validate_check!(opts, op_name) do
     opts
     |> validate!(@fill_in_opts_schema, op_name)
-    |> validate_selector!(op_name)
     |> validate_state_filters!(op_name)
     |> validate_match_filters!(op_name, true)
   end
@@ -655,7 +626,6 @@ defmodule Cerberus.Options do
   def validate_choose!(opts, op_name) do
     opts
     |> validate!(@fill_in_opts_schema, op_name)
-    |> validate_selector!(op_name)
     |> validate_state_filters!(op_name)
     |> validate_match_filters!(op_name, true)
   end
@@ -664,7 +634,6 @@ defmodule Cerberus.Options do
   def validate_select!(opts) do
     opts
     |> validate!(@select_opts_schema, "select/3")
-    |> validate_selector!("select/3")
     |> validate_state_filters!("select/3")
     |> validate_match_filters!("select/3", true)
     |> validate_select_option!("select/3")
@@ -674,7 +643,6 @@ defmodule Cerberus.Options do
   def validate_submit!(opts) do
     opts
     |> validate!(@submit_opts_schema, "submit/3")
-    |> validate_selector!("submit/3")
     |> validate_state_filters!("submit/3")
     |> validate_match_filters!("submit/3", true)
   end
@@ -683,7 +651,6 @@ defmodule Cerberus.Options do
   def validate_upload!(opts) do
     opts
     |> validate!(@upload_opts_schema, "upload/4")
-    |> validate_selector!("upload/4")
     |> validate_state_filters!("upload/4")
     |> validate_match_filters!("upload/4", true)
   end
@@ -721,16 +688,12 @@ defmodule Cerberus.Options do
 
   @spec validate_browser_type!(keyword()) :: browser_type_opts()
   def validate_browser_type!(opts) do
-    opts
-    |> validate!(@browser_type_opts_schema, "Browser.type/3")
-    |> validate_selector!("Browser.type/3")
+    validate!(opts, @browser_type_opts_schema, "Browser.type/4")
   end
 
   @spec validate_browser_press!(keyword()) :: browser_press_opts()
   def validate_browser_press!(opts) do
-    opts
-    |> validate!(@browser_press_opts_schema, "Browser.press/3")
-    |> validate_selector!("Browser.press/3")
+    validate!(opts, @browser_press_opts_schema, "Browser.press/4")
   end
 
   @spec validate_browser_drag!(keyword()) :: browser_drag_opts()
@@ -832,23 +795,6 @@ defmodule Cerberus.Options do
     opts
     |> Keyword.drop(keys)
     |> Keyword.merge(validated_known_opts)
-  end
-
-  defp validate_selector!(opts, op_name) do
-    case Keyword.get(opts, :selector) do
-      nil ->
-        opts
-
-      selector when is_binary(selector) ->
-        if String.trim(selector) == "" do
-          raise ArgumentError, "#{op_name} invalid options: :selector must be a non-empty CSS selector string"
-        else
-          opts
-        end
-
-      _other ->
-        raise ArgumentError, "#{op_name} invalid options: :selector must be a non-empty CSS selector string"
-    end
   end
 
   defp validate_path_string!(opts, op_name, key) do

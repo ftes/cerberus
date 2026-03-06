@@ -148,6 +148,12 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
       live_clickable_common_opts_match?(root_node, node, opts)
   end
 
+  defp live_clickable_locator_match?(root_node, node, %Locator{kind: :scope, value: members, opts: opts})
+       when is_list(members) do
+    live_clickable_scope_members_match?(root_node, node, members) and
+      live_clickable_common_opts_match?(root_node, node, opts)
+  end
+
   defp live_clickable_locator_match?(root_node, node, %Locator{kind: :not, value: [member], opts: opts}) do
     not live_clickable_locator_match?(root_node, node, member) and
       live_clickable_common_opts_match?(root_node, node, opts)
@@ -182,6 +188,31 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   defp live_clickable_locator_value(_root_node, _node, :link), do: nil
   defp live_clickable_locator_value(_root_node, _node, :label), do: nil
   defp live_clickable_locator_value(_root_node, _node, :placeholder), do: nil
+
+  defp live_clickable_scope_members_match?(_root_node, _node, members) when length(members) < 2, do: false
+
+  defp live_clickable_scope_members_match?(root_node, node, members) do
+    target_locator = List.last(members)
+    scope_members = Enum.drop(members, -1)
+
+    scope_locator =
+      case scope_members do
+        [single] -> single
+        _ -> %Locator{kind: :scope, value: scope_members, opts: []}
+      end
+
+    live_clickable_locator_match?(root_node, node, target_locator) and
+      live_clickable_node_has_scope_chain?(root_node, node, scope_locator)
+  end
+
+  defp live_clickable_node_has_scope_chain?(root_node, node, %Locator{} = scope_locator) do
+    root_node
+    |> safe_query("*")
+    |> Enum.any?(fn scope_node ->
+      live_clickable_locator_match?(root_node, scope_node, scope_locator) and
+        strict_descendant?(scope_node, node)
+    end)
+  end
 
   defp live_clickable_common_opts_match?(root_node, node, opts) when is_list(opts) do
     node_matches_selector?(root_node, node, selector_opt(opts)) and
@@ -819,6 +850,17 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
 
   defp same_node?(left, right) do
     node_signature(left) == node_signature(right)
+  end
+
+  defp strict_descendant?(container, node) do
+    not same_node?(container, node) and contains_node_or_same?(container, node)
+  end
+
+  defp contains_node_or_same?(container, node) do
+    same_node?(container, node) or
+      container
+      |> safe_query("*")
+      |> Enum.any?(&same_node?(&1, node))
   end
 
   defp node_signature(node), do: node_signature(node, [], 0)

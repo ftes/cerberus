@@ -23,7 +23,7 @@ Isolation strategy:
 SQL sandbox helper:
 
 ```elixir
-metadata = Cerberus.sql_sandbox_user_agent(MyApp.Repo, context)
+metadata = Cerberus.Browser.user_agent_for_sandbox(MyApp.Repo, context)
 
 session(:browser, user_agent: metadata)
 ```

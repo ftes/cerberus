@@ -65,7 +65,6 @@ defmodule Cerberus.Html do
     assert_deadline!()
     locator = locator_without_from(locator)
     from_locator = Keyword.get(locator.opts, :from)
-    selector = selector_opt(locator.opts)
     query_selector = within_query_selector(locator)
     locator_for_filter = locator_for_candidate_filter(locator, query_selector)
 
@@ -77,7 +76,7 @@ defmodule Cerberus.Html do
 
       root_node
       |> safe_query(query_selector)
-      |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, locator_for_filter, selector))
+      |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, locator_for_filter))
       |> maybe_filter_scope_target_closest_candidates(root_node, from_locator)
       |> Enum.flat_map(&locator_assertion_values_for_node(root_node, hidden_nodes, &1, locator, visibility))
     end)
@@ -423,7 +422,6 @@ defmodule Cerberus.Html do
     opts = locator.opts
     from_locator = Keyword.get(opts, :from)
     locator = locator_without_from(locator)
-    selector = selector_opt(locator.opts)
     query_selector = within_query_selector(locator)
 
     matches =
@@ -432,7 +430,7 @@ defmodule Cerberus.Html do
       |> Enum.flat_map(fn root_node ->
         root_node
         |> safe_query(query_selector)
-        |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, locator, selector))
+        |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, locator))
         |> maybe_filter_scope_target_closest_candidates(root_node, from_locator)
         |> Enum.map(&scope_target_candidate_map(&1, lazy_html))
       end)
@@ -450,12 +448,11 @@ defmodule Cerberus.Html do
     end
   end
 
-  defp scope_target_candidate_matches?(root_node, node, %Locator{} = locator, selector) do
+  defp scope_target_candidate_matches?(root_node, node, %Locator{} = locator) do
     assert_deadline!()
     opts = locator.opts
 
     node_matches_within_locator?(root_node, node, locator) and
-      node_matches_selector?(root_node, node, selector) and
       node_matches_locator_filters?(node, opts) and
       Query.matches_state_filters?(scope_target_state(node), opts)
   end
@@ -463,12 +460,12 @@ defmodule Cerberus.Html do
   defp maybe_filter_scope_target_closest_candidates(candidates, _root_node, nil), do: candidates
 
   defp maybe_filter_scope_target_closest_candidates(candidates, root_node, %Locator{} = from_locator) do
-    from_selector = selector_opt(from_locator.opts) || within_query_selector(from_locator)
+    from_selector = within_query_selector(from_locator)
 
     from_candidates =
       root_node
       |> safe_query(from_selector)
-      |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, from_locator, selector_opt(from_locator.opts)))
+      |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, from_locator))
 
     Enum.filter(candidates, fn candidate ->
       closest_scope_candidate_for_any_from?(candidate, candidates, from_candidates)
@@ -556,6 +553,11 @@ defmodule Cerberus.Html do
     Enum.any?(members, &node_matches_within_locator?(root_node, node, &1))
   end
 
+  defp node_matches_within_locator?(root_node, node, %Locator{kind: :scope, value: members}) when is_list(members) do
+    assert_deadline!()
+    node_matches_scope_locator?(root_node, node, members)
+  end
+
   defp node_matches_within_locator?(root_node, node, %Locator{kind: :not, value: [member]}) do
     assert_deadline!()
     not node_matches_within_locator?(root_node, node, member)
@@ -598,6 +600,43 @@ defmodule Cerberus.Html do
   defp within_locator_match_value(_root_node, node, %Locator{kind: :testid}), do: attr(node, "data-testid") || ""
   defp within_locator_match_value(_root_node, _node, _locator), do: nil
 
+  defp node_matches_scope_locator?(_root_node, _node, []), do: false
+  defp node_matches_scope_locator?(_root_node, _node, [_single]), do: false
+
+  defp node_matches_scope_locator?(root_node, node, members) when is_list(members) do
+    scope_locator = %Locator{kind: :scope, value: Enum.drop(members, -1), opts: []}
+    target_locator = List.last(members)
+
+    node_matches_within_locator?(root_node, node, target_locator) and
+      node_has_scope_chain?(root_node, node, scope_locator)
+  end
+
+  defp node_has_scope_chain?(root_node, node, %Locator{kind: :scope, value: members}) when is_list(members) do
+    scope_selector = within_query_selector(%Locator{kind: :scope, value: members, opts: []})
+
+    root_node
+    |> safe_query(scope_selector)
+    |> Enum.any?(fn scope_node ->
+      node_matches_within_locator?(root_node, scope_node, %Locator{kind: :scope, value: members, opts: []}) and
+        strict_descendant?(scope_node, node)
+    end)
+  end
+
+  defp node_has_scope_chain?(root_node, node, %Locator{} = scope_locator) do
+    scope_selector = within_query_selector(scope_locator)
+
+    root_node
+    |> safe_query(scope_selector)
+    |> Enum.any?(fn scope_node ->
+      node_matches_within_locator?(root_node, scope_node, scope_locator) and
+        strict_descendant?(scope_node, node)
+    end)
+  end
+
+  defp strict_descendant?(container, node) do
+    not same_node?(container, node) and contains_node_or_same?(container, node)
+  end
+
   defp within_query_selector(%Locator{kind: :css, value: value}), do: value
 
   defp within_query_selector(%Locator{kind: :and, value: members}) when is_list(members) do
@@ -609,6 +648,13 @@ defmodule Cerberus.Html do
     |> Kernel.||("*")
   end
 
+  defp within_query_selector(%Locator{kind: :scope, value: members}) when is_list(members) do
+    members
+    |> List.last()
+    |> within_query_selector()
+  end
+
+  defp within_query_selector(%Locator{kind: :scope}), do: "*"
   defp within_query_selector(%Locator{kind: :and}), do: "*"
   defp within_query_selector(%Locator{kind: :or}), do: "*"
   defp within_query_selector(%Locator{kind: :not}), do: "*"
@@ -1159,6 +1205,12 @@ defmodule Cerberus.Html do
       action_node_matches_common_opts?(root_node, node, opts)
   end
 
+  defp locator_matches_action_node?(root_node, node, %Locator{kind: :scope, value: members, opts: opts}, context)
+       when is_list(members) do
+    action_scope_members_match?(root_node, node, members, context) and
+      action_node_matches_common_opts?(root_node, node, opts)
+  end
+
   defp locator_matches_action_node?(root_node, node, %Locator{kind: :not, value: [member], opts: opts}, context) do
     not locator_matches_action_node?(root_node, node, member, context) and
       action_node_matches_common_opts?(root_node, node, opts)
@@ -1213,6 +1265,33 @@ defmodule Cerberus.Html do
   end
 
   defp action_locator_match_value(_root_node, _node, :alt, _context), do: nil
+
+  defp action_scope_members_match?(_root_node, _node, members, _context) when length(members) < 2, do: false
+
+  defp action_scope_members_match?(root_node, node, members, context) do
+    target_locator = List.last(members)
+    scope_members = Enum.drop(members, -1)
+
+    scope_locator =
+      case scope_members do
+        [single] -> single
+        _ -> %Locator{kind: :scope, value: scope_members, opts: []}
+      end
+
+    locator_matches_action_node?(root_node, node, target_locator, context) and
+      action_node_has_scope_chain?(root_node, node, scope_locator, context)
+  end
+
+  defp action_node_has_scope_chain?(root_node, node, %Locator{} = scope_locator, context) do
+    scope_selector = within_query_selector(scope_locator)
+
+    root_node
+    |> safe_query(scope_selector)
+    |> Enum.any?(fn scope_node ->
+      locator_matches_action_node?(root_node, scope_node, scope_locator, context) and
+        strict_descendant?(scope_node, node)
+    end)
+  end
 
   defp action_node_matches_common_opts?(root_node, node, opts) when is_list(opts) do
     node_matches_selector?(root_node, node, selector_opt(opts)) and
@@ -1612,7 +1691,7 @@ defmodule Cerberus.Html do
   defp alt_value(node), do: attr(node, "alt") || ""
 
   defp node_has_locator?(node, %Locator{} = has_locator) do
-    selector = selector_opt(has_locator.opts) || within_query_selector(has_locator)
+    selector = within_query_selector(has_locator)
     has_locator = locator_without_from(has_locator)
 
     selector

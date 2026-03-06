@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAction && window.__cerberusAction.__version === 13) return;
+    if (window.__cerberusAction && window.__cerberusAction.__version === 14) return;
 
     const helper = {};
-    helper.__version = 13;
+    helper.__version = 14;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -612,13 +612,12 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       return nested ? (nested.getAttribute("alt") || "") : "";
     };
 
-    helper.queryWithinRoots = (roots, querySelector, selector) => {
+    helper.queryWithinRoots = (roots, querySelector) => {
       const seen = new Set();
       const matches = [];
 
-      const maybePush = (element) => {
+      const addUnique = (element) => {
         if (!element || seen.has(element)) return;
-        if (!helper.matchesSelector(element, selector)) return;
         seen.add(element);
         matches.push(element);
       };
@@ -627,7 +626,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         if (!root || typeof root.querySelectorAll !== "function") continue;
 
         if (helper.matchesSelector(root, querySelector)) {
-          maybePush(root);
+          addUnique(root);
         }
 
         let nodes = [];
@@ -638,7 +637,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         }
 
         for (const node of nodes) {
-          maybePush(node);
+          addUnique(node);
         }
       }
 
@@ -658,11 +657,11 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       return candidate;
     };
 
-    helper.clickCandidates = (roots, selector, kind) => {
+    helper.clickCandidates = (roots, kind) => {
       const links =
         kind === "button"
           ? []
-          : helper.queryWithinRoots(roots, "a[href]", selector).map((element, index) =>
+          : helper.queryWithinRoots(roots, "a[href]").map((element, index) =>
               helper.attachElement(
                 {
                   kind: "link",
@@ -690,7 +689,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       const clickables =
         kind === "any"
           ? helper
-              .queryWithinRoots(roots, "[phx-click]", selector)
+              .queryWithinRoots(roots, "[phx-click]")
               .filter((element) => {
                 const tag = (element.tagName || "").toLowerCase();
                 return tag !== "a" && tag !== "button" && !helper.isButtonLikeInput(element);
@@ -720,7 +719,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       const buttons =
         kind === "link"
           ? []
-          : helper.queryWithinRoots(roots, helper.buttonSelector, selector).map((element, index) =>
+          : helper.queryWithinRoots(roots, helper.buttonSelector).map((element, index) =>
               helper.attachElement(
                 {
                   kind: "button",
@@ -747,8 +746,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       return links.concat(clickables).concat(buttons);
     };
 
-    helper.submitCandidates = (roots, selector) => {
-      const allButtons = helper.queryWithinRoots(roots, helper.buttonSelector, selector);
+    helper.submitCandidates = (roots) => {
+      const allButtons = helper.queryWithinRoots(roots, helper.buttonSelector);
 
       return allButtons
         .map((element, index) => ({ element, index }))
@@ -785,7 +784,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
     helper.labelsByFor = (roots) => {
       const labels = new Map();
 
-      for (const label of helper.queryWithinRoots(roots, "label[for]", null)) {
+      for (const label of helper.queryWithinRoots(roots, "label[for]")) {
         const id = label.getAttribute("for");
         if (id) labels.set(id, helper.normalize(label.textContent, true));
       }
@@ -805,11 +804,11 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       return "";
     };
 
-    helper.formCandidates = (roots, selector) => {
+    helper.formCandidates = (roots) => {
       const labels = helper.labelsByFor(roots);
 
       return helper
-        .queryWithinRoots(roots, "input, textarea, select", selector)
+        .queryWithinRoots(roots, "input, textarea, select")
         .filter((element) => {
           const tag = (element.tagName || "").toLowerCase();
           const rawType = (element.getAttribute("type") || "").toLowerCase();
@@ -847,10 +846,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         });
     };
 
-    helper.fileCandidates = (roots, selector) => {
+    helper.fileCandidates = (roots) => {
       const labels = helper.labelsByFor(roots);
 
-      return helper.queryWithinRoots(roots, "input[type='file']", selector).map((element, index) =>
+      return helper.queryWithinRoots(roots, "input[type='file']").map((element, index) =>
         helper.attachElement(
           {
             kind: "field",
@@ -990,11 +989,6 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
     helper.querySelectorForLocator = (locator) => {
       if (!locator || typeof locator !== "object") return "*";
 
-      const opts = locator.opts && typeof locator.opts === "object" ? locator.opts : null;
-      if (opts && typeof opts.selector === "string" && opts.selector.trim() !== "") {
-        return opts.selector;
-      }
-
       const rawKind = String(locator.kind || "").toLowerCase();
       const kind = rawKind === "role" ? helper.locatorKind(locator) : rawKind;
 
@@ -1019,6 +1013,14 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           return "[alt],img[alt],input[type='image'][alt],[role='img'][alt],button,a[href]";
         case "testid":
           return "[data-testid]";
+        case "scope": {
+          const members = Array.isArray(locator.members)
+            ? locator.members
+            : (Array.isArray(locator.value) ? locator.value : []);
+
+          if (members.length === 0) return "*";
+          return helper.querySelectorForLocator(members[members.length - 1]);
+        }
         case "and":
         case "or":
         case "not":
@@ -1127,10 +1129,6 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
       if (!helper.matchesStateFilters(candidate, opts)) return false;
 
-      if (typeof opts.selector === "string" && opts.selector.trim() !== "") {
-        if (!helper.matchesSelector(candidate.__el, opts.selector)) return false;
-      }
-
       if (opts.has) {
         if (!helper.elementHasLocator(candidate.__el, opts.has, op)) return false;
       }
@@ -1143,6 +1141,47 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       return true;
     };
 
+    helper.containsNodeOrSame = (container, node) => {
+      if (!container || !node) return false;
+      return container === node || (typeof container.contains === "function" && container.contains(node));
+    };
+
+    helper.strictDescendant = (container, node) => {
+      if (!container || !node) return false;
+      return container !== node && helper.containsNodeOrSame(container, node);
+    };
+
+    helper.scopeMembersMatch = (candidate, members, op) => {
+      if (!candidate || !candidate.__el || !Array.isArray(members) || members.length < 2) return false;
+
+      const targetLocator = members[members.length - 1];
+      if (!helper.matchesLocator(candidate, targetLocator, op)) return false;
+
+      const scopeMembers = members.slice(0, -1);
+      const scopeLocator =
+        scopeMembers.length === 1
+          ? scopeMembers[0]
+          : { kind: "scope", members: scopeMembers, opts: {} };
+
+      const scopeSelector = helper.querySelectorForLocator(scopeLocator);
+      const doc = candidate.__el.ownerDocument;
+      if (!doc || typeof doc.querySelectorAll !== "function") return false;
+
+      let scopeNodes = [];
+
+      try {
+        scopeNodes = Array.from(doc.querySelectorAll(scopeSelector));
+      } catch (_error) {
+        return false;
+      }
+
+      return scopeNodes.some((scopeNode) => {
+        if (!helper.strictDescendant(scopeNode, candidate.__el)) return false;
+        const scopeCandidate = helper.candidateFromElement(scopeNode);
+        return helper.matchesLocator(scopeCandidate, scopeLocator, op);
+      });
+    };
+
     helper.matchesLocator = (candidate, locator, op) => {
       if (!locator || typeof locator !== "object") return false;
 
@@ -1152,14 +1191,26 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       if (!kind) return false;
 
       if (kind === "not") {
-        const members = Array.isArray(locator.members) ? locator.members : [];
+        const members = Array.isArray(locator.members)
+          ? locator.members
+          : (Array.isArray(locator.value) ? locator.value : []);
         if (members.length !== 1) return false;
 
         return !helper.matchesLocator(candidate, members[0], op) && helper.matchesLocatorCommonOpts(candidate, locator.opts, op);
       }
 
+      if (kind === "scope") {
+        const members = Array.isArray(locator.members)
+          ? locator.members
+          : (Array.isArray(locator.value) ? locator.value : []);
+
+        return helper.scopeMembersMatch(candidate, members, op) && helper.matchesLocatorCommonOpts(candidate, locator.opts, op);
+      }
+
       if (kind === "and" || kind === "or") {
-        const members = Array.isArray(locator.members) ? locator.members : [];
+        const members = Array.isArray(locator.members)
+          ? locator.members
+          : (Array.isArray(locator.value) ? locator.value : []);
         if (members.length === 0) return false;
 
         const memberMatch =
@@ -1208,22 +1259,21 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
     helper.resolveCandidates = (options, roots) => {
       const op = options.op;
-      const selector = options.selector || null;
 
       if (op === "click") {
         const kind = options.kind || "any";
-        return helper.clickCandidates(roots, selector, kind);
+        return helper.clickCandidates(roots, kind);
       }
 
       if (op === "submit") {
-        return helper.submitCandidates(roots, selector);
+        return helper.submitCandidates(roots);
       }
 
       if (op === "upload") {
-        return helper.fileCandidates(roots, selector);
+        return helper.fileCandidates(roots);
       }
 
-      return helper.formCandidates(roots, selector);
+      return helper.formCandidates(roots);
     };
 
     helper.resolveOnce = (options) => {

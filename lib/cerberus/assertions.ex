@@ -431,7 +431,6 @@ defmodule Cerberus.Assertions do
 
   defp normalize_click_locator(locator_input, opts) do
     locator = Locator.normalize!(locator_input)
-    opts = merge_locator_selector_opts(locator, opts)
     {locator, opts}
   end
 
@@ -457,7 +456,6 @@ defmodule Cerberus.Assertions do
 
   defp normalize_form_action_locator(locator_input, opts) do
     locator = Locator.normalize!(locator_input)
-    opts = merge_locator_selector_opts(locator, opts)
     {locator, opts}
   end
 
@@ -555,7 +553,6 @@ defmodule Cerberus.Assertions do
 
   defp normalize_submit_locator(locator_input, opts) do
     locator = Locator.normalize!(locator_input)
-    opts = merge_locator_selector_opts(locator, opts)
     {locator, opts}
   end
 
@@ -577,18 +574,13 @@ defmodule Cerberus.Assertions do
     {%{locator | kind: :text, value: value, opts: normalized_opts}, opts}
   end
 
-  defp locator_assertion_requires_locator_engine?(%Locator{kind: kind}) when kind in [:and, :or, :not, :css], do: true
+  defp locator_assertion_requires_locator_engine?(%Locator{kind: kind}) when kind in [:scope, :and, :or, :not, :css],
+    do: true
 
   defp locator_assertion_requires_locator_engine?(%Locator{opts: locator_opts}) do
-    Keyword.has_key?(locator_opts, :selector) or
-      Keyword.has_key?(locator_opts, :has) or
+    Keyword.has_key?(locator_opts, :has) or
       Keyword.has_key?(locator_opts, :has_not) or
       Keyword.has_key?(locator_opts, :from)
-  end
-
-  defp merge_locator_selector_opts(%Locator{opts: locator_opts}, opts) when is_list(locator_opts) do
-    selector_opt = Keyword.take(locator_opts, [:selector])
-    Keyword.merge(selector_opt, opts)
   end
 
   defp prune_nil_match_by_opt(opts) do

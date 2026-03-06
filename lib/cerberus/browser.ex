@@ -12,6 +12,8 @@ defmodule Cerberus.Browser do
   alias Cerberus.OpenBrowser
   alias Cerberus.Options
   alias Cerberus.Session
+  alias Ecto.Adapters.SQL.Sandbox, as: EctoSandbox
+  alias Phoenix.Ecto.SQL.Sandbox, as: PhoenixSandbox
 
   @type cookie :: %{
           name: String.t() | nil,
@@ -23,8 +25,8 @@ defmodule Cerberus.Browser do
           same_site: String.t() | nil,
           session: boolean()
         }
-  @type_args_error "Browser.type/3 expects text as a string and options as a keyword list"
-  @press_args_error "Browser.press/3 expects key as a string and options as a keyword list"
+  @type_args_error "Browser.type/4 expects locator, text as a string, and options as a keyword list"
+  @press_args_error "Browser.press/4 expects locator, key as a string, and options as a keyword list"
   @drag_args_error "Browser.drag/4 expects source and target selectors as strings and options as a keyword list"
   @assert_dialog_args_error "Browser.assert_dialog/3 expects a text locator and options as a keyword list"
   @with_popup_args_error "Browser.with_popup/4 expects trigger callback arity 1, callback arity 2, and options as a keyword list"
@@ -37,6 +39,38 @@ defmodule Cerberus.Browser do
   @with_popup_options_doc NimbleOptions.docs(Options.browser_with_popup_schema())
   @add_cookie_options_doc NimbleOptions.docs(Options.browser_add_cookie_schema())
   @return_result_options_doc NimbleOptions.docs(Options.return_result_schema())
+
+  @doc """
+  Returns encoded SQL sandbox metadata for browser `user_agent` session wiring.
+
+  This helper is intended for browser-session sandbox wiring:
+
+      import Cerberus
+      import Cerberus.Browser
+
+      metadata = user_agent_for_sandbox(MyApp.Repo, context)
+      session(:browser, user_agent: metadata)
+  """
+  @spec user_agent_for_sandbox(module() | [module()], map()) :: String.t()
+  def user_agent_for_sandbox(repo, context) when (is_atom(repo) or is_list(repo)) and is_map(context) do
+    repo
+    |> List.wrap()
+    |> sandbox_metadata_for_repos(context)
+    |> PhoenixSandbox.encode_metadata()
+  end
+
+  @doc """
+  Returns encoded SQL sandbox metadata for the configured Cerberus Ecto repos.
+  """
+  @spec user_agent_for_sandbox(map()) :: String.t()
+  def user_agent_for_sandbox(context) when is_map(context) do
+    if repos = Application.get_env(:cerberus, :ecto_repos) do
+      user_agent_for_sandbox(repos, context)
+    else
+      raise ArgumentError,
+            "user_agent_for_sandbox/1 requires :cerberus, :ecto_repos to include at least one repo; use user_agent_for_sandbox/2 to pass an explicit repo"
+    end
+  end
 
   @doc """
   Captures a browser screenshot.
@@ -95,20 +129,23 @@ defmodule Cerberus.Browser do
   end
 
   @doc """
-  Types text into the currently focused element or a matched element.
+  Types text into a matched element.
 
   ## Options
 
   #{@type_options_doc}
   """
-  @spec type(session, String.t(), Options.browser_type_opts()) :: session when session: var
-  def type(session, text, opts \\ [])
+  @spec type(session, Locator.input(), String.t(), Options.browser_type_opts()) :: session when session: var
+  def type(session, locator, text, opts \\ [])
 
-  def type(session, text, opts) do
+  def type(session, locator, text, opts) do
     browser_only(session, :type, opts, @type_args_error, &Options.validate_browser_type!/1, fn browser_session,
                                                                                                validated_opts ->
       if is_binary(text) do
-        {:ok, Extensions.type(browser_session, text, validated_opts)}
+        normalized_locator = Locator.normalize!(locator)
+        selector = resolve_extension_selector!(browser_session, normalized_locator, "Browser.type/4")
+        extension_opts = Keyword.put(validated_opts, :selector, selector)
+        {:ok, Extensions.type(browser_session, text, extension_opts)}
       else
         :invalid_args
       end
@@ -116,20 +153,23 @@ defmodule Cerberus.Browser do
   end
 
   @doc """
-  Presses a keyboard key.
+  Presses a keyboard key on a matched element.
 
   ## Options
 
   #{@press_options_doc}
   """
-  @spec press(session, String.t(), Options.browser_press_opts()) :: session when session: var
-  def press(session, key, opts \\ [])
+  @spec press(session, Locator.input(), String.t(), Options.browser_press_opts()) :: session when session: var
+  def press(session, locator, key, opts \\ [])
 
-  def press(session, key, opts) do
+  def press(session, locator, key, opts) do
     browser_only(session, :press, opts, @press_args_error, &Options.validate_browser_press!/1, fn browser_session,
                                                                                                   validated_opts ->
       if is_binary(key) do
-        {:ok, Extensions.press(browser_session, key, validated_opts)}
+        normalized_locator = Locator.normalize!(locator)
+        selector = resolve_extension_selector!(browser_session, normalized_locator, "Browser.press/4")
+        extension_opts = Keyword.put(validated_opts, :selector, selector)
+        {:ok, Extensions.press(browser_session, key, extension_opts)}
       else
         :invalid_args
       end
@@ -386,6 +426,23 @@ defmodule Cerberus.Browser do
     {updated_session, png_binary, resolved_path}
   end
 
+  defp resolve_extension_selector!(%BrowserSession{} = session, %Locator{} = locator, op_name) do
+    case BrowserSession.resolve_within_scope(session, locator, Session.scope(session)) do
+      {:ok, selector} when is_binary(selector) and selector != "" ->
+        selector
+
+      {:ok, %{} = scope} ->
+        raise ArgumentError,
+              "#{op_name} invalid locator: resolved to iframe scope #{inspect(scope)}; Browser keyboard helpers require a document-scoped locator"
+
+      {:ok, _other} ->
+        raise ArgumentError, "#{op_name} invalid locator: did not resolve to a selector target"
+
+      {:error, reason} ->
+        raise ArgumentError, "#{op_name} invalid locator: could not be resolved: #{reason}"
+    end
+  end
+
   defp maybe_open_screenshot(path, opts) when is_binary(path) and is_list(opts) do
     if Keyword.get(opts, :open, false) do
       open_fun = Application.get_env(:cerberus, :open_with_system_cmd, &OpenBrowser.open_with_system_cmd/1)
@@ -414,4 +471,49 @@ defmodule Cerberus.Browser do
   defp browser_only(_session, _op, _opts, invalid_args_message, _validator, _fun) do
     raise ArgumentError, invalid_args_message
   end
+
+  defp sandbox_metadata_for_repos([repo], context) do
+    case maybe_start_sandbox_owner(repo, context) do
+      {:owner, owner_pid} -> PhoenixSandbox.metadata_for(repo, owner_pid)
+      :already_checked_out -> PhoenixSandbox.metadata_for(repo, self())
+    end
+  end
+
+  defp sandbox_metadata_for_repos(repos, context) when is_list(repos) do
+    Enum.each(repos, &maybe_start_sandbox_owner(&1, context))
+    PhoenixSandbox.metadata_for(repos, self())
+  end
+
+  defp maybe_start_sandbox_owner(repo, context) do
+    pid = EctoSandbox.start_owner!(repo, shared: not Map.get(context, :async, false))
+    ExUnit.Callbacks.on_exit(fn -> stop_sandbox_owner(pid) end)
+    {:owner, pid}
+  rescue
+    e in MatchError ->
+      if already_checked_out_match_error?(e),
+        do: :already_checked_out,
+        else: reraise(e, __STACKTRACE__)
+  end
+
+  defp stop_sandbox_owner(checkout_pid) do
+    EctoSandbox.stop_owner(checkout_pid)
+  catch
+    :exit, {:noproc, _} -> :ok
+  end
+
+  defp already_checked_out_match_error?(%MatchError{term: term}), do: contains_already_owner_or_allowed?(term)
+
+  defp contains_already_owner_or_allowed?({:already, reason}) when reason in [:owner, :allowed], do: true
+
+  defp contains_already_owner_or_allowed?(term) when is_tuple(term) do
+    term
+    |> Tuple.to_list()
+    |> Enum.any?(&contains_already_owner_or_allowed?/1)
+  end
+
+  defp contains_already_owner_or_allowed?([head | tail]),
+    do: contains_already_owner_or_allowed?(head) or contains_already_owner_or_allowed?(tail)
+
+  defp contains_already_owner_or_allowed?([]), do: false
+  defp contains_already_owner_or_allowed?(_term), do: false
 end

@@ -81,8 +81,8 @@ defmodule Cerberus.DocumentationExamplesTest do
       :browser
       |> driver_session(context)
       |> visit("/browser/extensions")
-      |> type("hello", selector: "#keyboard-input")
-      |> press("Enter", selector: "#press-input")
+      |> type(css("#keyboard-input"), "hello")
+      |> press(css("#press-input"), "Enter")
 
     evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), 10)", fn _ ->
       :ok

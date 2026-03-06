@@ -79,11 +79,10 @@ Default strategy:
 - `role(:button | :link | :textbox | ..., name: "...")`
 
 ### Composition (advanced)
-- same-element AND: `role(:button, name: "Apply") |> testid("apply-secondary-button")`
-- equivalent explicit form: `and_(role(:button, name: "Apply"), testid("apply-secondary-button"))`
-- both forms produce the same locator semantics; keep pipes for inline readability, use `and_` when combining pre-built locators (for example in helpers/reductions) and for symmetry with `or_`/`not_`
-- descendant requirement: `role(:button, name: "Apply") |> has(testid("apply-secondary-marker"))`
-- descendant exclusion: `role(:button, name: "Apply") |> has_not(testid("apply-secondary-marker"))`
+- scope chaining (descendant query): `css("#actions") |> role(:button, name: "Apply")`
+- same-element AND intersection: `and_(role(:button, name: "Apply"), testid("apply-secondary-button"))`
+- descendant requirement: `role(:button, name: "Apply") |> filter(has: testid("apply-secondary-marker"))`
+- descendant exclusion: `role(:button, name: "Apply") |> filter(has_not: testid("apply-secondary-marker"))`
 - alternatives (OR): `or_(css("#primary"), css("#secondary"))`
 - boolean algebra: `and_(role(:button, name: "Apply"), not_(testid("apply-secondary-button")))`
 - negated conjunction: `not_(and_(role(:button, name: "Apply"), testid("apply-secondary-button")))`
@@ -119,8 +118,8 @@ Use `Cerberus.Browser` only with `session(:browser)`.
 | Screenshot | `Browser.screenshot(session, path: "tmp/page.png")` |
 | Screenshot binary result | `png = Browser.screenshot(session, path: "tmp/page.png", return_result: true)` |
 | Screenshot + open viewer | `Browser.screenshot(session, path: "tmp/page.png", open: true)` |
-| Type keys | `Browser.type(session, "hello", selector: "#input")` |
-| Press key | `Browser.press(session, "Enter", selector: "#input")` |
+| Type keys | `Browser.type(session, css("#input"), "hello")` |
+| Press key | `Browser.press(session, css("#input"), "Enter")` |
 | Drag and drop | `Browser.drag(session, "#drag-source", "#drop-target")` |
 | Dialog assert + dismiss | `Browser.assert_dialog(session, ~l"Delete item?"e)` |
 | Dialog assert + confirm | `Browser.assert_dialog(session, ~l"Delete item?"e, accept: true)` |

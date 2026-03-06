@@ -12,7 +12,7 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     static_error =
       assert_raise AssertionError, fn ->
-        type(static, "hello")
+        type(static, css("#keyboard-input"), "hello")
       end
 
     assert static_error.message =~ "type is not implemented for :static driver"
@@ -60,8 +60,8 @@ defmodule Cerberus.BrowserExtensionsTest do
       |> session()
       |> visit("/browser/extensions")
       |> screenshot(path: path)
-      |> type("hello browser", selector: "#keyboard-input")
-      |> press("Enter", selector: "#press-input")
+      |> type(css("#keyboard-input"), "hello browser")
+      |> press(css("#press-input"), "Enter")
 
     evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), 10)", fn _ -> :ok end)
     session = assert_dialog(session, text("Delete item?", exact: true))
@@ -180,12 +180,12 @@ defmodule Cerberus.BrowserExtensionsTest do
       |> session()
       |> visit("/browser/extensions")
 
-    assert_raise ArgumentError, ~r/Browser.type\/3 invalid options/, fn ->
-      type(session, "hello", unknown: true)
+    assert_raise ArgumentError, ~r/Browser.type\/4 invalid options/, fn ->
+      type(session, css("#keyboard-input"), "hello", unknown: true)
     end
 
-    assert_raise ArgumentError, ~r/Browser.press\/3 invalid options/, fn ->
-      press(session, "Enter", timeout: -1)
+    assert_raise ArgumentError, ~r/Browser.press\/4 invalid options/, fn ->
+      press(session, css("#press-input"), "Enter", timeout: -1)
     end
 
     assert_raise ArgumentError, ~r/Browser.drag\/4 invalid options/, fn ->

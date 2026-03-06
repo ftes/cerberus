@@ -153,12 +153,10 @@ defmodule Cerberus.LocatorTest do
     end
   end
 
-  test "normalizes locator options for exact/selector" do
-    locator = Locator.normalize!(text: "Apply", exact: true, selector: "#primary-actions button")
-
-    assert %Locator{kind: :text, value: "Apply"} = locator
-    assert locator.opts[:exact] == true
-    assert locator.opts[:selector] == "#primary-actions button"
+  test "rejects selector locator option" do
+    assert_raise InvalidLocatorError, ~r/selector/, fn ->
+      Locator.normalize!(text: "Apply", exact: true, selector: "#primary-actions button")
+    end
   end
 
   test "normalizes has locator option for nested locator kinds" do
@@ -265,9 +263,12 @@ defmodule Cerberus.LocatorTest do
            } = locator
   end
 
-  test "pipe composition overloads create same-element and semantics" do
-    locator = and_(role(:button, name: "Run Search"), testid("submit-secondary-marker"))
-    assert %Locator{kind: :and, value: [%Locator{kind: :role}, %Locator{kind: :testid}]} = locator
+  test "pipe composition overloads create scope semantics" do
+    scoped = :button |> role(name: "Run Search") |> testid("submit-secondary-marker")
+    assert %Locator{kind: :scope, value: [%Locator{kind: :role}, %Locator{kind: :testid}]} = scoped
+
+    intersection = and_(role(:button, name: "Run Search"), testid("submit-secondary-marker"))
+    assert %Locator{kind: :and, value: [%Locator{kind: :role}, %Locator{kind: :testid}]} = intersection
   end
 
   test "preserves role locator kind and metadata" do

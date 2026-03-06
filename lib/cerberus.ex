@@ -23,8 +23,6 @@ defmodule Cerberus do
   alias Cerberus.Path
   alias Cerberus.Profiling
   alias Cerberus.Session
-  alias Ecto.Adapters.SQL.Sandbox, as: EctoSandbox
-  alias Phoenix.Ecto.SQL.Sandbox, as: PhoenixSandbox
 
   @type locator_input :: Locator.input()
   @type scope_locator_input :: Locator.input()
@@ -143,32 +141,6 @@ defmodule Cerberus do
     do: Keyword.put(opts, :browser_name, browser_name)
 
   @doc """
-  Returns the encoded SQL sandbox user-agent marker for an ExUnit test context.
-
-  This helper is intended for browser-session sandbox wiring:
-
-      metadata = Cerberus.sql_sandbox_user_agent(MyApp.Repo, context)
-      session(:browser, user_agent: metadata)
-  """
-  @spec sql_sandbox_user_agent(module() | [module()], map()) :: String.t()
-  def sql_sandbox_user_agent(repo, context) when (is_atom(repo) or is_list(repo)) and is_map(context) do
-    checkout_ecto_repos(repo, context)
-  end
-
-  @doc """
-  Returns the encoded SQL sandbox user-agent marker for the first configured Ecto repo.
-  """
-  @spec sql_sandbox_user_agent(map()) :: String.t()
-  def sql_sandbox_user_agent(context) when is_map(context) do
-    if repos = Application.get_env(:cerberus, :ecto_repos) do
-      sql_sandbox_user_agent(repos, context)
-    else
-      raise ArgumentError,
-            "sql_sandbox_user_agent/1 requires :cerberus, :ecto_repos to include at least one repo; use sql_sandbox_user_agent/2 to pass an explicit repo"
-    end
-  end
-
-  @doc """
   Opens a new tab for browser sessions and returns the updated session.
   """
   @spec open_tab(arg) :: arg when arg: var
@@ -281,7 +253,7 @@ defmodule Cerberus do
 
   @spec text(locator_input(), String.t() | Regex.t()) :: Locator.t()
   def text(locator, value) when is_binary(value) or is_struct(value, Regex) do
-    and_(locator, text(value))
+    scope(locator, text(value))
   end
 
   @doc """
@@ -289,7 +261,7 @@ defmodule Cerberus do
   """
   @spec text(locator_input(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def text(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
-    and_(locator, text(value, opts))
+    scope(locator, text(value, opts))
   end
 
   @doc """
@@ -312,7 +284,7 @@ defmodule Cerberus do
 
   @spec label(locator_input(), String.t() | Regex.t()) :: Locator.t()
   def label(locator, value) when is_binary(value) or is_struct(value, Regex) do
-    and_(locator, label(value))
+    scope(locator, label(value))
   end
 
   @doc """
@@ -320,7 +292,7 @@ defmodule Cerberus do
   """
   @spec label(locator_input(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def label(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
-    and_(locator, label(value, opts))
+    scope(locator, label(value, opts))
   end
 
   @doc """
@@ -343,7 +315,7 @@ defmodule Cerberus do
 
   @spec placeholder(locator_input(), String.t() | Regex.t()) :: Locator.t()
   def placeholder(locator, value) when is_binary(value) or is_struct(value, Regex) do
-    and_(locator, placeholder(value))
+    scope(locator, placeholder(value))
   end
 
   @doc """
@@ -351,7 +323,7 @@ defmodule Cerberus do
   """
   @spec placeholder(locator_input(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def placeholder(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
-    and_(locator, placeholder(value, opts))
+    scope(locator, placeholder(value, opts))
   end
 
   @doc """
@@ -374,7 +346,7 @@ defmodule Cerberus do
 
   @spec title(locator_input(), String.t() | Regex.t()) :: Locator.t()
   def title(locator, value) when is_binary(value) or is_struct(value, Regex) do
-    and_(locator, title(value))
+    scope(locator, title(value))
   end
 
   @doc """
@@ -382,7 +354,7 @@ defmodule Cerberus do
   """
   @spec title(locator_input(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def title(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
-    and_(locator, title(value, opts))
+    scope(locator, title(value, opts))
   end
 
   @doc """
@@ -405,7 +377,7 @@ defmodule Cerberus do
 
   @spec alt(locator_input(), String.t() | Regex.t()) :: Locator.t()
   def alt(locator, value) when is_binary(value) or is_struct(value, Regex) do
-    and_(locator, alt(value))
+    scope(locator, alt(value))
   end
 
   @doc """
@@ -413,7 +385,7 @@ defmodule Cerberus do
   """
   @spec alt(locator_input(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def alt(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
-    and_(locator, alt(value, opts))
+    scope(locator, alt(value, opts))
   end
 
   @doc """
@@ -436,7 +408,7 @@ defmodule Cerberus do
 
   @spec aria_label(locator_input(), String.t() | Regex.t()) :: Locator.t()
   def aria_label(locator, value) when is_binary(value) or is_struct(value, Regex) do
-    and_(locator, aria_label(value))
+    scope(locator, aria_label(value))
   end
 
   @doc """
@@ -444,7 +416,7 @@ defmodule Cerberus do
   """
   @spec aria_label(locator_input(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
   def aria_label(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
-    and_(locator, aria_label(value, opts))
+    scope(locator, aria_label(value, opts))
   end
 
   @doc """
@@ -467,7 +439,7 @@ defmodule Cerberus do
 
   @spec css(locator_input(), String.t()) :: Locator.t()
   def css(locator, value) when is_binary(value) do
-    and_(locator, css(value))
+    scope(locator, css(value))
   end
 
   @doc """
@@ -475,7 +447,7 @@ defmodule Cerberus do
   """
   @spec css(locator_input(), String.t(), Options.locator_leaf_opts()) :: Locator.t()
   def css(locator, value, opts) when is_binary(value) and is_list(opts) do
-    and_(locator, css(value, opts))
+    scope(locator, css(value, opts))
   end
 
   @doc """
@@ -498,7 +470,7 @@ defmodule Cerberus do
 
   @spec role(locator_input(), String.t() | atom()) :: Locator.t()
   def role(locator, role_name) when is_binary(role_name) or is_atom(role_name) do
-    and_(locator, role(role_name))
+    scope(locator, role(role_name))
   end
 
   @doc """
@@ -506,7 +478,7 @@ defmodule Cerberus do
   """
   @spec role(locator_input(), String.t() | atom(), Options.role_locator_opts()) :: Locator.t()
   def role(locator, role_name, opts) when (is_binary(role_name) or is_atom(role_name)) and is_list(opts) do
-    and_(locator, role(role_name, opts))
+    scope(locator, role(role_name, opts))
   end
 
   @doc """
@@ -529,7 +501,7 @@ defmodule Cerberus do
 
   @spec testid(locator_input(), String.t()) :: Locator.t()
   def testid(locator, value) when is_binary(value) do
-    and_(locator, testid(value))
+    scope(locator, testid(value))
   end
 
   @doc """
@@ -537,8 +509,16 @@ defmodule Cerberus do
   """
   @spec testid(locator_input(), String.t(), Options.locator_leaf_opts()) :: Locator.t()
   def testid(locator, value, opts) when is_binary(value) and is_list(opts) do
-    and_(locator, testid(value, opts))
+    scope(locator, testid(value, opts))
   end
+
+  @spec scope(locator_input(), locator_input()) :: Locator.t()
+  @doc """
+  Composes two locators with scope chaining (descendant query).
+
+  The right locator is resolved within each element matched by the left locator.
+  """
+  def scope(left, right), do: Locator.compose_scope(left, right)
 
   @spec and_(locator_input(), locator_input()) :: Locator.t()
   @doc """
@@ -568,21 +548,15 @@ defmodule Cerberus do
   """
   def not_(left, right), do: and_(left, not_(right))
 
-  @spec has(locator_input(), locator_input()) :: Locator.t()
+  @spec filter(locator_input(), keyword()) :: Locator.t()
   @doc """
-  Adds a descendant locator constraint (`:has`) to a locator.
+  Adds locator filters to an existing locator.
 
-  Example:
-
-      role(:button, name: "Apply") |> has(testid("apply-secondary-marker"))
+  Supported filters:
+  - `has: locator`
+  - `has_not: locator`
   """
-  def has(locator, nested_locator), do: Locator.put_has(locator, nested_locator)
-
-  @spec has_not(locator_input(), locator_input()) :: Locator.t()
-  @doc """
-  Adds a descendant-negation locator constraint (`:has_not`) to a locator.
-  """
-  def has_not(locator, nested_locator), do: Locator.put_has_not(locator, nested_locator)
+  def filter(locator, opts), do: Locator.filter(locator, opts)
 
   @doc """
   Composes a locator that matches the closest ancestor of a nested `from` locator.
@@ -1049,30 +1023,4 @@ defmodule Cerberus do
   defp profiling_bucket_driver_kind!(%StaticSession{}), do: :static
   defp profiling_bucket_driver_kind!(%LiveSession{}), do: :live
   defp profiling_bucket_driver_kind!(%BrowserSession{}), do: :browser
-
-  defp checkout_ecto_repos(repo, context) do
-    repos = List.wrap(repo)
-    metadata = sandbox_metadata_for_repos(repos, context)
-    PhoenixSandbox.encode_metadata(metadata)
-  end
-
-  defp sandbox_metadata_for_repos([repo], context),
-    do: PhoenixSandbox.metadata_for(repo, start_sandbox_owner(repo, context))
-
-  defp sandbox_metadata_for_repos(repos, context) when is_list(repos) do
-    Enum.each(repos, &start_sandbox_owner(&1, context))
-    PhoenixSandbox.metadata_for(repos, self())
-  end
-
-  defp start_sandbox_owner(repo, context) do
-    pid = EctoSandbox.start_owner!(repo, shared: not context.async)
-    ExUnit.Callbacks.on_exit(fn -> stop_sandbox_owner(pid) end)
-    pid
-  end
-
-  defp stop_sandbox_owner(checkout_pid) do
-    EctoSandbox.stop_owner(checkout_pid)
-  catch
-    :exit, {:noproc, _} -> :ok
-  end
 end

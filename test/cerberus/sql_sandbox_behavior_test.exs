@@ -2,6 +2,7 @@ defmodule Cerberus.SQLSandboxBehaviorTest do
   use ExUnit.Case, async: true
 
   import Cerberus
+  import Cerberus.Browser
 
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Live, as: LiveSession
@@ -9,7 +10,7 @@ defmodule Cerberus.SQLSandboxBehaviorTest do
   alias Cerberus.Fixtures.SandboxMessages
 
   setup context do
-    {:ok, sandbox_user_agent: sql_sandbox_user_agent(Cerberus.Fixtures.Repo, context)}
+    {:ok, sandbox_user_agent: user_agent_for_sandbox(Cerberus.Fixtures.Repo, context)}
   end
 
   for driver <- [:phoenix, :browser] do

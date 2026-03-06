@@ -465,8 +465,7 @@ defmodule Cerberus.Driver.Static do
   end
 
   defp locator_assertion_requires_locator_engine?(%Locator{opts: locator_opts}) do
-    Keyword.has_key?(locator_opts, :selector) or
-      Keyword.has_key?(locator_opts, :has) or
+    Keyword.has_key?(locator_opts, :has) or
       Keyword.has_key?(locator_opts, :has_not) or
       Keyword.has_key?(locator_opts, :from)
   end
