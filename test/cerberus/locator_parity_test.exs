@@ -522,52 +522,52 @@ defmodule Cerberus.LocatorParityTest do
         name: "submit supports same-element and composition with testid",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, "Run Search" |> button(exact: false) |> testid("submit-secondary-button"))
+        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> testid("submit-secondary-button"))
       },
       %{
         name: "submit and composition does not treat descendant marker as same element",
         html: @chained_locator_html,
         expect: :error,
         error_module: AssertionError,
-        run: &submit(&1, "Run Search" |> button(exact: false) |> testid("submit-secondary-marker"))
+        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> testid("submit-secondary-marker"))
       },
       %{
         name: "submit supports has testid nested locator filter",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, "Run Search" |> button(exact: false) |> has(testid("submit-secondary-marker")))
+        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> has(testid("submit-secondary-marker")))
       },
       %{
         name: "submit supports has text nested locator filter",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, "Run Search" |> button(exact: false) |> has(text("secondary", exact: true)))
+        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> has(text("secondary", exact: true)))
       },
       %{
         name: "submit has filter errors when nested locator does not match",
         html: @chained_locator_html,
         expect: :error,
         error_module: AssertionError,
-        run: &submit(&1, "Run Search" |> button(exact: false) |> has(testid("missing-marker")))
+        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> has(testid("missing-marker")))
       },
       %{
         name: "submit supports has css nested locator filter",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, "Run Search" |> button(exact: false) |> has(css(".kind-secondary")))
+        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> has(css(".kind-secondary")))
       },
       %{
         name: "submit supports has_not nested locator filter",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, "Run Search" |> button(exact: false) |> has_not(testid("submit-secondary-marker")))
+        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> has_not(testid("submit-secondary-marker")))
       },
       %{
         name: "submit has_not filter errors when nested locator still matches",
         html: @chained_locator_html,
         expect: :error,
         error_module: AssertionError,
-        run: &submit(&1, "Run Search" |> button(exact: false) |> has_not(css("span")))
+        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> has_not(css("span")))
       },
       %{
         name: "submit supports nested and composition inside has",
@@ -576,8 +576,8 @@ defmodule Cerberus.LocatorParityTest do
         run:
           &submit(
             &1,
-            "Run Search"
-            |> button(exact: false)
+            :button
+            |> role(name: "Run Search", exact: false)
             |> has(and_(testid("submit-secondary-marker"), text("secondary", exact: true)))
           )
       },
@@ -588,8 +588,8 @@ defmodule Cerberus.LocatorParityTest do
         run:
           &submit(
             &1,
-            "Run Search"
-            |> button(exact: false)
+            :button
+            |> role(name: "Run Search", exact: false)
             |> has(or_(testid("submit-primary-marker"), testid("submit-secondary-marker")))
           )
       },
@@ -597,7 +597,7 @@ defmodule Cerberus.LocatorParityTest do
         name: "submit supports A and not B boolean composition",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, and_(button("Run Search", exact: false), not_(testid("submit-secondary-button"))))
+        run: &submit(&1, and_(role(:button, name: "Run Search", exact: false), not_(testid("submit-secondary-button"))))
       },
       %{
         name: "submit supports not(A and B) boolean composition",
@@ -607,8 +607,8 @@ defmodule Cerberus.LocatorParityTest do
           &submit(
             &1,
             and_(
-              button("Run Search", exact: false),
-              not_(and_(button("Run Search", exact: false), testid("submit-secondary-button")))
+              role(:button, name: "Run Search", exact: false),
+              not_(and_(role(:button, name: "Run Search", exact: false), testid("submit-secondary-button")))
             )
           )
       },
@@ -623,13 +623,13 @@ defmodule Cerberus.LocatorParityTest do
         name: "assert_has supports has locator option",
         html: @chained_locator_html,
         expect: :ok,
-        run: &assert_has(&1, has(button("Apply", exact: false), text("secondary", exact: true)))
+        run: &assert_has(&1, has(role(:button, name: "Apply", exact: false), text("secondary", exact: true)))
       },
       %{
         name: "assert_has supports has_not locator option",
         html: @chained_locator_html,
         expect: :ok,
-        run: &assert_has(&1, has_not(button("Apply", exact: false), text("secondary", exact: true)))
+        run: &assert_has(&1, has_not(role(:button, name: "Apply", exact: false), text("secondary", exact: true)))
       },
       %{
         name: "assert_has supports composed css and text locator assertions",

@@ -3,7 +3,7 @@ defmodule Cerberus.Locator do
   Normalize user input into a canonical locator AST.
 
   The AST supports:
-  - leaf locators (`:text`, `:button`, `:css`, `:testid`, ...)
+  - leaf locators (`:text`, `:label`, `:css`, `:testid`, ...)
   - composition (`:and`, `:or`, `:not`)
   - descendant filters via `:has` and `:has_not`
   - closest-scope input via `:from`
@@ -16,8 +16,7 @@ defmodule Cerberus.Locator do
   @enforce_keys [:kind, :value]
   defstruct [:kind, :value, opts: []]
 
-  @type leaf_kind ::
-          :text | :label | :link | :button | :placeholder | :title | :alt | :aria_label | :testid | :css
+  @type leaf_kind :: :text | :label | :placeholder | :title | :alt | :aria_label | :testid | :css
   @type role_kind :: :role
   @type resolved_role_kind :: :text | :label | :link | :button | :alt
   @type composite_kind :: :and | :or | :not
@@ -86,7 +85,7 @@ defmodule Cerberus.Locator do
   @spec leaf(leaf_kind(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: t()
   def leaf(kind, value, opts \\ [])
 
-  def leaf(kind, value, opts) when kind in [:text, :label, :link, :button, :placeholder, :title, :alt, :aria_label] do
+  def leaf(kind, value, opts) when kind in [:text, :label, :placeholder, :title, :alt, :aria_label] do
     ensure_text_value!(kind, value, {kind, value, opts})
     normalized_opts = opts |> normalize_leaf_opts({kind, value, opts}) |> maybe_default_exact_opt(value)
     ensure_regex_exact_compatible!(kind, value, normalized_opts, {kind, value, opts})
@@ -192,22 +191,7 @@ defmodule Cerberus.Locator do
 
   @spec contains_kind?(input(), locator_kind()) :: boolean()
   def contains_kind?(locator, kind)
-      when kind in [
-             :text,
-             :label,
-             :link,
-             :button,
-             :placeholder,
-             :title,
-             :alt,
-             :aria_label,
-             :testid,
-             :css,
-             :role,
-             :and,
-             :or,
-             :not
-           ] do
+      when kind in [:text, :label, :placeholder, :title, :alt, :aria_label, :testid, :css, :role, :and, :or, :not] do
     locator
     |> normalize!()
     |> contains_kind_recursive?(kind)
@@ -316,8 +300,6 @@ defmodule Cerberus.Locator do
     kinds = [
       {:text, key_value(locator_map, :text)},
       {:label, key_value(locator_map, :label)},
-      {:link, key_value(locator_map, :link)},
-      {:button, key_value(locator_map, :button)},
       {:placeholder, key_value(locator_map, :placeholder)},
       {:title, key_value(locator_map, :title)},
       {:alt, key_value(locator_map, :alt)},
@@ -340,7 +322,7 @@ defmodule Cerberus.Locator do
         raise InvalidLocatorError,
           locator: original,
           message:
-            "invalid locator #{inspect(original)}; expected one of :text, :label, :link, :button, :placeholder, :title, :alt, :aria_label, :role, :css, :testid, :and, :or, or :not"
+            "invalid locator #{inspect(original)}; expected one of :text, :label, :placeholder, :title, :alt, :aria_label, :role, :css, :testid, :and, :or, or :not"
 
       [kind] ->
         normalize_kind(kind, locator_map, original)
@@ -386,24 +368,6 @@ defmodule Cerberus.Locator do
     normalized_opts = locator_map |> locator_opts(original) |> maybe_default_exact_opt(label)
     ensure_regex_exact_compatible!(:label, label, normalized_opts, original)
     %__MODULE__{kind: :label, value: label, opts: normalized_opts}
-  end
-
-  defp normalize_kind(:link, locator_map, original) do
-    link = key_value(locator_map, :link)
-    ensure_text_value!(:link, link, original)
-    ensure_only_keys!(locator_map, original, [:link, :exact, :selector, :has, :has_not, :from])
-    normalized_opts = locator_map |> locator_opts(original) |> maybe_default_exact_opt(link)
-    ensure_regex_exact_compatible!(:link, link, normalized_opts, original)
-    %__MODULE__{kind: :link, value: link, opts: normalized_opts}
-  end
-
-  defp normalize_kind(:button, locator_map, original) do
-    button = key_value(locator_map, :button)
-    ensure_text_value!(:button, button, original)
-    ensure_only_keys!(locator_map, original, [:button, :exact, :selector, :has, :has_not, :from])
-    normalized_opts = locator_map |> locator_opts(original) |> maybe_default_exact_opt(button)
-    ensure_regex_exact_compatible!(:button, button, normalized_opts, original)
-    %__MODULE__{kind: :button, value: button, opts: normalized_opts}
   end
 
   defp normalize_kind(:placeholder, locator_map, original) do
@@ -840,7 +804,7 @@ defmodule Cerberus.Locator do
   end
 
   defp normalize_locator(%__MODULE__{kind: kind, value: value, opts: opts} = locator, original)
-       when kind in [:text, :label, :link, :button, :placeholder, :title, :alt, :aria_label] do
+       when kind in [:text, :label, :placeholder, :title, :alt, :aria_label] do
     ensure_text_value!(kind, value, original)
     normalized_opts = opts |> normalize_leaf_opts(original) |> maybe_default_exact_opt(value)
     ensure_regex_exact_compatible!(kind, value, normalized_opts, original)

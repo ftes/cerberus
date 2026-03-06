@@ -69,7 +69,7 @@ possible candidates:
 
 A locator is the way Cerberus finds elements or text in the UI.
 
-Use composable locator functions when matching needs structure (`label`, `button`, `text`, `has`, `and_`, `closest`, ...).
+Use composable locator functions when matching needs structure (`label`, `role`, `text`, `has`, `and_`, `closest`, ...).
 Use `~l` sigil shorthand for common one-liners:
 - `~l"Save"` means exact text match by default
 - `~l"Save"i` means inexact text match

@@ -118,7 +118,7 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
     :phoenix
     |> session()
     |> visit("/live/trigger-action")
-    |> click(button("Data-method Trigger Action", exact: true))
+    |> click(role(:button, name: "Data-method Trigger Action", exact: true))
     |> assert_path("/trigger-action/result")
     |> assert_has(text("method: POST", exact: true))
   end
@@ -127,7 +127,7 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
   test "data-method buttons on live pages submit to static endpoints (browser)", context do
     context.shared_browser_session
     |> visit("/live/trigger-action")
-    |> click(button("Data-method Trigger Action", exact: true))
+    |> click(role(:button, name: "Data-method Trigger Action", exact: true))
     |> assert_path("/trigger-action/result")
     |> assert_has(text("method: POST", exact: true))
   end

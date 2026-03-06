@@ -21,7 +21,7 @@ defmodule Cerberus.PhoenixTest.ParitySmokeTest do
       |> driver_session(context)
       |> visit("/phoenix_test/page/index")
       |> assert_has(and_(css("h1"), text("Main page")))
-      |> click(link("Page 2"))
+      |> click(role(:link, name: "Page 2"))
       |> assert_has(and_(css("h1"), text("Page 2")))
     end
 
@@ -37,7 +37,7 @@ defmodule Cerberus.PhoenixTest.ParitySmokeTest do
       |> driver_session(context)
       |> visit("/phoenix_test/page/index")
       |> fill_in(label("Email"), "parity@example.com")
-      |> click(button("Save Email"))
+      |> click(role(:button, name: "Save Email"))
       |> assert_path("/phoenix_test/page/create_record")
     end
   end

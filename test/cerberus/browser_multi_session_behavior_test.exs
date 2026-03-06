@@ -20,7 +20,7 @@ defmodule Cerberus.BrowserMultiSessionBehaviorTest do
       primary
       |> open_tab()
       |> visit("/live/counter")
-      |> click(button("Increment"))
+      |> click(role(:button, name: "Increment"))
       |> assert_has(text("Count: 1", exact: true))
 
     assert secondary.tab_id != primary_tab
@@ -67,7 +67,7 @@ defmodule Cerberus.BrowserMultiSessionBehaviorTest do
       receive do
         {:go, ^barrier} ->
           initial_session
-          |> click(button("Increment"))
+          |> click(role(:button, name: "Increment"))
           |> assert_has(text("Count: 1", exact: true))
       end
     end

@@ -1419,7 +1419,7 @@ defmodule Cerberus.Driver.Live do
       is_nil(Keyword.get(opts, :selector))
   end
 
-  defp simple_link_locator?(%Locator{kind: :link}), do: true
+  defp simple_link_locator?(%Locator{kind: :role} = locator), do: Locator.resolved_kind(locator) == :link
   defp simple_link_locator?(_), do: false
 
   defp live_link_match_count(html, expected, opts, scope) when is_binary(html) do

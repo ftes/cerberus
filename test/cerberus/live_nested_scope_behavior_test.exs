@@ -23,7 +23,7 @@ defmodule Cerberus.LiveNestedScopeBehaviorTest do
       |> within(css("#child-live-view"), fn scoped ->
         scoped
         |> within(css(".actions"), fn nested ->
-          click(nested, button("Save"))
+          click(nested, role(:button, name: "Save"))
         end)
         |> assert_has(text("Child saved: 1", exact: true))
         |> refute_has(text("Parent saved: 1", exact: true))
@@ -40,7 +40,7 @@ defmodule Cerberus.LiveNestedScopeBehaviorTest do
           |> visit("/live/nested")
           |> within(css("#child-live-view"), fn scoped ->
             within(scoped, css(".child-actions"), fn nested ->
-              click(nested, button("Missing Action"), timeout: 0)
+              click(nested, role(:button, name: "Missing Action"), timeout: 0)
             end)
           end)
         end

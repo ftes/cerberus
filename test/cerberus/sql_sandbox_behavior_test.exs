@@ -31,7 +31,7 @@ defmodule Cerberus.SQLSandboxBehaviorTest do
       session
       |> visit("/live/sandbox/messages")
       |> assert_has(text(body, exact: true))
-      |> click(button("Refresh", exact: true))
+      |> click(role(:button, name: "Refresh", exact: true))
       |> assert_has(text(body, exact: true))
     end
   end

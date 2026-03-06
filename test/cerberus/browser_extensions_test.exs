@@ -91,7 +91,7 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     error =
       assert_raise AssertionError, fn ->
-        click(session, button("Hidden Action", exact: true))
+        click(session, role(:button, name: "Hidden Action", exact: true))
       end
 
     assert error.message =~ "matched element is not visible"
@@ -107,7 +107,7 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     session =
       session
-      |> click(button("Offscreen Action", exact: true))
+      |> click(role(:button, name: "Offscreen Action", exact: true))
       |> assert_has(text("Offscreen action result: clicked", exact: true))
 
     evaluate_js(session, "window.scrollY", &assert(&1 > 0))
@@ -246,7 +246,7 @@ defmodule Cerberus.BrowserExtensionsTest do
       with_popup(
         main,
         fn trigger_session ->
-          click(trigger_session, button("Open Popup"))
+          click(trigger_session, role(:button, name: "Open Popup"))
         end,
         fn callback_main, popup ->
           assert callback_main.tab_id == main.tab_id
@@ -278,7 +278,7 @@ defmodule Cerberus.BrowserExtensionsTest do
         main,
         fn trigger_session ->
           Process.sleep(35)
-          click(trigger_session, button("Open Popup"))
+          click(trigger_session, role(:button, name: "Open Popup"))
         end,
         fn callback_main, popup ->
           assert callback_main.tab_id == main.tab_id
@@ -326,7 +326,7 @@ defmodule Cerberus.BrowserExtensionsTest do
         with_popup(
           session,
           fn trigger_session ->
-            click(trigger_session, button("Open Popup"))
+            click(trigger_session, role(:button, name: "Open Popup"))
           end,
           fn _main, popup ->
             assert_path(popup, "/browser/popup/destination", query: %{source: "click-trigger"})
@@ -369,7 +369,7 @@ defmodule Cerberus.BrowserExtensionsTest do
       :browser
       |> session()
       |> visit("/browser/extensions")
-      |> click(button("Open Prompt Dialog", exact: true))
+      |> click(role(:button, name: "Open Prompt Dialog", exact: true))
 
     assert_prompt_result(session, "Prompt result: ")
   end
@@ -379,7 +379,7 @@ defmodule Cerberus.BrowserExtensionsTest do
       :browser
       |> session()
       |> visit("/browser/extensions")
-      |> click(button("Open Confirm Dialog", exact: true))
+      |> click(role(:button, name: "Open Confirm Dialog", exact: true))
 
     assert_dialog(session, text("Delete item?", exact: true))
     assert_has(session, text("Dialog result: confirmed", exact: true))
@@ -416,7 +416,7 @@ defmodule Cerberus.BrowserExtensionsTest do
       :browser
       |> session()
       |> visit("/browser/extensions")
-      |> click(link("Download Report"))
+      |> click(role(:link, name: "Download Report"))
 
     assert_download(session, "report.txt")
     assert_download(session, "report.txt")
@@ -436,7 +436,7 @@ defmodule Cerberus.BrowserExtensionsTest do
     session =
       session()
       |> visit("/browser/extensions")
-      |> click(link("Download Report"))
+      |> click(role(:link, name: "Download Report"))
 
     assert_download(session, "report.txt")
   end
@@ -445,7 +445,7 @@ defmodule Cerberus.BrowserExtensionsTest do
     session =
       session()
       |> visit("/live/counter")
-      |> click(link("Download Report"))
+      |> click(role(:link, name: "Download Report"))
 
     assert_download(session, "report.txt")
   end
@@ -456,7 +456,7 @@ defmodule Cerberus.BrowserExtensionsTest do
         unquote(driver)
         |> session()
         |> visit("/live/counter")
-        |> click(button("Delayed Download"))
+        |> click(role(:button, name: "Delayed Download"))
 
       assert_download(session, "report.txt", timeout: 1_500)
     end
@@ -477,7 +477,7 @@ defmodule Cerberus.BrowserExtensionsTest do
     session =
       session()
       |> visit("/browser/extensions")
-      |> click(link("Download Report"))
+      |> click(role(:link, name: "Download Report"))
 
     error =
       assert_raise AssertionError, fn ->
@@ -493,7 +493,7 @@ defmodule Cerberus.BrowserExtensionsTest do
       :browser
       |> session()
       |> visit("/browser/extensions")
-      |> click(link("Download Report"))
+      |> click(role(:link, name: "Download Report"))
 
     error =
       assert_raise AssertionError, fn ->

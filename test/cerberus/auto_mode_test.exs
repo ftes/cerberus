@@ -27,7 +27,7 @@ defmodule Cerberus.AutoModeTest do
     session = visit(session(), "/live/redirects")
     assert match?(%Live{}, session)
 
-    session = click(session, button("Redirect to Articles", exact: true))
+    session = click(session, role(:button, name: "Redirect to Articles", exact: true))
     assert session.current_path == "/articles"
     assert match?(%Static{}, session)
     assert session.last_result.transition.reason == :live_redirect
@@ -37,7 +37,7 @@ defmodule Cerberus.AutoModeTest do
     session = visit(session, "/live/redirects")
     assert match?(%Live{}, session)
 
-    session = click(session, button("Hard Redirect to Articles", exact: true))
+    session = click(session, role(:button, name: "Hard Redirect to Articles", exact: true))
     assert session.current_path == "/articles"
     assert match?(%Static{}, session)
     assert session.last_result.transition.reason == :redirect

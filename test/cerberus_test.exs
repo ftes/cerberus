@@ -36,7 +36,7 @@ defmodule CerberusTest do
       |> fill_in(label("Email"), email)
       |> fill_in(label("Password"), password)
       |> fill_in(label("Confirm Password"), password)
-      |> submit(button("Create account"))
+      |> submit(role(:button, name: "Create account"))
       |> assert_path("/auth/static/dashboard")
       |> assert_has(text("Signed in as: #{email}", exact: true))
 
@@ -199,9 +199,9 @@ defmodule CerberusTest do
     session =
       session()
       |> visit("/articles")
-      |> click(link("Counter"))
+      |> click(role(:link, name: "Counter"))
       |> assert_has(role(:button, name: "Increment"))
-      |> click(button("Increment"))
+      |> click(role(:button, name: "Increment"))
       |> assert_has(text("Count: 1"))
 
     assert session.current_path == "/live/counter"
@@ -315,7 +315,7 @@ defmodule CerberusTest do
     assert_raise ArgumentError, ~r/invalid options/, fn ->
       session()
       |> visit("/articles")
-      |> click(button("Counter"), exact: true)
+      |> click(role(:button, name: "Counter"), exact: true)
     end
 
     assert_raise ArgumentError, ~r/invalid options/, fn ->
@@ -536,7 +536,7 @@ defmodule CerberusTest do
              session()
              |> visit("/search")
              |> fill_in(label("Search term"), "phoenix")
-             |> submit(button("Run Search"))
+             |> submit(role(:button, name: "Run Search"))
              |> assert_path("/search/results", query: %{q: "phoenix"})
              |> refute_path("/search/results", query: %{q: "elixir"})
            )
@@ -549,7 +549,7 @@ defmodule CerberusTest do
       |> within(css("#secondary-panel"), fn scoped ->
         scoped
         |> assert_has(text("Secondary Panel", exact: true))
-        |> click(link("Open"))
+        |> click(role(:link, name: "Open"))
       end)
 
     assert session.current_path == "/search"

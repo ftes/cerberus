@@ -168,17 +168,17 @@ session() # or session(conn)
 You can compose locators when simple label/role/testid matching is not enough.
 
 Common advanced patterns:
-- same-element AND (pipe composition): `button("Run Search") |> testid("submit-secondary-button")`
-- descendant requirement: `button("Run Search") |> has(testid("submit-secondary-marker"))`
-- descendant exclusion: `button("Run Search") |> has_not(testid("submit-secondary-marker"))`
+- same-element AND (pipe composition): `role(:button, name: "Run Search") |> testid("submit-secondary-button")`
+- descendant requirement: `role(:button, name: "Run Search") |> has(testid("submit-secondary-marker"))`
+- descendant exclusion: `role(:button, name: "Run Search") |> has_not(testid("submit-secondary-marker"))`
 - OR alternatives: `or_(css("#primary"), css("#secondary"))`
-- boolean algebra: `and_(button("Run Search"), not_(testid("submit-secondary-button")))`
-- negated conjunction: `not_(and_(button("Run Search"), testid("submit-secondary-button")))`
+- boolean algebra: `and_(role(:button, name: "Run Search"), not_(testid("submit-secondary-button")))`
+- negated conjunction: `not_(and_(role(:button, name: "Run Search"), testid("submit-secondary-button")))`
 
 ```elixir
 session()
 |> visit("/live/selector-edge")
-|> click(button("Apply") |> testid("apply-secondary-button"))
+|> click(role(:button, name: "Apply") |> testid("apply-secondary-button"))
 |> assert_has(~l"Selected: secondary"e)
 ```
 

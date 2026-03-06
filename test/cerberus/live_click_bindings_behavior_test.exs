@@ -21,13 +21,13 @@ defmodule Cerberus.LiveClickBindingsBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/redirects")
-      |> click(button("JS Patch Details", exact: true))
+      |> click(role(:button, name: "JS Patch Details", exact: true))
       |> assert_path("/live/redirects", query: [details: "true", foo: "js_patch"])
       |> assert_has(text("Live Redirects Details", exact: true))
-      |> click(button("JS Dispatch + Push", exact: true))
+      |> click(role(:button, name: "JS Dispatch + Push", exact: true))
       |> assert_path("/live/counter", query: [foo: "bar"])
       |> visit("/live/redirects")
-      |> click(button("JS Navigate to Counter", exact: true))
+      |> click(role(:button, name: "JS Navigate to Counter", exact: true))
       |> assert_path("/live/counter", query: [foo: "bar"])
     end
   end
@@ -36,7 +36,7 @@ defmodule Cerberus.LiveClickBindingsBehaviorTest do
     assert_raise AssertionError, ~r/no button matched locator/, fn ->
       session()
       |> visit("/live/redirects")
-      |> click(button("JS Dispatch only", exact: true))
+      |> click(role(:button, name: "JS Dispatch only", exact: true))
     end
   end
 

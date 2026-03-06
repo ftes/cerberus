@@ -17,7 +17,7 @@ defmodule Cerberus.CrossDriverMultiTabUserTest do
         |> visit("/session/user")
         |> assert_has(text("Session user: alice", exact: true))
         |> visit("/live/counter")
-        |> click(button("Increment"))
+        |> click(role(:button, name: "Increment"))
         |> assert_has(text("Count: 1", exact: true))
 
       primary =

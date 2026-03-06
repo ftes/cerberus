@@ -26,7 +26,7 @@ defmodule Cerberus.PathScopeBehaviorTest do
         |> assert_has(text("Secondary Panel", exact: true))
         |> assert_has(text("Status: secondary", exact: true))
         |> refute_has(text("Status: primary", exact: true))
-        |> click(link("Open"))
+        |> click(role(:link, name: "Open"))
       end)
       |> assert_path("/search")
       |> assert_has(text("Search", exact: true))
@@ -37,7 +37,7 @@ defmodule Cerberus.PathScopeBehaviorTest do
       |> driver_session(context)
       |> visit("/search")
       |> fill_in(label("Search term"), "phoenix")
-      |> submit(button("Run Search"))
+      |> submit(role(:button, name: "Run Search"))
       |> assert_path("/search/results", query: %{q: "phoenix"})
       |> refute_path("/search/results", query: %{q: "elixir"})
     end
@@ -47,7 +47,7 @@ defmodule Cerberus.PathScopeBehaviorTest do
       |> driver_session(context)
       |> visit("/live/selector-edge")
       |> within(css("#secondary-actions"), fn scoped ->
-        click(scoped, button("Apply"))
+        click(scoped, role(:button, name: "Apply"))
       end)
       |> within(css("#selected-result"), fn scoped ->
         scoped
@@ -60,7 +60,7 @@ defmodule Cerberus.PathScopeBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/redirects")
-      |> click(button("Patch link"))
+      |> click(role(:button, name: "Patch link"))
       |> assert_path("/live/redirects", query: [details: "true", foo: "bar"])
       |> assert_path("/live/redirects?details=true&foo=bar")
       |> refute_path("/live/counter")
@@ -73,7 +73,7 @@ defmodule Cerberus.PathScopeBehaviorTest do
       |> within(css("#secondary-panel"), fn scoped ->
         scoped
         |> assert_has(text("Secondary Panel", exact: true))
-        |> click(link("Open"))
+        |> click(role(:link, name: "Open"))
       end)
       |> assert_path("/search")
       |> assert_has(text("Search", exact: true))

@@ -17,7 +17,7 @@ defmodule Cerberus.BrowserTimeoutAssertionsTest do
     :browser
     |> session()
     |> visit("/live/async_page")
-    |> click(button("Async navigate!"))
+    |> click(role(:button, name: "Async navigate!"))
     |> assert_path("/live/counter")
   end
 
@@ -25,7 +25,7 @@ defmodule Cerberus.BrowserTimeoutAssertionsTest do
     :browser
     |> session()
     |> visit("/live/async_page")
-    |> click(button("Async navigate!"))
+    |> click(role(:button, name: "Async navigate!"))
     |> assert_has(text("Count: 0"), timeout: 500)
     |> assert_path("/live/counter", timeout: 500)
   end
@@ -34,7 +34,7 @@ defmodule Cerberus.BrowserTimeoutAssertionsTest do
     :browser
     |> session()
     |> visit("/live/async_page")
-    |> click(button("Async redirect!"))
+    |> click(role(:button, name: "Async redirect!"))
     |> assert_path("/articles", timeout: 2_000)
   end
 

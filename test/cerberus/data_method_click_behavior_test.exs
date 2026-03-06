@@ -6,14 +6,14 @@ defmodule Cerberus.DataMethodClickBehaviorTest do
   test "static click(button) submits data-method request" do
     session()
     |> visit("/phoenix_test/page/index")
-    |> click(button("Data-method Delete"))
+    |> click(role(:button, name: "Data-method Delete"))
     |> assert_has("h1" |> css() |> text("Record deleted"))
   end
 
   test "live click(button) submits data-method request" do
     session()
     |> visit("/phoenix_test/live/index")
-    |> click(button("Data-method Delete"))
+    |> click(role(:button, name: "Data-method Delete"))
     |> assert_has("h1" |> css() |> text("Record deleted"))
   end
 
@@ -21,7 +21,7 @@ defmodule Cerberus.DataMethodClickBehaviorTest do
     :browser
     |> session()
     |> visit("/phoenix_test/page/index")
-    |> click(button("Data-method Delete"))
+    |> click(role(:button, name: "Data-method Delete"))
     |> assert_has("h1" |> css() |> text("Record deleted"))
   end
 
@@ -29,7 +29,7 @@ defmodule Cerberus.DataMethodClickBehaviorTest do
     static_session = visit(session(), "/phoenix_test/page/index")
 
     assert_raise ExUnit.AssertionError, ~r/data-method element must define `data-to` or `href`/, fn ->
-      click(static_session, button("Incomplete data-method Delete"))
+      click(static_session, role(:button, name: "Incomplete data-method Delete"))
     end
   end
 end

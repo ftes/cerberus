@@ -156,7 +156,7 @@ defmodule Cerberus.TestSupport.PhoenixTestPlaywright.Legacy do
   def click_link(session, text) when not is_list(text) do
     session
     |> ensure_session()
-    |> Cerberus.click(Cerberus.link(normalize_scalar(text), exact: false))
+    |> Cerberus.click(Cerberus.role(:link, name: normalize_scalar(text), exact: false))
   end
 
   def click_link(session, text, opts) when is_list(opts) do
@@ -165,13 +165,13 @@ defmodule Cerberus.TestSupport.PhoenixTestPlaywright.Legacy do
 
     session
     |> ensure_session()
-    |> Cerberus.click(Cerberus.link(normalize_scalar(text), exact: exact), action_opts)
+    |> Cerberus.click(Cerberus.role(:link, name: normalize_scalar(text), exact: exact), action_opts)
   end
 
   def click_link(session, selector, text) when not is_list(text) do
     session
     |> ensure_session()
-    |> Cerberus.click(Cerberus.link(Cerberus.css(selector), normalize_scalar(text), exact: false))
+    |> Cerberus.click(Cerberus.role(Cerberus.css(selector), :link, name: normalize_scalar(text), exact: false))
   end
 
   def click_link(session, selector, text, opts) when is_list(opts) do
@@ -180,13 +180,16 @@ defmodule Cerberus.TestSupport.PhoenixTestPlaywright.Legacy do
 
     session
     |> ensure_session()
-    |> Cerberus.click(Cerberus.link(Cerberus.css(selector), normalize_scalar(text), exact: exact), action_opts)
+    |> Cerberus.click(
+      Cerberus.role(Cerberus.css(selector), :link, name: normalize_scalar(text), exact: exact),
+      action_opts
+    )
   end
 
   def click_button(session, text) when not is_list(text) do
     session
     |> ensure_session()
-    |> Cerberus.click(Cerberus.button(normalize_scalar(text), exact: false))
+    |> Cerberus.click(Cerberus.role(:button, name: normalize_scalar(text), exact: false))
   end
 
   def click_button(session, text, opts) when is_list(opts) do
@@ -195,13 +198,13 @@ defmodule Cerberus.TestSupport.PhoenixTestPlaywright.Legacy do
 
     session
     |> ensure_session()
-    |> Cerberus.click(Cerberus.button(normalize_scalar(text), exact: exact), action_opts)
+    |> Cerberus.click(Cerberus.role(:button, name: normalize_scalar(text), exact: exact), action_opts)
   end
 
   def click_button(session, selector, text) when not is_list(text) do
     session
     |> ensure_session()
-    |> Cerberus.click(Cerberus.button(Cerberus.css(selector), normalize_scalar(text), exact: false))
+    |> Cerberus.click(Cerberus.role(Cerberus.css(selector), :button, name: normalize_scalar(text), exact: false))
   end
 
   def click_button(session, selector, text, opts) when is_list(opts) do
@@ -210,7 +213,10 @@ defmodule Cerberus.TestSupport.PhoenixTestPlaywright.Legacy do
 
     session
     |> ensure_session()
-    |> Cerberus.click(Cerberus.button(Cerberus.css(selector), normalize_scalar(text), exact: exact), action_opts)
+    |> Cerberus.click(
+      Cerberus.role(Cerberus.css(selector), :button, name: normalize_scalar(text), exact: exact),
+      action_opts
+    )
   end
 
   def fill_in(session, field_or_selector, opts) when is_list(opts) do
@@ -319,7 +325,7 @@ defmodule Cerberus.TestSupport.PhoenixTestPlaywright.Legacy do
   def submit(session, text) do
     session
     |> ensure_session()
-    |> Cerberus.submit(Cerberus.button(normalize_scalar(text), exact: false))
+    |> Cerberus.submit(Cerberus.role(:button, name: normalize_scalar(text), exact: false))
   end
 
   def within(session, selector, callback) when is_function(callback, 1) do

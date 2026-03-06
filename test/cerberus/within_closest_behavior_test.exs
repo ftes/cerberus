@@ -29,7 +29,10 @@ defmodule Cerberus.WithinClosestBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/scoped")
-      |> within(closest(css("section"), from: text("Secondary Panel", exact: true)), &click(&1, link("Open")))
+      |> within(
+        closest(css("section"), from: text("Secondary Panel", exact: true)),
+        &click(&1, role(:link, name: "Open"))
+      )
       |> assert_path("/search")
     end
 

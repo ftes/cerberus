@@ -293,68 +293,6 @@ defmodule Cerberus do
   end
 
   @doc """
-  Builds a link locator.
-  """
-  @spec link(String.t() | Regex.t()) :: Locator.t()
-  def link(value) when is_binary(value) or is_struct(value, Regex), do: link(value, [])
-
-  @doc """
-  Builds or composes a link locator.
-
-  Supported forms:
-  - `link(value, opts)` for a leaf locator
-  - `link(locator, value)` to compose with an existing locator
-  """
-  @spec link(String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
-  def link(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
-    Locator.leaf(:link, value, opts)
-  end
-
-  @spec link(locator_input(), String.t() | Regex.t()) :: Locator.t()
-  def link(locator, value) when is_binary(value) or is_struct(value, Regex) do
-    and_(locator, link(value))
-  end
-
-  @doc """
-  Composes a link constraint into an existing locator with locator options.
-  """
-  @spec link(locator_input(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
-  def link(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
-    and_(locator, link(value, opts))
-  end
-
-  @doc """
-  Builds a button locator.
-  """
-  @spec button(String.t() | Regex.t()) :: Locator.t()
-  def button(value) when is_binary(value) or is_struct(value, Regex), do: button(value, [])
-
-  @doc """
-  Builds or composes a button locator.
-
-  Supported forms:
-  - `button(value, opts)` for a leaf locator
-  - `button(locator, value)` to compose with an existing locator
-  """
-  @spec button(String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
-  def button(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
-    Locator.leaf(:button, value, opts)
-  end
-
-  @spec button(locator_input(), String.t() | Regex.t()) :: Locator.t()
-  def button(locator, value) when is_binary(value) or is_struct(value, Regex) do
-    and_(locator, button(value))
-  end
-
-  @doc """
-  Composes a button constraint into an existing locator with locator options.
-  """
-  @spec button(locator_input(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
-  def button(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
-    and_(locator, button(value, opts))
-  end
-
-  @doc """
   Builds a label locator.
   """
   @spec label(String.t() | Regex.t()) :: Locator.t()
@@ -636,7 +574,7 @@ defmodule Cerberus do
 
   Example:
 
-      button("Apply") |> has(testid("apply-secondary-marker"))
+      role(:button, name: "Apply") |> has(testid("apply-secondary-marker"))
   """
   def has(locator, nested_locator), do: Locator.put_has(locator, nested_locator)
 
@@ -788,7 +726,7 @@ defmodule Cerberus do
   Typical flow is sequential:
 
       session
-      |> click(link("Download Report"))
+      |> click(role(:link, name: "Download Report"))
       |> assert_download("report.txt")
 
   Browser driver waits on BiDi download events. Static/live drivers assert on

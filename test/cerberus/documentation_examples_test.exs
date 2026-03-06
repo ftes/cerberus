@@ -22,7 +22,7 @@ defmodule Cerberus.DocumentationExamplesTest do
       |> driver_session(context)
       |> visit("/articles")
       |> assert_has(text("Articles", exact: true))
-      |> click(link("Counter"))
+      |> click(role(:link, name: "Counter"))
       |> assert_has(text("Count: 0", exact: true))
     end
 
@@ -31,7 +31,7 @@ defmodule Cerberus.DocumentationExamplesTest do
       |> driver_session(context)
       |> visit("/search")
       |> fill_in(label("Search term"), "Aragorn")
-      |> submit(button("Run Search"))
+      |> submit(role(:button, name: "Run Search"))
       |> assert_path("/search/results", query: %{q: "Aragorn"})
       |> assert_has(text("Search query: Aragorn", exact: true))
     end
@@ -43,7 +43,7 @@ defmodule Cerberus.DocumentationExamplesTest do
       |> within(css("#secondary-panel"), fn scoped ->
         scoped
         |> assert_has(text("Status: secondary", exact: true))
-        |> click(link("Open"))
+        |> click(role(:link, name: "Open"))
       end)
       |> assert_path("/search")
     end

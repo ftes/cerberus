@@ -27,7 +27,7 @@ defmodule Cerberus.PhoenixTest.LiveInteractionsParityTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/phoenix_test/live/index")
-      |> click(link("Navigate link"))
+      |> click(role(:link, name: "Navigate link"))
       |> assert_has(and_(css("h1"), text("LiveView page 2")))
     end
 
@@ -35,7 +35,7 @@ defmodule Cerberus.PhoenixTest.LiveInteractionsParityTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/phoenix_test/live/index")
-      |> click(link("Patch link"))
+      |> click(role(:link, name: "Patch link"))
       |> assert_has(and_(css("h2"), text("LiveView main page details")))
     end
 
@@ -43,7 +43,7 @@ defmodule Cerberus.PhoenixTest.LiveInteractionsParityTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/phoenix_test/live/index")
-      |> click(link("Navigate to non-liveview"))
+      |> click(role(:link, name: "Navigate to non-liveview"))
       |> assert_has(and_(css("h1"), text("Main page")))
     end
 
@@ -51,7 +51,7 @@ defmodule Cerberus.PhoenixTest.LiveInteractionsParityTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/phoenix_test/live/index")
-      |> click(button("Show tab"))
+      |> click(role(:button, name: "Show tab"))
       |> assert_has(and_(css("#tab"), text("Tab title")))
     end
 
@@ -59,7 +59,7 @@ defmodule Cerberus.PhoenixTest.LiveInteractionsParityTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/phoenix_test/live/index")
-      |> click(button("Button with push navigation"))
+      |> click(role(:button, name: "Button with push navigation"))
       |> assert_has(and_(css("h1"), text("LiveView page 2")))
     end
 
@@ -67,7 +67,7 @@ defmodule Cerberus.PhoenixTest.LiveInteractionsParityTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/phoenix_test/live/index")
-      |> click(button("Button with push patch"))
+      |> click(role(:button, name: "Button with push patch"))
       |> assert_path("/phoenix_test/live/index", query: %{foo: "bar"})
     end
   end

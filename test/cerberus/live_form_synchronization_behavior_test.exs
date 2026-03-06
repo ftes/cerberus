@@ -21,9 +21,9 @@ defmodule Cerberus.LiveFormSynchronizationBehaviorTest do
       |> driver_session(context)
       |> visit("/live/form-sync")
       |> fill_in(label("Version A Text"), "some value for A")
-      |> click(button("Version B", exact: true))
+      |> click(role(:button, name: "Version B", exact: true))
       |> fill_in(label("Version B Text"), "some value for B")
-      |> submit(button("Save Conditional", exact: true))
+      |> submit(role(:button, name: "Save Conditional", exact: true))
       |> assert_has(text("has version_a_text?: false", exact: true))
       |> assert_has(text("has version_b_text?: true", exact: true))
       |> assert_has(text("submitted version_b_text: some value for B", exact: true))
@@ -36,7 +36,7 @@ defmodule Cerberus.LiveFormSynchronizationBehaviorTest do
       |> fill_in(label("Version A Text"), "some value for A")
       |> click(text("Switch to Version B", exact: true))
       |> fill_in(label("Version B Text"), "some value for B")
-      |> submit(button("Save Profile", exact: true))
+      |> submit(role(:button, name: "Save Profile", exact: true))
       |> assert_has(text("has version_a_text?: false", exact: true))
       |> assert_has(text("has version_b_text?: true", exact: true))
       |> assert_has(text("submitted version_b_text: some value for B", exact: true))
@@ -47,10 +47,10 @@ defmodule Cerberus.LiveFormSynchronizationBehaviorTest do
       |> driver_session(context)
       |> visit("/live/form-sync")
       |> assert_has(text("Email count: 1", exact: true))
-      |> click(button("add more", exact: true))
+      |> click(role(:button, name: "add more", exact: true))
       |> assert_has(text("Email count: 2", exact: true))
       |> click(
-        button("delete", exact: true),
+        role(:button, name: "delete", exact: true),
         selector: "button[name='mailing_list[emails_drop][]'][value='1']"
       )
       |> assert_has(text("Email count: 1", exact: true))
@@ -62,7 +62,7 @@ defmodule Cerberus.LiveFormSynchronizationBehaviorTest do
       |> visit("/live/form-sync")
       |> fill_in(label("Nickname (submit only)"), "Aragorn")
       |> refute_has(text("no-change submitted: Aragorn", exact: true))
-      |> submit(button("Save No Change", exact: true))
+      |> submit(role(:button, name: "Save No Change", exact: true))
       |> assert_has(text("no-change submitted: Aragorn", exact: true))
     end
   end

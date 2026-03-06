@@ -13,7 +13,7 @@ defmodule Cerberus.LiveSelectRegressionTest do
     |> visit("/phoenix_test/live/index")
     |> select(label("Race 2"), option: text("Elf"))
     |> select(label("Race 2"), option: text("Dwarf"))
-    |> click(button("Save Full Form"))
+    |> click(role(:button, name: "Save Full Form"))
     |> assert_has("#form-data" |> css() |> text("[elf, dwarf]", exact: false))
   end
 
@@ -23,7 +23,7 @@ defmodule Cerberus.LiveSelectRegressionTest do
     |> visit("/phoenix_test/live/index")
     |> select(label("Race 2"), option: text("Elf"))
     |> select(label("Race 2"), option: text("Dwarf"))
-    |> click(button("Save Full Form"))
+    |> click(role(:button, name: "Save Full Form"))
     |> assert_has("#form-data" |> css() |> text("[elf, dwarf]", exact: false))
   end
 
@@ -65,7 +65,7 @@ defmodule Cerberus.LiveSelectRegressionTest do
       conn
       |> session()
       |> visit("/phoenix_test/live/index")
-      |> click(link("Multiple links", exact: false))
+      |> click(role(:link, name: "Multiple links", exact: false))
     end
   end
 end

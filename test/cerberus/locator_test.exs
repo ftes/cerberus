@@ -33,8 +33,8 @@ defmodule Cerberus.LocatorTest do
       Locator.normalize!(text: ~r/Saved/, exact: true)
     end
 
-    assert_raise InvalidLocatorError, ~r/:exact cannot be combined with regex :button locators/, fn ->
-      button(~r/Save/, exact: false)
+    assert_raise InvalidLocatorError, ~r/:exact cannot be combined with regex :role locators/, fn ->
+      role(:button, name: ~r/Save/, exact: false)
     end
   end
 
@@ -128,8 +128,12 @@ defmodule Cerberus.LocatorTest do
   end
 
   test "normalizes helper keyword locators" do
-    assert %Locator{kind: :link, value: "Counter"} = Locator.normalize!(link: "Counter")
-    assert %Locator{kind: :button, value: "Save"} = Locator.normalize!(button: "Save")
+    assert %Locator{kind: :role, value: "Counter", opts: [role: "link", exact: true]} =
+             Locator.normalize!(role: :link, name: "Counter")
+
+    assert %Locator{kind: :role, value: "Save", opts: [role: "button", exact: true]} =
+             Locator.normalize!(role: :button, name: "Save")
+
     assert %Locator{kind: :label, value: "Search term"} = Locator.normalize!(label: "Search term")
     assert %Locator{kind: :placeholder, value: "Search"} = Locator.normalize!(placeholder: "Search")
     assert %Locator{kind: :title, value: "Main Heading"} = Locator.normalize!(title: "Main Heading")
@@ -137,6 +141,16 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :aria_label, value: "Search field"} = Locator.normalize!(aria_label: "Search field")
     assert %Locator{kind: :css, value: "#save"} = Locator.normalize!(css: "#save")
     assert %Locator{kind: :testid, value: "submit-btn"} = Locator.normalize!(testid: "submit-btn")
+  end
+
+  test "rejects deprecated link/button keyword kinds" do
+    assert_raise InvalidLocatorError, ~r/expected one of :text, :label/, fn ->
+      Locator.normalize!(link: "Counter")
+    end
+
+    assert_raise InvalidLocatorError, ~r/expected one of :text, :label/, fn ->
+      Locator.normalize!(button: "Save")
+    end
   end
 
   test "normalizes locator options for exact/selector" do
@@ -148,10 +162,11 @@ defmodule Cerberus.LocatorTest do
   end
 
   test "normalizes has locator option for nested locator kinds" do
-    locator = Locator.normalize!(button: "Apply", has: testid("apply-secondary"))
+    locator = Locator.normalize!(role: :button, name: "Apply", has: testid("apply-secondary"))
     has_locator = locator.opts[:has]
 
-    assert %Locator{kind: :button, value: "Apply"} = locator
+    assert %Locator{kind: :role, value: "Apply", opts: opts} = locator
+    assert opts[:role] == "button"
     assert %Locator{kind: :testid, value: "apply-secondary"} = has_locator
     assert has_locator.opts[:exact] == true
 
@@ -176,10 +191,11 @@ defmodule Cerberus.LocatorTest do
   end
 
   test "normalizes has_not locator option for nested locator kinds" do
-    locator = Locator.normalize!(button: "Apply", has_not: testid("apply-secondary-marker"))
+    locator = Locator.normalize!(role: :button, name: "Apply", has_not: testid("apply-secondary-marker"))
     has_not_locator = locator.opts[:has_not]
 
-    assert %Locator{kind: :button, value: "Apply"} = locator
+    assert %Locator{kind: :role, value: "Apply", opts: opts} = locator
+    assert opts[:role] == "button"
     assert %Locator{kind: :testid, value: "apply-secondary-marker"} = has_not_locator
     assert has_not_locator.opts[:exact] == true
   end
@@ -201,11 +217,11 @@ defmodule Cerberus.LocatorTest do
     locator =
       "Run Search"
       |> text()
-      |> and_(button("Run Search"))
+      |> and_(role(:button, name: "Run Search"))
       |> and_(testid("submit-secondary"))
 
     assert %Locator{kind: :and, value: members} = locator
-    assert Enum.map(members, & &1.kind) == [:text, :button, :testid]
+    assert Enum.map(members, & &1.kind) == [:text, :role, :testid]
 
     disjunction =
       or_(
@@ -218,39 +234,40 @@ defmodule Cerberus.LocatorTest do
   end
 
   test "composes not locators including chained A and not B patterns" do
-    negated = not_(button("Run Search"))
-    assert %Locator{kind: :not, value: [%Locator{kind: :button, value: "Run Search"}]} = negated
+    negated = not_(role(:button, name: "Run Search"))
+    assert %Locator{kind: :not, value: [%Locator{kind: :role, value: "Run Search"}]} = negated
 
-    chained = "Run Search" |> button() |> not_(testid("submit-secondary-button"))
+    chained = and_(role(:button, name: "Run Search"), not_(testid("submit-secondary-button")))
 
     assert %Locator{
              kind: :and,
              value: [
-               %Locator{kind: :button, value: "Run Search"},
+               %Locator{kind: :role, value: "Run Search"},
                %Locator{kind: :not, value: [%Locator{kind: :testid, value: "submit-secondary-button"}]}
              ]
            } = chained
 
-    negated_conjunction = not_(and_(button("Run Search"), testid("submit-secondary-button")))
+    negated_conjunction = not_(and_(role(:button, name: "Run Search"), testid("submit-secondary-button")))
 
     assert %Locator{
              kind: :not,
-             value: [%Locator{kind: :and, value: [%Locator{kind: :button}, %Locator{kind: :testid}]}]
+             value: [%Locator{kind: :and, value: [%Locator{kind: :role}, %Locator{kind: :testid}]}]
            } = negated_conjunction
   end
 
   test "supports map normalization for not composition" do
-    locator = Locator.normalize!(not: %{and: [%{button: "Run Search"}, %{testid: "submit-secondary-button"}]})
+    locator =
+      Locator.normalize!(not: %{and: [%{role: :button, name: "Run Search"}, %{testid: "submit-secondary-button"}]})
 
     assert %Locator{
              kind: :not,
-             value: [%Locator{kind: :and, value: [%Locator{kind: :button}, %Locator{kind: :testid}]}]
+             value: [%Locator{kind: :and, value: [%Locator{kind: :role}, %Locator{kind: :testid}]}]
            } = locator
   end
 
   test "pipe composition overloads create same-element and semantics" do
-    locator = "Run Search" |> button() |> testid("submit-secondary-marker")
-    assert %Locator{kind: :and, value: [%Locator{kind: :button}, %Locator{kind: :testid}]} = locator
+    locator = and_(role(:button, name: "Run Search"), testid("submit-secondary-marker"))
+    assert %Locator{kind: :and, value: [%Locator{kind: :role}, %Locator{kind: :testid}]} = locator
   end
 
   test "preserves role locator kind and metadata" do

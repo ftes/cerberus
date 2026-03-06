@@ -72,23 +72,21 @@ Default strategy:
 
 ### Helper constructors
 - `text("...")`
-- `link("...")`
-- `button("...")`
 - `label("...")`
 - `aria_label("...")`
 - `testid("...")`
 - `css("...")`
-- `role(:button, name: "...")`
+- `role(:button | :link | :textbox | ..., name: "...")`
 
 ### Composition (advanced)
-- same-element AND: `button("Apply") |> testid("apply-secondary-button")`
-- equivalent explicit form: `and_(button("Apply"), testid("apply-secondary-button"))`
+- same-element AND: `role(:button, name: "Apply") |> testid("apply-secondary-button")`
+- equivalent explicit form: `and_(role(:button, name: "Apply"), testid("apply-secondary-button"))`
 - both forms produce the same locator semantics; keep pipes for inline readability, use `and_` when combining pre-built locators (for example in helpers/reductions) and for symmetry with `or_`/`not_`
-- descendant requirement: `button("Apply") |> has(testid("apply-secondary-marker"))`
-- descendant exclusion: `button("Apply") |> has_not(testid("apply-secondary-marker"))`
+- descendant requirement: `role(:button, name: "Apply") |> has(testid("apply-secondary-marker"))`
+- descendant exclusion: `role(:button, name: "Apply") |> has_not(testid("apply-secondary-marker"))`
 - alternatives (OR): `or_(css("#primary"), css("#secondary"))`
-- boolean algebra: `and_(button("Apply"), not_(testid("apply-secondary-button")))`
-- negated conjunction: `not_(and_(button("Apply"), testid("apply-secondary-button")))`
+- boolean algebra: `and_(role(:button, name: "Apply"), not_(testid("apply-secondary-button")))`
+- negated conjunction: `not_(and_(role(:button, name: "Apply"), testid("apply-secondary-button")))`
 - nearest ancestor scope: `closest(css(".fieldset"), from: label("Email", exact: true))`
 
 ### Sigil `~l`

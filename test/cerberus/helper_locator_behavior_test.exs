@@ -22,7 +22,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       |> driver_session(context)
       |> visit("/search")
       |> fill_in(label("Search term"), "phoenix")
-      |> submit(button("Run Search"))
+      |> submit(role(:button, name: "Run Search"))
       |> assert_has(text("Search query: phoenix", exact: true))
       |> visit("/search")
       |> fill_in(role(:textbox, name: "Search term"), "elixir")
@@ -31,7 +31,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       |> visit("/articles")
       |> click(role(:link, name: "Counter"))
       |> assert_has(role(:button, name: "Increment", exact: true))
-      |> click(link("Articles"))
+      |> click(role(:link, name: "Articles"))
       |> assert_has(text("Articles", exact: true))
     end
 
@@ -53,7 +53,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/selector-edge")
-      |> click(button("Apply"))
+      |> click(role(:button, name: "Apply"))
       |> assert_has(text("Selected: primary", exact: true))
       |> click(role(:button, name: "Apply"))
       |> assert_has(text("Selected: primary", exact: true))
@@ -71,7 +71,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/selector-edge")
-      |> click(button("Create", exact: true))
+      |> click(role(:button, name: "Create", exact: true))
       |> assert_has(text("Selected: confirmed", exact: true))
     end
 
@@ -163,7 +163,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/selector-edge")
-      |> click("Apply" |> button() |> has(testid("apply-secondary-marker")))
+      |> click(:button |> role(name: "Apply") |> has(testid("apply-secondary-marker")))
       |> assert_has(text("Selected: secondary", exact: true))
     end
 
@@ -171,7 +171,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/selector-edge")
-      |> click("Apply" |> button() |> has_not(testid("apply-secondary-marker")))
+      |> click(:button |> role(name: "Apply") |> has_not(testid("apply-secondary-marker")))
       |> assert_has(text("Selected: primary", exact: true))
     end
 
@@ -180,13 +180,13 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/live/selector-edge")
-        |> click("Apply" |> button() |> testid("apply-secondary-marker"), timeout: 0)
+        |> click(:button |> role(name: "Apply") |> testid("apply-secondary-marker"), timeout: 0)
       end
 
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/selector-edge")
-      |> click("Apply" |> button() |> has(testid("apply-secondary-marker")))
+      |> click(:button |> role(name: "Apply") |> has(testid("apply-secondary-marker")))
       |> assert_has(text("Selected: secondary", exact: true))
     end
 
@@ -194,7 +194,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/selector-edge")
-      |> click(and_(button("Apply"), not_(testid("apply-secondary"))))
+      |> click(and_(role(:button, name: "Apply"), not_(testid("apply-secondary"))))
       |> assert_has(text("Selected: primary", exact: true))
     end
 
@@ -204,8 +204,8 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       |> visit("/live/selector-edge")
       |> click(
         and_(
-          button("Apply"),
-          not_(and_(button("Apply"), testid("apply-secondary")))
+          role(:button, name: "Apply"),
+          not_(and_(role(:button, name: "Apply"), testid("apply-secondary")))
         )
       )
       |> assert_has(text("Selected: primary", exact: true))
@@ -226,15 +226,15 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/search")
-      |> submit(button(~r/^Run/))
+      |> submit(role(:button, name: ~r/^Run/))
       |> assert_path("/search/results")
       |> visit("/search")
       |> fill_in(label("Search term"), "shire", first: true)
-      |> submit(button(~r/^Run/), first: true)
+      |> submit(role(:button, name: ~r/^Run/), first: true)
       |> assert_path("/search/results", query: [q: "shire"])
       |> visit("/search")
       |> fill_in(label("Search term", exact: false), "gondor", last: true)
-      |> submit(button(~r/^Run/), last: true)
+      |> submit(role(:button, name: ~r/^Run/), last: true)
       |> assert_path("/search/nested/results", query: [nested_q: "gondor"])
     end
 
