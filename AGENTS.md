@@ -18,12 +18,11 @@ Keep a log of what you did to present when you're done.
 - `source .envrc` before running tests to get browser version env vars.
 - Run targeted `mix test` often after changing files.
 - Run `mix format` after each logical change set (and before tests/precommit), since precommit checks formatting and does not rewrite files.
-- Commit in small increments and run `mix do format + precommit + test + test.slow` before each commit.
+- Commit in small increments and run `mix do format + precommit + test + test --only slow` before each commit.
 - Cerberus is unreleased. Don't preserve backwards compatability. KISS. Don't warn about legacy arguments or functions. Always remove and change with a clean cut.
 - Codex: Run real-browser tests outside the Codex sandbox (escalated permissions), since Chrome startup can fail inside the sandbox.
 - If public API/behavior/examples changed, update docs in the same change (`README.md`, relevant guides, moduledocs).
 - Current browser policy: run Chrome only. Ignore Firefox and websocket lanes locally and in CI unless explicitly requested.
 - If in doubt about static/live driver behavior, check PhoenixTest static and live driver implementations for reference patterns.
 - If in doubt about browser driver behavior, use Cuprite as the primary implementation reference; use Playwright JS as the secondary reference.
-- For refactors/renames, use Igniter when it helps.
 - There is NO `@tag :browser`. Don't try to filter tests with `--only browser` or `--exclude browser`. Running browser tests is cheap and fine.
