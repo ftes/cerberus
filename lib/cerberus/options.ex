@@ -16,15 +16,11 @@ defmodule Cerberus.Options do
   @type text_match_opts :: [exact: boolean(), normalize_ws: boolean()]
   @type locator_leaf_opts :: [
           exact: boolean(),
-          has: locator_nested_input() | nil,
-          has_not: locator_nested_input() | nil,
           from: locator_nested_input() | nil
         ]
   @type role_locator_opts :: [
           name: role_locator_name(),
-          exact: boolean(),
-          has: locator_nested_input() | nil,
-          has_not: locator_nested_input() | nil
+          exact: boolean()
         ]
   @type closest_opts :: [from: locator_nested_input()]
   @type state_filter_opts :: [

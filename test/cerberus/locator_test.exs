@@ -159,43 +159,53 @@ defmodule Cerberus.LocatorTest do
     end
   end
 
-  test "normalizes has locator option for nested locator kinds" do
-    locator = Locator.normalize!(role: :button, name: "Apply", has: testid("apply-secondary"))
+  test "rejects direct has and has_not locator options outside filter/2" do
+    assert_raise InvalidLocatorError, ~r/unsupported locator keys \[:has\]/, fn ->
+      Locator.normalize!(text: "Apply", has: text("secondary"))
+    end
+
+    assert_raise InvalidLocatorError, ~r/unsupported locator keys \[:has_not\]/, fn ->
+      Locator.normalize!(role: :button, name: "Apply", has_not: testid("apply-secondary-marker"))
+    end
+
+    assert_raise InvalidLocatorError, ~r/unsupported locator keys \[:has\]/, fn ->
+      text("Apply", has: text("secondary"))
+    end
+
+    assert_raise InvalidLocatorError, ~r/unsupported locator keys \[:has_not\]/, fn ->
+      role(:button, name: "Apply", has_not: testid("apply-secondary-marker"))
+    end
+  end
+
+  test "normalizes has and has_not through filter/2" do
+    locator = :button |> role(name: "Apply") |> filter(has: testid("apply-secondary"), has_not: css(".disabled"))
     has_locator = locator.opts[:has]
+    has_not_locator = locator.opts[:has_not]
 
     assert %Locator{kind: :role, value: "Apply", opts: opts} = locator
     assert opts[:role] == "button"
     assert %Locator{kind: :testid, value: "apply-secondary"} = has_locator
     assert has_locator.opts[:exact] == true
-
-    text_has_locator = Locator.normalize!(text: "Apply", has: text("secondary", exact: true)).opts[:has]
-    assert %Locator{kind: :text, value: "secondary", opts: [exact: true]} = text_has_locator
-
-    label_has_locator = Locator.normalize!(css: ".fieldset", has: label("Email")).opts[:has]
-    assert %Locator{kind: :label, value: "Email"} = label_has_locator
-
-    role_has_locator = Locator.normalize!(text: "Save", has: role(:button, name: "Submit")).opts[:has]
-    assert %Locator{kind: :role, value: "Submit", opts: [role: "button", exact: true]} = role_has_locator
+    assert %Locator{kind: :css, value: ".disabled"} = has_not_locator
   end
 
-  test "supports nested has locators" do
-    locator = Locator.normalize!(text: "Apply", has: text("secondary", has: css(".badge")))
+  test "supports nested has locators via filter/2" do
+    locator =
+      "Apply"
+      |> text()
+      |> filter(
+        has:
+          "secondary"
+          |> text()
+          |> filter(has: css(".badge"))
+      )
+
     has_locator = locator.opts[:has]
     nested_has = has_locator.opts[:has]
 
     assert %Locator{kind: :text, value: "Apply"} = locator
     assert %Locator{kind: :text, value: "secondary"} = has_locator
     assert %Locator{kind: :css, value: ".badge"} = nested_has
-  end
-
-  test "normalizes has_not locator option for nested locator kinds" do
-    locator = Locator.normalize!(role: :button, name: "Apply", has_not: testid("apply-secondary-marker"))
-    has_not_locator = locator.opts[:has_not]
-
-    assert %Locator{kind: :role, value: "Apply", opts: opts} = locator
-    assert opts[:role] == "button"
-    assert %Locator{kind: :testid, value: "apply-secondary-marker"} = has_not_locator
-    assert has_not_locator.opts[:exact] == true
   end
 
   test "closest helper composes base locator with from locator" do

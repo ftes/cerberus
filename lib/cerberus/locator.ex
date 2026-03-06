@@ -5,7 +5,7 @@ defmodule Cerberus.Locator do
   The AST supports:
   - leaf locators (`:text`, `:label`, `:css`, `:testid`, ...)
   - composition (`:scope`, `:and`, `:or`, `:not`)
-  - descendant filters via `:has` and `:has_not`
+  - descendant filters via `filter/2` (`:has` and `:has_not`)
   - closest-scope input via `:from`
   - regex text values for text-like locators and role names (without `:exact`)
   """
@@ -87,7 +87,7 @@ defmodule Cerberus.Locator do
 
   def leaf(kind, value, opts) when kind in [:text, :label, :placeholder, :title, :alt, :aria_label] do
     ensure_text_value!(kind, value, {kind, value, opts})
-    normalized_opts = opts |> normalize_leaf_opts({kind, value, opts}) |> maybe_default_exact_opt(value)
+    normalized_opts = opts |> normalize_leaf_constructor_opts({kind, value, opts}) |> maybe_default_exact_opt(value)
     ensure_regex_exact_compatible!(kind, value, normalized_opts, {kind, value, opts})
     %__MODULE__{kind: kind, value: value, opts: normalized_opts}
   end
@@ -98,7 +98,7 @@ defmodule Cerberus.Locator do
     %__MODULE__{
       kind: :css,
       value: value,
-      opts: opts |> normalize_leaf_opts({:css, value, opts}) |> ensure_exact_opt(true)
+      opts: opts |> normalize_leaf_constructor_opts({:css, value, opts}) |> ensure_exact_opt(true)
     }
   end
 
@@ -107,7 +107,7 @@ defmodule Cerberus.Locator do
 
     normalized_opts =
       opts
-      |> normalize_leaf_opts({:testid, value, opts})
+      |> normalize_leaf_constructor_opts({:testid, value, opts})
       |> ensure_exact_opt(true)
 
     %__MODULE__{kind: :testid, value: value, opts: normalized_opts}
@@ -115,10 +115,8 @@ defmodule Cerberus.Locator do
 
   @spec role(String.t() | atom(), Options.role_locator_opts()) :: t()
   def role(role, opts \\ []) when (is_binary(role) or is_atom(role)) and is_list(opts) do
-    [role: role, name: Keyword.get(opts, :name)]
-    |> maybe_put_opt(opts, :exact)
-    |> maybe_put_opt(opts, :has)
-    |> maybe_put_opt(opts, :has_not)
+    opts
+    |> Keyword.put(:role, role)
     |> normalize!()
   end
 
@@ -355,7 +353,7 @@ defmodule Cerberus.Locator do
   defp normalize_kind(:text, locator_map, original) do
     text = key_value(locator_map, :text)
     ensure_text_value!(:text, text, original)
-    ensure_only_keys!(locator_map, original, [:text, :exact, :has, :has_not, :from])
+    ensure_only_keys!(locator_map, original, [:text, :exact, :from])
     normalized_opts = locator_map |> locator_opts(original) |> maybe_default_exact_opt(text)
     ensure_regex_exact_compatible!(:text, text, normalized_opts, original)
     %__MODULE__{kind: :text, value: text, opts: normalized_opts}
@@ -388,7 +386,7 @@ defmodule Cerberus.Locator do
   defp normalize_kind(:label, locator_map, original) do
     label = key_value(locator_map, :label)
     ensure_text_value!(:label, label, original)
-    ensure_only_keys!(locator_map, original, [:label, :exact, :has, :has_not, :from])
+    ensure_only_keys!(locator_map, original, [:label, :exact, :from])
     normalized_opts = locator_map |> locator_opts(original) |> maybe_default_exact_opt(label)
     ensure_regex_exact_compatible!(:label, label, normalized_opts, original)
     %__MODULE__{kind: :label, value: label, opts: normalized_opts}
@@ -397,7 +395,7 @@ defmodule Cerberus.Locator do
   defp normalize_kind(:placeholder, locator_map, original) do
     placeholder = key_value(locator_map, :placeholder)
     ensure_text_value!(:placeholder, placeholder, original)
-    ensure_only_keys!(locator_map, original, [:placeholder, :exact, :has, :has_not, :from])
+    ensure_only_keys!(locator_map, original, [:placeholder, :exact, :from])
     normalized_opts = locator_map |> locator_opts(original) |> maybe_default_exact_opt(placeholder)
     ensure_regex_exact_compatible!(:placeholder, placeholder, normalized_opts, original)
     %__MODULE__{kind: :placeholder, value: placeholder, opts: normalized_opts}
@@ -406,7 +404,7 @@ defmodule Cerberus.Locator do
   defp normalize_kind(:title, locator_map, original) do
     title = key_value(locator_map, :title)
     ensure_text_value!(:title, title, original)
-    ensure_only_keys!(locator_map, original, [:title, :exact, :has, :has_not, :from])
+    ensure_only_keys!(locator_map, original, [:title, :exact, :from])
     normalized_opts = locator_map |> locator_opts(original) |> maybe_default_exact_opt(title)
     ensure_regex_exact_compatible!(:title, title, normalized_opts, original)
     %__MODULE__{kind: :title, value: title, opts: normalized_opts}
@@ -415,7 +413,7 @@ defmodule Cerberus.Locator do
   defp normalize_kind(:alt, locator_map, original) do
     alt = key_value(locator_map, :alt)
     ensure_text_value!(:alt, alt, original)
-    ensure_only_keys!(locator_map, original, [:alt, :exact, :has, :has_not, :from])
+    ensure_only_keys!(locator_map, original, [:alt, :exact, :from])
     normalized_opts = locator_map |> locator_opts(original) |> maybe_default_exact_opt(alt)
     ensure_regex_exact_compatible!(:alt, alt, normalized_opts, original)
     %__MODULE__{kind: :alt, value: alt, opts: normalized_opts}
@@ -424,7 +422,7 @@ defmodule Cerberus.Locator do
   defp normalize_kind(:aria_label, locator_map, original) do
     aria_label = key_value(locator_map, :aria_label)
     ensure_text_value!(:aria_label, aria_label, original)
-    ensure_only_keys!(locator_map, original, [:aria_label, :exact, :has, :has_not, :from])
+    ensure_only_keys!(locator_map, original, [:aria_label, :exact, :from])
     normalized_opts = locator_map |> locator_opts(original) |> maybe_default_exact_opt(aria_label)
     ensure_regex_exact_compatible!(:aria_label, aria_label, normalized_opts, original)
     %__MODULE__{kind: :aria_label, value: aria_label, opts: normalized_opts}
@@ -433,7 +431,7 @@ defmodule Cerberus.Locator do
   defp normalize_kind(:css, locator_map, original) do
     css = key_value(locator_map, :css)
     ensure_css_selector_value!(:css, css, original)
-    ensure_only_keys!(locator_map, original, [:css, :exact, :has, :has_not, :from])
+    ensure_only_keys!(locator_map, original, [:css, :exact, :from])
     %__MODULE__{kind: :css, value: css, opts: locator_map |> locator_opts(original) |> ensure_exact_opt(true)}
   end
 
@@ -441,7 +439,7 @@ defmodule Cerberus.Locator do
     testid = key_value(locator_map, :testid)
 
     if is_binary(testid) and testid != "" do
-      ensure_only_keys!(locator_map, original, [:testid, :exact, :has, :has_not, :from])
+      ensure_only_keys!(locator_map, original, [:testid, :exact, :from])
       %__MODULE__{kind: :testid, value: testid, opts: locator_map |> locator_opts(original) |> ensure_exact_opt(true)}
     else
       raise InvalidLocatorError,
@@ -454,7 +452,7 @@ defmodule Cerberus.Locator do
     role = key_value(locator_map, :role)
     name = key_value(locator_map, :name)
 
-    ensure_only_keys!(locator_map, original, [:role, :name, :exact, :has, :has_not, :from])
+    ensure_only_keys!(locator_map, original, [:role, :name, :exact, :from])
     ensure_text_value!(:name, name, original)
     role_name = normalize_role_name!(role, original)
     resolve_role_kind!(role_name, original)
@@ -883,13 +881,6 @@ defmodule Cerberus.Locator do
       message: "invalid locator #{inspect(original)}; unsupported locator kind #{inspect(kind)}"
   end
 
-  defp maybe_put_opt(locator, opts, key) do
-    case Keyword.fetch(opts, key) do
-      {:ok, value} -> Keyword.put(locator, key, value)
-      :error -> locator
-    end
-  end
-
   defp maybe_put_filter_opt(opts, source_opts, key, original) do
     case Keyword.fetch(source_opts, key) do
       {:ok, value} ->
@@ -900,6 +891,18 @@ defmodule Cerberus.Locator do
       :error ->
         opts
     end
+  end
+
+  defp normalize_leaf_constructor_opts(opts, original) when is_list(opts) do
+    opts_map = Map.new(opts)
+    ensure_only_keys!(opts_map, original, [:exact, :from])
+    locator_opts(opts_map, original)
+  end
+
+  defp normalize_leaf_constructor_opts(_opts, original) do
+    raise InvalidLocatorError,
+      locator: original,
+      message: "invalid locator #{inspect(original)}; :opts must be a keyword list"
   end
 
   defp normalize_leaf_opts(opts, original) when is_list(opts) do
