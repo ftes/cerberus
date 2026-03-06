@@ -1115,8 +1115,17 @@ defmodule Cerberus.Driver.Browser do
         {ready_state, readiness}
 
       {:error, ready_reason, ready_details} ->
-        raise ArgumentError,
-              "browser visit readiness failed: #{ready_reason} (#{inspect(ready_details)})"
+        if recoverable_visit_readiness_error?(ready_reason, ready_details) do
+          recovered_readiness =
+            ready_details
+            |> Map.put_new("recoveredFrom", ready_reason)
+            |> Map.put("reason", "visit_snapshot_recovery")
+
+          {state, recovered_readiness}
+        else
+          raise ArgumentError,
+                "browser visit readiness failed: #{ready_reason} (#{inspect(ready_details)})"
+        end
     end
   end
 
@@ -1325,6 +1334,16 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp recoverable_action_readiness_error?(_action, _reason, _readiness), do: false
+
+  defp recoverable_visit_readiness_error?(reason, readiness)
+       when reason in ["bidi command timeout", "browser readiness timeout"] and is_map(readiness) do
+    readiness["reason"] == "timeout" and
+      readiness["lastLiveState"] == "disconnected" and
+      readiness["lastSignal"] == "liveview-disconnected" and
+      is_binary(readiness["path"])
+  end
+
+  defp recoverable_visit_readiness_error?(_reason, _readiness), do: false
 
   defp navigation_transition_error?(reason, details) do
     combined = "#{reason} #{inspect(details)}"

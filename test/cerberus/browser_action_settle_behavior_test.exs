@@ -31,6 +31,50 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> assert_has(text("Count: 0", exact: true), timeout: 0)
   end
 
+  test "browser visit treats mixed connected and disconnected live roots as ready", context do
+    :browser
+    |> SharedBrowserSession.driver_session(context)
+    |> visit("/browser/readiness/mixed-live-roots")
+    |> then(fn updated ->
+      readiness = updated.last_result.observed.readiness
+      assert is_map(readiness)
+      assert readiness["reason"] == "settled"
+      assert readiness["lastLiveState"] == "connected"
+      updated
+    end)
+    |> assert_has(text("Mixed Live Roots", exact: true), timeout: 0)
+  end
+
+  test "browser navigation to mixed live roots still performs await_ready", context do
+    :browser
+    |> SharedBrowserSession.driver_session(context)
+    |> visit("/browser/readiness/source")
+    |> click(role(:link, name: "Open mixed roots", exact: true))
+    |> then(fn updated ->
+      readiness = updated.last_result.observed.readiness
+      assert is_map(readiness)
+      assert readiness["reason"] == "settled"
+      assert readiness["lastLiveState"] == "connected"
+      updated
+    end)
+    |> assert_path("/browser/readiness/mixed-live-roots")
+  end
+
+  test "browser visit recovers from disconnected live-root timeout when snapshot is available", context do
+    :browser
+    |> SharedBrowserSession.driver_session(context)
+    |> visit("/browser/readiness/disconnected-live-root")
+    |> then(fn updated ->
+      readiness = updated.last_result.observed.readiness
+      assert is_map(readiness)
+      assert readiness["reason"] == "visit_snapshot_recovery"
+      assert readiness["recoveredFrom"] == "browser readiness timeout"
+      assert readiness["lastLiveState"] == "disconnected"
+      updated
+    end)
+    |> assert_has(text("Disconnected Live Root", exact: true), timeout: 0)
+  end
+
   test "browser click on live non-navigation actions still performs await_ready", context do
     :browser
     |> SharedBrowserSession.driver_session(context)

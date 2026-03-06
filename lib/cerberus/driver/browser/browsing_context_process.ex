@@ -590,15 +590,15 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
               const currentRoots = roots();
               if (currentRoots.length === 0) return "down";
 
-              const allConnected = currentRoots.every((root) => {
+              const connectedCount = currentRoots.filter((root) => {
                 try {
                   return !!(root && root.classList && root.classList.contains("phx-connected"));
                 } catch (_error) {
                   return false;
                 }
-              });
+              }).length;
 
-              return allConnected ? "connected" : "disconnected";
+              return connectedCount > 0 ? "connected" : "disconnected";
             } catch (_error) {
               return "unknown";
             }

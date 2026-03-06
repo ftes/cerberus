@@ -124,7 +124,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       const roots = helper.liveRoots();
       if (roots.length === 0) return true;
 
-      return roots.every((root) => {
+      return roots.some((root) => {
         try {
           return !!(root && root.classList && root.classList.contains("phx-connected"));
         } catch (_error) {

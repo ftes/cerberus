@@ -668,6 +668,66 @@ defmodule Cerberus.Fixtures.PageController do
     |> send_resp(200, "cerberus,download")
   end
 
+  def mixed_live_roots(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Mixed Live Roots</title>
+      </head>
+      <body>
+        <main>
+          <div data-phx-session="stale-root" id="stale-root" class="phx-disconnected">
+            stale root
+          </div>
+          <div data-phx-session="active-root" id="active-root" class="phx-connected">
+            active root
+          </div>
+          <h1>Mixed Live Roots</h1>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def mixed_live_roots_source(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Mixed Live Roots Source</title>
+      </head>
+      <body>
+        <main>
+          <a href="/browser/readiness/mixed-live-roots">Open mixed roots</a>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def disconnected_live_root(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Disconnected Live Root</title>
+      </head>
+      <body>
+        <main>
+          <div data-phx-session="disconnected-root" id="disconnected-root" class="phx-disconnected">
+            disconnected root
+          </div>
+          <h1>Disconnected Live Root</h1>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
   def popup_auto(conn, _params) do
     html(conn, """
     <!doctype html>

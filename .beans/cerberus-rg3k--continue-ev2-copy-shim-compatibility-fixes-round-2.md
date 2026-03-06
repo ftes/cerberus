@@ -1,11 +1,11 @@
 ---
 # cerberus-rg3k
 title: Continue EV2-copy shim compatibility fixes (round 2)
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-03-05T10:46:54Z
-updated_at: 2026-03-05T12:40:28Z
+updated_at: 2026-03-06T20:16:46Z
 ---
 
 ## Goal
@@ -16,7 +16,7 @@ Continue iterating on EV2-copy shim compatibility: fix failing slices, re-run sw
 - [x] Fix highest-frequency shim incompatibilities found in targeted runs
 - [x] Re-run non-Playwright one-by-one sweep and measure pass/fail delta
 - [x] Create follow-up beans for unresolved failures that remain
-- [ ] Summarize outcomes and commit relevant changes
+- [x] Summarize outcomes and commit relevant changes
 
 ## Summary of Changes
 - Extended EV2 shim compatibility layer in `test/support/ev2_web/phoenix_test_shim_compat.ex` with:
