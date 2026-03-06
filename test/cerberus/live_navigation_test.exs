@@ -20,19 +20,19 @@ defmodule Cerberus.LiveNavigationTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/counter")
-      |> click(text: "Increment")
-      |> assert_has(text: "Count: 1", exact: true)
+      |> click(~l"Increment"e)
+      |> assert_has(~l"Count: 1"e)
     end
 
     test "live redirects are deterministic in live and browser drivers (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/redirects")
-      |> click(text: "Redirect to Articles")
-      |> assert_has(text: "Articles")
+      |> click(~l"Redirect to Articles"e)
+      |> assert_has(~l"Articles"e)
       |> visit("/live/redirects")
-      |> click(text: "Redirect to Counter")
-      |> assert_has(text: "Count: 0", exact: true)
+      |> click(~l"Redirect to Counter"e)
+      |> assert_has(~l"Count: 0"e)
     end
   end
 

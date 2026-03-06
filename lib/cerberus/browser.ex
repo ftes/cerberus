@@ -135,15 +135,14 @@ defmodule Cerberus.Browser do
 
   #{@type_options_doc}
   """
-  @spec type(session, Locator.input(), String.t(), Options.browser_type_opts()) :: session when session: var
+  @spec type(session, Locator.t(), String.t(), Options.browser_type_opts()) :: session when session: var
   def type(session, locator, text, opts \\ [])
 
   def type(session, locator, text, opts) do
     browser_only(session, :type, opts, @type_args_error, &Options.validate_browser_type!/1, fn browser_session,
                                                                                                validated_opts ->
       if is_binary(text) do
-        normalized_locator = Locator.normalize!(locator)
-        selector = resolve_extension_selector!(browser_session, normalized_locator, "Browser.type/4")
+        selector = resolve_extension_selector!(browser_session, locator, "Browser.type/4")
         extension_opts = Keyword.put(validated_opts, :selector, selector)
         {:ok, Extensions.type(browser_session, text, extension_opts)}
       else
@@ -159,15 +158,14 @@ defmodule Cerberus.Browser do
 
   #{@press_options_doc}
   """
-  @spec press(session, Locator.input(), String.t(), Options.browser_press_opts()) :: session when session: var
+  @spec press(session, Locator.t(), String.t(), Options.browser_press_opts()) :: session when session: var
   def press(session, locator, key, opts \\ [])
 
   def press(session, locator, key, opts) do
     browser_only(session, :press, opts, @press_args_error, &Options.validate_browser_press!/1, fn browser_session,
                                                                                                   validated_opts ->
       if is_binary(key) do
-        normalized_locator = Locator.normalize!(locator)
-        selector = resolve_extension_selector!(browser_session, normalized_locator, "Browser.press/4")
+        selector = resolve_extension_selector!(browser_session, locator, "Browser.press/4")
         extension_opts = Keyword.put(validated_opts, :selector, selector)
         {:ok, Extensions.press(browser_session, key, extension_opts)}
       else
@@ -208,7 +206,7 @@ defmodule Cerberus.Browser do
 
   #{@assert_dialog_options_doc}
   """
-  @spec assert_dialog(session, Locator.input(), Options.browser_assert_dialog_opts()) :: session when session: var
+  @spec assert_dialog(session, Locator.t(), Options.browser_assert_dialog_opts()) :: session when session: var
   def assert_dialog(session, locator, opts \\ [])
 
   def assert_dialog(session, locator, opts) do
@@ -219,10 +217,8 @@ defmodule Cerberus.Browser do
       @assert_dialog_args_error,
       &Options.validate_browser_assert_dialog!/1,
       fn browser_session, validated_opts ->
-        normalized_locator = Locator.normalize!(locator)
-
-        if normalized_locator.kind == :text do
-          {:ok, Extensions.assert_dialog(browser_session, normalized_locator, validated_opts)}
+        if locator.kind == :text do
+          {:ok, Extensions.assert_dialog(browser_session, locator, validated_opts)}
         else
           :invalid_args
         end

@@ -134,9 +134,6 @@ defmodule Cerberus.Driver.LocatorOps do
     end
   end
 
-  defp inferred_click_kind(%Locator{kind: :link}), do: :link
-  defp inferred_click_kind(%Locator{kind: :button}), do: :button
-
   defp inferred_click_kind(%Locator{kind: :role} = locator) do
     case Locator.resolved_kind(locator) do
       :link -> :link

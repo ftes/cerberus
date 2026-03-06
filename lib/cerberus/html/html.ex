@@ -622,17 +622,6 @@ defmodule Cerberus.Html do
     end)
   end
 
-  defp node_has_scope_chain?(root_node, node, %Locator{} = scope_locator) do
-    scope_selector = within_query_selector(scope_locator)
-
-    root_node
-    |> safe_query(scope_selector)
-    |> Enum.any?(fn scope_node ->
-      node_matches_within_locator?(root_node, scope_node, scope_locator) and
-        strict_descendant?(scope_node, node)
-    end)
-  end
-
   defp strict_descendant?(container, node) do
     not same_node?(container, node) and contains_node_or_same?(container, node)
   end

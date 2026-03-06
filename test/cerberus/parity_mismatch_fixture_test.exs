@@ -20,14 +20,14 @@ defmodule Cerberus.ParityMismatchFixtureTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/oracle/mismatch")
-      |> assert_has(text: "Oracle mismatch static fixture marker", exact: true)
+      |> assert_has(~l"Oracle mismatch static fixture marker"e)
     end
 
     test "parity live mismatch fixture is reachable in live and browser drivers (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/oracle/mismatch")
-      |> assert_has(text: "Oracle mismatch live fixture marker", exact: true)
+      |> assert_has(~l"Oracle mismatch live fixture marker"e)
     end
   end
 

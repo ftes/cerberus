@@ -39,11 +39,11 @@ defmodule Cerberus.ApiExamplesTest do
           unquote(driver)
           |> driver_session(context)
           |> visit("/articles")
-          |> assert_has([text: "DOES NOT EXIST", exact: true], timeout: 0)
+          |> assert_has(~l"DOES NOT EXIST"e, timeout: 0)
         end
 
       assert error.message =~ "assert_has failed"
-      assert error.message =~ ~s(locator: [text: "DOES NOT EXIST", exact: true])
+      assert error.message =~ ~s(locator: %Cerberus.Locator{kind: :text, value: "DOES NOT EXIST")
       assert error.message =~ "opts:"
       assert error.message =~ "visible: true"
       assert error.message =~ ~r/timeout: (0|500)/

@@ -27,16 +27,14 @@ refute_has(session, locator, opts \\ [])
 ```
 
 `locator` accepted in slice 1:
-- string text
-- regex text
-- keyword form: `[text: ...]`
+- `Cerberus.Locator.t()` values (for example `~l"Count: 1"e` or `~l"button:Increment"r`)
 
 Example:
 ```elixir
 session
 |> visit("/live/counter")
-|> click([text: "Increment"])
-|> assert_has([text: "Count: 1", exact: true])
+|> click(~l"Increment"e)
+|> assert_has(~l"Count: 1"e)
 ```
 
 ## Architecture Snapshot
@@ -72,7 +70,7 @@ Scenario: counter increments
   browser : PASS
 
 Mismatch category: live-vs-browser/text-state
-Locator: [text: "Count: 1"]
+Locator: %Cerberus.Locator{kind: :text, value: "Count: 1", opts: [exact: true]}
 Opts: [exact: true, visible: true, normalize_ws: true]
 ```
 

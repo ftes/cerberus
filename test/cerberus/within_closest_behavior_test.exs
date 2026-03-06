@@ -21,8 +21,8 @@ defmodule Cerberus.WithinClosestBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/field-wrapper-errors")
-      |> assert_has(filter(closest(css(".fieldset"), from: label("Email")), has: text("can't be blank", exact: false)))
-      |> assert_has(filter(closest(css(".fieldset"), from: label("Email")), has_not: text("Outer wrapper error")))
+      |> assert_has(filter(closest(css(".fieldset"), from: ~l"Email"l), has: text("can't be blank", exact: false)))
+      |> assert_has(filter(closest(css(".fieldset"), from: ~l"Email"l), has_not: text("Outer wrapper error")))
     end
 
     test "scoped click supports closest scope locator (#{driver})", context do
@@ -40,7 +40,7 @@ defmodule Cerberus.WithinClosestBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/field-wrapper-errors")
-      |> within(".fieldset" |> css() |> filter(has: label("Name", exact: true)), fn scoped ->
+      |> within(".fieldset" |> css() |> filter(has: ~l"Name"le), fn scoped ->
         scoped
         |> assert_has(text("Name can't be blank", exact: true))
         |> refute_has(text("Email can't be blank", exact: true))
@@ -52,7 +52,7 @@ defmodule Cerberus.WithinClosestBehaviorTest do
       |> driver_session(context)
       |> visit("/field-wrapper-errors")
       |> within(
-        closest(css(".fieldset"), from: label("Email", exact: true)),
+        closest(css(".fieldset"), from: ~l"Email"le),
         &(&1
           |> assert_has(text("Email can't be blank", exact: true))
           |> refute_has(text("Outer wrapper error", exact: true)))

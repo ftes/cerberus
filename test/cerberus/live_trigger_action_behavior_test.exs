@@ -23,8 +23,8 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/trigger-action")
-      |> fill_in(label("Trigger action"), "engage")
-      |> submit(text: "Submit Trigger Form")
+      |> fill_in(~l"Trigger action"l, "engage")
+      |> submit(~l"Submit Trigger Form"e)
       |> assert_path("/trigger-action/result")
       |> assert_has(text("method: POST", exact: true))
     end
@@ -33,7 +33,7 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/trigger-action")
-      |> fill_in(label("Trigger action"), "engage")
+      |> fill_in(~l"Trigger action"l, "engage")
       |> submit()
       |> assert_path("/trigger-action/result")
       |> assert_has(text("method: POST", exact: true))
@@ -43,7 +43,7 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/trigger-action")
-      |> click(text: "Trigger from elsewhere")
+      |> click(~l"Trigger from elsewhere"e)
       |> assert_path("/trigger-action/result")
       |> assert_has(text("method: POST", exact: true))
     end
@@ -52,11 +52,11 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/trigger-action")
-      |> click(text: "Redirect and trigger action")
+      |> click(~l"Redirect and trigger action"e)
       |> assert_path("/live/counter")
       |> assert_has(text("Counter", exact: true))
       |> visit("/live/trigger-action")
-      |> click(text: "Navigate and trigger action")
+      |> click(~l"Navigate and trigger action"e)
       |> assert_path("/live/counter")
       |> assert_has(text("Counter", exact: true))
     end
@@ -65,9 +65,9 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/trigger-action")
-      |> click(text: "Show Dynamic Form")
-      |> fill_in(label("Message"), "dynamic")
-      |> submit(text: "Submit Dynamic Form")
+      |> click(~l"Show Dynamic Form"e)
+      |> fill_in(~l"Message"l, "dynamic")
+      |> submit(~l"Submit Dynamic Form"e)
       |> assert_path("/trigger-action/result")
       |> assert_has(text("method: POST", exact: true))
     end
@@ -77,7 +77,7 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
     :phoenix
     |> session()
     |> visit("/live/trigger-action")
-    |> click(text: "Trigger from elsewhere")
+    |> click(~l"Trigger from elsewhere"e)
     |> assert_path("/trigger-action/result")
     |> assert_has(text("trigger_action_hidden_input: trigger_action_hidden_value", exact: true))
     |> refute_has(text("trigger_action_input: engage", exact: true))
@@ -87,8 +87,8 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
     :phoenix
     |> session()
     |> visit("/live/trigger-action")
-    |> fill_in(label("Trigger action"), "engage")
-    |> submit(text: "Submit Trigger Form")
+    |> fill_in(~l"Trigger action"l, "engage")
+    |> submit(~l"Submit Trigger Form"e)
     |> assert_path("/trigger-action/result")
     |> assert_has(text("trigger_action_hidden_input: trigger_action_hidden_value", exact: true))
     |> assert_has(text("trigger_action_input: engage", exact: true))
@@ -98,7 +98,7 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
     :phoenix
     |> session()
     |> visit("/live/trigger-action")
-    |> fill_in(label("Patch and trigger action"), "let's go")
+    |> fill_in(~l"Patch and trigger action"l, "let's go")
     |> assert_path("/trigger-action/result")
     |> assert_has(text("patch_and_trigger_action: let's go", exact: true))
   end
@@ -107,9 +107,9 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
     :phoenix
     |> session()
     |> visit("/live/trigger-action")
-    |> click(text: "Show Dynamic Form")
-    |> fill_in(label("Message"), "dynamic")
-    |> submit(text: "Submit Dynamic Form")
+    |> click(~l"Show Dynamic Form"e)
+    |> fill_in(~l"Message"l, "dynamic")
+    |> submit(~l"Submit Dynamic Form"e)
     |> assert_path("/trigger-action/result")
     |> assert_has(text("message: dynamic", exact: true))
   end
@@ -137,7 +137,7 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
       :phoenix
       |> session()
       |> visit("/live/trigger-action")
-      |> click(text: "Trigger multiple")
+      |> click(~l"Trigger multiple"e)
     end
   end
 

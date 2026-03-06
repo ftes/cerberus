@@ -36,7 +36,7 @@ defmodule Cerberus.PathScopeBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/search")
-      |> fill_in(label("Search term"), "phoenix")
+      |> fill_in(~l"Search term"l, "phoenix")
       |> submit(role(:button, name: "Run Search"))
       |> assert_path("/search/results", query: %{q: "phoenix"})
       |> refute_path("/search/results", query: %{q: "elixir"})

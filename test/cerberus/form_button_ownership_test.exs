@@ -24,13 +24,13 @@ defmodule Cerberus.FormButtonOwnershipTest do
       unquote(driver)
       |> driver_session(context)
       |> then(fn session ->
-        reset_locator = Cerberus.Locator.normalize!(text: "Reset")
-        save_locator = Cerberus.Locator.normalize!(text: "Save Owner Form")
+        reset_locator = Cerberus.Locator.normalize!(text("Reset"))
+        save_locator = Cerberus.Locator.normalize!(text("Save Owner Form"))
 
         session =
           session
           |> visit("/owner-form")
-          |> fill_in(label("Name"), "Aragorn")
+          |> fill_in(~l"Name"l, "Aragorn")
 
         assert {:error, session_after_reset, _observed, _reason} =
                  submit_for_session(session, reset_locator, timeout: 0)
@@ -39,8 +39,8 @@ defmodule Cerberus.FormButtonOwnershipTest do
                  submit_for_session(session_after_reset, save_locator, [])
 
         submitted_session
-        |> assert_has(text: "name: Aragorn", exact: true)
-        |> assert_has(text: "form-button: save-owner-form", exact: true)
+        |> assert_has(~l"name: Aragorn"e)
+        |> assert_has(~l"form-button: save-owner-form"e)
       end)
     end
 
@@ -48,22 +48,22 @@ defmodule Cerberus.FormButtonOwnershipTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/owner-form")
-      |> fill_in(label("Name"), "Aragorn")
-      |> submit(text: "Save Owner Form")
-      |> assert_has(text: "name: Aragorn", exact: true)
-      |> assert_has(text: "form-button: save-owner-form", exact: true)
+      |> fill_in(~l"Name"l, "Aragorn")
+      |> submit(~l"Save Owner Form"e)
+      |> assert_has(~l"name: Aragorn"e)
+      |> assert_has(~l"form-button: save-owner-form"e)
     end
 
     test "submit clears active form values for subsequent submits (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/owner-form")
-      |> fill_in(label("Name"), "Aragorn")
-      |> submit(text: "Save Owner Form")
+      |> fill_in(~l"Name"l, "Aragorn")
+      |> submit(~l"Save Owner Form"e)
       |> visit("/owner-form")
-      |> submit(text: "Save Owner Form")
-      |> assert_has(text: "name: ", exact: true)
-      |> assert_has(text: "form-button: save-owner-form", exact: true)
+      |> submit(~l"Save Owner Form"e)
+      |> assert_has(~l"name: "e)
+      |> assert_has(~l"form-button: save-owner-form"e)
     end
 
     test "button formaction submit follows redirect and preserves button payload (#{driver})", context do
@@ -71,10 +71,10 @@ defmodule Cerberus.FormButtonOwnershipTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/owner-form")
-        |> fill_in(label("Name"), "Aragorn")
-        |> submit(text: "Save Owner Form Redirect")
-        |> assert_has(text: "name: Aragorn", exact: true)
-        |> assert_has(text: "form-button: save-owner-form-redirect", exact: true)
+        |> fill_in(~l"Name"l, "Aragorn")
+        |> submit(~l"Save Owner Form Redirect"e)
+        |> assert_has(~l"name: Aragorn"e)
+        |> assert_has(~l"form-button: save-owner-form-redirect"e)
 
       assert String.starts_with?(session.current_path || "", "/owner-form/result")
     end
@@ -87,13 +87,13 @@ defmodule Cerberus.FormButtonOwnershipTest do
       :phoenix
       |> session(conn: seed_conn)
       |> visit("/owner-form")
-      |> fill_in(label("Name"), "Aragorn")
+      |> fill_in(~l"Name"l, "Aragorn")
 
     assert %{active_form: active_before} = session.form_data
     assert is_binary(active_before)
 
-    reset_locator = Cerberus.Locator.normalize!(text: "Reset")
-    save_locator = Cerberus.Locator.normalize!(text: "Save Owner Form")
+    reset_locator = Cerberus.Locator.normalize!(text("Reset"))
+    save_locator = Cerberus.Locator.normalize!(text("Save Owner Form"))
 
     assert {:error, after_reset, _observed, _reason} =
              submit_for_session(session, reset_locator, [])
@@ -115,11 +115,11 @@ defmodule Cerberus.FormButtonOwnershipTest do
       :phoenix
       |> session(conn: seed_conn)
       |> visit("/owner-form")
-      |> fill_in(label("Name"), "Aragorn")
-      |> submit(text: "Save Owner Form Redirect")
-      |> assert_has(text: "name: Aragorn", exact: true)
-      |> assert_has(text: "form-button: save-owner-form-redirect", exact: true)
-      |> assert_has(text: "x-flow-token: flow-123", exact: true)
+      |> fill_in(~l"Name"l, "Aragorn")
+      |> submit(~l"Save Owner Form Redirect"e)
+      |> assert_has(~l"name: Aragorn"e)
+      |> assert_has(~l"form-button: save-owner-form-redirect"e)
+      |> assert_has(~l"x-flow-token: flow-123"e)
 
     assert String.starts_with?(session.current_path || "", "/owner-form/result")
   end

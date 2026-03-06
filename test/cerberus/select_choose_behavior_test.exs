@@ -21,7 +21,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/controls")
-      |> select(label("Race"), option: ~l"Dwarf"e)
+      |> select(~l"Race"l, option: ~l"Dwarf"e)
       |> submit(text("Save Controls"))
       |> assert_has(text("race: dwarf", exact: true))
     end
@@ -52,8 +52,8 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/controls")
-      |> select(label("Race 2"), option: ~l"Elf"e)
-      |> select(label("Race 2"), option: ~l"Dwarf"e)
+      |> select(~l"Race 2"l, option: ~l"Elf"e)
+      |> select(~l"Race 2"l, option: ~l"Dwarf"e)
       |> submit(text("Save Controls"))
       |> assert_has(text("race_2: [dwarf]", exact: true))
     end
@@ -62,7 +62,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/controls")
-      |> select(label("Race 2"), option: [~l"Elf"e, ~l"Dwarf"e])
+      |> select(~l"Race 2"l, option: [~l"Elf"e, ~l"Dwarf"e])
       |> submit(text("Save Controls"))
       |> assert_has(text("race_2: [elf,dwarf]", exact: true))
     end
@@ -80,7 +80,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/controls")
-      |> choose(label("Email Choice"))
+      |> choose(~l"Email Choice"l)
       |> submit(text("Save Controls"))
       |> assert_has(text("contact: email", exact: true))
     end
@@ -90,7 +90,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/controls")
-        |> select(label("Race"), option: ~l"Disabled Race"e)
+        |> select(~l"Race"l, option: ~l"Disabled Race"e)
       end
     end
 
@@ -98,7 +98,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/controls")
-      |> select(label("Race"), option: ~l"Elf"e)
+      |> select(~l"Race"l, option: ~l"Elf"e)
       |> assert_has(text("_target: [race]", exact: true))
       |> assert_has(text("race: elf", exact: true))
     end
@@ -145,7 +145,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/controls")
-      |> choose(label("Phone Choice"))
+      |> choose(~l"Phone Choice"l)
       |> assert_has(text("contact: phone", exact: true))
     end
 
@@ -154,7 +154,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       |> driver_session(context)
       |> visit("/phoenix_test/live/index")
       |> within(css("#not-a-form"), fn scoped ->
-        choose(scoped, label("Huey"))
+        choose(scoped, ~l"Huey"l)
       end)
       |> assert_has(text("value: huey", exact: true))
     end
@@ -163,9 +163,9 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/controls")
-      |> select(label("Race 2"), option: ~l"Elf"e)
+      |> select(~l"Race 2"l, option: ~l"Elf"e)
       |> assert_has(text("race_2: [elf]", exact: true))
-      |> select(label("Race 2"), option: ~l"Dwarf"e)
+      |> select(~l"Race 2"l, option: ~l"Dwarf"e)
       |> assert_has(text("race_2: [elf,dwarf]", exact: true))
     end
 
@@ -173,7 +173,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/controls")
-      |> select(label("Race 2"), option: [~l"Elf"e, ~l"Dwarf"e])
+      |> select(~l"Race 2"l, option: [~l"Elf"e, ~l"Dwarf"e])
       |> assert_has(text("race_2: [elf,dwarf]", exact: true))
     end
 
@@ -196,7 +196,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
     assert_raise ArgumentError,
                  ~r/have a valid `phx-click` attribute or belong to a `form` element/,
                  fn ->
-                   choose(live_session, label("Invalid Radio Button"))
+                   choose(live_session, ~l"Invalid Radio Button"l)
                  end
   end
 

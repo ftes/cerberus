@@ -21,12 +21,12 @@
 | --- | --- |
 | Visit page | `visit(session, "/articles")` |
 | Click link/button | `click(session, ~l"link:Counter"r)` |
-| Fill input | `fill_in(session, label("Search term"), "Aragorn")` |
-| Select option | `select(session, label("Race"), option: ~l"Elf"e)` |
-| Choose radio | `choose(session, label("Email Choice"))` |
-| Check checkbox | `check(session, label("Accept Terms"))` |
-| Uncheck checkbox | `uncheck(session, label("Receive updates"))` |
-| Upload file | `upload(session, label("Avatar"), "/tmp/avatar.jpg")` |
+| Fill input | `fill_in(session, ~l"Search term"l, "Aragorn")` |
+| Select option | `select(session, ~l"Race"l, option: ~l"Elf"e)` |
+| Choose radio | `choose(session, ~l"Email Choice"l)` |
+| Check checkbox | `check(session, ~l"Accept Terms"l)` |
+| Uncheck checkbox | `uncheck(session, ~l"Receive updates"l)` |
+| Upload file | `upload(session, ~l"Avatar"l, "/tmp/avatar.jpg")` |
 | Submit form | `submit(session, ~l"button:Run Search"r)` |
 | Assert text present | `assert_has(session, ~l"Articles"e)` |
 | Assert text absent | `refute_has(session, ~l"Error"e)` |
@@ -59,11 +59,11 @@ Default strategy:
 
 | Goal | Preferred locator | Example |
 | --- | --- | --- |
-| Fill a text input | label text | `fill_in(session, label("Email"), "alice@example.com")` |
+| Fill a text input | label text | `fill_in(session, ~l"Email"l, "alice@example.com")` |
 | Click a button | role + name | `click(session, ~l"button:Save"r)` |
 | Click a link | role + name | `click(session, ~l"link:Billing"r)` |
 | Assert rendered content | visible text | `assert_has(session, ~l"Settings saved"e)` |
-| Operate inside repeated UI | scope + same locators | `within(session, ~l"#shipping-address"c, fn s -> fill_in(s, label("City"), "Berlin") end)` |
+| Operate inside repeated UI | scope + same locators | `within(session, ~l"#shipping-address"c, fn s -> fill_in(s, ~l"City"l, "Berlin") end)` |
 | Disambiguate duplicate controls | `testid` | `click(session, testid("apply-secondary-button"))` |
 
 ### Supported role aliases
@@ -72,8 +72,8 @@ Default strategy:
 
 ### Helper constructors
 - `text("...")`
-- `label("...")`
-- `aria_label("...")`
+- `~l"..."l`
+- `~l"..."a`
 - `testid("...")`
 - `css("...")`
 - `role(:button | :link | :textbox | ..., name: "...")`
@@ -86,7 +86,7 @@ Default strategy:
 - alternatives (OR): `or_(css("#primary"), css("#secondary"))`
 - boolean algebra: `and_(role(:button, name: "Apply"), not_(testid("apply-secondary-button")))`
 - negated conjunction: `not_(and_(role(:button, name: "Apply"), testid("apply-secondary-button")))`
-- nearest ancestor scope: `closest(css(".fieldset"), from: label("Email", exact: true))`
+- nearest ancestor scope: `closest(css(".fieldset"), from: ~l"Email"le)`
 
 ### Sigil `~l`
 

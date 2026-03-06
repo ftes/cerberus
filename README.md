@@ -31,9 +31,11 @@ sh> MIX_ENV=test mix cerberus.install.chrome
 import Cerberus
 
 session
-|> visit("/live/counter")
-|> click(~l"button:Increment"r) # role locator
-|> assert_has(~l"Count: 1"e) # e = exact text match
+|> visit("/auth/static/users/log_in")
+|> fill_in(~l"Email"l, "frodo@example.com")
+|> fill_in(~l"Password"l, "shire-secret")
+|> submit(~l"Log in"e)
+|> assert_has(~l"Signed in as: frodo@example.com"e)
 
 
 import Cerberus.Browser
@@ -53,12 +55,12 @@ When an action/assertion misses, Cerberus includes likely alternatives.
 ```elixir
 session()
 |> visit("/search")
-|> submit(text: "Definitely Missing Submit")
+|> submit(~l"Definitely Missing Submit"e)
 ```
 
 ```text
 submit failed: no submit button matched locator
-locator: [text: "Definitely Missing Submit"]
+locator: %Cerberus.Locator{kind: :text, value: "Definitely Missing Submit", opts: [exact: true]}
 ...
 possible candidates:
   - "Run Search"

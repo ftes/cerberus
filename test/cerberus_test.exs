@@ -8,7 +8,6 @@ defmodule CerberusTest do
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.Live, as: LiveSession
   alias Cerberus.Driver.Static, as: StaticSession
-  alias Cerberus.InvalidLocatorError
   alias ExUnit.AssertionError
 
   test "session constructor defaults to phoenix non-browser sessions" do
@@ -33,9 +32,9 @@ defmodule CerberusTest do
     %StaticSession{conn: seeded_conn} =
       session()
       |> visit("/auth/static/users/register")
-      |> fill_in(label("Email"), email)
-      |> fill_in(label("Password"), password)
-      |> fill_in(label("Confirm Password"), password)
+      |> fill_in(~l"Email"l, email)
+      |> fill_in(~l"Password"l, password)
+      |> fill_in(~l"Confirm Password"l, password)
       |> submit(role(:button, name: "Create account"))
       |> assert_path("/auth/static/dashboard")
       |> assert_has(text("Signed in as: #{email}", exact: true))
@@ -150,8 +149,8 @@ defmodule CerberusTest do
     end
   end
 
-  test "assert_has with unsupported locator raises InvalidLocatorError" do
-    assert_raise InvalidLocatorError, fn ->
+  test "assert_has rejects unsupported locator input type" do
+    assert_raise FunctionClauseError, fn ->
       session()
       |> visit("/articles")
       |> assert_has(foo: "bar")
@@ -185,13 +184,13 @@ defmodule CerberusTest do
     assert_raise AssertionError, ~r/no clickable element matched locator/, fn ->
       session()
       |> visit("/search")
-      |> click(label("Search term"))
+      |> click(~l"Search term"l)
     end
 
     assert is_struct(
              session()
              |> visit("/search")
-             |> assert_has(label("Search term"))
+             |> assert_has(~l"Search term"l)
            )
   end
 
@@ -209,7 +208,7 @@ defmodule CerberusTest do
     assert is_struct(
              session()
              |> visit("/search")
-             |> fill_in(label("Search term"), "phoenix")
+             |> fill_in(~l"Search term"l, "phoenix")
            )
   end
 
@@ -235,7 +234,7 @@ defmodule CerberusTest do
     assert is_struct(
              session()
              |> visit("/search")
-             |> fill_in(label("Search term"), "phoenix")
+             |> fill_in(~l"Search term"l, "phoenix")
            )
   end
 
@@ -251,7 +250,7 @@ defmodule CerberusTest do
     checked =
       session()
       |> visit("/checkbox-array")
-      |> check(label("Two"))
+      |> check(~l"Two"l)
       |> submit(text("Save Items"))
 
     assert_has(checked, text("Selected Items: one,two", exact: true))
@@ -259,7 +258,7 @@ defmodule CerberusTest do
     unchecked =
       session()
       |> visit("/checkbox-array")
-      |> uncheck(label("One"))
+      |> uncheck(~l"One"l)
       |> submit(text("Save Items"))
 
     assert_has(unchecked, text("Selected Items: None", exact: true))
@@ -279,14 +278,14 @@ defmodule CerberusTest do
     assert_raise ArgumentError, ~r/:option must be a text locator or list of text locators/, fn ->
       session()
       |> visit("/controls")
-      |> select(label("Race"), option: "Dwarf")
+      |> select(~l"Race"l, option: "Dwarf")
     end
   end
 
   test "upload requires explicit locators and accepts explicit text locators" do
     jpg = "test/support/files/elixir.jpg"
 
-    assert_raise FunctionClauseError, fn ->
+    assert_raise ArgumentError, ~r/upload\/4 expects a non-empty path string and keyword options/, fn ->
       session()
       |> visit("/live/uploads")
       |> within(css("#upload-change-form"), fn scoped ->
@@ -307,7 +306,7 @@ defmodule CerberusTest do
     assert_raise ArgumentError, ~r/invalid options/, fn ->
       session()
       |> visit("/articles")
-      |> click([text: "Articles"], nope: true)
+      |> click(~l"Articles"e, nope: true)
     end
   end
 
@@ -349,31 +348,31 @@ defmodule CerberusTest do
     assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
       session()
       |> visit("/search")
-      |> fill_in(label("Search term"), "Gandalf", timeout: -1)
+      |> fill_in(~l"Search term"l, "Gandalf", timeout: -1)
     end
 
     assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
       session()
       |> visit("/controls")
-      |> select(label("Race"), option: ~l"Elf"e, timeout: -1)
+      |> select(~l"Race"l, option: ~l"Elf"e, timeout: -1)
     end
 
     assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
       session()
       |> visit("/controls")
-      |> choose(label("Email Choice"), timeout: -1)
+      |> choose(~l"Email Choice"l, timeout: -1)
     end
 
     assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
       session()
       |> visit("/controls")
-      |> check(label("Subscribe"), timeout: -1)
+      |> check(~l"Subscribe"l, timeout: -1)
     end
 
     assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
       session()
       |> visit("/controls")
-      |> uncheck(label("Subscribe"), timeout: -1)
+      |> uncheck(~l"Subscribe"l, timeout: -1)
     end
 
     assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
@@ -385,7 +384,7 @@ defmodule CerberusTest do
     assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
       session()
       |> visit("/live/uploads")
-      |> upload(label("Avatar"), "test/support/files/elixir.jpg", timeout: -1)
+      |> upload(~l"Avatar"l, "test/support/files/elixir.jpg", timeout: -1)
     end
   end
 
@@ -495,8 +494,8 @@ defmodule CerberusTest do
     static_session =
       session()
       |> visit("/controls")
-      |> select(label("Race"), option: ~l"Elf"e)
-      |> choose(label("Email Choice"))
+      |> select(~l"Race"l, option: ~l"Elf"e)
+      |> choose(~l"Email Choice"l)
       |> submit(text("Save Controls"))
 
     assert String.starts_with?(static_session.current_path, "/controls/result")
@@ -506,8 +505,8 @@ defmodule CerberusTest do
     live_session =
       session()
       |> visit("/live/controls")
-      |> select(label("Race"), option: ~l"Dwarf"e)
-      |> choose(label("Phone Choice"))
+      |> select(~l"Race"l, option: ~l"Dwarf"e)
+      |> choose(~l"Phone Choice"l)
 
     assert live_session.current_path == "/live/controls"
     assert_has(live_session, text("race: dwarf", exact: true))
@@ -518,14 +517,14 @@ defmodule CerberusTest do
     assert_raise ArgumentError, ~r/select\/3 invalid options: required :option option/, fn ->
       session()
       |> visit("/controls")
-      |> select(label("Race"))
+      |> select(~l"Race"l)
     end
 
     choose_error =
       assert_raise AssertionError, fn ->
         session()
         |> visit("/controls")
-        |> choose(label("Race"))
+        |> choose(~l"Race"l)
       end
 
     assert choose_error.message =~ "matched field is not a radio input"
@@ -535,7 +534,7 @@ defmodule CerberusTest do
     assert is_struct(
              session()
              |> visit("/search")
-             |> fill_in(label("Search term"), "phoenix")
+             |> fill_in(~l"Search term"l, "phoenix")
              |> submit(role(:button, name: "Run Search"))
              |> assert_path("/search/results", query: %{q: "phoenix"})
              |> refute_path("/search/results", query: %{q: "elixir"})
@@ -738,8 +737,8 @@ defmodule CerberusTest do
       :browser
       |> session()
       |> visit("/controls")
-      |> select(label("Race"), option: ~l"Dwarf"e)
-      |> choose(label("Email Choice"))
+      |> select(~l"Race"l, option: ~l"Dwarf"e)
+      |> choose(~l"Email Choice"l)
       |> submit(text("Save Controls"))
 
     assert String.starts_with?(browser_session.current_path, "/controls/result")

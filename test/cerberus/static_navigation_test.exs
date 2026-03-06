@@ -20,25 +20,25 @@ defmodule Cerberus.StaticNavigationTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/articles")
-      |> click(text: "Counter")
-      |> assert_has(text: "Count: 0", exact: true)
+      |> click(~l"Counter"e)
+      |> assert_has(~l"Count: 0"e)
     end
 
     test "static session auto-switches to live for dynamic button interactions (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/counter")
-      |> click(text: "Increment")
-      |> assert_has(text: "Count: 1", exact: true)
+      |> click(~l"Increment"e)
+      |> assert_has(~l"Count: 1"e)
     end
 
     test "static redirects are deterministic and stay inside fixture routes (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/redirect/static")
-      |> assert_has(text: "Articles")
+      |> assert_has(~l"Articles"e)
       |> visit("/redirect/live")
-      |> assert_has(text: "Count: 0", exact: true)
+      |> assert_has(~l"Count: 0"e)
     end
   end
 

@@ -30,7 +30,7 @@ defmodule Cerberus.DocumentationExamplesTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/search")
-      |> fill_in(label("Search term"), "Aragorn")
+      |> fill_in(~l"Search term"l, "Aragorn")
       |> submit(role(:button, name: "Run Search"))
       |> assert_path("/search/results", query: %{q: "Aragorn"})
       |> assert_has(text("Search query: Aragorn", exact: true))

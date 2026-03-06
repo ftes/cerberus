@@ -368,7 +368,7 @@ defmodule Cerberus.LocatorParityTest do
       %{
         name: "assert_has label helper",
         expect: :ok,
-        run: &assert_has(&1, label("Email Address", exact: true))
+        run: &assert_has(&1, ~l"Email Address"le)
       },
       %{
         name: "assert_has role button helper",
@@ -403,7 +403,7 @@ defmodule Cerberus.LocatorParityTest do
       },
       %{name: "assert_has testid helper", expect: :ok, run: &assert_has(&1, testid("articles-title"))},
       # fill_in
-      %{name: "fill_in label locator", expect: :ok, run: &fill_in(&1, label("Email Address"), "alice@example.com")},
+      %{name: "fill_in label locator", expect: :ok, run: &fill_in(&1, ~l"Email Address"l, "alice@example.com")},
       %{
         name: "fill_in role textbox locator",
         expect: :ok,
@@ -448,10 +448,10 @@ defmodule Cerberus.LocatorParityTest do
         name: "fill_in wrapped label input",
         html: @inline_label_html,
         expect: :ok,
-        run: &fill_in(&1, label("Inline Email"), "wrapped@example.com")
+        run: &fill_in(&1, ~l"Inline Email"l, "wrapped@example.com")
       },
       # select
-      %{name: "select label locator", expect: :ok, run: &select(&1, label("Language"), option: ~l"Elixir"e)},
+      %{name: "select label locator", expect: :ok, run: &select(&1, ~l"Language"l, option: ~l"Elixir"e)},
       %{
         name: "select role combobox locator",
         expect: :ok,
@@ -466,71 +466,71 @@ defmodule Cerberus.LocatorParityTest do
       %{
         name: "select exact_option false supports substring",
         expect: :ok,
-        run: &select(&1, label("Language"), option: ~l"Elix"e, exact_option: false)
+        run: &select(&1, ~l"Language"l, option: ~l"Elix"e, exact_option: false)
       },
       %{
         name: "select disabled option errors",
         expect: :error,
         error_module: AssertionError,
-        run: &select(&1, label("Language"), option: ~l"Rust"e)
+        run: &select(&1, ~l"Language"l, option: ~l"Rust"e)
       },
       %{
         name: "select option missing errors",
         expect: :error,
         error_module: AssertionError,
-        run: &select(&1, label("Language"), option: ~l"Missing"e)
+        run: &select(&1, ~l"Language"l, option: ~l"Missing"e)
       },
       # check/uncheck/choose
-      %{name: "check checkbox by label", expect: :ok, run: &check(&1, label("Two"))},
-      %{name: "uncheck checkbox by label", expect: :ok, run: &uncheck(&1, label("One"))},
+      %{name: "check checkbox by label", expect: :ok, run: &check(&1, ~l"Two"l)},
+      %{name: "uncheck checkbox by label", expect: :ok, run: &uncheck(&1, ~l"One"l)},
       %{
         name: "check duplicate labels disambiguated by scope chain",
         expect: :ok,
         run: &check(&1, "#secondary" |> css() |> label("Two"))
       },
-      %{name: "choose radio by label", expect: :ok, run: &choose(&1, label("SMS"))},
+      %{name: "choose radio by label", expect: :ok, run: &choose(&1, ~l"SMS"l)},
       %{
         name: "check on non-checkbox field errors",
         expect: :error,
         error_module: AssertionError,
-        run: &check(&1, label("Search term"))
+        run: &check(&1, ~l"Search term"l)
       },
       %{
         name: "choose on non-radio field errors",
         expect: :error,
         error_module: AssertionError,
-        run: &choose(&1, label("Two"))
+        run: &choose(&1, ~l"Two"l)
       },
       # state filters
       %{
         name: "fill_in state filter chooses enabled duplicate field",
         html: @state_filter_html,
         expect: :ok,
-        run: &fill_in(&1, label("State Field"), "enabled", disabled: false)
+        run: &fill_in(&1, ~l"State Field"l, "enabled", disabled: false)
       },
       %{
         name: "fill_in state filter chooses readonly field",
         html: @state_filter_html,
         expect: :ok,
-        run: &fill_in(&1, label("Readonly Field"), "readonly", readonly: true)
+        run: &fill_in(&1, ~l"Readonly Field"l, "readonly", readonly: true)
       },
       %{
         name: "check state filter chooses unchecked checkbox",
         html: @state_filter_html,
         expect: :ok,
-        run: &check(&1, label("State Check"), checked: false)
+        run: &check(&1, ~l"State Check"l, checked: false)
       },
       %{
         name: "uncheck state filter chooses checked checkbox",
         html: @state_filter_html,
         expect: :ok,
-        run: &uncheck(&1, label("State Check"), checked: true)
+        run: &uncheck(&1, ~l"State Check"l, checked: true)
       },
       %{
         name: "choose state filter chooses unselected radio",
         html: @state_filter_html,
         expect: :ok,
-        run: &choose(&1, label("State Contact"), selected: false)
+        run: &choose(&1, ~l"State Contact"l, selected: false)
       },
       # locator composition / chaining
       %{
@@ -660,7 +660,7 @@ defmodule Cerberus.LocatorParityTest do
       %{
         name: "fill_in supports same-element and_ composition with css",
         expect: :ok,
-        run: &fill_in(&1, and_(label("Email Address"), css("#secondary_email")), "secondary@example.com")
+        run: &fill_in(&1, and_(~l"Email Address"l, css("#secondary_email")), "secondary@example.com")
       },
       %{
         name: "fill_in or composition resolves when exactly one branch matches",
@@ -674,31 +674,31 @@ defmodule Cerberus.LocatorParityTest do
         run: &fill_in(&1, or_(css("#email_input"), css("#secondary_email")), "ambiguous")
       },
       # upload
-      %{name: "upload file input by label", expect: :ok, run: &upload(&1, label("Avatar"), upload_path)},
+      %{name: "upload file input by label", expect: :ok, run: &upload(&1, ~l"Avatar"l, upload_path)},
       %{
         name: "upload wrapped label input",
         html: @inline_upload_label_html,
         expect: :ok,
-        run: &upload(&1, label("Inline Avatar"), upload_path)
+        run: &upload(&1, ~l"Inline Avatar"l, upload_path)
       },
       %{
         name: "upload on non-file field errors",
         expect: :error,
         error_module: AssertionError,
-        run: &upload(&1, label("Nickname"), upload_path)
+        run: &upload(&1, ~l"Nickname"l, upload_path)
       },
       # click/submit with non-clickable locator kinds
       %{
         name: "click with label locator errors when no clickable matches",
         expect: :error,
         error_module: AssertionError,
-        run: &click(&1, label("Search term"))
+        run: &click(&1, ~l"Search term"l)
       },
       %{
         name: "submit with label locator errors when no submit control matches",
         expect: :error,
         error_module: AssertionError,
-        run: &submit(&1, label("Search term"))
+        run: &submit(&1, ~l"Search term"l)
       },
       # sigil-rich cases
       %{name: "sigil css locator for fill_in", expect: :ok, run: &fill_in(&1, ~l"#search_q"c, "sigil css")},
@@ -783,98 +783,98 @@ defmodule Cerberus.LocatorParityTest do
         name: "fill_in supports first count-position filter",
         html: @count_position_html,
         expect: :ok,
-        run: &fill_in(&1, label("Code"), "first-code", first: true, count: 3)
+        run: &fill_in(&1, ~l"Code"l, "first-code", first: true, count: 3)
       },
       %{
         name: "fill_in supports last count-position filter",
         html: @count_position_html,
         expect: :ok,
-        run: &fill_in(&1, label("Code"), "last-code", last: true, between: {2, 3})
+        run: &fill_in(&1, ~l"Code"l, "last-code", last: true, between: {2, 3})
       },
       %{
         name: "fill_in supports nth count-position filter",
         html: @count_position_html,
         expect: :ok,
-        run: &fill_in(&1, label("Code"), "second-code", nth: 2, min: 3)
+        run: &fill_in(&1, ~l"Code"l, "second-code", nth: 2, min: 3)
       },
       %{
         name: "fill_in supports index count-position filter",
         html: @count_position_html,
         expect: :ok,
-        run: &fill_in(&1, label("Code"), "third-code", index: 2, max: 3)
+        run: &fill_in(&1, ~l"Code"l, "third-code", index: 2, max: 3)
       },
       %{
         name: "fill_in fails when count filter mismatches",
         html: @count_position_html,
         expect: :error,
         error_module: AssertionError,
-        run: &fill_in(&1, label("Code"), "mismatch", count: 2)
+        run: &fill_in(&1, ~l"Code"l, "mismatch", count: 2)
       },
       %{
         name: "fill_in fails when nth is out of bounds",
         html: @count_position_html,
         expect: :error,
         error_module: AssertionError,
-        run: &fill_in(&1, label("Code"), "out-of-bounds", nth: 4)
+        run: &fill_in(&1, ~l"Code"l, "out-of-bounds", nth: 4)
       },
       %{
         name: "fill_in validates mutually exclusive position filters",
         html: @count_position_html,
         expect: :error,
         error_module: ArgumentError,
-        run: &fill_in(&1, label("Code"), "invalid", first: true, nth: 2)
+        run: &fill_in(&1, ~l"Code"l, "invalid", first: true, nth: 2)
       },
       %{
         name: "check supports count-position filters",
         html: @count_position_html,
         expect: :ok,
-        run: &check(&1, label("Agree"), last: true, count: 2)
+        run: &check(&1, ~l"Agree"l, last: true, count: 2)
       },
       %{
         name: "check fails when count filter mismatches",
         html: @count_position_html,
         expect: :error,
         error_module: AssertionError,
-        run: &check(&1, label("Agree"), count: 1)
+        run: &check(&1, ~l"Agree"l, count: 1)
       },
       %{
         name: "choose supports count-position filters",
         html: @count_position_html,
         expect: :ok,
-        run: &choose(&1, label("Contact"), index: 1, between: {2, 2})
+        run: &choose(&1, ~l"Contact"l, index: 1, between: {2, 2})
       },
       %{
         name: "choose fails when count filter mismatches",
         html: @count_position_html,
         expect: :error,
         error_module: AssertionError,
-        run: &choose(&1, label("Contact"), count: 1)
+        run: &choose(&1, ~l"Contact"l, count: 1)
       },
       %{
         name: "select supports first count-position filter",
         html: @count_position_html,
         expect: :ok,
-        run: &select(&1, label("Pet"), option: ~l"Dog"e, first: true, count: 2)
+        run: &select(&1, ~l"Pet"l, option: ~l"Dog"e, first: true, count: 2)
       },
       %{
         name: "select supports last count-position filter",
         html: @count_position_html,
         expect: :ok,
-        run: &select(&1, label("Pet"), option: ~l"Fish"e, last: true, between: {2, 2})
+        run: &select(&1, ~l"Pet"l, option: ~l"Fish"e, last: true, between: {2, 2})
       },
       %{
         name: "select fails when position is out of bounds",
         html: @count_position_html,
         expect: :error,
         error_module: AssertionError,
-        run: &select(&1, label("Pet"), option: ~l"Dog"e, nth: 3)
+        run: &select(&1, ~l"Pet"l, option: ~l"Dog"e, nth: 3)
       },
       %{
         name: "select fails when count filter mismatches",
         html: @count_position_html,
         expect: :error,
         error_module: AssertionError,
-        run: &select(&1, label("Pet"), option: ~l"Dog"e, count: 1)
+        run: &select(&1, ~l"Pet"l, option: ~l"Dog"e, count: 1)
       },
       # scope chaining disambiguation snippet
       %{
@@ -887,7 +887,7 @@ defmodule Cerberus.LocatorParityTest do
         name: "selector-only snippet ambiguous fill_in still succeeds",
         html: @selector_only_html,
         expect: :ok,
-        run: &fill_in(&1, label("Field"), "any")
+        run: &fill_in(&1, ~l"Field"l, "any")
       },
       %{
         name: "selector-only snippet assertion exact text",

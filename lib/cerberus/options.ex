@@ -8,7 +8,6 @@ defmodule Cerberus.Options do
 
   @type locator_match_by :: :text | :label | :link | :button | :placeholder | :title | :alt | :aria_label | :testid
   @type role_locator_name :: String.t() | Regex.t() | nil
-  @type locator_nested_input :: Cerberus.Locator.input()
   @type visibility_filter :: boolean() | :any
   @type fill_in_value :: String.t() | integer() | float() | boolean()
   @type select_value :: String.t() | [String.t()]
@@ -16,13 +15,14 @@ defmodule Cerberus.Options do
   @type text_match_opts :: [exact: boolean(), normalize_ws: boolean()]
   @type locator_leaf_opts :: [
           exact: boolean(),
-          from: locator_nested_input() | nil
+          from: Cerberus.Locator.t() | nil
         ]
   @type role_locator_opts :: [
           name: role_locator_name(),
-          exact: boolean()
+          exact: boolean(),
+          from: Cerberus.Locator.t() | nil
         ]
-  @type closest_opts :: [from: locator_nested_input()]
+  @type closest_opts :: [from: Cerberus.Locator.t()]
   @type state_filter_opts :: [
           checked: boolean() | nil,
           disabled: boolean() | nil,

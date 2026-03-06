@@ -21,7 +21,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/search")
-      |> fill_in(label("Search term"), "phoenix")
+      |> fill_in(~l"Search term"l, "phoenix")
       |> submit(role(:button, name: "Run Search"))
       |> assert_has(text("Search query: phoenix", exact: true))
       |> visit("/search")
@@ -229,11 +229,11 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       |> submit(role(:button, name: ~r/^Run/))
       |> assert_path("/search/results")
       |> visit("/search")
-      |> fill_in(label("Search term"), "shire", first: true)
+      |> fill_in(~l"Search term"l, "shire", first: true)
       |> submit(role(:button, name: ~r/^Run/), first: true)
       |> assert_path("/search/results", query: [q: "shire"])
       |> visit("/search")
-      |> fill_in(label("Search term", exact: false), "gondor", last: true)
+      |> fill_in(~l"Search term"li, "gondor", last: true)
       |> submit(role(:button, name: ~r/^Run/), last: true)
       |> assert_path("/search/nested/results", query: [nested_q: "gondor"])
     end
@@ -243,14 +243,14 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       |> driver_session(context)
       |> visit("/articles")
       |> assert_has(title("Articles heading", exact: true))
-      |> assert_has(aria_label("Articles heading aria", exact: true))
+      |> assert_has(~l"Articles heading aria"ae)
       |> assert_has(alt("Articles hero image", exact: true))
       |> visit("/search")
-      |> assert_has(aria_label("Search heading aria", exact: true))
+      |> assert_has(~l"Search heading aria"ae)
       |> assert_has(testid("search-title"))
       |> assert_has(placeholder("Search by term", exact: true))
-      |> fill_in(aria_label("Search term aria"), "boromir")
-      |> submit(aria_label("Run search aria", exact: true))
+      |> fill_in(~l"Search term aria"a, "boromir")
+      |> submit(~l"Run search aria"ae)
       |> assert_has(text("Search query: boromir", exact: true))
     end
 
@@ -260,8 +260,8 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       |> visit("/live/form-change")
       |> assert_has(title("Live name input", exact: true))
       |> assert_has(placeholder("Live name", exact: true))
-      |> assert_has(aria_label("Live name aria", exact: true))
-      |> fill_in(aria_label("Live name aria"), "Eowyn")
+      |> assert_has(~l"Live name aria"ae)
+      |> fill_in(~l"Live name aria"a, "Eowyn")
       |> assert_has(testid("live-change-name"))
       |> assert_has(text("name: Eowyn", exact: true))
     end
@@ -270,7 +270,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/controls")
-      |> choose(label("Mail Choice"), selected: true)
+      |> choose(~l"Mail Choice"l, selected: true)
       |> assert_has(text("contact: mail", exact: true))
     end
 
@@ -279,7 +279,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/live/controls")
-        |> choose(label("Email Choice"), selected: true, timeout: 0)
+        |> choose(~l"Email Choice"l, selected: true, timeout: 0)
       end
     end
 
@@ -288,14 +288,14 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/live/controls")
-        |> select(label("Disabled select"), option: ~l"Cannot submit"e, disabled: false, timeout: 0)
+        |> select(~l"Disabled select"l, option: ~l"Cannot submit"e, disabled: false, timeout: 0)
       end
 
       assert_raise ExUnit.AssertionError, ~r/matched select field is disabled/, fn ->
         unquote(driver)
         |> driver_session(context)
         |> visit("/live/controls")
-        |> select(label("Disabled select"), option: ~l"Cannot submit"e, disabled: true, timeout: 0)
+        |> select(~l"Disabled select"l, option: ~l"Cannot submit"e, disabled: true, timeout: 0)
       end
     end
   end

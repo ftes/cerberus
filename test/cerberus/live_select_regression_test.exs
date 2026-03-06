@@ -11,20 +11,20 @@ defmodule Cerberus.LiveSelectRegressionTest do
     conn
     |> session()
     |> visit("/phoenix_test/live/index")
-    |> select(label("Race 2"), option: text("Elf"))
-    |> select(label("Race 2"), option: text("Dwarf"))
+    |> select(~l"Race 2"l, option: text("Elf"))
+    |> select(~l"Race 2"l, option: text("Dwarf"))
     |> click(role(:button, name: "Save Full Form"))
-    |> assert_has("#form-data" |> css() |> text("[elf, dwarf]", exact: false))
+    |> assert_has(and_(css("#form-data"), text("[elf, dwarf]", exact: false)))
   end
 
   test "browser live multi-select preserves previous picks across repeated calls" do
     :browser
     |> session()
     |> visit("/phoenix_test/live/index")
-    |> select(label("Race 2"), option: text("Elf"))
-    |> select(label("Race 2"), option: text("Dwarf"))
+    |> select(~l"Race 2"l, option: text("Elf"))
+    |> select(~l"Race 2"l, option: text("Dwarf"))
     |> click(role(:button, name: "Save Full Form"))
-    |> assert_has("#form-data" |> css() |> text("[elf, dwarf]", exact: false))
+    |> assert_has(and_(css("#form-data"), text("[elf, dwarf]", exact: false)))
   end
 
   test "live select outside forms dispatches option phx-click events", %{conn: conn} do
@@ -32,9 +32,9 @@ defmodule Cerberus.LiveSelectRegressionTest do
     |> session()
     |> visit("/phoenix_test/live/index")
     |> within(css("#not-a-form"), fn scoped ->
-      select(scoped, label("Choose a pet:"), option: [text("Dog"), text("Cat")])
+      select(scoped, ~l"Choose a pet:"l, option: [text("Dog"), text("Cat")])
     end)
-    |> assert_has("#form-data" |> css() |> text("selected: [dog, cat]"))
+    |> assert_has(and_(css("#form-data"), text("selected: [dog, cat]")))
   end
 
   test "browser live select outside forms dispatches option phx-click events" do
@@ -42,9 +42,9 @@ defmodule Cerberus.LiveSelectRegressionTest do
     |> session()
     |> visit("/phoenix_test/live/index")
     |> within(css("#not-a-form"), fn scoped ->
-      select(scoped, label("Choose a pet:"), option: [text("Dog"), text("Cat")])
+      select(scoped, ~l"Choose a pet:"l, option: [text("Dog"), text("Cat")])
     end)
-    |> assert_has("#form-data" |> css() |> text("selected: [dog, cat]"))
+    |> assert_has(and_(css("#form-data"), text("selected: [dog, cat]")))
   end
 
   test "live select outside forms without option phx-click raises a contract error", %{conn: conn} do
@@ -56,7 +56,7 @@ defmodule Cerberus.LiveSelectRegressionTest do
     assert_raise ArgumentError,
                  ~r/to have a valid `phx-click` attribute on options or to belong to a `form`/,
                  fn ->
-                   select(live_session, label("Invalid Select Option"), option: text("Dog"))
+                   select(live_session, ~l"Invalid Select Option"l, option: text("Dog"))
                  end
   end
 

@@ -61,7 +61,7 @@ defmodule Cerberus.AssertionFilterSemanticsTest do
       |> driver_session(context)
       |> visit("/controls")
       |> assert_has(css("input[value='33']"))
-      |> assert_has(label("Age", exact: true))
+      |> assert_has(~l"Age"le)
       |> refute_has(css("input[value='99']"))
     end
 
@@ -70,8 +70,8 @@ defmodule Cerberus.AssertionFilterSemanticsTest do
       |> driver_session(context)
       |> visit("/live/controls")
       |> assert_has(css("input[value='33']"))
-      |> assert_has(label("Age", exact: true))
-      |> fill_in(label("Age"), "41")
+      |> assert_has(~l"Age"le)
+      |> fill_in(~l"Age"l, "41")
       |> assert_has(css("input[value='41']"))
       |> refute_has(css("input[value='33']"))
     end

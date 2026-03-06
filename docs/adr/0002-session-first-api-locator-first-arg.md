@@ -24,8 +24,8 @@ refute_has(session, locator, opts \\ [])
 ```elixir
 session
 |> visit("/live/counter")
-|> click([text: "Increment"])
-|> assert_has([text: "Count: 1", exact: true])
+|> click(~l"Increment"e)
+|> assert_has(~l"Count: 1"e)
 ```
 
 ## Consequences

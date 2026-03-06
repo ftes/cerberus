@@ -20,21 +20,21 @@ defmodule Cerberus.FormActionsTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/search")
-      |> click(text: "Articles")
-      |> assert_has(text: "Articles", exact: true)
+      |> click(~l"Articles"e)
+      |> assert_has(~l"Articles"e)
       |> visit("/search")
-      |> fill_in(label("Search term"), "phoenix")
-      |> submit(text: "Run Search")
-      |> assert_has(text: "Search query: phoenix", exact: true)
+      |> fill_in(~l"Search term"l, "phoenix")
+      |> submit(~l"Run Search"e)
+      |> assert_has(~l"Search query: phoenix"e)
     end
 
     test "submit/1 submits the active form (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/search")
-      |> fill_in(label("Search term *"), "compat")
+      |> fill_in(~l"Search term *"l, "compat")
       |> submit()
-      |> assert_has(text: "Nested search query: compat", exact: true)
+      |> assert_has(~l"Nested search query: compat"e)
     end
 
     test "submit/1 fails when no active form exists (#{driver})", context do
@@ -51,30 +51,30 @@ defmodule Cerberus.FormActionsTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/search")
-      |> fill_in(label("Search term *"), "phoenix")
-      |> submit(text: "Run Nested Search")
-      |> assert_has(text: "Nested search query: phoenix", exact: true)
+      |> fill_in(~l"Search term *"l, "phoenix")
+      |> submit(~l"Run Nested Search"e)
+      |> assert_has(~l"Nested search query: phoenix"e)
     end
 
     test "submit normalizes nested form params for non-GET requests (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/nested-submit")
-      |> fill_in(label("Email"), "someone-1@teamengine.co.uk")
-      |> fill_in(label("Password"), "Pass123456789!")
-      |> submit(text: "Sign In")
-      |> assert_has(text: "session.email: someone-1@teamengine.co.uk", exact: true)
-      |> assert_has(text: "session.password: Pass123456789!", exact: true)
-      |> assert_has(text: "flat session[email] key?: false", exact: true)
-      |> assert_has(text: "flat session[password] key?: false", exact: true)
+      |> fill_in(~l"Email"l, "someone-1@teamengine.co.uk")
+      |> fill_in(~l"Password"l, "Pass123456789!")
+      |> submit(~l"Sign In"e)
+      |> assert_has(~l"session.email: someone-1@teamengine.co.uk"e)
+      |> assert_has(~l"session.password: Pass123456789!"e)
+      |> assert_has(~l"flat session[email] key?: false"e)
+      |> assert_has(~l"flat session[password] key?: false"e)
     end
 
     test "click_button works on live counter flow for live and browser drivers (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/counter")
-      |> click(text: "Increment")
-      |> assert_has(text: "Count: 1", exact: true)
+      |> click(~l"Increment"e)
+      |> assert_has(~l"Count: 1"e)
     end
 
     test "action failures include possible candidate hints (#{driver})", context do
@@ -83,7 +83,7 @@ defmodule Cerberus.FormActionsTest do
           unquote(driver)
           |> driver_session(context)
           |> visit("/search")
-          |> click(text: "Definitely Missing Link")
+          |> click(~l"Definitely Missing Link"e)
         end
 
       assert click_error.message =~ "possible candidates:"
@@ -94,7 +94,7 @@ defmodule Cerberus.FormActionsTest do
           unquote(driver)
           |> driver_session(context)
           |> visit("/search")
-          |> fill_in(label("Definitely Missing Field"), "x")
+          |> fill_in(~l"Definitely Missing Field"l, "x")
         end
 
       assert fill_error.message =~ "possible candidates:"
@@ -105,7 +105,7 @@ defmodule Cerberus.FormActionsTest do
           unquote(driver)
           |> driver_session(context)
           |> visit("/search")
-          |> submit(text: "Definitely Missing Submit")
+          |> submit(~l"Definitely Missing Submit"e)
         end
 
       assert submit_error.message =~ "possible candidates:"
@@ -130,7 +130,7 @@ defmodule Cerberus.FormActionsTest do
     :phoenix
     |> session()
     |> visit("/live/form-change")
-    |> fill_in(label("No button name"), "Arnor")
+    |> fill_in(~l"No button name"l, "Arnor")
     |> submit()
     |> assert_has(text("No button submit: Arnor", exact: true))
   end
@@ -140,7 +140,7 @@ defmodule Cerberus.FormActionsTest do
       :phoenix
       |> session()
       |> visit("/live/form-change")
-      |> fill_in(label("Name (no phx-change)"), "Arnor")
+      |> fill_in(~l"Name (no phx-change)"l, "Arnor")
       |> submit()
     end
   end
@@ -149,13 +149,13 @@ defmodule Cerberus.FormActionsTest do
     :phoenix
     |> session()
     |> visit("/phoenix_test/live/index")
-    |> fill_in(label("To keep"), "this input should stay")
-    |> fill_in(label("To remove"), "this input will now be removed")
+    |> fill_in(~l"To keep"l, "this input should stay")
+    |> fill_in(~l"To remove"l, "this input will now be removed")
     |> submit()
-    |> check(label("Hide to remove"))
+    |> check(~l"Hide to remove"l)
     |> submit()
-    |> assert_has("#form-data" |> css() |> text("this input should stay", exact: false))
-    |> refute_has("#form-data" |> css() |> text("this input will now be removed", exact: false))
+    |> assert_has(and_(css("#form-data"), text("this input should stay", exact: false)))
+    |> refute_has(and_(css("#form-data"), text("this input will now be removed", exact: false)))
   end
 
   @tag skip: "browser submit-active-form-no-button parity bug"
@@ -163,7 +163,7 @@ defmodule Cerberus.FormActionsTest do
     :browser
     |> session()
     |> visit("/live/form-change")
-    |> fill_in(label("No button name"), "Arnor")
+    |> fill_in(~l"No button name"l, "Arnor")
     |> submit()
     |> assert_has(text("No button submit: Arnor", exact: true))
   end
@@ -173,14 +173,14 @@ defmodule Cerberus.FormActionsTest do
       :phoenix
       |> session()
       |> visit("/live/counter")
-      |> fill_in(label("Search term"), "x")
+      |> fill_in(~l"Search term"l, "x")
     end
 
     assert_raise ExUnit.AssertionError, ~r/no submit button matched locator/, fn ->
       :phoenix
       |> session()
       |> visit("/live/counter")
-      |> submit(text: "Run Search")
+      |> submit(~l"Run Search"e)
     end
   end
 

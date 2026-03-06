@@ -750,13 +750,13 @@ defmodule Cerberus.Driver.Static do
   defp active_form_submit_button(session) do
     case FormData.active_form_selector(session.form_data) do
       selector when is_binary(selector) and selector != "" ->
-        submit_selector = selector <> " button"
+        submit_scope = merge_submit_scope(Session.scope(session), selector)
 
         case Html.find_submit_button(
                session.html,
-               "",
-               [match_by: :button, selector: submit_selector],
-               Session.scope(session)
+               ~r/.*/,
+               [match_by: :button],
+               submit_scope
              ) do
           {:ok, button} -> {:ok, button}
           :error -> {:error, "submit/1 could not find a submit button in the active form"}
@@ -766,6 +766,12 @@ defmodule Cerberus.Driver.Static do
         {:error, "submit/1 requires an active form; call fill_in/select/choose/check/uncheck/upload first"}
     end
   end
+
+  defp merge_submit_scope(scope, submit_selector) when is_binary(scope) and scope != "" do
+    "#{scope} #{submit_selector}"
+  end
+
+  defp merge_submit_scope(_scope, submit_selector), do: submit_selector
 
   defp do_submit(session, button) do
     method = normalize_submit_method(button.method)

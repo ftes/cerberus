@@ -13,20 +13,20 @@ defmodule Cerberus.LiveCheckboxBehaviorTest do
     |> visit("/phoenix_test/live/index")
     |> within(css("#not-a-form"), fn scoped ->
       scoped
-      |> check(label("Second Breakfast"))
-      |> uncheck(label("Second Breakfast"))
+      |> check(~l"Second Breakfast"l)
+      |> uncheck(~l"Second Breakfast"l)
     end)
-    |> refute_has("#form-data" |> css() |> text("value: second-breakfast"))
+    |> refute_has(and_(css("#form-data"), text("value: second-breakfast")))
   end
 
   test "label-based nameless checkbox phx-click sends value payloads", %{conn: conn} do
     conn
     |> session()
     |> visit("/phoenix_test/live/index")
-    |> check(label("Checkbox abc"))
-    |> assert_has("#checkbox-phx-click-values-abc-value" |> css() |> text("Checked"))
-    |> uncheck(label("Checkbox abc"))
-    |> assert_has("#checkbox-phx-click-values-abc-value" |> css() |> text("Unchecked"))
+    |> check(~l"Checkbox abc"l)
+    |> assert_has(and_(css("#checkbox-phx-click-values-abc-value"), text("Checked")))
+    |> uncheck(~l"Checkbox abc"l)
+    |> assert_has(and_(css("#checkbox-phx-click-values-abc-value"), text("Unchecked")))
   end
 
   test "outside-form checkbox without phx-click raises contract error", %{conn: conn} do
@@ -36,7 +36,7 @@ defmodule Cerberus.LiveCheckboxBehaviorTest do
       |> visit("/phoenix_test/live/index")
 
     assert_raise ArgumentError, ~r/have a valid `phx-click` attribute or belong to a `form`/, fn ->
-      check(live_session, label("Invalid Checkbox"))
+      check(live_session, ~l"Invalid Checkbox"l)
     end
   end
 end

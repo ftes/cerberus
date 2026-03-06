@@ -10,17 +10,17 @@ defmodule Cerberus.AutoModeTest do
   test "auto mode starts static and switches to live when navigating to live routes" do
     session()
     |> visit("/articles")
-    |> assert_has(text: "Articles", exact: true)
+    |> assert_has(~l"Articles"e)
     |> visit("/live/counter")
-    |> click(text: "Increment")
-    |> assert_has(text: "Count: 1", exact: true)
+    |> click(~l"Increment"e)
+    |> assert_has(~l"Count: 1"e)
   end
 
   test "auto mode starts live and switches to static on non-live navigation" do
     session()
     |> visit("/live/counter")
-    |> click(text: "Articles")
-    |> assert_has(text: "Articles", exact: true)
+    |> click(~l"Articles"e)
+    |> assert_has(~l"Articles"e)
   end
 
   test "auto mode tracks redirect and live_redirect transitions with path and active driver" do
@@ -49,11 +49,11 @@ defmodule Cerberus.AutoModeTest do
     session = visit(session(:browser), "/articles")
     assert match?(%Browser{}, session)
 
-    session = click(session, text: "Counter")
+    session = click(session, ~l"Counter"e)
     assert match?(%Browser{}, session)
     assert session.current_path == "/live/counter"
 
-    session = click(session, text: "Articles")
+    session = click(session, ~l"Articles"e)
     assert match?(%Browser{}, session)
     assert session.current_path == "/articles"
   end
@@ -63,8 +63,8 @@ defmodule Cerberus.AutoModeTest do
       assert_raise ExUnit.AssertionError, fn ->
         session()
         |> visit("/articles")
-        |> click(text: "Counter")
-        |> assert_has(text: "no such text", exact: true)
+        |> click(~l"Counter"e)
+        |> assert_has(~l"no such text"e)
       end
 
     assert error.message =~ "transition:"

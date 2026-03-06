@@ -37,7 +37,7 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     :browser
     |> SharedBrowserSession.driver_session(context)
     |> visit("/live/form-sync")
-    |> fill_in(label("Nickname (submit only)"), "Aragorn")
+    |> fill_in(~l"Nickname (submit only)"l, "Aragorn")
     |> submit(role(:button, name: "Save No Change", exact: true))
     |> then(fn updated ->
       readiness = updated.last_result.observed.readiness

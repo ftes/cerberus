@@ -11,7 +11,7 @@ defmodule Cerberus.InvalidLocatorError do
       Keyword.get(
         opts,
         :message,
-        "invalid locator #{inspect(locator)}; expected text string, regex, or [text: ...]"
+        "invalid locator #{inspect(locator)}; expected a %Cerberus.Locator{}"
       )
 
     %__MODULE__{message: message, locator: locator}

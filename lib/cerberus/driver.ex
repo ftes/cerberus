@@ -6,7 +6,6 @@ defmodule Cerberus.Driver do
   alias Cerberus.Session
 
   @type session_t :: Session.t()
-  @type locator_input :: Locator.input()
   @type observed :: Session.observed()
   @type op_ok :: {:ok, session_t(), observed()}
   @type op_error :: {:error, session_t(), observed(), String.t()}

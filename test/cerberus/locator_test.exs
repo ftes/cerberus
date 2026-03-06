@@ -7,7 +7,7 @@ defmodule Cerberus.LocatorTest do
   alias Cerberus.Locator
 
   test "normalize returns {:ok, locator} for valid locator input" do
-    assert {:ok, %Locator{kind: :text, value: "Saved"}} = Locator.normalize(text: "Saved")
+    assert {:ok, %Locator{kind: :text, value: "Saved"}} = Locator.normalize(text("Saved"))
   end
 
   test "normalize returns {:error, invalid_locator_error} for invalid locator input" do
@@ -30,7 +30,7 @@ defmodule Cerberus.LocatorTest do
 
   test "rejects exact option when text-like locator value is regex" do
     assert_raise InvalidLocatorError, ~r/:exact cannot be combined with regex :text locators/, fn ->
-      Locator.normalize!(text: ~r/Saved/, exact: true)
+      Locator.normalize!(text(~r/Saved/, exact: true))
     end
 
     assert_raise InvalidLocatorError, ~r/:exact cannot be combined with regex :role locators/, fn ->
@@ -40,7 +40,7 @@ defmodule Cerberus.LocatorTest do
 
   test "rejects exact option when role locator name is regex" do
     assert_raise InvalidLocatorError, ~r/:exact cannot be combined with regex :role locators/, fn ->
-      Locator.normalize!(role: :button, name: ~r/Save/, exact: true)
+      Locator.normalize!(role(:button, name: ~r/Save/, exact: true))
     end
   end
 
@@ -54,13 +54,13 @@ defmodule Cerberus.LocatorTest do
     end
   end
 
-  test "normalizes keyword text locator" do
-    assert %Locator{kind: :text, value: "Saved"} = Locator.normalize!(text: "Saved")
+  test "normalizes text locators" do
+    assert %Locator{kind: :text, value: "Saved"} = Locator.normalize!(text("Saved"))
   end
 
-  test "raises for unsupported locator keys" do
+  test "rejects literal keyword locator input" do
     assert_raise InvalidLocatorError, fn ->
-      Locator.normalize!(text: "Saved", role: "button")
+      Locator.normalize!(text: "Saved")
     end
   end
 
@@ -78,8 +78,8 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :text, value: "Saved", opts: [exact: true]} = ~l"Saved"e
     assert %Locator{kind: :text, value: "Saved", opts: [exact: false]} = ~l"Saved"i
 
-    assert Locator.normalize!(~l"Saved"e) == Locator.normalize!(text: "Saved", exact: true)
-    assert Locator.normalize!(~l"Saved"i) == Locator.normalize!(text: "Saved", exact: false)
+    assert Locator.normalize!(~l"Saved"e) == Locator.normalize!(text("Saved", exact: true))
+    assert Locator.normalize!(~l"Saved"i) == Locator.normalize!(text("Saved", exact: false))
   end
 
   test "~l supports role modifier using ROLE:NAME syntax" do
@@ -109,6 +109,12 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :testid, value: "search-input", opts: [exact: false]} = ~l"search-input"ti
   end
 
+  test "~l supports label modifier" do
+    assert %Locator{kind: :label, value: "Search term", opts: [exact: true]} = ~l"Search term"l
+    assert %Locator{kind: :label, value: "Search term", opts: [exact: true]} = ~l"Search term"le
+    assert %Locator{kind: :label, value: "Search term", opts: [exact: false]} = ~l"Search term"li
+  end
+
   test "~l rejects invalid modifier combinations and role syntax" do
     assert_raise InvalidLocatorError, ~r/at most one locator-kind modifier/, fn ->
       ~l"button:Save"rc
@@ -129,50 +135,42 @@ defmodule Cerberus.LocatorTest do
 
   test "normalizes helper keyword locators" do
     assert %Locator{kind: :role, value: "Counter", opts: [role: "link", exact: true]} =
-             Locator.normalize!(role: :link, name: "Counter")
+             Locator.normalize!(role(:link, name: "Counter"))
 
     assert %Locator{kind: :role, value: "Save", opts: [role: "button", exact: true]} =
-             Locator.normalize!(role: :button, name: "Save")
+             Locator.normalize!(role(:button, name: "Save"))
 
-    assert %Locator{kind: :label, value: "Search term"} = Locator.normalize!(label: "Search term")
-    assert %Locator{kind: :placeholder, value: "Search"} = Locator.normalize!(placeholder: "Search")
-    assert %Locator{kind: :title, value: "Main Heading"} = Locator.normalize!(title: "Main Heading")
-    assert %Locator{kind: :alt, value: "Hero image"} = Locator.normalize!(alt: "Hero image")
-    assert %Locator{kind: :aria_label, value: "Search field"} = Locator.normalize!(aria_label: "Search field")
-    assert %Locator{kind: :css, value: "#save"} = Locator.normalize!(css: "#save")
-    assert %Locator{kind: :testid, value: "submit-btn"} = Locator.normalize!(testid: "submit-btn")
+    assert %Locator{kind: :label, value: "Search term"} = Locator.normalize!(~l"Search term"l)
+    assert %Locator{kind: :placeholder, value: "Search"} = Locator.normalize!(placeholder("Search"))
+    assert %Locator{kind: :title, value: "Main Heading"} = Locator.normalize!(title("Main Heading"))
+    assert %Locator{kind: :alt, value: "Hero image"} = Locator.normalize!(alt("Hero image"))
+    assert %Locator{kind: :aria_label, value: "Search field"} = Locator.normalize!(~l"Search field"a)
+    assert %Locator{kind: :css, value: "#save"} = Locator.normalize!(css("#save"))
+    assert %Locator{kind: :testid, value: "submit-btn"} = Locator.normalize!(testid("submit-btn"))
   end
 
   test "rejects deprecated link/button keyword kinds" do
-    assert_raise InvalidLocatorError, ~r/expected one of :text, :label/, fn ->
-      Locator.normalize!(link: "Counter")
+    assert_raise InvalidLocatorError, ~r/unsupported locator kind :link/, fn ->
+      Locator.normalize!(%Locator{kind: :link, value: "Counter", opts: []})
     end
 
-    assert_raise InvalidLocatorError, ~r/expected one of :text, :label/, fn ->
-      Locator.normalize!(button: "Save")
+    assert_raise InvalidLocatorError, ~r/unsupported locator kind :button/, fn ->
+      Locator.normalize!(%Locator{kind: :button, value: "Save", opts: []})
     end
   end
 
   test "rejects selector locator option" do
     assert_raise InvalidLocatorError, ~r/selector/, fn ->
-      Locator.normalize!(text: "Apply", exact: true, selector: "#primary-actions button")
+      Locator.normalize!(text("Apply", exact: true, selector: "#primary-actions button"))
     end
   end
 
   test "rejects direct has and has_not locator options outside filter/2" do
     assert_raise InvalidLocatorError, ~r/unsupported locator keys \[:has\]/, fn ->
-      Locator.normalize!(text: "Apply", has: text("secondary"))
-    end
-
-    assert_raise InvalidLocatorError, ~r/unsupported locator keys \[:has_not\]/, fn ->
-      Locator.normalize!(role: :button, name: "Apply", has_not: testid("apply-secondary-marker"))
-    end
-
-    assert_raise InvalidLocatorError, ~r/unsupported locator keys \[:has\]/, fn ->
       text("Apply", has: text("secondary"))
     end
 
-    assert_raise InvalidLocatorError, ~r/unsupported locator keys \[:has_not\]/, fn ->
+    assert_raise ArgumentError, ~r/role\/2 supports only :name, :exact, and :from options/, fn ->
       role(:button, name: "Apply", has_not: testid("apply-secondary-marker"))
     end
   end
@@ -209,7 +207,7 @@ defmodule Cerberus.LocatorTest do
   end
 
   test "closest helper composes base locator with from locator" do
-    locator = closest(css(".fieldset"), from: label("Email"))
+    locator = closest(css(".fieldset"), from: ~l"Email"l)
 
     assert %Locator{kind: :css, value: ".fieldset"} = locator
     assert %Locator{kind: :label, value: "Email"} = locator.opts[:from]
@@ -217,7 +215,7 @@ defmodule Cerberus.LocatorTest do
 
   test "closest rejects nested from locators" do
     assert_raise ArgumentError, ~r/nested :from/, fn ->
-      closest(css(".outer"), from: closest(css(".inner"), from: label("Email")))
+      closest(css(".outer"), from: closest(css(".inner"), from: ~l"Email"l))
     end
   end
 
@@ -263,14 +261,10 @@ defmodule Cerberus.LocatorTest do
            } = negated_conjunction
   end
 
-  test "supports map normalization for not composition" do
-    locator =
+  test "rejects map normalization input for not composition" do
+    assert_raise InvalidLocatorError, fn ->
       Locator.normalize!(not: %{and: [%{role: :button, name: "Run Search"}, %{testid: "submit-secondary-button"}]})
-
-    assert %Locator{
-             kind: :not,
-             value: [%Locator{kind: :and, value: [%Locator{kind: :role}, %Locator{kind: :testid}]}]
-           } = locator
+    end
   end
 
   test "pipe composition overloads create scope semantics" do
@@ -283,56 +277,56 @@ defmodule Cerberus.LocatorTest do
 
   test "preserves role locator kind and metadata" do
     assert %Locator{kind: :role, value: "Increment", opts: [role: "button", exact: true]} =
-             Locator.normalize!(role: :button, name: "Increment")
+             Locator.normalize!(role(:button, name: "Increment"))
 
     assert %Locator{kind: :role, value: "Tab Primary", opts: [role: "tab", exact: true]} =
-             Locator.normalize!(role: :tab, name: "Tab Primary")
+             Locator.normalize!(role(:tab, name: "Tab Primary"))
 
     assert %Locator{kind: :role, value: "Menu Secondary", opts: [role: "menuitem", exact: true]} =
-             Locator.normalize!(role: :menuitem, name: "Menu Secondary")
+             Locator.normalize!(role(:menuitem, name: "Menu Secondary"))
 
     assert %Locator{kind: :role, value: "Counter", opts: [role: "link", exact: true]} =
-             Locator.normalize!(role: "link", name: "Counter")
+             Locator.normalize!(role("link", name: "Counter"))
 
     assert %Locator{kind: :role, value: "Search term", opts: [role: "textbox", exact: true]} =
-             Locator.normalize!(role: :textbox, name: "Search term")
+             Locator.normalize!(role(:textbox, name: "Search term"))
 
     assert %Locator{kind: :role, value: "Race 2", opts: [role: "listbox", exact: true]} =
-             Locator.normalize!(role: :listbox, name: "Race 2")
+             Locator.normalize!(role(:listbox, name: "Race 2"))
 
     assert %Locator{kind: :role, value: "Age", opts: [role: "spinbutton", exact: true]} =
-             Locator.normalize!(role: :spinbutton, name: "Age")
+             Locator.normalize!(role(:spinbutton, name: "Age"))
 
     assert %Locator{kind: :role, value: "Email updates", opts: [role: "checkbox", exact: true]} =
-             Locator.normalize!(role: :checkbox, name: "Email updates")
+             Locator.normalize!(role(:checkbox, name: "Email updates"))
 
     assert %Locator{kind: :role, value: "Logo", opts: [role: "img", exact: true]} =
-             Locator.normalize!(role: :img, name: "Logo")
+             Locator.normalize!(role(:img, name: "Logo"))
 
     assert %Locator{kind: :role, value: "Dashboard", opts: [role: "heading", exact: true]} =
-             Locator.normalize!(role: :heading, name: "Dashboard")
+             Locator.normalize!(role(:heading, name: "Dashboard"))
   end
 
   test "resolved_kind maps role locators to matcher kinds" do
-    assert :button == [role: :button, name: "Increment"] |> Locator.normalize!() |> Locator.resolved_kind()
-    assert :button == [role: :tab, name: "Tab Primary"] |> Locator.normalize!() |> Locator.resolved_kind()
-    assert :button == [role: :menuitem, name: "Menu Secondary"] |> Locator.normalize!() |> Locator.resolved_kind()
-    assert :link == [role: :link, name: "Counter"] |> Locator.normalize!() |> Locator.resolved_kind()
-    assert :label == [role: :textbox, name: "Search term"] |> Locator.normalize!() |> Locator.resolved_kind()
-    assert :label == [role: :listbox, name: "Race 2"] |> Locator.normalize!() |> Locator.resolved_kind()
-    assert :label == [role: :spinbutton, name: "Age"] |> Locator.normalize!() |> Locator.resolved_kind()
-    assert :label == [role: :checkbox, name: "Email updates"] |> Locator.normalize!() |> Locator.resolved_kind()
-    assert :alt == [role: :img, name: "Logo"] |> Locator.normalize!() |> Locator.resolved_kind()
-    assert :text == [role: :heading, name: "Dashboard"] |> Locator.normalize!() |> Locator.resolved_kind()
+    assert :button == :button |> role(name: "Increment") |> Locator.normalize!() |> Locator.resolved_kind()
+    assert :button == :tab |> role(name: "Tab Primary") |> Locator.normalize!() |> Locator.resolved_kind()
+    assert :button == :menuitem |> role(name: "Menu Secondary") |> Locator.normalize!() |> Locator.resolved_kind()
+    assert :link == :link |> role(name: "Counter") |> Locator.normalize!() |> Locator.resolved_kind()
+    assert :label == :textbox |> role(name: "Search term") |> Locator.normalize!() |> Locator.resolved_kind()
+    assert :label == :listbox |> role(name: "Race 2") |> Locator.normalize!() |> Locator.resolved_kind()
+    assert :label == :spinbutton |> role(name: "Age") |> Locator.normalize!() |> Locator.resolved_kind()
+    assert :label == :checkbox |> role(name: "Email updates") |> Locator.normalize!() |> Locator.resolved_kind()
+    assert :alt == :img |> role(name: "Logo") |> Locator.normalize!() |> Locator.resolved_kind()
+    assert :text == :heading |> role(name: "Dashboard") |> Locator.normalize!() |> Locator.resolved_kind()
   end
 
   test "role locator requires supported role and name" do
     assert_raise InvalidLocatorError, ~r/unsupported :role/, fn ->
-      Locator.normalize!(role: :dialog, name: "Modal")
+      Locator.normalize!(role(:dialog, name: "Modal"))
     end
 
     assert_raise InvalidLocatorError, ~r/:name must be a string or regex/, fn ->
-      Locator.normalize!(role: :button)
+      Locator.normalize!(role(:button))
     end
   end
 end

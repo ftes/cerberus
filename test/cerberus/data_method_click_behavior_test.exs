@@ -7,14 +7,14 @@ defmodule Cerberus.DataMethodClickBehaviorTest do
     session()
     |> visit("/phoenix_test/page/index")
     |> click(role(:button, name: "Data-method Delete"))
-    |> assert_has("h1" |> css() |> text("Record deleted"))
+    |> assert_has(and_(css("h1"), text("Record deleted")))
   end
 
   test "live click(button) submits data-method request" do
     session()
     |> visit("/phoenix_test/live/index")
     |> click(role(:button, name: "Data-method Delete"))
-    |> assert_has("h1" |> css() |> text("Record deleted"))
+    |> assert_has(and_(css("h1"), text("Record deleted")))
   end
 
   test "browser click(button) submits data-method request" do
@@ -22,7 +22,7 @@ defmodule Cerberus.DataMethodClickBehaviorTest do
     |> session()
     |> visit("/phoenix_test/page/index")
     |> click(role(:button, name: "Data-method Delete"))
-    |> assert_has("h1" |> css() |> text("Record deleted"))
+    |> assert_has(and_(css("h1"), text("Record deleted")))
   end
 
   test "click(button) raises a helpful error when data-method target is missing" do

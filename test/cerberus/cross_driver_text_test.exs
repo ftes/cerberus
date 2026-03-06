@@ -8,10 +8,10 @@ defmodule Cerberus.CrossDriverTextTest do
       unquote(driver)
       |> session()
       |> visit("/articles")
-      |> assert_has(text: "Articles")
+      |> assert_has(~l"Articles"e)
       |> assert_has(text(~r/articles index/i))
-      |> refute_has(text: "500 Internal Server Error")
-      |> assert_has([text: "Hidden helper text"], visible: false)
+      |> refute_has(~l"500 Internal Server Error"e)
+      |> assert_has(~l"Hidden helper text"e, visible: false)
     end
 
     test "assert_has failure includes candidate hints (#{driver})" do
@@ -20,7 +20,7 @@ defmodule Cerberus.CrossDriverTextTest do
           unquote(driver)
           |> session()
           |> visit("/articles")
-          |> assert_has(text: "Definitely Missing Text")
+          |> assert_has(~l"Definitely Missing Text"e)
         end
 
       assert error.message =~ "possible candidates:"
