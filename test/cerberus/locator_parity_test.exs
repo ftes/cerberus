@@ -296,7 +296,7 @@ defmodule Cerberus.LocatorParityTest do
 
     browser_session =
       browser_session
-      |> submit(:button |> role(name: "Run Search", exact: false) |> testid("submit-secondary-button"))
+      |> submit(and_(role(:button, name: "Run Search", exact: false), testid("submit-secondary-button")))
       |> fill_in(role(:textbox, name: "Search term"), "after-submit")
 
     Browser.evaluate_js(browser_session, "document.getElementById('chained_q')?.value", &assert(&1 == "after-submit"))
@@ -312,6 +312,7 @@ defmodule Cerberus.LocatorParityTest do
       html = Map.get(case_def, :html, @default_html)
       expect = case_def.expect
       expected_error_module = Map.get(case_def, :error_module)
+      expected_error_contains = Map.get(case_def, :error_contains)
 
       static_session = static_snippet_session(html)
       browser_session = inject_snippet!(context.browser_session, html)
@@ -328,13 +329,14 @@ defmodule Cerberus.LocatorParityTest do
       assert static_result.status == browser_result.status,
              "expected parity for #{name}, static=#{inspect(static_result)} browser=#{inspect(browser_result)}"
 
-      if expect == :error and not is_nil(expected_error_module) do
-        assert static_result.error_module == expected_error_module,
-               "expected static #{name} error module #{inspect(expected_error_module)}, got #{inspect(static_result)}"
-
-        assert browser_result.error_module == expected_error_module,
-               "expected browser #{name} error module #{inspect(expected_error_module)}, got #{inspect(browser_result)}"
-      end
+      assert_expected_error_case!(
+        expect,
+        name,
+        expected_error_module,
+        expected_error_contains,
+        static_result,
+        browser_result
+      )
     end)
   end
 
@@ -393,9 +395,10 @@ defmodule Cerberus.LocatorParityTest do
       %{name: "assert_has placeholder helper", expect: :ok, run: &assert_has(&1, placeholder("Search placeholder"))},
       %{name: "assert_has css locator", expect: :ok, run: &assert_has(&1, css("#root"))},
       %{
-        name: "assert_has selector option unsupported in this slice",
+        name: "assert_has rejects removed selector option",
         expect: :error,
         error_module: ArgumentError,
+        error_contains: "unknown options [:selector]",
         run: &assert_has(&1, text("Articles"), selector: "h1")
       },
       %{name: "assert_has testid helper", expect: :ok, run: &assert_has(&1, testid("articles-title"))},
@@ -430,9 +433,9 @@ defmodule Cerberus.LocatorParityTest do
         run: &fill_in(&1, role(:link, name: "Counter Link"), "invalid")
       },
       %{
-        name: "fill_in duplicate labels disambiguated by selector",
+        name: "fill_in duplicate labels disambiguated by scope chain",
         expect: :ok,
-        run: &fill_in(&1, label("Email Address"), "secondary@example.com", selector: "#secondary input")
+        run: &fill_in(&1, "#secondary" |> css() |> label("Email Address"), "secondary@example.com")
       },
       %{
         name: "fill_in by placeholder",
@@ -481,9 +484,9 @@ defmodule Cerberus.LocatorParityTest do
       %{name: "check checkbox by label", expect: :ok, run: &check(&1, label("Two"))},
       %{name: "uncheck checkbox by label", expect: :ok, run: &uncheck(&1, label("One"))},
       %{
-        name: "check duplicate labels disambiguated by selector",
+        name: "check duplicate labels disambiguated by scope chain",
         expect: :ok,
-        run: &check(&1, label("Two"), selector: "#secondary input")
+        run: &check(&1, "#secondary" |> css() |> label("Two"))
       },
       %{name: "choose radio by label", expect: :ok, run: &choose(&1, label("SMS"))},
       %{
@@ -531,13 +534,13 @@ defmodule Cerberus.LocatorParityTest do
       },
       # locator composition / chaining
       %{
-        name: "submit supports same-element and composition with testid",
+        name: "submit supports same-element and_ composition with testid",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> testid("submit-secondary-button"))
+        run: &submit(&1, and_(role(:button, name: "Run Search", exact: false), testid("submit-secondary-button")))
       },
       %{
-        name: "submit and composition does not treat descendant marker as same element",
+        name: "submit scope chaining targets descendants, not same-element intersection",
         html: @chained_locator_html,
         expect: :error,
         error_module: AssertionError,
@@ -547,39 +550,44 @@ defmodule Cerberus.LocatorParityTest do
         name: "submit supports has testid nested locator filter",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> has(testid("submit-secondary-marker")))
+        run:
+          &submit(&1, :button |> role(name: "Run Search", exact: false) |> filter(has: testid("submit-secondary-marker")))
       },
       %{
         name: "submit supports has text nested locator filter",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> has(text("secondary", exact: true)))
+        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> filter(has: text("secondary", exact: true)))
       },
       %{
         name: "submit has filter errors when nested locator does not match",
         html: @chained_locator_html,
         expect: :error,
         error_module: AssertionError,
-        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> has(testid("missing-marker")))
+        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> filter(has: testid("missing-marker")))
       },
       %{
         name: "submit supports has css nested locator filter",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> has(css(".kind-secondary")))
+        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> filter(has: css(".kind-secondary")))
       },
       %{
         name: "submit supports has_not nested locator filter",
         html: @chained_locator_html,
         expect: :ok,
-        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> has_not(testid("submit-secondary-marker")))
+        run:
+          &submit(
+            &1,
+            :button |> role(name: "Run Search", exact: false) |> filter(has_not: testid("submit-secondary-marker"))
+          )
       },
       %{
         name: "submit has_not filter errors when nested locator still matches",
         html: @chained_locator_html,
         expect: :error,
         error_module: AssertionError,
-        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> has_not(css("span")))
+        run: &submit(&1, :button |> role(name: "Run Search", exact: false) |> filter(has_not: css("span")))
       },
       %{
         name: "submit supports nested and composition inside has",
@@ -590,7 +598,7 @@ defmodule Cerberus.LocatorParityTest do
             &1,
             :button
             |> role(name: "Run Search", exact: false)
-            |> has(and_(testid("submit-secondary-marker"), text("secondary", exact: true)))
+            |> filter(has: and_(testid("submit-secondary-marker"), text("secondary", exact: true)))
           )
       },
       %{
@@ -602,7 +610,7 @@ defmodule Cerberus.LocatorParityTest do
             &1,
             :button
             |> role(name: "Run Search", exact: false)
-            |> has(or_(testid("submit-primary-marker"), testid("submit-secondary-marker")))
+            |> filter(has: or_(testid("submit-primary-marker"), testid("submit-secondary-marker")))
           )
       },
       %{
@@ -635,13 +643,13 @@ defmodule Cerberus.LocatorParityTest do
         name: "assert_has supports has locator option",
         html: @chained_locator_html,
         expect: :ok,
-        run: &assert_has(&1, has(role(:button, name: "Apply", exact: false), text("secondary", exact: true)))
+        run: &assert_has(&1, filter(role(:button, name: "Apply", exact: false), has: text("secondary", exact: true)))
       },
       %{
         name: "assert_has supports has_not locator option",
         html: @chained_locator_html,
         expect: :ok,
-        run: &assert_has(&1, has_not(role(:button, name: "Apply", exact: false), text("secondary", exact: true)))
+        run: &assert_has(&1, filter(role(:button, name: "Apply", exact: false), has_not: text("secondary", exact: true)))
       },
       %{
         name: "assert_has supports composed css and text locator assertions",
@@ -650,9 +658,9 @@ defmodule Cerberus.LocatorParityTest do
         run: &assert_has(&1, and_(css("#apply-secondary"), text("Apply", exact: false)))
       },
       %{
-        name: "fill_in supports same-element and composition with css",
+        name: "fill_in supports same-element and_ composition with css",
         expect: :ok,
-        run: &fill_in(&1, "Email Address" |> label() |> css("#secondary_email"), "secondary@example.com")
+        run: &fill_in(&1, and_(label("Email Address"), css("#secondary_email")), "secondary@example.com")
       },
       %{
         name: "fill_in or composition resolves when exactly one branch matches",
@@ -868,13 +876,12 @@ defmodule Cerberus.LocatorParityTest do
         error_module: AssertionError,
         run: &select(&1, label("Pet"), option: ~l"Dog"e, count: 1)
       },
-      # selector-only disambiguation snippet
+      # scope chaining disambiguation snippet
       %{
-        name: "selector-only snippet fill_in with selector",
+        name: "scope-chain snippet fill_in with scoped locator",
         html: @selector_only_html,
-        expect: :error,
-        error_module: AssertionError,
-        run: &fill_in(&1, label("Field"), "scoped", selector: ".secondary #s2")
+        expect: :ok,
+        run: &fill_in(&1, "#selector-form" |> css() |> css("#s2"), "scoped")
       },
       %{
         name: "selector-only snippet ambiguous fill_in still succeeds",
@@ -925,5 +932,51 @@ defmodule Cerberus.LocatorParityTest do
   rescue
     error in [AssertionError, ArgumentError, InvalidLocatorError] ->
       %{status: :error, error: Exception.message(error), error_module: error.__struct__}
+  end
+
+  defp assert_expected_error_case!(
+         :ok,
+         name,
+         expected_error_module,
+         expected_error_contains,
+         _static_result,
+         _browser_result
+       ) do
+    assert is_nil(expected_error_module),
+           "expected #{name} to omit :error_module when expect is :ok, got #{inspect(expected_error_module)}"
+
+    assert is_nil(expected_error_contains),
+           "expected #{name} to omit :error_contains when expect is :ok, got #{inspect(expected_error_contains)}"
+  end
+
+  defp assert_expected_error_case!(
+         :error,
+         name,
+         expected_error_module,
+         expected_error_contains,
+         static_result,
+         browser_result
+       ) do
+    assert is_atom(expected_error_module),
+           "expected #{name} to set :error_module when expect is :error"
+
+    assert static_result.error_module == expected_error_module,
+           "expected static #{name} error module #{inspect(expected_error_module)}, got #{inspect(static_result)}"
+
+    assert browser_result.error_module == expected_error_module,
+           "expected browser #{name} error module #{inspect(expected_error_module)}, got #{inspect(browser_result)}"
+
+    assert_error_contains!(name, :static, static_result, expected_error_contains)
+    assert_error_contains!(name, :browser, browser_result, expected_error_contains)
+  end
+
+  defp assert_error_contains!(_name, _lane, _result, nil), do: :ok
+
+  defp assert_error_contains!(name, lane, result, expected_error_contains) when is_binary(expected_error_contains) do
+    assert is_binary(result.error),
+           "expected #{lane} #{name} error message to be present, got #{inspect(result)}"
+
+    assert String.contains?(result.error, expected_error_contains),
+           "expected #{lane} #{name} error message to contain #{inspect(expected_error_contains)}, got #{inspect(result.error)}"
   end
 end
