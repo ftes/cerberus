@@ -18,7 +18,7 @@ Keep a log of what you did to present when you're done.
 - `source .envrc` before running tests to get browser version env vars.
 - Run targeted `mix test` often after changing files.
 - Run `mix format` after each logical change set (and before tests/precommit), since precommit checks formatting and does not rewrite files.
-- Commit in small increments and run `mix do format + precommit + test + test --only slow` before each commit.
+- Commit in small increments and run `MIX_ENV=test mix do format + precommit + test + test --only slow` before each commit.
 - Cerberus is unreleased. Don't preserve backwards compatability. KISS. Don't warn about legacy arguments or functions. Always remove and change with a clean cut.
 - Codex: Run real-browser tests outside the Codex sandbox (escalated permissions), since Chrome startup can fail inside the sandbox.
 - If public API/behavior/examples changed, update docs in the same change (`README.md`, relevant guides, moduledocs).
