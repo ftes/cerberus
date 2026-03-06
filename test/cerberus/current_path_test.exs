@@ -51,6 +51,20 @@ defmodule Cerberus.CurrentPathTest do
       assert session.current_path == "/search/results?q=phoenix"
     end
 
+    test "prefixed fixture paths keep prefix and query in current_path across drivers (#{driver})", context do
+      session =
+        unquote(driver)
+        |> driver_session(context)
+        |> visit("/phoenix_test/page/index?source=core")
+
+      assert session.current_path == "/phoenix_test/page/index?source=core"
+
+      session
+      |> assert_path("/phoenix_test/page/index", query: %{source: "core"})
+      |> click(role(:link, name: "Page 2"))
+      |> assert_path("/phoenix_test/page/page_2", query: %{foo: "bar"})
+    end
+
     test "reload_page preserves current_path after live patch transitions (#{driver})", context do
       session =
         unquote(driver)

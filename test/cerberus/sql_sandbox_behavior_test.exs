@@ -36,6 +36,15 @@ defmodule Cerberus.SQLSandboxBehaviorTest do
     end
   end
 
+  test "sandbox metadata keeps delayed browser LiveView DB reads isolated on playwright fixture", context do
+    :browser
+    |> sandbox_session(context)
+    |> visit("/phoenix_test/playwright/pw/live/ecto?delay_ms=100")
+    |> assert_has(text("Version: PostgreSQL", exact: false), timeout: 5_000)
+    |> assert_has(text("Long running: void", exact: true), timeout: 5_000)
+    |> assert_has(text("Delayed version: PostgreSQL", exact: false), timeout: 5_000)
+  end
+
   defp unique_message(prefix, session) do
     "#{prefix}-#{driver_tag(session)}-#{System.unique_integer([:positive, :monotonic])}"
   end
