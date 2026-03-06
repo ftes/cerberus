@@ -1,11 +1,11 @@
 ---
 # cerberus-fffe
 title: PT compatibility error contract normalization
-status: in-progress
+status: completed
 type: bug
 priority: normal
 created_at: 2026-03-05T14:14:57Z
-updated_at: 2026-03-05T19:02:27Z
+updated_at: 2026-03-05T21:15:25Z
 parent: cerberus-zh82
 ---
 
@@ -38,3 +38,10 @@ Compatibility layer no longer normalizes low-level live driver ArgumentError int
 ## Acceptance
 - PT aggregate run no longer fails on the listed lines.
 - Keep semantics-correct failures while normalizing exception class and message usefulness.
+
+## Summary of Changes
+Normalized PT compatibility error contracts for negative assertion and action flows as part of the broader PT migration passes. The previously listed failing PT cases now pass under the adapted Cerberus assertion/error contract checks, and the imported PhoenixTest suite runs green.
+
+## Final Verification
+- source .envrc and PORT=4650 mix test
+  - 1319 tests, 0 failures, 201 skipped (3 excluded)

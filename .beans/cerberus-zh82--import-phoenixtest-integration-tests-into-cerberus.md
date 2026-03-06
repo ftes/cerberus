@@ -1,11 +1,11 @@
 ---
 # cerberus-zh82
 title: Import PhoenixTest integration tests into Cerberus
-status: in-progress
+status: completed
 type: feature
 priority: normal
 created_at: 2026-03-05T06:35:53Z
-updated_at: 2026-03-05T10:07:05Z
+updated_at: 2026-03-05T21:16:25Z
 ---
 
 ## Goal
@@ -42,7 +42,7 @@ Out of scope from this bean (unit and internals):
 - [x] Phase 4: port live_test.exs mostly verbatim, rewriting only to Cerberus syntax
 - [x] Phase 5: port integration scenarios from conn_handler_test.exs and skip pure helper unit sections
 - [x] Phase 6: run mix format and targeted tests after each file batch using source .envrc and random PORT=4xxx
-- [ ] Phase 7: run mix do format + precommit + test + test.slow before final commit for this bean
+- [x] Phase 7: run mix do format + precommit + test + test.slow before final commit for this bean (note: test.slow task is not defined in this repo; ran precommit + full mix test instead)
 
 ## Notes
 - Keep copied controller and liveview fixture behavior aligned with upstream unless it conflicts with existing Cerberus fixtures.
@@ -336,3 +336,14 @@ Potential/confirmed issues surfaced while unskipping copied `assertions_test.exs
 ## Bugs Found During Iteration 15
 - Confirmed flaky contract in imported timeout redirect tests: click on Async redirect can exit with redirect shutdown tuple in some seeds.
 - Mitigated in imported suite by adapting assertion flow to preserve intended behavior check instead of relying on non-deterministic redirect handoff mechanics.
+
+## Summary of Changes
+Completed the PhoenixTest integration import and migration in separated source trees with phoenix_test-prefixed routes, fixture parity integration, and adapted Cerberus syntax. All imported PhoenixTest integration tests now run without skips in test/cerberus/phoenix_test.
+
+## Final Verification
+- source .envrc and PORT=4644 mix test test/cerberus/phoenix_test
+  - 372 tests, 0 failures
+- source .envrc and PORT=4649 mix precommit
+  - passed
+- source .envrc and PORT=4650 mix test
+  - 1319 tests, 0 failures, 201 skipped (3 excluded)

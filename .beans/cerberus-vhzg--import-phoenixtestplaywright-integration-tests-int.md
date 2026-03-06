@@ -1,11 +1,11 @@
 ---
 # cerberus-vhzg
 title: Import PhoenixTestPlaywright integration tests into Cerberus
-status: in-progress
+status: completed
 type: feature
 priority: normal
 created_at: 2026-03-05T06:36:05Z
-updated_at: 2026-03-05T10:14:10Z
+updated_at: 2026-03-05T21:16:25Z
 blocked_by:
     - cerberus-zh82
 ---
@@ -40,7 +40,7 @@ Out of scope from this bean:
 - [x] Phase 4: port playwright feature integration tests in batches: case_test and no_browser_pool_test, then ecto sandbox tests, then playwright_test and step_test
 - [x] Phase 5: adapt or skip assertions that depend on unsupported lanes (firefox or websocket specific behavior)
 - [x] Phase 6: run mix format and targeted test batches using source .envrc and random PORT=4xxx after each batch
-- [ ] Phase 7: run mix do format + precommit + test + test.slow before final commit for this bean
+- [x] Phase 7: run mix do format + precommit + test + test.slow before final commit for this bean (note: test.slow task is not defined in this repo; ran precommit + full mix test instead)
 
 ## Notes
 - Follow current project policy of Chrome-only local and CI validation.
@@ -189,3 +189,16 @@ Out of scope from this bean:
 - Known parity bug (tracked skips): duplicate-label exact matching (`First Name` vs duplicate `for="name"`) diverges from upstream compatibility expectations.
 - Known parity bug (tracked skip): live assertion snapshot stability (`Cannot find context with specified id` / `Inspected target navigated or closed`) in long browser live runs.
 - Residual known issue unchanged: async Ecto sandbox teardown still emits owner-exited logs while assertions pass.
+
+## Summary of Changes
+Completed PhoenixTestPlaywright integration import into Cerberus with separated source trees and phoenix_test prefixed routes. Migrated applicable upstream and Playwright integration suites to Cerberus syntax, preserved unsupported internals as explicit skips, and captured parity gaps as tracked known issues.
+
+## Final Verification
+- source .envrc and PORT=4307 mix test test/cerberus/form_actions_test.exs test/cerberus/helper_locator_behavior_test.exs test/cerberus/input_submit_button_behavior_test.exs
+  - 72 tests, 0 failures, 1 skipped
+- source .envrc and PORT=4313 mix test test/cerberus/phoenix_test_playwright/upstream/static_test.exs
+  - 94 tests, 0 failures, 32 skipped
+- source .envrc and PORT=4320 mix test test/cerberus/phoenix_test_playwright/upstream/assertions_test.exs
+  - 81 tests, 0 failures, 15 skipped
+- source .envrc and PORT=4321 mix test test/cerberus/phoenix_test_playwright/upstream/live_test.exs
+  - 147 tests, 0 failures, 147 skipped (module tagged)
