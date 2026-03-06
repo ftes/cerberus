@@ -105,12 +105,10 @@ defmodule Cerberus.Options do
         ]
   @type session_browser_opts :: [
           endpoint: module(),
-          conn: Plug.Conn.t() | nil,
           assert_timeout_ms: non_neg_integer(),
           ready_timeout_ms: pos_integer(),
           ready_quiet_ms: pos_integer(),
           user_agent: String.t() | nil,
-          sandbox_metadata: String.t() | nil,
           browser: browser_override_opts(),
           browser_name: :chrome | :firefox,
           webdriver_url: String.t() | nil,
@@ -468,12 +466,10 @@ defmodule Cerberus.Options do
 
   @session_browser_opts_schema [
     endpoint: [type: :any, doc: "Endpoint module override."],
-    conn: [type: :any, doc: "Seed Plug.Conn for browser session state."],
     assert_timeout_ms: [type: :non_neg_integer, doc: "Default assertion timeout in milliseconds."],
     ready_timeout_ms: [type: :pos_integer, doc: "Browser readiness timeout in milliseconds."],
     ready_quiet_ms: [type: :pos_integer, doc: "Browser readiness quiet window in milliseconds."],
     user_agent: [type: :any, doc: "Top-level user-agent override for browser session context."],
-    sandbox_metadata: [type: :any, doc: "Optional sandbox metadata user-agent marker."],
     browser: [type: :keyword_list, doc: "Per-session browser overrides."],
     browser_name: [type: {:in, [:chrome, :firefox]}, doc: "Browser lane selector."],
     webdriver_url: [type: :any, doc: "Remote WebDriver URL."],
@@ -782,11 +778,10 @@ defmodule Cerberus.Options do
   @spec validate_session_browser!(keyword()) :: session_browser_opts()
   def validate_session_browser!(opts) do
     opts
+    |> reject_disallowed_browser_session_opts!("session(:browser, opts)")
     |> validate_known!(@session_browser_opts_schema, "session(:browser, opts)")
     |> validate_optional_module_atom!("session(:browser, opts)", :endpoint)
-    |> validate_optional_conn!("session(:browser, opts)", :conn)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :user_agent)
-    |> validate_optional_non_empty_string!("session(:browser, opts)", :sandbox_metadata)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :webdriver_url)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :chrome_webdriver_url)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :firefox_webdriver_url)
@@ -799,6 +794,24 @@ defmodule Cerberus.Options do
     |> validate_optional_string_list!("session(:browser, opts)", :chrome_args)
     |> validate_optional_string_list!("session(:browser, opts)", :firefox_args)
     |> validate_browser_override!("session(:browser, opts)")
+  end
+
+  defp reject_disallowed_browser_session_opts!(opts, op_name) do
+    disallowed =
+      opts
+      |> Keyword.keys()
+      |> Enum.uniq()
+      |> Enum.filter(&(&1 in [:conn, :sandbox_metadata]))
+
+    case disallowed do
+      [] ->
+        opts
+
+      keys ->
+        keys = Enum.map_join(keys, ", ", &":#{&1}")
+
+        raise ArgumentError, "#{op_name} invalid options: #{keys} is not supported for browser sessions"
+    end
   end
 
   defp validate!(opts, schema, op_name) do

@@ -9,14 +9,7 @@ defmodule Cerberus.SQLSandboxBehaviorTest do
   alias Cerberus.Fixtures.SandboxMessages
 
   setup context do
-    metadata_header = sql_sandbox_user_agent(Cerberus.Fixtures.Repo, context)
-
-    conn =
-      Phoenix.ConnTest.build_conn()
-      |> Plug.Conn.delete_req_header("user-agent")
-      |> Plug.Conn.put_req_header("user-agent", metadata_header)
-
-    {:ok, sandbox_metadata: metadata_header, sandbox_conn: conn}
+    {:ok, sandbox_user_agent: sql_sandbox_user_agent(Cerberus.Fixtures.Repo, context)}
   end
 
   for driver <- [:phoenix, :browser] do
@@ -47,14 +40,8 @@ defmodule Cerberus.SQLSandboxBehaviorTest do
     "#{prefix}-#{driver_tag(session)}-#{System.unique_integer([:positive, :monotonic])}"
   end
 
-  defp sandbox_session(driver, context) when driver in [:phoenix, :browser] do
-    opts = [conn: context.sandbox_conn, sandbox_metadata: context.sandbox_metadata]
-
-    case driver do
-      :browser -> session(:browser, Keyword.put(opts, :user_agent, context.sandbox_metadata))
-      :phoenix -> session(:phoenix, opts)
-    end
-  end
+  defp sandbox_session(:browser, context), do: session(:browser, user_agent: context.sandbox_user_agent)
+  defp sandbox_session(:phoenix, _context), do: session(:phoenix)
 
   defp driver_tag(%StaticSession{}), do: "static"
   defp driver_tag(%LiveSession{}), do: "live"

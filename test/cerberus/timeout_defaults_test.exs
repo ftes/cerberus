@@ -94,6 +94,14 @@ defmodule Cerberus.TimeoutDefaultsTest do
     assert_raise ArgumentError, ~r/session\(:browser, opts\) invalid options:.*user_agent/, fn ->
       session(:browser, user_agent: "   ")
     end
+
+    assert_raise ArgumentError, ~r/session\(:browser, opts\) invalid options:.*conn/, fn ->
+      session(:browser, conn: Phoenix.ConnTest.build_conn())
+    end
+
+    assert_raise ArgumentError, ~r/session\(:browser, opts\) invalid options:.*sandbox_metadata/, fn ->
+      session(:browser, sandbox_metadata: "BeamMetadata (...)")
+    end
   end
 
   test "browser ready timeout falls back to global browser config and allows session override" do

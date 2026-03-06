@@ -74,7 +74,6 @@ defmodule Cerberus.Driver.Browser do
           ready_timeout_ms: pos_integer(),
           ready_quiet_ms: pos_integer(),
           browser_context_defaults: browser_context_defaults(),
-          sandbox_metadata: String.t() | nil,
           active_form_selector: String.t() | nil,
           scope: Session.scope_value(),
           current_path: String.t() | nil,
@@ -90,7 +89,6 @@ defmodule Cerberus.Driver.Browser do
             ready_timeout_ms: @default_ready_timeout_ms,
             ready_quiet_ms: @default_ready_quiet_ms,
             browser_context_defaults: @empty_browser_context_defaults,
-            sandbox_metadata: nil,
             active_form_selector: nil,
             scope: nil,
             current_path: nil,
@@ -119,8 +117,6 @@ defmodule Cerberus.Driver.Browser do
           raise ArgumentError, "failed to initialize browser driver: #{inspect(reason)}"
       end
 
-    maybe_configure_sandbox_metadata!(user_context_pid, opts)
-
     tab_id =
       case UserContextProcess.active_tab(user_context_pid) do
         value when is_binary(value) -> value
@@ -137,8 +133,7 @@ defmodule Cerberus.Driver.Browser do
         SessionConfig.assert_timeout_from_opts!(opts, SessionConfig.live_browser_assert_timeout_default_ms()),
       ready_timeout_ms: ready_timeout_ms(opts),
       ready_quiet_ms: ready_quiet_ms(opts),
-      browser_context_defaults: context_defaults,
-      sandbox_metadata: Keyword.get(opts, :sandbox_metadata)
+      browser_context_defaults: context_defaults
     }
   end
 
@@ -1736,7 +1731,6 @@ defmodule Cerberus.Driver.Browser do
         ready_timeout_ms: state.ready_timeout_ms,
         ready_quiet_ms: state.ready_quiet_ms,
         browser_context_defaults: state.browser_context_defaults,
-        sandbox_metadata: state.sandbox_metadata,
         active_form_selector: state.active_form_selector,
         scope: session.scope,
         current_path: state.current_path,
@@ -1853,30 +1847,6 @@ defmodule Cerberus.Driver.Browser do
   @doc false
   @spec browser_context_defaults(keyword()) :: browser_context_defaults()
   def browser_context_defaults(opts \\ []) when is_list(opts), do: Config.browser_context_defaults(opts)
-
-  defp maybe_configure_sandbox_metadata!(user_context_pid, opts) do
-    case Keyword.get(opts, :sandbox_metadata) do
-      nil ->
-        :ok
-
-      metadata when is_binary(metadata) ->
-        if String.trim(metadata) == "" do
-          raise ArgumentError, ":sandbox_metadata must be a non-empty string"
-        end
-
-        case UserContextProcess.set_user_agent(user_context_pid, metadata) do
-          :ok ->
-            :ok
-
-          {:error, reason, details} ->
-            raise ArgumentError,
-                  "failed to configure browser sandbox metadata: #{reason} (#{inspect(details)})"
-        end
-
-      other ->
-        raise ArgumentError, "expected :sandbox_metadata option to be a string, got: #{inspect(other)}"
-    end
-  end
 
   @doc false
   @spec ready_timeout_ms(keyword()) :: pos_integer()

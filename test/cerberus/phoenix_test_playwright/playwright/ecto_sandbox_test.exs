@@ -12,17 +12,7 @@ defmodule Cerberus.PhoenixTestPlaywright.Playwright.EctoSandboxTest do
 
     metadata_header = sql_sandbox_user_agent(Cerberus.Fixtures.Repo, context)
 
-    conn =
-      Phoenix.ConnTest.build_conn()
-      |> Plug.Conn.delete_req_header("user-agent")
-      |> Plug.Conn.put_req_header("user-agent", metadata_header)
-
-    browser =
-      session(:browser,
-        conn: conn,
-        sandbox_metadata: metadata_header,
-        user_agent: metadata_header
-      )
+    browser = session(:browser, user_agent: metadata_header)
 
     {:ok, conn: browser}
   end

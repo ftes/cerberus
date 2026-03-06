@@ -149,12 +149,6 @@ defmodule Cerberus do
 
       metadata = Cerberus.sql_sandbox_user_agent(MyApp.Repo, context)
       session(:browser, user_agent: metadata)
-
-  The returned value can also be used for raw conn headers:
-
-      conn
-      |> Plug.Conn.delete_req_header("user-agent")
-      |> Plug.Conn.put_req_header("user-agent", metadata)
   """
   @spec sql_sandbox_user_agent(module() | [module()], map()) :: String.t()
   def sql_sandbox_user_agent(repo, context) when (is_atom(repo) or is_list(repo)) and is_map(context) do
