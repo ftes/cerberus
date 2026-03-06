@@ -16,10 +16,11 @@ defmodule Cerberus.Assertions do
   @type select_option_input :: Locator.t() | [Locator.t()]
 
   defguardp is_locator_input(input) when is_struct(input, Locator)
+  defguardp is_value_expected(expected) when is_binary(expected) or is_struct(expected, Regex)
 
   @spec click(arg, Locator.t(), Driver.click_opts()) :: arg when arg: var
   def click(session, locator_input, opts \\ []) when is_locator_input(locator_input) and is_list(opts) do
-    {locator, opts} = normalize_click_locator(locator_input, opts)
+    {locator, opts} = normalize_locator_and_opts(locator_input, opts)
     opts = Options.validate_click!(opts)
     driver = driver_module_for_session!(session)
     result = profile_driver_operation(session, :click, fn -> driver.click(session, locator, opts) end)
@@ -36,7 +37,7 @@ defmodule Cerberus.Assertions do
 
   @spec fill_in(arg, Locator.t(), Driver.fill_in_input_value(), Driver.fill_in_opts()) :: arg when arg: var
   def fill_in(session, locator_input, value, opts \\ []) when is_locator_input(locator_input) and is_list(opts) do
-    {locator, opts} = normalize_fill_in_locator(locator_input, opts)
+    {locator, opts} = normalize_locator_and_opts(locator_input, opts)
     opts = Options.validate_fill_in!(opts)
     driver = driver_module_for_session!(session)
 
@@ -55,7 +56,7 @@ defmodule Cerberus.Assertions do
 
   @spec select(arg, Locator.t(), Driver.select_opts()) :: arg when arg: var
   def select(session, locator_input, opts \\ []) when is_locator_input(locator_input) and is_list(opts) do
-    {locator, opts} = normalize_select_locator(locator_input, opts)
+    {locator, opts} = normalize_locator_and_opts(locator_input, opts)
     opts = normalize_select_option_opts!(opts)
     opts = Options.validate_select!(opts)
     driver = driver_module_for_session!(session)
@@ -73,7 +74,7 @@ defmodule Cerberus.Assertions do
 
   @spec choose(arg, Locator.t(), Driver.choose_opts()) :: arg when arg: var
   def choose(session, locator_input, opts \\ []) when is_locator_input(locator_input) and is_list(opts) do
-    {locator, opts} = normalize_choose_locator(locator_input, opts)
+    {locator, opts} = normalize_locator_and_opts(locator_input, opts)
     opts = Options.validate_choose!(opts, "choose/3")
     driver = driver_module_for_session!(session)
     result = profile_driver_operation(session, :choose, fn -> driver.choose(session, locator, opts) end)
@@ -90,7 +91,7 @@ defmodule Cerberus.Assertions do
 
   @spec check(arg, Locator.t(), Driver.check_opts()) :: arg when arg: var
   def check(session, locator_input, opts \\ []) when is_locator_input(locator_input) and is_list(opts) do
-    {locator, opts} = normalize_check_locator(locator_input, opts, "check/3")
+    {locator, opts} = normalize_locator_and_opts(locator_input, opts)
     opts = Options.validate_check!(opts, "check/3")
     driver = driver_module_for_session!(session)
     result = profile_driver_operation(session, :check, fn -> driver.check(session, locator, opts) end)
@@ -107,7 +108,7 @@ defmodule Cerberus.Assertions do
 
   @spec uncheck(arg, Locator.t(), Driver.check_opts()) :: arg when arg: var
   def uncheck(session, locator_input, opts \\ []) when is_locator_input(locator_input) and is_list(opts) do
-    {locator, opts} = normalize_check_locator(locator_input, opts, "uncheck/3")
+    {locator, opts} = normalize_locator_and_opts(locator_input, opts)
     opts = Options.validate_check!(opts, "uncheck/3")
     driver = driver_module_for_session!(session)
     result = profile_driver_operation(session, :uncheck, fn -> driver.uncheck(session, locator, opts) end)
@@ -128,7 +129,7 @@ defmodule Cerberus.Assertions do
   def upload(session, locator_input, path, opts)
       when is_locator_input(locator_input) and is_binary(path) and is_list(opts) do
     ensure_non_empty_upload_path!(path)
-    {locator, opts} = normalize_upload_locator(locator_input, opts)
+    {locator, opts} = normalize_locator_and_opts(locator_input, opts)
     opts = Options.validate_upload!(opts)
     driver = driver_module_for_session!(session)
     result = profile_driver_operation(session, :upload, fn -> driver.upload(session, locator, path, opts) end)
@@ -164,7 +165,7 @@ defmodule Cerberus.Assertions do
 
   @spec submit(arg, Locator.t(), Driver.submit_opts()) :: arg when arg: var
   def submit(session, locator_input, opts \\ []) when is_locator_input(locator_input) and is_list(opts) do
-    {locator, opts} = normalize_submit_locator(locator_input, opts)
+    {locator, opts} = normalize_locator_and_opts(locator_input, opts)
     opts = Options.validate_submit!(opts)
     driver = driver_module_for_session!(session)
     result = profile_driver_operation(session, :submit, fn -> driver.submit(session, locator, opts) end)
@@ -236,6 +237,46 @@ defmodule Cerberus.Assertions do
     end
   end
 
+  @spec assert_value(arg, Locator.t(), String.t() | Regex.t(), Driver.assert_value_opts()) :: arg when arg: var
+  def assert_value(session, locator_input, expected, call_opts \\ [])
+      when is_locator_input(locator_input) and is_value_expected(expected) and is_list(call_opts) do
+    call_has_timeout = Keyword.has_key?(call_opts, :timeout)
+    {locator, call_opts} = normalize_locator_and_opts(locator_input, call_opts)
+    validated_opts = Options.validate_assert_value!(call_opts, "assert_value/4")
+    {validated_timeout, driver_opts} = Keyword.pop(validated_opts, :timeout, 0)
+    timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
+    message_opts = Keyword.put(driver_opts, :timeout, timeout)
+
+    if match?(%BrowserSession{}, session) do
+      browser_opts = Keyword.put(driver_opts, :timeout, timeout)
+      run_value_assertion!(session, :assert_value, locator, expected, locator_input, browser_opts, message_opts)
+    else
+      LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
+        run_value_assertion!(timed_session, :assert_value, locator, expected, locator_input, driver_opts, message_opts)
+      end)
+    end
+  end
+
+  @spec refute_value(arg, Locator.t(), String.t() | Regex.t(), Driver.assert_value_opts()) :: arg when arg: var
+  def refute_value(session, locator_input, expected, call_opts \\ [])
+      when is_locator_input(locator_input) and is_value_expected(expected) and is_list(call_opts) do
+    call_has_timeout = Keyword.has_key?(call_opts, :timeout)
+    {locator, call_opts} = normalize_locator_and_opts(locator_input, call_opts)
+    validated_opts = Options.validate_assert_value!(call_opts, "refute_value/4")
+    {validated_timeout, driver_opts} = Keyword.pop(validated_opts, :timeout, 0)
+    timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
+    message_opts = Keyword.put(driver_opts, :timeout, timeout)
+
+    if match?(%BrowserSession{}, session) do
+      browser_opts = Keyword.put(driver_opts, :timeout, timeout)
+      run_value_assertion!(session, :refute_value, locator, expected, locator_input, browser_opts, message_opts)
+    else
+      LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
+        run_value_assertion!(timed_session, :refute_value, locator, expected, locator_input, driver_opts, message_opts)
+      end)
+    end
+  end
+
   @spec run_assertion!(
           Session.t(),
           :assert_has | :refute_has,
@@ -247,6 +288,41 @@ defmodule Cerberus.Assertions do
   defp run_assertion!(session, op, locator, locator_input, driver_opts, message_opts) do
     driver = driver_module_for_session!(session)
     result = profile_driver_operation(session, op, fn -> apply(driver, op, [session, locator, driver_opts]) end)
+
+    case result do
+      {:ok, session, _observed} ->
+        session
+
+      {:error, failed_session, observed, reason} ->
+        raise AssertionError,
+          message:
+            format_error(
+              Atom.to_string(op),
+              locator_input,
+              message_opts,
+              reason,
+              observed,
+              failed_session
+            )
+    end
+  end
+
+  @spec run_value_assertion!(
+          Session.t(),
+          :assert_value | :refute_value,
+          Locator.t(),
+          String.t() | Regex.t(),
+          Locator.t(),
+          keyword(),
+          keyword()
+        ) :: Session.t()
+  defp run_value_assertion!(session, op, locator, expected, locator_input, driver_opts, message_opts) do
+    driver = driver_module_for_session!(session)
+
+    result =
+      profile_driver_operation(session, op, fn ->
+        apply(driver, op, [session, locator, expected, driver_opts])
+      end)
 
     case result do
       {:ok, session, _observed} ->
@@ -425,32 +501,7 @@ defmodule Cerberus.Assertions do
           "unsupported session #{inspect(session)}; expected a Cerberus session"
   end
 
-  defp normalize_click_locator(locator_input, opts) do
-    locator = Locator.normalize!(locator_input)
-    {locator, opts}
-  end
-
-  defp normalize_fill_in_locator(locator_input, opts) do
-    normalize_form_action_locator(locator_input, opts)
-  end
-
-  defp normalize_upload_locator(locator_input, opts) do
-    normalize_form_action_locator(locator_input, opts)
-  end
-
-  defp normalize_check_locator(locator_input, opts, _op_name) do
-    normalize_form_action_locator(locator_input, opts)
-  end
-
-  defp normalize_select_locator(locator_input, opts) do
-    normalize_form_action_locator(locator_input, opts)
-  end
-
-  defp normalize_choose_locator(locator_input, opts) do
-    normalize_check_locator(locator_input, opts, "choose/3")
-  end
-
-  defp normalize_form_action_locator(locator_input, opts) do
+  defp normalize_locator_and_opts(locator_input, opts) do
     locator = Locator.normalize!(locator_input)
     {locator, opts}
   end
@@ -526,21 +577,13 @@ defmodule Cerberus.Assertions do
   end
 
   defp normalize_assert_locator(locator_input, opts) do
-    locator = Locator.normalize!(locator_input)
-    normalize_assert_locator_kind(locator, opts)
-  end
+    {locator, opts} = normalize_locator_and_opts(locator_input, opts)
 
-  defp normalize_assert_locator_kind(%Locator{} = locator, opts) do
     if locator_assertion_requires_locator_engine?(locator) do
       {locator, opts}
     else
       normalize_assert_locator_simple_kind(locator, opts)
     end
-  end
-
-  defp normalize_submit_locator(locator_input, opts) do
-    locator = Locator.normalize!(locator_input)
-    {locator, opts}
   end
 
   defp normalize_assert_locator_simple_kind(%Locator{kind: :text} = locator, opts), do: {locator, opts}
@@ -552,7 +595,7 @@ defmodule Cerberus.Assertions do
   end
 
   defp normalize_assert_locator_simple_kind(%Locator{kind: kind, value: value} = locator, opts)
-       when kind in [:label, :link, :button, :placeholder, :title, :alt, :aria_label] do
+       when kind in [:label, :placeholder, :title, :alt, :aria_label] do
     {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, kind)}, opts}
   end
 

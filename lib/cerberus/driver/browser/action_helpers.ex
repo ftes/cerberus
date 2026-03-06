@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAction && window.__cerberusAction.__version === 14) return;
+    if (window.__cerberusAction && window.__cerberusAction.__version === 15) return;
 
     const helper = {};
-    helper.__version = 14;
+    helper.__version = 15;
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -833,6 +833,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
               ariaLabel: element.getAttribute("aria-label") || "",
               testid: element.getAttribute("data-testid") || "",
               formSelector: helper.formSelector(element),
+              value: helper.fieldValueForElement(element, tag, type),
               checked: element.checked === true,
               selected:
                 tag === "select"
@@ -862,6 +863,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
             ariaLabel: element.getAttribute("aria-label") || "",
             testid: element.getAttribute("data-testid") || "",
             formSelector: helper.formSelector(element),
+            value: helper.fieldValueForElement(element, "input", "file"),
             checked: element.checked === true,
             selected: element.checked === true,
             disabled: element.disabled === true,
@@ -962,7 +964,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
       const members = Array.isArray(locator.members)
         ? locator.members
-        : (Array.isArray(locator.value) ? locator.value : null);
+        : null;
 
       if (kind === "and" && Array.isArray(members)) {
         for (const member of members) {
@@ -1014,9 +1016,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         case "testid":
           return "[data-testid]";
         case "scope": {
-          const members = Array.isArray(locator.members)
-            ? locator.members
-            : (Array.isArray(locator.value) ? locator.value : []);
+          const members = Array.isArray(locator.members) ? locator.members : [];
 
           if (members.length === 0) return "*";
           return helper.querySelectorForLocator(members[members.length - 1]);
@@ -1093,6 +1093,37 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       return "";
     };
 
+    helper.fieldValueForElement = (element, tag, type) => {
+      if (!element) return "";
+
+      if (tag === "select") {
+        if (element.multiple) {
+          const selected = Array.from(element.selectedOptions || []);
+          const first = selected[0];
+          return first ? first.value || helper.normalize(first.textContent, true) : "";
+        }
+
+        return typeof element.value === "string" ? element.value : "";
+      }
+
+      if (type === "checkbox" || type === "radio") {
+        return (typeof element.value === "string" && element.value !== "") ? element.value : "on";
+      }
+
+      if (type === "file") {
+        if (element.files && element.files.length > 0) {
+          const firstFile = element.files[0];
+          return firstFile && typeof firstFile.name === "string" ? firstFile.name : "";
+        }
+
+        return "";
+      }
+
+      const value = element.value;
+      if (value === null || value === undefined) return "";
+      return String(value);
+    };
+
     helper.candidateFromElement = (element) => {
       const tag = (element && element.tagName ? element.tagName : "").toLowerCase();
       const rawType = (element && typeof element.getAttribute === "function" ? element.getAttribute("type") : "") || "";
@@ -1112,6 +1143,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           alt: helper.altSourceForElement(element, "img[alt],input[type='image'][alt],[role='img'][alt]"),
           testid: (element.getAttribute("data-testid") || ""),
           formSelector: helper.formSelector(element),
+          value: helper.fieldValueForElement(element, tag, type),
           checked: element.checked === true,
           selected:
             tag === "select"
@@ -1133,9 +1165,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         if (!helper.elementHasLocator(candidate.__el, opts.has, op)) return false;
       }
 
-      const hasNot = opts.has_not || opts.hasNot;
-      if (hasNot) {
-        if (helper.elementHasLocator(candidate.__el, hasNot, op)) return false;
+      if (opts.has_not) {
+        if (helper.elementHasLocator(candidate.__el, opts.has_not, op)) return false;
       }
 
       return true;
@@ -1191,26 +1222,20 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       if (!kind) return false;
 
       if (kind === "not") {
-        const members = Array.isArray(locator.members)
-          ? locator.members
-          : (Array.isArray(locator.value) ? locator.value : []);
+        const members = Array.isArray(locator.members) ? locator.members : [];
         if (members.length !== 1) return false;
 
         return !helper.matchesLocator(candidate, members[0], op) && helper.matchesLocatorCommonOpts(candidate, locator.opts, op);
       }
 
       if (kind === "scope") {
-        const members = Array.isArray(locator.members)
-          ? locator.members
-          : (Array.isArray(locator.value) ? locator.value : []);
+        const members = Array.isArray(locator.members) ? locator.members : [];
 
         return helper.scopeMembersMatch(candidate, members, op) && helper.matchesLocatorCommonOpts(candidate, locator.opts, op);
       }
 
       if (kind === "and" || kind === "or") {
-        const members = Array.isArray(locator.members)
-          ? locator.members
-          : (Array.isArray(locator.value) ? locator.value : []);
+        const members = Array.isArray(locator.members) ? locator.members : [];
         if (members.length === 0) return false;
 
         const memberMatch =

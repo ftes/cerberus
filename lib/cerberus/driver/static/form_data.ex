@@ -146,7 +146,8 @@ defmodule Cerberus.Driver.Static.FormData do
     Html.form_defaults(session.html, selector, Session.scope(session))
   end
 
-  defp pruned_params_for_form(session, form, form_selector) do
+  @spec pruned_params_for_form(struct(), String.t() | nil, String.t() | nil) :: map()
+  def pruned_params_for_form(session, form, form_selector) do
     active = params_for_form(session.form_data, form, form_selector)
     keep = form_field_name_allowlist(session, form_selector)
     prune_form_params(active, keep)

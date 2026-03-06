@@ -34,6 +34,7 @@ defmodule Cerberus do
   @upload_options_doc NimbleOptions.docs(Options.upload_schema())
   @select_options_doc NimbleOptions.docs(Options.select_schema())
   @assert_options_doc NimbleOptions.docs(Options.assert_schema())
+  @assert_value_options_doc NimbleOptions.docs(Options.assert_value_schema())
   @return_result_options_doc NimbleOptions.docs(Options.return_result_schema())
 
   @doc """
@@ -968,6 +969,46 @@ defmodule Cerberus do
   @spec refute_has(arg, Locator.t(), Options.assert_opts()) :: arg when arg: var
   def refute_has(session, locator, opts) when is_list(opts) do
     Assertions.refute_has(session, locator, opts)
+  end
+
+  @doc """
+  Asserts that the current value of a form field matched by `locator` equals `expected`.
+
+  String values use exact matching. Regex values are matched against the current field value.
+  """
+  @spec assert_value(arg, Locator.t(), String.t() | Regex.t()) :: arg when arg: var
+  def assert_value(session, locator, expected), do: assert_value(session, locator, expected, [])
+
+  @doc """
+  Asserts a form-field value.
+
+  ## Options
+
+  #{@assert_value_options_doc}
+  """
+  @spec assert_value(arg, Locator.t(), String.t() | Regex.t(), Options.assert_value_opts()) :: arg when arg: var
+  def assert_value(session, locator, expected, opts) when is_list(opts) do
+    Assertions.assert_value(session, locator, expected, opts)
+  end
+
+  @doc """
+  Refutes that the current value of a form field matched by `locator` equals `expected`.
+
+  String values use exact matching. Regex values are matched against the current field value.
+  """
+  @spec refute_value(arg, Locator.t(), String.t() | Regex.t()) :: arg when arg: var
+  def refute_value(session, locator, expected), do: refute_value(session, locator, expected, [])
+
+  @doc """
+  Refutes a form-field value.
+
+  ## Options
+
+  #{@assert_value_options_doc}
+  """
+  @spec refute_value(arg, Locator.t(), String.t() | Regex.t(), Options.assert_value_opts()) :: arg when arg: var
+  def refute_value(session, locator, expected, opts) when is_list(opts) do
+    Assertions.refute_value(session, locator, expected, opts)
   end
 
   defp render_html_result(session) do

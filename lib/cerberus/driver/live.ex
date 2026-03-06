@@ -627,6 +627,48 @@ defmodule Cerberus.Driver.Live do
     run_locator_assertion(session, locator, opts, :refute)
   end
 
+  @impl true
+  def assert_value(%__MODULE__{} = session, %Locator{} = locator, expected, opts)
+      when (is_binary(expected) or is_struct(expected, Regex)) and is_list(opts) do
+    run_value_assertion(session, locator, expected, opts, :assert)
+  end
+
+  @impl true
+  def refute_value(%__MODULE__{} = session, %Locator{} = locator, expected, opts)
+      when (is_binary(expected) or is_struct(expected, Regex)) and is_list(opts) do
+    run_value_assertion(session, locator, expected, opts, :refute)
+  end
+
+  defp run_value_assertion(%__MODULE__{} = session, %Locator{} = locator, expected, opts, mode)
+       when mode in [:assert, :refute] do
+    session = with_latest_html(session)
+    {field_expected, match_opts} = LocatorOps.form(locator, opts)
+    op = value_assertion_op(mode)
+
+    case Html.find_form_field(session.html, field_expected, match_opts, Session.scope(session)) do
+      {:ok, field} ->
+        value = current_field_value(session, field)
+        matched? = value_matches?(value, expected)
+        observed = value_assertion_observed(session, field, expected, value)
+
+        if value_assertion_satisfied?(mode, matched?) do
+          {:ok, update_session(session, op, observed), observed}
+        else
+          {:error, session, observed, value_assertion_reason(mode)}
+        end
+
+      :error ->
+        observed = %{
+          path: session.current_path,
+          expected: expected,
+          candidate_values: field_candidate_values(session, match_opts),
+          transition: session_transition(session)
+        }
+
+        {:error, session, observed, "no form field matched locator"}
+    end
+  end
+
   defp run_locator_assertion(%__MODULE__{} = session, %Locator{} = locator, opts, mode) when mode in [:assert, :refute] do
     session = with_latest_html(session)
     match_opts = locator_match_opts(locator, opts)
@@ -1527,6 +1569,67 @@ defmodule Cerberus.Driver.Live do
 
     Html.assertion_values(session.html, match_by, :any, Session.scope(session))
   end
+
+  defp value_assertion_satisfied?(:assert, matched?), do: matched?
+  defp value_assertion_satisfied?(:refute, matched?), do: not matched?
+
+  defp value_assertion_op(:assert), do: :assert_value
+  defp value_assertion_op(:refute), do: :refute_value
+
+  defp value_assertion_reason(:assert), do: "expected field value not found"
+  defp value_assertion_reason(:refute), do: "unexpected matching field value found"
+
+  defp value_matches?(actual, %Regex{} = expected), do: Regex.match?(expected, actual)
+  defp value_matches?(actual, expected) when is_binary(expected), do: actual == expected
+
+  defp value_assertion_observed(session, field, expected, value) do
+    %{
+      path: session.current_path,
+      field: field,
+      value: value,
+      expected: expected,
+      candidate_values: [value],
+      transition: session_transition(session)
+    }
+  end
+
+  defp current_field_value(session, field) do
+    form_selector = field[:form_selector]
+    defaults = form_defaults_for_selector(session, form_selector)
+    active = FormData.pruned_params_for_form(session, field.form, form_selector)
+    raw = Map.get(Map.merge(defaults, active), field.name)
+    normalize_field_value(field, raw)
+  end
+
+  defp form_defaults_for_selector(_session, selector) when selector in [nil, ""], do: %{}
+
+  defp form_defaults_for_selector(session, selector) do
+    Html.form_defaults(session.html, selector, Session.scope(session))
+  end
+
+  defp normalize_field_value(%{input_type: type, input_value: input_value}, _raw) when type in ["checkbox", "radio"] do
+    input_value || "on"
+  end
+
+  defp normalize_field_value(%{input_type: "file"}, %Plug.Upload{filename: filename}) when is_binary(filename),
+    do: filename
+
+  defp normalize_field_value(%{input_type: "select"}, raw), do: normalize_select_value(raw)
+  defp normalize_field_value(_field, raw), do: normalize_scalar_value(raw)
+
+  defp normalize_select_value([value | _rest]), do: normalize_scalar_value(value)
+  defp normalize_select_value([]), do: ""
+  defp normalize_select_value(value), do: normalize_scalar_value(value)
+
+  defp normalize_scalar_value(value) when is_binary(value), do: value
+  defp normalize_scalar_value(value) when is_integer(value) or is_float(value), do: to_string(value)
+  defp normalize_scalar_value(true), do: "true"
+  defp normalize_scalar_value(false), do: "false"
+  defp normalize_scalar_value(%Plug.Upload{filename: filename}) when is_binary(filename), do: filename
+  defp normalize_scalar_value([value | _rest]), do: normalize_scalar_value(value)
+  defp normalize_scalar_value([]), do: ""
+  defp normalize_scalar_value(nil), do: ""
+  defp normalize_scalar_value(value), do: to_string(value)
 
   defp active_form_submit_button(session) do
     case FormData.active_form_selector(session.form_data) do

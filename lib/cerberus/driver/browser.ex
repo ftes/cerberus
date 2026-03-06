@@ -27,6 +27,7 @@ defmodule Cerberus.Driver.Browser do
   @default_ready_timeout_ms 1_500
   @default_ready_quiet_ms 40
   @transient_eval_retry_interval_ms 25
+  @value_assertion_poll_interval_ms 50
   @transient_eval_retry_min_budget_ms 3_000
   @transient_ready_retry_min_budget_ms 3_000
   @transient_navigation_eval_markers [
@@ -510,6 +511,38 @@ defmodule Cerberus.Driver.Browser do
     case run_assertion_by_mode(:locator, state, locator, nil, visible, match_opts, timeout_ms, :refute) do
       {:ok, next_state, observed} ->
         {:ok, update_session(session, next_state, :refute_has, observed), observed}
+
+      {:error, reason, observed} ->
+        {:error, session, observed, reason}
+    end
+  end
+
+  @impl true
+  def assert_value(%__MODULE__{} = session, %Locator{} = locator, expected, opts)
+      when (is_binary(expected) or is_struct(expected, Regex)) and is_list(opts) do
+    state = state!(session)
+    timeout_ms = assertion_timeout_ms(opts)
+    {field_expected, match_opts} = LocatorOps.form(locator, Keyword.delete(opts, :timeout))
+
+    case run_value_assertion_by_mode(state, field_expected, match_opts, expected, timeout_ms, :assert) do
+      {:ok, next_state, observed} ->
+        {:ok, update_session(session, next_state, :assert_value, observed), observed}
+
+      {:error, reason, observed} ->
+        {:error, session, observed, reason}
+    end
+  end
+
+  @impl true
+  def refute_value(%__MODULE__{} = session, %Locator{} = locator, expected, opts)
+      when (is_binary(expected) or is_struct(expected, Regex)) and is_list(opts) do
+    state = state!(session)
+    timeout_ms = assertion_timeout_ms(opts)
+    {field_expected, match_opts} = LocatorOps.form(locator, Keyword.delete(opts, :timeout))
+
+    case run_value_assertion_by_mode(state, field_expected, match_opts, expected, timeout_ms, :refute) do
+      {:ok, next_state, observed} ->
+        {:ok, update_session(session, next_state, :refute_value, observed), observed}
 
       {:error, reason, observed} ->
         {:error, session, observed, reason}
@@ -1317,6 +1350,115 @@ defmodule Cerberus.Driver.Browser do
     run_locator_assertion(state, locator, visible, match_opts, timeout_ms, mode)
   end
 
+  defp run_value_assertion_by_mode(state, field_expected, match_opts, expected_value, timeout_ms, mode)
+       when mode in [:assert, :refute] do
+    started_at_ms = System.monotonic_time(:millisecond)
+
+    do_run_value_assertion_by_mode(
+      state,
+      field_expected,
+      match_opts,
+      expected_value,
+      timeout_ms,
+      mode,
+      started_at_ms
+    )
+  end
+
+  defp do_run_value_assertion_by_mode(state, field_expected, match_opts, expected_value, timeout_ms, mode, started_at_ms) do
+    remaining_timeout_ms = remaining_budget_ms(started_at_ms, timeout_ms)
+
+    case resolve_form_field_value(state, field_expected, match_opts, remaining_timeout_ms) do
+      {:ok, next_state, observed} ->
+        matched? = value_matches?(observed.value, expected_value)
+
+        cond do
+          value_assertion_satisfied?(mode, matched?) ->
+            {:ok, next_state, Map.put(observed, :expected, expected_value)}
+
+          remaining_timeout_ms > 0 ->
+            Process.sleep(min(@value_assertion_poll_interval_ms, remaining_timeout_ms))
+
+            do_run_value_assertion_by_mode(
+              next_state,
+              field_expected,
+              match_opts,
+              expected_value,
+              timeout_ms,
+              mode,
+              started_at_ms
+            )
+
+          true ->
+            observed = Map.put(observed, :expected, expected_value)
+            {:error, value_assertion_reason(mode), observed}
+        end
+
+      {:error, reason, next_state, observed} ->
+        if reason == "no form field matched locator" and remaining_timeout_ms > 0 do
+          Process.sleep(min(@value_assertion_poll_interval_ms, remaining_timeout_ms))
+
+          do_run_value_assertion_by_mode(
+            next_state,
+            field_expected,
+            match_opts,
+            expected_value,
+            timeout_ms,
+            mode,
+            started_at_ms
+          )
+        else
+          {:error, reason, Map.put(observed, :expected, expected_value)}
+        end
+    end
+  end
+
+  defp resolve_form_field_value(state, field_expected, match_opts, timeout_ms) do
+    eval_result =
+      eval_json_with_transient_retry(state, timeout_ms, fn remaining_timeout_ms ->
+        payload = build_action_payload(state, :fill_in, field_expected, match_opts, remaining_timeout_ms, %{})
+        Expressions.action_resolve(payload)
+      end)
+
+    case eval_result do
+      {:ok, %{"ok" => true, "target" => target} = result} when is_map(target) ->
+        value = target |> Map.get("value") |> normalize_field_value()
+        next_state = %{state | current_path: result["path"] || state.current_path}
+
+        observed = %{
+          path: next_state.current_path,
+          field: target,
+          value: value,
+          candidate_values: [value]
+        }
+
+        {:ok, next_state, observed}
+
+      {:ok, %{"ok" => false} = result} ->
+        reason = action_failure_reason(:fill_in, match_opts, result, "no form field matched locator")
+        next_state = %{state | current_path: result["path"] || state.current_path}
+
+        observed = %{
+          path: next_state.current_path,
+          reason: Map.get(result, "reason"),
+          match_count: Map.get(result, "matchCount"),
+          candidate_count: Map.get(result, "candidateCount"),
+          candidate_values: Map.get(result, "candidateValues", []),
+          result: result
+        }
+
+        {:error, reason, next_state, observed}
+
+      {:ok, result} ->
+        observed = %{path: state.current_path, result: result}
+        {:error, "unexpected value assertion payload", state, observed}
+
+      {:error, reason, details} ->
+        observed = %{path: state.current_path, details: details}
+        {:error, "failed to evaluate browser value assertion: #{reason}", state, observed}
+    end
+  end
+
   defp run_text_assertion(state, expected, visible, match_opts, timeout_ms, mode) when mode in [:assert, :refute] do
     do_run_text_assertion(state, expected, visible, match_opts, timeout_ms, mode)
   end
@@ -1741,6 +1883,24 @@ defmodule Cerberus.Driver.Browser do
   defp locator_match_opts(%Locator{opts: locator_opts}, opts) do
     Keyword.merge(locator_opts, opts)
   end
+
+  defp value_assertion_satisfied?(:assert, matched?), do: matched?
+  defp value_assertion_satisfied?(:refute, matched?), do: not matched?
+
+  defp value_assertion_reason(:assert), do: "expected field value not found"
+  defp value_assertion_reason(:refute), do: "unexpected matching field value found"
+
+  defp value_matches?(actual, %Regex{} = expected), do: Regex.match?(expected, actual)
+  defp value_matches?(actual, expected) when is_binary(expected), do: actual == expected
+
+  defp normalize_field_value(value) when is_binary(value), do: value
+  defp normalize_field_value(value) when is_integer(value) or is_float(value), do: to_string(value)
+  defp normalize_field_value(true), do: "true"
+  defp normalize_field_value(false), do: "false"
+  defp normalize_field_value([value | _rest]), do: normalize_field_value(value)
+  defp normalize_field_value([]), do: ""
+  defp normalize_field_value(nil), do: ""
+  defp normalize_field_value(value), do: to_string(value)
 
   defp to_absolute_url(base_url, path_or_url) do
     uri = URI.parse(path_or_url)

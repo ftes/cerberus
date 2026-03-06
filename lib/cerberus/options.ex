@@ -148,6 +148,22 @@ defmodule Cerberus.Options do
           between: between_filter()
         ]
 
+  @type assert_value_opts :: [
+          timeout: non_neg_integer(),
+          checked: boolean() | nil,
+          disabled: boolean() | nil,
+          selected: boolean() | nil,
+          readonly: boolean() | nil,
+          count: non_neg_integer() | nil,
+          min: non_neg_integer() | nil,
+          max: non_neg_integer() | nil,
+          between: between_filter(),
+          first: boolean(),
+          last: boolean(),
+          nth: pos_integer() | nil,
+          index: non_neg_integer() | nil
+        ]
+
   @type fill_in_opts :: [
           timeout: non_neg_integer(),
           checked: boolean() | nil,
@@ -354,6 +370,22 @@ defmodule Cerberus.Options do
     index: [type: :any, default: nil, doc: "Selects the index (0-based) matched candidate."]
   ]
 
+  @assert_value_opts_schema [
+    timeout: [type: :non_neg_integer, default: 0, doc: "Retries value assertions for up to this many milliseconds."],
+    checked: [type: :any, default: nil, doc: "Requires matched fields to be checked/unchecked."],
+    disabled: [type: :any, default: nil, doc: "Requires matched fields to be disabled/enabled."],
+    selected: [type: :any, default: nil, doc: "Requires matched fields to be selected/unselected."],
+    readonly: [type: :any, default: nil, doc: "Requires matched fields to be readonly/editable."],
+    count: [type: :any, default: nil, doc: "Requires exactly this many matched candidates."],
+    min: [type: :any, default: nil, doc: "Requires at least this many matched candidates."],
+    max: [type: :any, default: nil, doc: "Requires at most this many matched candidates."],
+    between: [type: :any, default: nil, doc: "Requires matched candidate count to fall within an inclusive range."],
+    first: [type: :boolean, default: false, doc: "Selects the first matched candidate."],
+    last: [type: :boolean, default: false, doc: "Selects the last matched candidate."],
+    nth: [type: :any, default: nil, doc: "Selects the nth (1-based) matched candidate."],
+    index: [type: :any, default: nil, doc: "Selects the index (0-based) matched candidate."]
+  ]
+
   @submit_opts_schema [
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],
     checked: [type: :any, default: nil, doc: "Requires matched submit controls to be checked/unchecked."],
@@ -542,6 +574,9 @@ defmodule Cerberus.Options do
   @spec fill_in_schema() :: keyword()
   def fill_in_schema, do: @fill_in_opts_schema
 
+  @spec assert_value_schema() :: keyword()
+  def assert_value_schema, do: @assert_value_opts_schema
+
   @spec submit_schema() :: keyword()
   def submit_schema, do: @submit_opts_schema
 
@@ -608,6 +643,14 @@ defmodule Cerberus.Options do
     |> validate!(@fill_in_opts_schema, "fill_in/4")
     |> validate_state_filters!("fill_in/4")
     |> validate_match_filters!("fill_in/4", true)
+  end
+
+  @spec validate_assert_value!(keyword(), String.t()) :: assert_value_opts()
+  def validate_assert_value!(opts, op_name) do
+    opts
+    |> validate!(@assert_value_opts_schema, op_name)
+    |> validate_state_filters!(op_name)
+    |> validate_match_filters!(op_name, true)
   end
 
   @spec validate_check!(keyword(), String.t()) :: check_opts()
