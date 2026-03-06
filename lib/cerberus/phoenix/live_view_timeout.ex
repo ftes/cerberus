@@ -68,7 +68,7 @@ defmodule Cerberus.Phoenix.LiveViewTimeout do
     action.(session)
   end
 
-  defp handle_watched_messages_until(session, deadline, action, fetch_redirect_info) do
+  defp handle_watched_messages_until(%Live{view: %{pid: _}} = session, deadline, action, fetch_redirect_info) do
     remaining = remaining_timeout(deadline)
 
     if remaining <= 0 do
@@ -78,6 +78,24 @@ defmodule Cerberus.Phoenix.LiveViewTimeout do
         wait_for_next_liveview_event(retried_session, deadline, action, fetch_redirect_info)
       end)
     end
+  end
+
+  defp handle_watched_messages_until(session, deadline, action, fetch_redirect_info) do
+    case remaining_timeout(deadline) do
+      remaining when remaining <= 0 ->
+        action.(session)
+
+      _remaining ->
+        with_retry(session, action, fn retried_session ->
+          sleep_until_retry_window(deadline)
+          handle_watched_messages_until(retried_session, deadline, action, fetch_redirect_info)
+        end)
+    end
+  end
+
+  defp sleep_until_retry_window(deadline) do
+    wait_time = max(min(remaining_timeout(deadline), interval_wait_time()), 0)
+    if wait_time > 0, do: Process.sleep(wait_time)
   end
 
   defp handle_watched_messages_timeout_exhausted(session, action, fetch_redirect_info) do

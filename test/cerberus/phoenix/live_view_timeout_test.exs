@@ -5,6 +5,7 @@ defmodule Cerberus.Phoenix.LiveViewTimeoutTest do
   import Phoenix.ConnTest, only: [build_conn: 0]
 
   alias Cerberus.Driver.Live, as: LiveSession
+  alias Cerberus.Driver.Static, as: StaticSession
   alias Cerberus.Fixtures.Endpoint
   alias Cerberus.Phoenix.LiveViewTimeout
   alias ExUnit.AssertionError
@@ -113,6 +114,33 @@ defmodule Cerberus.Phoenix.LiveViewTimeoutTest do
     end
 
     assert :redirected = LiveViewTimeout.with_timeout(session, 1_000, action)
+  end
+
+  test "handles watcher redirect that switches from live to static session" do
+    session = dummy_live_session("/live/redirects")
+    view_pid = session.view.pid
+    attempt_key = make_ref()
+    send(self(), {:watcher, view_pid, {:live_view_redirected, {:redirect, %{to: "/page/index"}}}})
+
+    action = fn
+      %LiveSession{current_path: "/live/redirects"} ->
+        raise AssertionError, message: "waiting for redirect"
+
+      %StaticSession{} = redirected_session ->
+        attempt = Process.get(attempt_key, 0) + 1
+        Process.put(attempt_key, attempt)
+
+        assert current_path(redirected_session, return_result: true) == "/page/index"
+
+        if attempt < 2 do
+          raise AssertionError, message: "retry once on redirected static page"
+        else
+          :redirected
+        end
+    end
+
+    assert :redirected = LiveViewTimeout.with_timeout(session, 1_000, action)
+    assert Process.get(attempt_key) == 2
   end
 
   test "attempts redirect fallback when the live view dies before timeout" do

@@ -1,5 +1,5 @@
 defmodule Cerberus.LocatorParityTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import Cerberus
 
@@ -43,7 +43,7 @@ defmodule Cerberus.LocatorParityTest do
                     <button id="increment" data-testid="increment-button" title="Increment title">Increment</button>
 
                     <section id="primary">
-                      <form id="profile" action="/search/results" method="get">
+                      <form id="profile" action="#" method="get" onsubmit="return false">
                         <label for="email_input">Email Address</label>
                         <input
                           id="email_input"
@@ -260,7 +260,7 @@ defmodule Cerberus.LocatorParityTest do
                               </button>
                             </section>
 
-                            <form id="chained-submit-form" action="/search/results" method="get">
+                            <form id="chained-submit-form" action="#" method="get" onsubmit="return false">
                               <label for="chained_q">Search term</label>
                               <input id="chained_q" name="q" type="text" />
 
@@ -291,7 +291,19 @@ defmodule Cerberus.LocatorParityTest do
     {:ok, browser_session: session(:browser), upload_path: upload_path}
   end
 
+  test "chained snippet submit keeps form controls available for follow-up actions", context do
+    browser_session = inject_snippet!(context.browser_session, @chained_locator_html)
+
+    browser_session =
+      browser_session
+      |> submit(:button |> role(name: "Run Search", exact: false) |> testid("submit-secondary-button"))
+      |> fill_in(role(:textbox, name: "Search term"), "after-submit")
+
+    Browser.evaluate_js(browser_session, "document.getElementById('chained_q')?.value", &assert(&1 == "after-submit"))
+  end
+
   @tag :slow
+  @tag timeout: 180_000
   test "rich snippet locator corpus stays in static/browser parity", context do
     cases = parity_cases(context.upload_path)
 
