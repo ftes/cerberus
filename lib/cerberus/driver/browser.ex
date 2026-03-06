@@ -456,7 +456,7 @@ defmodule Cerberus.Driver.Browser do
     state = state!(session)
     timeout_ms = assertion_timeout_ms(opts)
     match_opts = locator_match_opts(locator, Keyword.delete(opts, :timeout))
-    visible = visibility_filter(opts)
+    visible = assertion_visibility(opts, locator)
     assertion_runner = if(locator_assertion_requires_locator_engine?(locator), do: :locator, else: :text)
 
     case run_assertion_by_mode(assertion_runner, state, locator, expected, visible, match_opts, timeout_ms, :assert) do
@@ -473,7 +473,7 @@ defmodule Cerberus.Driver.Browser do
     state = state!(session)
     timeout_ms = assertion_timeout_ms(opts)
     match_opts = locator_match_opts(locator, Keyword.delete(opts, :timeout))
-    visible = visibility_filter(opts)
+    visible = assertion_visibility(opts, locator)
 
     case run_assertion_by_mode(:locator, state, locator, nil, visible, match_opts, timeout_ms, :assert) do
       {:ok, next_state, observed} ->
@@ -489,7 +489,7 @@ defmodule Cerberus.Driver.Browser do
     state = state!(session)
     timeout_ms = assertion_timeout_ms(opts)
     match_opts = locator_match_opts(locator, Keyword.delete(opts, :timeout))
-    visible = visibility_filter(opts)
+    visible = assertion_visibility(opts, locator)
     assertion_runner = if(locator_assertion_requires_locator_engine?(locator), do: :locator, else: :text)
 
     case run_assertion_by_mode(assertion_runner, state, locator, expected, visible, match_opts, timeout_ms, :refute) do
@@ -506,7 +506,7 @@ defmodule Cerberus.Driver.Browser do
     state = state!(session)
     timeout_ms = assertion_timeout_ms(opts)
     match_opts = locator_match_opts(locator, Keyword.delete(opts, :timeout))
-    visible = visibility_filter(opts)
+    visible = assertion_visibility(opts, locator)
 
     case run_assertion_by_mode(:locator, state, locator, nil, visible, match_opts, timeout_ms, :refute) do
       {:ok, next_state, observed} ->
@@ -750,6 +750,7 @@ defmodule Cerberus.Driver.Browser do
         expected: text_expectation_payload(expected),
         exact: Keyword.get(opts, :exact, false),
         normalizeWs: Keyword.get(opts, :normalize_ws, true),
+        force: Keyword.get(opts, :force, false),
         matchBy: action_match_by(opts, op),
         kind: action_kind(opts, op),
         count: Keyword.get(opts, :count),
@@ -765,6 +766,7 @@ defmodule Cerberus.Driver.Browser do
         disabled: Keyword.get(opts, :disabled),
         selected: Keyword.get(opts, :selected),
         readonly: Keyword.get(opts, :readonly),
+        visible: Keyword.get(opts, :visible),
         readyTimeoutMs: timeout_ms,
         timeoutMs: timeout_ms,
         pollMs: 100
@@ -851,7 +853,8 @@ defmodule Cerberus.Driver.Browser do
       checked: Keyword.get(opts, :checked),
       disabled: Keyword.get(opts, :disabled),
       selected: Keyword.get(opts, :selected),
-      readonly: Keyword.get(opts, :readonly)
+      readonly: Keyword.get(opts, :readonly),
+      visible: Keyword.get(opts, :visible)
     }
   end
 
@@ -1703,7 +1706,8 @@ defmodule Cerberus.Driver.Browser do
   defp locator_assertion_requires_locator_engine?(%Locator{opts: locator_opts}) do
     Keyword.has_key?(locator_opts, :has) or
       Keyword.has_key?(locator_opts, :has_not) or
-      Keyword.has_key?(locator_opts, :from)
+      Keyword.has_key?(locator_opts, :from) or
+      Keyword.has_key?(locator_opts, :visible)
   end
 
   defp eval_json_transient_read(state, expression, timeout_ms \\ 0)
@@ -2011,6 +2015,14 @@ defmodule Cerberus.Driver.Browser do
   defp ready_quiet_ms(opts), do: Config.ready_quiet_ms(opts)
 
   defp visibility_filter(opts), do: Config.visibility_filter(opts)
+
+  defp assertion_visibility(opts, %Locator{opts: locator_opts}) do
+    case Keyword.get(locator_opts, :visible) do
+      value when is_boolean(value) -> value
+      _ -> visibility_filter(opts)
+    end
+  end
+
   defp assertion_timeout_ms(opts), do: Config.assertion_timeout_ms(opts)
   defp path_timeout_ms(opts), do: Config.path_timeout_ms(opts)
 

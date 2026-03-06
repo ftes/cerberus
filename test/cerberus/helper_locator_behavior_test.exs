@@ -297,6 +297,15 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
         |> select(~l"Disabled select"l, option: ~l"Cannot submit"e, disabled: true, timeout: 0)
       end
     end
+
+    test "force action option is accepted across static and browser drivers (#{driver})", context do
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/search")
+      |> fill_in(~l"Search term"l, "force-query", force: true)
+      |> submit(role(:button, name: "Run Search"), force: true)
+      |> assert_has(text("Search query: force-query", exact: true))
+    end
   end
 
   defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)

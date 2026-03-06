@@ -76,8 +76,8 @@ defmodule Cerberus.Html do
 
       root_node
       |> safe_query(query_selector)
-      |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, locator_for_filter))
-      |> maybe_filter_scope_target_closest_candidates(root_node, from_locator)
+      |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, locator_for_filter, hidden_nodes))
+      |> maybe_filter_scope_target_closest_candidates(root_node, from_locator, hidden_nodes)
       |> Enum.flat_map(&locator_assertion_values_for_node(root_node, hidden_nodes, &1, locator, visibility))
     end)
   end
@@ -93,6 +93,11 @@ defmodule Cerberus.Html do
   def node_matches_locator_filters?(node, opts) when is_list(opts) do
     matches_nested_filter?(node, Keyword.get(opts, :has), true) and
       matches_nested_filter?(node, Keyword.get(opts, :has_not), false)
+  end
+
+  @spec node_visible_in_root?(term(), term()) :: boolean()
+  def node_visible_in_root?(root_node, node) do
+    not node_hidden_in_root?(hidden_nodes_in_root(root_node), node)
   end
 
   @spec fragment_matches_locator_filters?(String.t(), Options.locator_filter_opts()) :: boolean()
@@ -282,7 +287,7 @@ defmodule Cerberus.Html do
           expected,
           opts,
           scope,
-          fn node, text, _root_node ->
+          fn node, text, root_node ->
             %{
               text: text,
               href: attr(node, "href"),
@@ -292,6 +297,7 @@ defmodule Cerberus.Html do
               readonly: false,
               selected: false,
               checked: false,
+              visible: node_visible_in_root?(root_node, node),
               title: attr(node, "title") || "",
               aria_label: attr(node, "aria-label") || "",
               testid: attr(node, "data-testid") || ""
@@ -318,7 +324,7 @@ defmodule Cerberus.Html do
           expected,
           opts,
           scope,
-          fn node, text, _root_node ->
+          fn node, text, root_node ->
             %{
               text: text,
               data_method: attr(node, "data-method"),
@@ -327,6 +333,7 @@ defmodule Cerberus.Html do
               readonly: readonly?(node),
               selected: false,
               checked: false,
+              visible: node_visible_in_root?(root_node, node),
               title: attr(node, "title") || "",
               aria_label: attr(node, "aria-label") || "",
               testid: attr(node, "data-testid") || "",
@@ -428,11 +435,13 @@ defmodule Cerberus.Html do
       lazy_html
       |> scoped_nodes(scope)
       |> Enum.flat_map(fn root_node ->
+        hidden_nodes = hidden_nodes_in_root(root_node)
+
         root_node
         |> safe_query(query_selector)
-        |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, locator))
-        |> maybe_filter_scope_target_closest_candidates(root_node, from_locator)
-        |> Enum.map(&scope_target_candidate_map(&1, lazy_html))
+        |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, locator, hidden_nodes))
+        |> maybe_filter_scope_target_closest_candidates(root_node, from_locator, hidden_nodes)
+        |> Enum.map(&scope_target_candidate_map(&1, lazy_html, root_node, hidden_nodes))
       end)
 
     case Query.pick_match(matches, opts) do
@@ -448,24 +457,24 @@ defmodule Cerberus.Html do
     end
   end
 
-  defp scope_target_candidate_matches?(root_node, node, %Locator{} = locator) do
+  defp scope_target_candidate_matches?(root_node, node, %Locator{} = locator, hidden_nodes) do
     assert_deadline!()
     opts = locator.opts
 
     node_matches_within_locator?(root_node, node, locator) and
       node_matches_locator_filters?(node, opts) and
-      Query.matches_state_filters?(scope_target_state(node), opts)
+      Query.matches_state_filters?(scope_target_state(node, root_node, hidden_nodes), opts)
   end
 
-  defp maybe_filter_scope_target_closest_candidates(candidates, _root_node, nil), do: candidates
+  defp maybe_filter_scope_target_closest_candidates(candidates, _root_node, nil, _hidden_nodes), do: candidates
 
-  defp maybe_filter_scope_target_closest_candidates(candidates, root_node, %Locator{} = from_locator) do
+  defp maybe_filter_scope_target_closest_candidates(candidates, root_node, %Locator{} = from_locator, hidden_nodes) do
     from_selector = within_query_selector(from_locator)
 
     from_candidates =
       root_node
       |> safe_query(from_selector)
-      |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, from_locator))
+      |> Enum.filter(&scope_target_candidate_matches?(root_node, &1, from_locator, hidden_nodes))
 
     Enum.filter(candidates, fn candidate ->
       closest_scope_candidate_for_any_from?(candidate, candidates, from_candidates)
@@ -494,9 +503,9 @@ defmodule Cerberus.Html do
       Enum.any?(safe_query(container, "*"), &same_node?(&1, node))
   end
 
-  defp scope_target_candidate_map(node, lazy_html) do
+  defp scope_target_candidate_map(node, lazy_html, root_node, hidden_nodes) do
     node
-    |> scope_target_state()
+    |> scope_target_state(root_node, hidden_nodes)
     |> Map.merge(%{
       tag: node_tag(node),
       iframe?: node_tag(node) == "iframe"
@@ -504,12 +513,13 @@ defmodule Cerberus.Html do
     |> maybe_put_unique_selector(lazy_html, node)
   end
 
-  defp scope_target_state(node) do
+  defp scope_target_state(node, root_node, hidden_nodes \\ nil) do
     %{
       checked: checked?(node),
       disabled: disabled?(node),
       readonly: readonly?(node),
-      selected: selected?(node, input_type(node))
+      selected: selected?(node, input_type(node)),
+      visible: scope_target_visible?(root_node, node, hidden_nodes)
     }
   end
 
@@ -802,6 +812,7 @@ defmodule Cerberus.Html do
         readonly: readonly?(button_node),
         selected: false,
         checked: false,
+        visible: node_visible_in_root?(root_node, button_node),
         action: action,
         method: method,
         form: form_meta.form,
@@ -966,6 +977,7 @@ defmodule Cerberus.Html do
       readonly: readonly?(button_node),
       selected: false,
       checked: false,
+      visible: node_visible_in_root?(root_node, button_node),
       action: action,
       method: method,
       form: form_meta.form,
@@ -989,6 +1001,7 @@ defmodule Cerberus.Html do
             readonly: false,
             selected: false,
             checked: false,
+            visible: node_visible_in_root?(root_node, node),
             title: attr(node, "title") || "",
             aria_label: attr(node, "aria-label") || "",
             alt: node_alt_text(root_node, node),
@@ -1017,6 +1030,7 @@ defmodule Cerberus.Html do
             readonly: readonly?(node),
             selected: false,
             checked: false,
+            visible: node_visible_in_root?(root_node, node),
             title: attr(node, "title") || "",
             aria_label: attr(node, "aria-label") || "",
             alt: button_alt_text(node, root_node),
@@ -1145,7 +1159,8 @@ defmodule Cerberus.Html do
       input_checked: checked?(field_node),
       input_disabled: disabled?(field_node),
       input_readonly: readonly?(field_node),
-      input_selected: selected?(field_node, input_type)
+      input_selected: selected?(field_node, input_type),
+      visible: node_visible_in_root?(root_node, field_node)
     }
   end
 
@@ -1285,7 +1300,7 @@ defmodule Cerberus.Html do
   defp action_node_matches_common_opts?(root_node, node, opts) when is_list(opts) do
     node_matches_selector?(root_node, node, selector_opt(opts)) and
       node_matches_locator_filters?(node, opts) and
-      Query.matches_state_filters?(scope_target_state(node), opts)
+      Query.matches_state_filters?(scope_target_state(node, root_node), opts)
   end
 
   defp pick_match_result(matches, opts) do
@@ -1682,15 +1697,31 @@ defmodule Cerberus.Html do
   defp node_has_locator?(node, %Locator{} = has_locator) do
     selector = within_query_selector(has_locator)
     has_locator = locator_without_from(has_locator)
+    hidden_nodes = hidden_nodes_in_root(node)
 
     selector
     |> safe_query_in_node(node)
     |> Enum.any?(fn candidate_node ->
       node_matches_within_locator?(node, candidate_node, has_locator) and
         node_matches_locator_filters?(candidate_node, has_locator.opts) and
-        Query.matches_state_filters?(scope_target_state(candidate_node), has_locator.opts)
+        Query.matches_state_filters?(scope_target_state(candidate_node, node, hidden_nodes), has_locator.opts)
     end)
   end
+
+  defp scope_target_visible?(root_node, node, hidden_nodes) do
+    cond do
+      is_list(hidden_nodes) ->
+        not node_hidden_in_root?(hidden_nodes, node)
+
+      is_nil(root_node) ->
+        node_visible?(node)
+
+      true ->
+        node_visible_in_root?(root_node, node)
+    end
+  end
+
+  defp node_visible?(node), do: not hidden_node?(node)
 
   defp matches_nested_filter?(_node, nil, _expected), do: true
 

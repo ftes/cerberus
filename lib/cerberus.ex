@@ -554,6 +554,7 @@ defmodule Cerberus do
   Supported filters:
   - `has: locator`
   - `has_not: locator`
+  - `visible: boolean`
   """
   def filter(locator, opts), do: Locator.filter(locator, opts)
 

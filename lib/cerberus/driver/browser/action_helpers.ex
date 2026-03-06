@@ -504,10 +504,21 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
     };
 
     helper.matchesStateFilters = (candidate, options) => {
-      const stateKeys = ["checked", "disabled", "selected", "readonly"];
+      const stateKeys = ["checked", "disabled", "selected", "readonly", "visible"];
 
       for (const key of stateKeys) {
         if (typeof options[key] !== "boolean") continue;
+
+        if (key === "visible") {
+          const actualVisible =
+            typeof candidate.visible === "boolean"
+              ? candidate.visible
+              : helper.isElementVisible(candidate && candidate.__el ? candidate.__el : null);
+
+          if (actualVisible !== options[key]) return false;
+          continue;
+        }
+
         if ((candidate[key] === true) !== options[key]) return false;
       }
 
@@ -1487,9 +1498,13 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         ...extra
       });
 
-      const actionability = helper.prepareTargetForAction(element, op);
-      if (!actionability || actionability.ok !== true) {
-        return fail(actionability && actionability.reason ? actionability.reason : "actionability_check_failed");
+      const force = options && options.force === true;
+
+      if (!force) {
+        const actionability = helper.prepareTargetForAction(element, op);
+        if (!actionability || actionability.ok !== true) {
+          return fail(actionability && actionability.reason ? actionability.reason : "actionability_check_failed");
+        }
       }
 
       if (op === "fill_in") {

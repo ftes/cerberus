@@ -154,6 +154,9 @@ Element-targeting actions also support position filters:
 - `nth: n` (1-based)
 - `index: n` (0-based)
 
+Browser actions additionally support:
+- `force: true` (bypass browser actionability checks for the targeted action)
+
 Example:
 
 ```elixir
@@ -172,6 +175,7 @@ Common advanced patterns:
 - same-element intersection: `and_(role(:button, name: "Run Search"), testid("submit-secondary-button"))`
 - descendant requirement: `role(:button, name: "Run Search") |> filter(has: testid("submit-secondary-marker"))`
 - descendant exclusion: `role(:button, name: "Run Search") |> filter(has_not: testid("submit-secondary-marker"))`
+- visibility constraint: `role(:button, name: "Run Search") |> filter(visible: true)`
 - OR alternatives: `or_(css("#primary"), css("#secondary"))`
 - boolean algebra: `and_(role(:button, name: "Run Search"), not_(testid("submit-secondary-button")))`
 - negated conjunction: `not_(and_(role(:button, name: "Run Search"), testid("submit-secondary-button")))`

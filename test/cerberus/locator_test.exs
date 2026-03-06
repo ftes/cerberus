@@ -175,8 +175,12 @@ defmodule Cerberus.LocatorTest do
     end
   end
 
-  test "normalizes has and has_not through filter/2" do
-    locator = :button |> role(name: "Apply") |> filter(has: testid("apply-secondary"), has_not: css(".disabled"))
+  test "normalizes has, has_not, and visible through filter/2" do
+    locator =
+      :button
+      |> role(name: "Apply")
+      |> filter(has: testid("apply-secondary"), has_not: css(".disabled"), visible: false)
+
     has_locator = locator.opts[:has]
     has_not_locator = locator.opts[:has_not]
 
@@ -185,6 +189,13 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :testid, value: "apply-secondary"} = has_locator
     assert has_locator.opts[:exact] == true
     assert %Locator{kind: :css, value: ".disabled"} = has_not_locator
+    assert opts[:visible] == false
+  end
+
+  test "filter visible expects a boolean" do
+    assert_raise ArgumentError, ~r/filter\/2 expects :visible to be a boolean/, fn ->
+      "Apply" |> text() |> filter(visible: :any)
+    end
   end
 
   test "supports nested has locators via filter/2" do

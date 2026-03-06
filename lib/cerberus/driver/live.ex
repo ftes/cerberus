@@ -672,7 +672,7 @@ defmodule Cerberus.Driver.Live do
   defp run_locator_assertion(%__MODULE__{} = session, %Locator{} = locator, opts, mode) when mode in [:assert, :refute] do
     session = with_latest_html(session)
     match_opts = locator_match_opts(locator, opts)
-    visible = Keyword.get(opts, :visible, true)
+    visible = assertion_visibility(opts, locator)
 
     case locator_assertion_values(session, locator, visible) do
       {:ok, matched} ->
@@ -744,7 +744,15 @@ defmodule Cerberus.Driver.Live do
   defp locator_assertion_requires_locator_engine?(%Locator{opts: locator_opts}) do
     Keyword.has_key?(locator_opts, :has) or
       Keyword.has_key?(locator_opts, :has_not) or
-      Keyword.has_key?(locator_opts, :from)
+      Keyword.has_key?(locator_opts, :from) or
+      Keyword.has_key?(locator_opts, :visible)
+  end
+
+  defp assertion_visibility(opts, %Locator{opts: locator_opts}) do
+    case Keyword.get(locator_opts, :visible) do
+      value when is_boolean(value) -> value
+      _ -> Keyword.get(opts, :visible, true)
+    end
   end
 
   @impl true

@@ -27,7 +27,8 @@ defmodule Cerberus.Options do
           checked: boolean() | nil,
           disabled: boolean() | nil,
           selected: boolean() | nil,
-          readonly: boolean() | nil
+          readonly: boolean() | nil,
+          visible: boolean() | nil
         ]
   @type count_filter_opts :: [
           count: non_neg_integer() | nil,
@@ -46,6 +47,7 @@ defmodule Cerberus.Options do
           disabled: boolean() | nil,
           selected: boolean() | nil,
           readonly: boolean() | nil,
+          visible: boolean() | nil,
           count: non_neg_integer() | nil,
           min: non_neg_integer() | nil,
           max: non_neg_integer() | nil,
@@ -124,6 +126,7 @@ defmodule Cerberus.Options do
 
   @type click_opts :: [
           timeout: non_neg_integer(),
+          force: boolean(),
           checked: boolean() | nil,
           disabled: boolean() | nil,
           selected: boolean() | nil,
@@ -166,6 +169,7 @@ defmodule Cerberus.Options do
 
   @type fill_in_opts :: [
           timeout: non_neg_integer(),
+          force: boolean(),
           checked: boolean() | nil,
           disabled: boolean() | nil,
           selected: boolean() | nil,
@@ -182,6 +186,7 @@ defmodule Cerberus.Options do
 
   @type check_opts :: [
           timeout: non_neg_integer(),
+          force: boolean(),
           checked: boolean() | nil,
           disabled: boolean() | nil,
           selected: boolean() | nil,
@@ -200,6 +205,7 @@ defmodule Cerberus.Options do
           option: select_value(),
           exact_option: boolean(),
           timeout: non_neg_integer(),
+          force: boolean(),
           checked: boolean() | nil,
           disabled: boolean() | nil,
           selected: boolean() | nil,
@@ -216,6 +222,7 @@ defmodule Cerberus.Options do
 
   @type choose_opts :: [
           timeout: non_neg_integer(),
+          force: boolean(),
           checked: boolean() | nil,
           disabled: boolean() | nil,
           selected: boolean() | nil,
@@ -232,6 +239,7 @@ defmodule Cerberus.Options do
 
   @type upload_opts :: [
           timeout: non_neg_integer(),
+          force: boolean(),
           checked: boolean() | nil,
           disabled: boolean() | nil,
           selected: boolean() | nil,
@@ -248,6 +256,7 @@ defmodule Cerberus.Options do
 
   @type submit_opts :: [
           timeout: non_neg_integer(),
+          force: boolean(),
           checked: boolean() | nil,
           disabled: boolean() | nil,
           selected: boolean() | nil,
@@ -318,6 +327,7 @@ defmodule Cerberus.Options do
 
   @click_opts_schema [
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],
+    force: [type: :boolean, default: false, doc: "Bypasses browser actionability checks before dispatching the action."],
     checked: [type: :any, default: nil, doc: "Requires matched elements to be checked/unchecked."],
     disabled: [type: :any, default: nil, doc: "Requires matched elements to be disabled/enabled."],
     selected: [type: :any, default: nil, doc: "Requires matched elements to be selected/unselected."],
@@ -356,6 +366,7 @@ defmodule Cerberus.Options do
 
   @fill_in_opts_schema [
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],
+    force: [type: :boolean, default: false, doc: "Bypasses browser actionability checks before dispatching the action."],
     checked: [type: :any, default: nil, doc: "Requires matched fields to be checked/unchecked."],
     disabled: [type: :any, default: nil, doc: "Requires matched fields to be disabled/enabled."],
     selected: [type: :any, default: nil, doc: "Requires matched fields to be selected/unselected."],
@@ -388,6 +399,7 @@ defmodule Cerberus.Options do
 
   @submit_opts_schema [
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],
+    force: [type: :boolean, default: false, doc: "Bypasses browser actionability checks before dispatching the action."],
     checked: [type: :any, default: nil, doc: "Requires matched submit controls to be checked/unchecked."],
     disabled: [type: :any, default: nil, doc: "Requires matched submit controls to be disabled/enabled."],
     selected: [type: :any, default: nil, doc: "Requires matched submit controls to be selected/unselected."],
@@ -404,6 +416,7 @@ defmodule Cerberus.Options do
 
   @upload_opts_schema [
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],
+    force: [type: :boolean, default: false, doc: "Bypasses browser actionability checks before dispatching the action."],
     checked: [type: :any, default: nil, doc: "Requires matched file inputs to be checked/unchecked."],
     disabled: [type: :any, default: nil, doc: "Requires matched file inputs to be disabled/enabled."],
     selected: [type: :any, default: nil, doc: "Requires matched file inputs to be selected/unselected."],
@@ -427,6 +440,7 @@ defmodule Cerberus.Options do
     ],
     exact_option: [type: :boolean, default: true, doc: "Requires exact option-text matches unless disabled."],
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."],
+    force: [type: :boolean, default: false, doc: "Bypasses browser actionability checks before dispatching the action."],
     checked: [type: :any, default: nil, doc: "Requires matched selects to be checked/unchecked."],
     disabled: [type: :any, default: nil, doc: "Requires matched selects to be disabled/enabled."],
     selected: [type: :any, default: nil, doc: "Requires matched selects to be selected/unselected."],

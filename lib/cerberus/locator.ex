@@ -5,7 +5,7 @@ defmodule Cerberus.Locator do
   The AST supports:
   - leaf locators (`:text`, `:label`, `:css`, `:testid`, ...)
   - composition (`:scope`, `:and`, `:or`, `:not`)
-  - descendant filters via `filter/2` (`:has` and `:has_not`)
+  - descendant/state filters via `filter/2` (`:has`, `:has_not`, and `:visible`)
   - closest-scope input via `:from`
   - regex text values for text-like locators and role names (without `:exact`)
   """
@@ -135,19 +135,20 @@ defmodule Cerberus.Locator do
     keys = opts |> Keyword.keys() |> Enum.uniq()
 
     if keys == [] do
-      raise ArgumentError, "filter/2 expects at least one filter option (:has or :has_not)"
+      raise ArgumentError, "filter/2 expects at least one filter option (:has, :has_not, or :visible)"
     end
 
-    invalid = keys -- [:has, :has_not]
+    invalid = keys -- [:has, :has_not, :visible]
 
     if invalid != [] do
-      raise ArgumentError, "filter/2 supports only :has and :has_not options, got: #{inspect(invalid)}"
+      raise ArgumentError, "filter/2 supports only :has, :has_not, and :visible options, got: #{inspect(invalid)}"
     end
 
     updated_opts =
       locator.opts
       |> maybe_put_filter_opt(opts, :has, locator)
       |> maybe_put_filter_opt(opts, :has_not, locator)
+      |> maybe_put_visible_filter_opt(opts, locator)
 
     %{locator | opts: updated_opts}
   end
@@ -346,6 +347,7 @@ defmodule Cerberus.Locator do
     |> maybe_put_exact(opts, original)
     |> maybe_put_has(opts, original)
     |> maybe_put_has_not(opts, original)
+    |> maybe_put_visible(opts, original)
     |> maybe_put_from(opts, original)
   end
 
@@ -381,6 +383,21 @@ defmodule Cerberus.Locator do
 
       {:ok, has_not_locator_input} ->
         Keyword.put(normalized_opts, :has_not, normalize_has_locator!(has_not_locator_input, original))
+    end
+  end
+
+  defp maybe_put_visible(normalized_opts, source_opts, original) do
+    case Keyword.fetch(source_opts, :visible) do
+      :error ->
+        normalized_opts
+
+      {:ok, visible} when is_boolean(visible) ->
+        Keyword.put(normalized_opts, :visible, visible)
+
+      {:ok, _other} ->
+        raise InvalidLocatorError,
+          locator: original,
+          message: "invalid locator #{inspect(original)}; :visible must be a boolean"
     end
   end
 
@@ -724,6 +741,19 @@ defmodule Cerberus.Locator do
     end
   end
 
+  defp maybe_put_visible_filter_opt(opts, source_opts, original) do
+    case Keyword.fetch(source_opts, :visible) do
+      :error ->
+        opts
+
+      {:ok, visible} when is_boolean(visible) ->
+        Keyword.put(opts, :visible, visible)
+
+      {:ok, _other} ->
+        raise ArgumentError, "filter/2 expects :visible to be a boolean in #{inspect(original)}"
+    end
+  end
+
   defp normalize_leaf_constructor_opts(opts, original) when is_list(opts) do
     if Keyword.keyword?(opts) do
       ensure_only_keys!(opts, original, [:exact, :from])
@@ -743,7 +773,7 @@ defmodule Cerberus.Locator do
 
   defp normalize_leaf_opts(opts, original) when is_list(opts) do
     if Keyword.keyword?(opts) do
-      ensure_only_keys!(opts, original, [:exact, :has, :has_not, :from])
+      ensure_only_keys!(opts, original, [:exact, :has, :has_not, :visible, :from])
       locator_opts(opts, original)
     else
       raise InvalidLocatorError,
@@ -760,7 +790,7 @@ defmodule Cerberus.Locator do
 
   defp normalize_role_opts(opts, original) when is_list(opts) do
     if Keyword.keyword?(opts) do
-      ensure_only_keys!(opts, original, [:role, :exact, :has, :has_not, :from])
+      ensure_only_keys!(opts, original, [:role, :exact, :has, :has_not, :visible, :from])
 
       role_name =
         case Keyword.fetch(opts, :role) do
@@ -790,11 +820,12 @@ defmodule Cerberus.Locator do
 
   defp normalize_composite_opts(opts, original) when is_list(opts) do
     if Keyword.keyword?(opts) do
-      ensure_only_keys!(opts, original, [:has, :has_not, :from])
+      ensure_only_keys!(opts, original, [:has, :has_not, :visible, :from])
 
       []
       |> maybe_put_has(opts, original)
       |> maybe_put_has_not(opts, original)
+      |> maybe_put_visible(opts, original)
       |> maybe_put_from(opts, original)
     else
       raise InvalidLocatorError,

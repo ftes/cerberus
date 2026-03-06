@@ -217,15 +217,16 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   defp live_clickable_common_opts_match?(root_node, node, opts) when is_list(opts) do
     node_matches_selector?(root_node, node, selector_opt(opts)) and
       Html.node_matches_locator_filters?(node, opts) and
-      Query.matches_state_filters?(live_clickable_state(node), opts)
+      Query.matches_state_filters?(live_clickable_state(root_node, node), opts)
   end
 
-  defp live_clickable_state(node) do
+  defp live_clickable_state(root_node, node) do
     %{
       checked: false,
       disabled: phx_boolean_attr?(attr(node, "disabled")),
       readonly: phx_boolean_attr?(attr(node, "readonly")),
-      selected: false
+      selected: false,
+      visible: Html.node_visible_in_root?(root_node, node)
     }
   end
 
@@ -303,6 +304,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
       input_checked: phx_boolean_attr?(attr(field_node, "checked")),
       input_disabled: phx_boolean_attr?(attr(field_node, "disabled")),
       input_readonly: phx_boolean_attr?(attr(field_node, "readonly")),
+      visible: Html.node_visible_in_root?(root_node, field_node),
       form: form_id,
       form_selector: form_selector(root_node, form_node, form_id)
     }
@@ -530,6 +532,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
       readonly: phx_boolean_attr?(attr(node, "readonly")),
       selected: false,
       checked: false,
+      visible: Html.node_visible_in_root?(root_node, node),
       button_name: attr(node, "name"),
       button_value: attr(node, "value"),
       form: form_id,

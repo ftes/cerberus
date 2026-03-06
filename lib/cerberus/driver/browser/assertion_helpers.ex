@@ -751,11 +751,13 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
             : checked;
       const disabled = element.disabled === true;
       const readonly = element.readOnly === true || element.hasAttribute("readonly");
+      const visible = !helper.isHidden(element);
 
       if (typeof opts.checked === "boolean" && checked !== opts.checked) return false;
       if (typeof opts.selected === "boolean" && selected !== opts.selected) return false;
       if (typeof opts.disabled === "boolean" && disabled !== opts.disabled) return false;
       if (typeof opts.readonly === "boolean" && readonly !== opts.readonly) return false;
+      if (typeof opts.visible === "boolean" && visible !== opts.visible) return false;
 
       return true;
     };

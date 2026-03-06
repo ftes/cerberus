@@ -364,6 +364,17 @@ defmodule Cerberus.LocatorParityTest do
         expect: :ok,
         run: &assert_has(&1, text("Hidden Attribute Copy"), visible: :any)
       },
+      %{
+        name: "assert_has hidden text using locator visible filter false",
+        expect: :ok,
+        run: &assert_has(&1, filter(text("Hidden Attribute Copy"), visible: false))
+      },
+      %{
+        name: "assert_has hidden text using locator visible filter true",
+        expect: :error,
+        error_module: AssertionError,
+        run: &assert_has(&1, filter(text("Hidden Attribute Copy"), visible: true))
+      },
       # helper mappings in assertions
       %{
         name: "assert_has label helper",

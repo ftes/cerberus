@@ -97,6 +97,14 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert error.message =~ "matched element is not visible"
   end
 
+  test "force bypasses browser actionability visibility checks" do
+    :browser
+    |> session()
+    |> visit("/browser/extensions")
+    |> click(:button |> role(name: "Hidden Action", exact: true) |> filter(visible: false), force: true)
+    |> assert_has(text("Hidden action result: clicked", exact: true))
+  end
+
   test "click scrolls offscreen targets into view before acting" do
     session =
       :browser

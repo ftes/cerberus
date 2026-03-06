@@ -1,10 +1,11 @@
 ---
 # cerberus-phtj
 title: Add force option for action APIs to bypass actionability checks
-status: todo
+status: completed
 type: feature
+priority: normal
 created_at: 2026-03-06T09:39:50Z
-updated_at: 2026-03-06T09:39:50Z
+updated_at: 2026-03-06T12:33:13Z
 ---
 
 ## Goal
@@ -100,17 +101,17 @@ Driver strategy
 - Docs/examples mention `force` and explain intended scope.
 
 ## Implementation Checklist
-- [ ] Add `force` to action option schemas and validations
-- [ ] Add `force` to browser action payload plumbing
-- [ ] Implement force bypass in browser action helper gate
-- [ ] Define and implement force semantics for disabled checks
-- [ ] Add browser tests for hidden target with `force: true`
-- [ ] Add browser tests preserving strict default behavior
-- [ ] Add cross-driver API acceptance tests for `force`
-- [ ] Update docs/examples for `force`
-- [ ] Run `mix format`
-- [ ] Run targeted `mix test` with random `PORT=4xxx`
-- [ ] Run `mix do format + precommit + test + test --only slow`
+- [x] Add `force` to action option schemas and validations
+- [x] Add `force` to browser action payload plumbing
+- [x] Implement force bypass in browser action helper gate
+- [x] Define and implement force semantics for disabled checks
+- [x] Add browser tests for hidden target with `force: true`
+- [x] Add browser tests preserving strict default behavior
+- [x] Add cross-driver API acceptance tests for `force`
+- [x] Update docs/examples for `force`
+- [x] Run `mix format`
+- [x] Run targeted `mix test` with random `PORT=4xxx`
+- [x] Run `mix do format + precommit + test + test --only slow`
 
 ## Validation Notes
 - Source environment before test runs: `source .envrc`.
@@ -119,3 +120,11 @@ Driver strategy
 ## Dependencies and Coordination
 - Related to `cerberus-84zg` (actionability parity), but this bean focuses specifically on introducing an explicit override.
 - Can proceed independently from `cerberus-7b3a` filter work.
+
+## Summary of Changes
+- Added `force: boolean` action option support to click/fill_in/check/choose/select/submit/upload schemas and types.
+- Plumbed `force` into browser action payloads and implemented `force: true` behavior by skipping browser actionability prechecks (`prepareTargetForAction`).
+- Defined force semantics to bypass readiness/actionability checks only; operation-level disabled/type checks still apply.
+- Added browser coverage for forced hidden clicks and cross-driver acceptance coverage for `force` options.
+- Updated docs/examples (`docs/getting-started.md`, `docs/cheatsheet.md`) to include `force`.
+- Validated with targeted suites and full checks (`MIX_ENV=test mix do format + precommit + test + test --only slow`).

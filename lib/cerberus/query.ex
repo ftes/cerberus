@@ -3,7 +3,7 @@ defmodule Cerberus.Query do
 
   alias Cerberus.Options
 
-  @state_keys [:checked, :disabled, :selected, :readonly]
+  @state_keys [:checked, :disabled, :selected, :readonly, :visible]
   @non_breaking_spaces ~r/[\x{00A0}\x{202F}]/u
 
   @spec match_text?(String.t(), String.t() | Regex.t(), Options.text_match_opts()) :: boolean()
@@ -221,6 +221,10 @@ defmodule Cerberus.Query do
       nil -> bool_value(candidate, [:input_checked, :checked])
       value -> value
     end
+  end
+
+  defp resolve_state_value(candidate, :visible) do
+    bool_value(candidate, [:input_visible, :visible])
   end
 
   defp bool_value(candidate, keys) do

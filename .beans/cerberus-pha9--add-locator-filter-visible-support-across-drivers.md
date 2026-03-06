@@ -1,11 +1,11 @@
 ---
 # cerberus-pha9
 title: Add locator filter visible support across drivers
-status: todo
+status: completed
 type: feature
 priority: normal
 created_at: 2026-03-06T09:40:25Z
-updated_at: 2026-03-06T09:40:34Z
+updated_at: 2026-03-06T12:33:13Z
 blocked_by:
     - cerberus-7b3a
 ---
@@ -112,16 +112,16 @@ Playwright alignment intent
 - New tests cover positive and negative visibility-filter cases across driver matrices.
 
 ## Implementation Checklist
-- [ ] Add `visible` to locator/filter option model and validation
-- [ ] Extend query/state filter logic to evaluate visibility
-- [ ] Add candidate visibility state in static/live HTML mapping paths
-- [ ] Extend browser in-page state filter logic for visibility
-- [ ] Integrate with `filter` API and nested filter composition
-- [ ] Define and implement assert-visible + locator-visible interaction rules
-- [ ] Add cross-driver tests for locator visibility filtering
-- [ ] Run `mix format`
-- [ ] Run targeted `mix test` with random `PORT=4xxx`
-- [ ] Run `mix do format + precommit + test + test --only slow`
+- [x] Add `visible` to locator/filter option model and validation
+- [x] Extend query/state filter logic to evaluate visibility
+- [x] Add candidate visibility state in static/live HTML mapping paths
+- [x] Extend browser in-page state filter logic for visibility
+- [x] Integrate with `filter` API and nested filter composition
+- [x] Define and implement assert-visible + locator-visible interaction rules
+- [x] Add cross-driver tests for locator visibility filtering
+- [x] Run `mix format`
+- [x] Run targeted `mix test` with random `PORT=4xxx`
+- [x] Run `mix do format + precommit + test + test --only slow`
 
 ## Validation Notes
 - Source environment before tests: `source .envrc`.
@@ -130,3 +130,13 @@ Playwright alignment intent
 ## Dependencies and Coordination
 - Depends on completion or merge path from `cerberus-7b3a` (filter API introduction).
 - Coordinate with `cerberus-84zg` and `cerberus-phtj` so visibility filter semantics and force/actionability semantics remain coherent.
+
+## Summary of Changes
+- Extended locator filtering to support `filter(visible: true | false)` with validation and normalization in `Cerberus.Locator`.
+- Added `visible` into shared state-filter handling (`Cerberus.Query`) and browser locator payload serialization.
+- Implemented visibility-aware candidate state mapping across HTML/live/static paths and browser helpers.
+- Added browser assertion-helper support for locator-level `visible` state filtering.
+- Defined assert interaction contract: when locator has `visible`, locator visibility takes precedence for locator assertions.
+- Added cross-driver tests for locator-level visible filtering in live assertions and parity corpus coverage for hidden text locators.
+- Updated docs/examples (`docs/getting-started.md`, `docs/cheatsheet.md`) to include locator `visible` filters.
+- Validated with targeted suites and full checks (`MIX_ENV=test mix do format + precommit + test + test --only slow`).

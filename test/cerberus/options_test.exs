@@ -37,4 +37,18 @@ defmodule Cerberus.OptionsTest do
       Options.validate_fill_in!(checked: :yes)
     end
   end
+
+  test "action validators accept boolean force option" do
+    assert Options.validate_click!(force: true)[:force] == true
+    assert Options.validate_fill_in!(force: true)[:force] == true
+    assert Options.validate_submit!(force: true)[:force] == true
+    assert Options.validate_upload!(force: true)[:force] == true
+    assert Options.validate_select!(option: "Value", force: true)[:force] == true
+  end
+
+  test "action validators reject non-boolean force option" do
+    assert_raise ArgumentError, ~r/:force option/, fn ->
+      Options.validate_click!(force: :yes)
+    end
+  end
 end

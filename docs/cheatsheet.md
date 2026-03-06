@@ -28,6 +28,7 @@
 | Uncheck checkbox | `uncheck(session, ~l"Receive updates"l)` |
 | Upload file | `upload(session, ~l"Avatar"l, "/tmp/avatar.jpg")` |
 | Submit form | `submit(session, ~l"button:Run Search"r)` |
+| Bypass browser actionability checks | `click(session, ~l"button:Hidden Action"r, force: true)` |
 | Assert text present | `assert_has(session, ~l"Articles"e)` |
 | Assert text absent | `refute_has(session, ~l"Error"e)` |
 | Assert scoped text | `assert_has(session, ~l"#secondary-panel"c, ~l"Status: secondary"e)` |
@@ -83,6 +84,7 @@ Default strategy:
 - same-element AND intersection: `and_(role(:button, name: "Apply"), testid("apply-secondary-button"))`
 - descendant requirement: `role(:button, name: "Apply") |> filter(has: testid("apply-secondary-marker"))`
 - descendant exclusion: `role(:button, name: "Apply") |> filter(has_not: testid("apply-secondary-marker"))`
+- visibility constraint: `role(:button, name: "Apply") |> filter(visible: true)`
 - alternatives (OR): `or_(css("#primary"), css("#secondary"))`
 - boolean algebra: `and_(role(:button, name: "Apply"), not_(testid("apply-secondary-button")))`
 - negated conjunction: `not_(and_(role(:button, name: "Apply"), testid("apply-secondary-button")))`

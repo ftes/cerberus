@@ -24,6 +24,14 @@ defmodule Cerberus.LiveVisibilityAssertionsTest do
       |> assert_has(text("Hidden live helper text"), visible: false)
       |> assert_has(text("Hidden live helper text"), visible: :any)
     end
+
+    test "live assertions support locator-level visible filters (#{driver})", context do
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/live/counter")
+      |> assert_has(filter(text("Hidden live helper text"), visible: false))
+      |> refute_has(filter(text("Hidden live helper text"), visible: true))
+    end
   end
 
   defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)
