@@ -17,6 +17,12 @@ defmodule Cerberus.Phoenix.LiveViewClient do
   @type render_result :: String.t() | {:error, {redirect_kind(), redirect_opts()}}
   @type html_tree :: term()
   @type html_snapshot :: {html_tree(), String.t() | nil}
+  @type progress_result ::
+          :diff
+          | :terminated
+          | {:redirect, redirect_opts()}
+          | {:live_redirect, redirect_opts()}
+          | {:patch, redirect_opts()}
 
   defguardp is_text_filter(text_filter)
             when is_binary(text_filter) or is_struct(text_filter, Regex) or is_nil(text_filter)
@@ -79,6 +85,63 @@ defmodule Cerberus.Phoenix.LiveViewClient do
   @spec live_children(view()) :: [view()]
   def live_children(%View{} = parent) do
     call(parent, {:live_children, proxy_topic(parent)})
+  end
+
+  @spec view_alive?(view()) :: boolean()
+  def view_alive?(%View{pid: pid}) when is_pid(pid), do: Process.alive?(pid)
+  def view_alive?(_view), do: false
+
+  @spec render_version(view()) :: non_neg_integer()
+  def render_version(%View{} = view) do
+    view
+    |> proxy_state()
+    |> case do
+      {:ok, state} ->
+        :erlang.phash2({state.html_tree, state.page_title, state.url, map_size(state.views)})
+
+      :error ->
+        0
+    end
+  end
+
+  @spec await_progress(view(), non_neg_integer(), non_neg_integer()) :: {:ok, progress_result()} | :timeout
+  def await_progress(%View{} = view, version, timeout_ms)
+      when is_integer(version) and is_integer(timeout_ms) and timeout_ms >= 0 do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    do_await_progress(view, version, deadline)
+  end
+
+  @spec receive_navigation(view(), non_neg_integer()) ::
+          {:redirect, redirect_opts()} | {:live_redirect, redirect_opts()} | {:patch, redirect_opts()} | nil
+  def receive_navigation(%View{} = view, timeout \\ 0) when is_integer(timeout) and timeout >= 0 do
+    %{proxy: {ref, topic, _}} = view
+
+    receive do
+      {^ref, {:redirect, ^topic, %{to: _to} = opts}} ->
+        {:redirect, opts}
+
+      {^ref, {:live_redirect, ^topic, %{to: _to} = opts}} ->
+        {:live_redirect, opts}
+
+      {^ref, {:patch, ^topic, %{to: _to} = opts}} ->
+        {:patch, opts}
+    after
+      timeout ->
+        nil
+    end
+  end
+
+  @spec current_path(view(), String.t() | nil) :: String.t() | nil
+  def current_path(%View{} = view, fallback \\ nil) do
+    case call(view, :url) do
+      url when is_binary(url) ->
+        Cerberus.Path.normalize(url) || fallback
+
+      _other ->
+        fallback
+    end
+  catch
+    :exit, _ -> fallback
   end
 
   @spec find_live_child(view(), String.t()) :: view() | nil
@@ -213,6 +276,40 @@ defmodule Cerberus.Phoenix.LiveViewClient do
     {:ok, result} -> result
     {:raise, exception} -> raise exception
   end
+
+  defp do_await_progress(view, version, deadline) do
+    case receive_navigation(view, 0) do
+      nil ->
+        current_version = render_version(view)
+        remaining = max(deadline - System.monotonic_time(:millisecond), 0)
+
+        cond do
+          current_version != version ->
+            {:ok, :diff}
+
+          not view_alive?(view) ->
+            {:ok, :terminated}
+
+          remaining <= 0 ->
+            :timeout
+
+          true ->
+            Process.sleep(min(remaining, 50))
+            do_await_progress(view, version, deadline)
+        end
+
+      navigation ->
+        {:ok, navigation}
+    end
+  end
+
+  defp proxy_state(%{proxy: {_ref, _topic, pid}}) when is_pid(pid) do
+    {:ok, :sys.get_state(pid)}
+  catch
+    :exit, _ -> :error
+  end
+
+  defp proxy_state(_view), do: :error
 
   defp proxy_pid(%{proxy: {_ref, _topic, pid}}), do: pid
   defp proxy_topic(%{proxy: {_ref, topic, _pid}}), do: topic

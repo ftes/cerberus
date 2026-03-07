@@ -2,13 +2,13 @@ defmodule Cerberus.Assertions do
   @moduledoc false
 
   alias Cerberus.Driver
-  alias Cerberus.Driver.Browser, as: BrowserSession
-  alias Cerberus.Driver.Live, as: LiveSession
-  alias Cerberus.Driver.Static, as: StaticSession
+  alias Cerberus.Driver.Browser
+  alias Cerberus.Driver.Live
+  alias Cerberus.Driver.Static
   alias Cerberus.Locator
   alias Cerberus.Options
   alias Cerberus.Path
-  alias Cerberus.Phoenix.LiveViewTimeout
+  alias Cerberus.PhoenixLoop
   alias Cerberus.Profiling
   alias Cerberus.Session
   alias ExUnit.AssertionError
@@ -301,14 +301,16 @@ defmodule Cerberus.Assertions do
     timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
     message_opts = Keyword.put(driver_opts, :timeout, timeout)
 
-    if match?(%BrowserSession{}, session) do
-      browser_opts = Keyword.put(driver_opts, :timeout, timeout)
-      run_assertion!(session, op, locator, locator_input, browser_opts, message_opts)
-    else
-      LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
-        run_assertion!(timed_session, op, locator, locator_input, driver_opts, message_opts)
-      end)
-    end
+    run_assertion_with_loop(session, timeout, fn timed_session ->
+      timed_driver_opts =
+        if match?(%Browser{}, timed_session) do
+          Keyword.put(driver_opts, :timeout, timeout)
+        else
+          driver_opts
+        end
+
+      run_assertion!(timed_session, op, locator, locator_input, timed_driver_opts, message_opts)
+    end)
   end
 
   @spec run_state_assertion_with_timeout(
@@ -342,14 +344,16 @@ defmodule Cerberus.Assertions do
     timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
     message_opts = Keyword.put(driver_opts, :timeout, timeout)
 
-    if match?(%BrowserSession{}, session) do
-      browser_opts = Keyword.put(driver_opts, :timeout, timeout)
-      run_value_assertion!(session, op, locator, expected, locator_input, browser_opts, message_opts)
-    else
-      LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
-        run_value_assertion!(timed_session, op, locator, expected, locator_input, driver_opts, message_opts)
-      end)
-    end
+    run_assertion_with_loop(session, timeout, fn timed_session ->
+      timed_driver_opts =
+        if match?(%Browser{}, timed_session) do
+          Keyword.put(driver_opts, :timeout, timeout)
+        else
+          driver_opts
+        end
+
+      run_value_assertion!(timed_session, op, locator, expected, locator_input, timed_driver_opts, message_opts)
+    end)
   end
 
   @spec run_assertion!(
@@ -415,6 +419,15 @@ defmodule Cerberus.Assertions do
               failed_session
             )
     end
+  end
+
+  defp run_assertion_with_loop(%Browser{} = session, timeout, fun) when is_function(fun, 1) do
+    _ = timeout
+    fun.(session)
+  end
+
+  defp run_assertion_with_loop(session, timeout, fun) when is_function(fun, 1) do
+    PhoenixLoop.run(session, timeout, fun)
   end
 
   @spec format_error(
@@ -550,9 +563,9 @@ defmodule Cerberus.Assertions do
   end
 
   defp resolve_assert_timeout(_session, true, validated_timeout), do: validated_timeout
-  defp resolve_assert_timeout(%StaticSession{timeout_ms: timeout}, false, _validated_timeout), do: timeout
-  defp resolve_assert_timeout(%LiveSession{timeout_ms: timeout}, false, _validated_timeout), do: timeout
-  defp resolve_assert_timeout(%BrowserSession{timeout_ms: timeout}, false, _validated_timeout), do: timeout
+  defp resolve_assert_timeout(%Static{timeout_ms: timeout}, false, _validated_timeout), do: timeout
+  defp resolve_assert_timeout(%Live{timeout_ms: timeout}, false, _validated_timeout), do: timeout
+  defp resolve_assert_timeout(%Browser{timeout_ms: timeout}, false, _validated_timeout), do: timeout
 
   defp profile_driver_operation(session, op, fun) when is_atom(op) and is_function(fun, 0) do
     Profiling.measure({:driver_operation, driver_kind(session), op}, fun)
@@ -561,13 +574,13 @@ defmodule Cerberus.Assertions do
   defp session_transition(%{last_result: %{transition: transition}}), do: transition
   defp session_transition(_session), do: nil
 
-  defp driver_kind(%StaticSession{}), do: :static
-  defp driver_kind(%LiveSession{}), do: :live
-  defp driver_kind(%BrowserSession{}), do: :browser
+  defp driver_kind(%Static{}), do: :static
+  defp driver_kind(%Live{}), do: :live
+  defp driver_kind(%Browser{}), do: :browser
 
-  defp driver_module_for_session!(%StaticSession{}), do: StaticSession
-  defp driver_module_for_session!(%LiveSession{}), do: LiveSession
-  defp driver_module_for_session!(%BrowserSession{}), do: BrowserSession
+  defp driver_module_for_session!(%Static{}), do: Static
+  defp driver_module_for_session!(%Live{}), do: Live
+  defp driver_module_for_session!(%Browser{}), do: Browser
 
   defp driver_module_for_session!(session) do
     raise ArgumentError,

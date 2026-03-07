@@ -28,7 +28,7 @@ defmodule Cerberus.Driver.Live do
   alias Cerberus.Phoenix.Conn
   alias Cerberus.Phoenix.LiveViewClient
   alias Cerberus.Phoenix.LiveViewHTML
-  alias Cerberus.Phoenix.LiveViewTimeout
+  alias Cerberus.PhoenixLoop
   alias Cerberus.Query
   alias Cerberus.Session
   alias Cerberus.Session.Config, as: SessionConfig
@@ -723,7 +723,7 @@ defmodule Cerberus.Driver.Live do
         timeout_ms = Keyword.fetch!(opts, :timeout)
 
         session
-        |> LiveViewTimeout.with_timeout(timeout_ms, &download_redirect_target!/1)
+        |> PhoenixLoop.run(timeout_ms, &download_redirect_target!/1)
         |> DownloadAssertion.assert_from_conn!(filename)
 
       :static ->
@@ -746,7 +746,7 @@ defmodule Cerberus.Driver.Live do
   def run_path_assertion(%__MODULE__{} = session, expected, opts, timeout, op) when op in [:assert_path, :refute_path] do
     driver_opts = Keyword.put(opts, :timeout, timeout)
 
-    LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
+    PhoenixLoop.run(session, timeout, fn timed_session ->
       timed_driver = path_assertion_driver_for_session!(timed_session)
       run_path_assertion_operation!(timed_driver, timed_session, expected, driver_opts, op)
     end)
@@ -2738,26 +2738,27 @@ defmodule Cerberus.Driver.Live do
 
   defp do_wait_for_live_actionable(session, deadline, pending_reason, finder) when is_function(finder, 1) do
     refreshed = with_latest_document(session)
+    baseline_version = live_progress_version(refreshed)
 
     case finder.(refreshed) do
       {:ok, candidate} ->
         {:ok, refreshed, candidate}
 
       {:retry, reason} ->
-        if live_action_time_remaining?(deadline) do
-          Process.sleep(25)
-          do_wait_for_live_actionable(refreshed, deadline, reason, finder)
-        else
-          {:error, refreshed, reason}
-        end
+        retry_live_actionable(refreshed, baseline_version, deadline, reason, finder)
+
+      {:error, reason} when is_nil(pending_reason) ->
+        {:error, refreshed, reason}
 
       {:error, reason} ->
-        if pending_reason && live_action_retryable_reason?(reason) && live_action_time_remaining?(deadline) do
-          Process.sleep(25)
-          do_wait_for_live_actionable(refreshed, deadline, pending_reason, finder)
-        else
-          {:error, refreshed, pending_reason || reason}
-        end
+        maybe_retry_live_actionable(
+          refreshed,
+          baseline_version,
+          deadline,
+          pending_reason,
+          reason,
+          finder
+        )
     end
   end
 
@@ -2768,6 +2769,75 @@ defmodule Cerberus.Driver.Live do
   defp live_action_retryable_reason?(reason) do
     reason in ["no form field matched locator", "no submit button matched locator", "no button matched locator"]
   end
+
+  defp retry_live_actionable(session, baseline_version, deadline, retry_reason, finder) do
+    with true <- live_action_time_remaining?(deadline),
+         {:ok, progressed_session} <- await_live_action_progress(session, baseline_version, deadline) do
+      do_wait_for_live_actionable(progressed_session, deadline, retry_reason, finder)
+    else
+      _ -> {:error, session, retry_reason}
+    end
+  end
+
+  defp maybe_retry_live_actionable(session, baseline_version, deadline, pending_reason, reason, finder) do
+    cond do
+      not live_action_retryable_reason?(reason) ->
+        {:error, session, pending_reason}
+
+      not live_action_time_remaining?(deadline) ->
+        {:error, session, pending_reason}
+
+      true ->
+        case await_live_action_progress(session, baseline_version, deadline) do
+          {:ok, progressed_session} ->
+            do_wait_for_live_actionable(progressed_session, deadline, pending_reason, finder)
+
+          :timeout ->
+            {:error, session, pending_reason}
+        end
+    end
+  end
+
+  defp await_live_action_progress(%__MODULE__{view: view} = session, baseline_version, deadline)
+       when is_integer(baseline_version) do
+    remaining = max(deadline - System.monotonic_time(:millisecond), 0)
+
+    case LiveViewClient.await_progress(view, baseline_version, remaining) do
+      {:ok, {:redirect, %{to: path}}} ->
+        {:ok, follow_redirect(session, path)}
+
+      {:ok, {:live_redirect, %{to: path}}} ->
+        {:ok, follow_redirect(session, path)}
+
+      {:ok, {:patch, %{to: path}}} ->
+        {:ok, refresh_live_progress_session(session, path)}
+
+      {:ok, :diff} ->
+        {:ok, refresh_live_progress_session(session, nil)}
+
+      {:ok, :terminated} ->
+        :timeout
+
+      :timeout ->
+        :timeout
+    end
+  end
+
+  defp await_live_action_progress(session, _baseline_version, _deadline), do: {:ok, session}
+
+  defp refresh_live_progress_session(%__MODULE__{} = session, path_override) do
+    case LiveViewClient.render(session.view) do
+      rendered when is_binary(rendered) ->
+        path = path_override || LiveViewClient.current_path(session.view, session.current_path)
+        %{session | document: Html.parse!(rendered), current_path: path || session.current_path}
+
+      {:error, {kind, %{to: path}}} when kind in [:redirect, :live_redirect] ->
+        follow_redirect(session, path)
+    end
+  end
+
+  defp live_progress_version(%__MODULE__{view: view}), do: LiveViewClient.render_version(view)
+  defp live_progress_version(_session), do: 0
 
   defp live_field_disabled_reason(%{input_disabled: true}, :select), do: "matched select field is disabled"
   defp live_field_disabled_reason(%{input_disabled: true}, _op), do: "matched field is disabled"

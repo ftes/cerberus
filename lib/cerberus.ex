@@ -14,9 +14,9 @@ defmodule Cerberus do
   """
 
   alias Cerberus.Assertions
-  alias Cerberus.Driver.Browser, as: BrowserSession
-  alias Cerberus.Driver.Live, as: LiveSession
-  alias Cerberus.Driver.Static, as: StaticSession
+  alias Cerberus.Driver.Browser
+  alias Cerberus.Driver.Live
+  alias Cerberus.Driver.Static
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
   alias Cerberus.Options
@@ -60,7 +60,7 @@ defmodule Cerberus do
   def session(opts) when is_list(opts) do
     opts
     |> Options.validate_session_common!()
-    |> StaticSession.new_session()
+    |> Static.new_session()
   end
 
   @spec session(Plug.Conn.t()) :: Session.t()
@@ -131,7 +131,7 @@ defmodule Cerberus do
       |> Options.validate_session_browser!()
       |> maybe_put_browser_name(browser_name)
 
-    BrowserSession.new_session(opts)
+    Browser.new_session(opts)
   end
 
   defp maybe_put_browser_name(opts, nil), do: opts
@@ -1152,9 +1152,9 @@ defmodule Cerberus do
     |> Path.normalize()
   end
 
-  defp driver_module_for_session!(%StaticSession{}), do: StaticSession
-  defp driver_module_for_session!(%LiveSession{}), do: LiveSession
-  defp driver_module_for_session!(%BrowserSession{}), do: BrowserSession
+  defp driver_module_for_session!(%Static{}), do: Static
+  defp driver_module_for_session!(%Live{}), do: Live
+  defp driver_module_for_session!(%Browser{}), do: Browser
 
   defp driver_module_for_session!(session) do
     raise ArgumentError,
@@ -1180,7 +1180,7 @@ defmodule Cerberus do
     apply(driver, operation, [session | args])
   end
 
-  defp profiling_bucket_driver_kind!(%StaticSession{}), do: :static
-  defp profiling_bucket_driver_kind!(%LiveSession{}), do: :live
-  defp profiling_bucket_driver_kind!(%BrowserSession{}), do: :browser
+  defp profiling_bucket_driver_kind!(%Static{}), do: :static
+  defp profiling_bucket_driver_kind!(%Live{}), do: :live
+  defp profiling_bucket_driver_kind!(%Browser{}), do: :browser
 end

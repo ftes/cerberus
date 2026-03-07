@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Static do
 
   @behaviour Cerberus.Driver
 
-  alias Cerberus.Driver.Browser, as: BrowserSession
+  alias Cerberus.Driver.Browser
   alias Cerberus.Driver.CandidateScope
   alias Cerberus.Driver.DownloadAssertion
-  alias Cerberus.Driver.Live, as: LiveSession
+  alias Cerberus.Driver.Live
   alias Cerberus.Driver.LocatorOps
   alias Cerberus.Driver.SelectorFallback
   alias Cerberus.Driver.Static.FormData
@@ -14,7 +14,6 @@ defmodule Cerberus.Driver.Static do
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
   alias Cerberus.Phoenix.Conn
-  alias Cerberus.Phoenix.LiveViewTimeout
   alias Cerberus.Query
   alias Cerberus.Session
   alias Cerberus.Session.Config, as: SessionConfig
@@ -74,12 +73,12 @@ defmodule Cerberus.Driver.Static do
     target_session
   end
 
-  def switch_tab(%__MODULE__{} = session, %LiveSession{} = target_session) do
+  def switch_tab(%__MODULE__{} = session, %Live{} = target_session) do
     ensure_same_endpoint!(session, target_session)
     target_session
   end
 
-  def switch_tab(%__MODULE__{}, %BrowserSession{}) do
+  def switch_tab(%__MODULE__{}, %Browser{}) do
     raise ArgumentError, "cannot switch non-browser tab to a browser session"
   end
 
@@ -131,7 +130,7 @@ defmodule Cerberus.Driver.Static do
         transition = transition(:static, :live, :visit, from_path, current_path)
         document = Html.parse!(html)
 
-        %LiveSession{
+        %Live{
           endpoint: session.endpoint,
           conn: conn,
           timeout_ms: timeout_for_driver(session, :live),
@@ -141,7 +140,7 @@ defmodule Cerberus.Driver.Static do
           form_data: session.form_data,
           scope: session.scope,
           current_path: current_path,
-          last_result: LastResult.new(:visit, %{path: current_path, transition: transition}, LiveSession)
+          last_result: LastResult.new(:visit, %{path: current_path, transition: transition}, Live)
         }
 
       :error ->
@@ -563,11 +562,7 @@ defmodule Cerberus.Driver.Static do
   @impl true
   def run_path_assertion(%__MODULE__{} = session, expected, opts, timeout, op) when op in [:assert_path, :refute_path] do
     driver_opts = Keyword.put(opts, :timeout, timeout)
-
-    LiveViewTimeout.with_timeout(session, timeout, fn timed_session ->
-      timed_driver = path_assertion_driver_for_session!(timed_session)
-      run_path_assertion_operation!(timed_driver, timed_session, expected, driver_opts, op)
-    end)
+    run_path_assertion_operation!(__MODULE__, session, expected, driver_opts, op)
   end
 
   @impl true
@@ -623,14 +618,11 @@ defmodule Cerberus.Driver.Static do
     end
   end
 
-  defp path_assertion_driver_for_session!(%__MODULE__{}), do: __MODULE__
-  defp path_assertion_driver_for_session!(%LiveSession{}), do: LiveSession
-
   defp update_last_result(%__MODULE__{} = session, op, observed) do
     %{session | last_result: LastResult.new(op, observed, session)}
   end
 
-  defp update_last_result(%LiveSession{} = session, op, observed) do
+  defp update_last_result(%Live{} = session, op, observed) do
     %{session | last_result: LastResult.new(op, observed, session)}
   end
 
@@ -988,7 +980,7 @@ defmodule Cerberus.Driver.Static do
       {:ok, view, html} ->
         document = Html.parse!(html)
 
-        %LiveSession{
+        %Live{
           endpoint: session.endpoint,
           conn: conn,
           timeout_ms: timeout_for_driver(session, :live),
@@ -1053,7 +1045,7 @@ defmodule Cerberus.Driver.Static do
         unwrap_transition = transition(from_driver, :live, :unwrap, session.current_path, current_path)
         document = Html.parse!(html)
 
-        %LiveSession{
+        %Live{
           endpoint: session.endpoint,
           conn: conn,
           view: view,
@@ -1061,7 +1053,7 @@ defmodule Cerberus.Driver.Static do
           form_data: session.form_data,
           scope: session.scope,
           current_path: current_path,
-          last_result: LastResult.new(:unwrap, %{path: current_path, transition: unwrap_transition}, LiveSession)
+          last_result: LastResult.new(:unwrap, %{path: current_path, transition: unwrap_transition}, Live)
         }
 
       :error ->
@@ -1137,7 +1129,7 @@ defmodule Cerberus.Driver.Static do
     }
   end
 
-  defp clear_submitted_session(%LiveSession{} = session, form_data, op, observed) do
+  defp clear_submitted_session(%Live{} = session, form_data, op, observed) do
     %{
       session
       | form_data: form_data,
@@ -1419,5 +1411,5 @@ defmodule Cerberus.Driver.Static do
   defp session_transition(_session), do: nil
 
   defp driver_kind(%__MODULE__{}), do: :static
-  defp driver_kind(%LiveSession{}), do: :live
+  defp driver_kind(%Live{}), do: :live
 end
