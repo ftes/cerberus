@@ -81,7 +81,7 @@ defmodule Cerberus.DocumentationExamplesTest do
   end
 
   test "browser extension snippet from docs works", context do
-    m
+    session =
       :browser
       |> driver_session(context)
       |> visit("/browser/extensions")
