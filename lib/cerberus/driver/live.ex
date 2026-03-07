@@ -15,20 +15,19 @@ defmodule Cerberus.Driver.Live do
       render_submit: 2
     ]
 
-  alias Cerberus.Driver.Browser, as: BrowserSession
+  alias Cerberus.Driver.Browser
   alias Cerberus.Driver.CandidateScope
   alias Cerberus.Driver.DownloadAssertion
   alias Cerberus.Driver.Live.FormData
   alias Cerberus.Driver.LocatorOps
   alias Cerberus.Driver.SelectorFallback
-  alias Cerberus.Driver.Static, as: StaticSession
+  alias Cerberus.Driver.Static
   alias Cerberus.Html
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
   alias Cerberus.Phoenix.Conn
   alias Cerberus.Phoenix.LiveViewClient
   alias Cerberus.Phoenix.LiveViewHTML
-  alias Cerberus.PhoenixLoop
   alias Cerberus.Query
   alias Cerberus.Session
   alias Cerberus.Session.Config, as: SessionConfig
@@ -88,7 +87,7 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   @spec switch_tab(t(), Session.t()) :: Session.t()
-  def switch_tab(%__MODULE__{} = session, %StaticSession{} = target_session) do
+  def switch_tab(%__MODULE__{} = session, %Static{} = target_session) do
     ensure_same_endpoint!(session, target_session)
     target_session
   end
@@ -98,7 +97,7 @@ defmodule Cerberus.Driver.Live do
     target_session
   end
 
-  def switch_tab(%__MODULE__{}, %BrowserSession{}) do
+  def switch_tab(%__MODULE__{}, %Browser{}) do
     raise ArgumentError, "cannot switch non-browser tab to a browser session"
   end
 
@@ -198,7 +197,7 @@ defmodule Cerberus.Driver.Live do
         transition = transition(from_driver, :static, :visit, from_path, current_path)
         document = Html.parse!(html)
 
-        %StaticSession{
+        %Static{
           endpoint: session.endpoint,
           conn: conn,
           timeout_ms: timeout_for_driver(session, :static),
@@ -207,7 +206,7 @@ defmodule Cerberus.Driver.Live do
           form_data: session.form_data,
           scope: session.scope,
           current_path: current_path,
-          last_result: LastResult.new(:visit, %{path: current_path, transition: transition}, StaticSession)
+          last_result: LastResult.new(:visit, %{path: current_path, transition: transition}, Static)
         }
     end
   end
@@ -516,6 +515,21 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def assert_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
+    timeout_ms = live_action_timeout_ms(session, opts)
+
+    run_transition_aware_assertion(session, timeout_ms, fn current_session ->
+      assert_has_text_once(current_session, locator, expected, opts)
+    end)
+  end
+
+  @impl true
+  def assert_has(%__MODULE__{} = session, %Locator{} = locator, opts) do
+    run_transition_aware_assertion(session, live_action_timeout_ms(session, opts), fn current_session ->
+      assert_has_once(current_session, locator, opts)
+    end)
+  end
+
+  defp assert_has_text_once(%__MODULE__{} = session, %Locator{} = locator, expected, opts) do
     if locator_assertion_requires_locator_engine?(locator) do
       run_locator_assertion(session, locator, opts, :assert)
     else
@@ -544,13 +558,35 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  @impl true
-  def assert_has(%__MODULE__{} = session, %Locator{} = locator, opts) do
+  defp assert_has_text_once(%Static{} = session, %Locator{} = locator, _expected, opts) do
+    Static.assert_has(session, locator, opts)
+  end
+
+  defp assert_has_once(%__MODULE__{} = session, %Locator{} = locator, opts) do
     run_locator_assertion(session, locator, opts, :assert)
+  end
+
+  defp assert_has_once(%Static{} = session, %Locator{} = locator, opts) do
+    Static.assert_has(session, locator, opts)
   end
 
   @impl true
   def refute_has(%__MODULE__{} = session, %Locator{kind: :text, value: expected} = locator, opts) do
+    timeout_ms = live_action_timeout_ms(session, opts)
+
+    run_transition_aware_assertion(session, timeout_ms, fn current_session ->
+      refute_has_text_once(current_session, locator, expected, opts)
+    end)
+  end
+
+  @impl true
+  def refute_has(%__MODULE__{} = session, %Locator{} = locator, opts) do
+    run_transition_aware_assertion(session, live_action_timeout_ms(session, opts), fn current_session ->
+      refute_has_once(current_session, locator, opts)
+    end)
+  end
+
+  defp refute_has_text_once(%__MODULE__{} = session, %Locator{} = locator, expected, opts) do
     if locator_assertion_requires_locator_engine?(locator) do
       run_locator_assertion(session, locator, opts, :refute)
     else
@@ -579,24 +615,35 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  @impl true
-  def refute_has(%__MODULE__{} = session, %Locator{} = locator, opts) do
+  defp refute_has_text_once(%Static{} = session, %Locator{} = locator, _expected, opts) do
+    Static.refute_has(session, locator, opts)
+  end
+
+  defp refute_has_once(%__MODULE__{} = session, %Locator{} = locator, opts) do
     run_locator_assertion(session, locator, opts, :refute)
+  end
+
+  defp refute_has_once(%Static{} = session, %Locator{} = locator, opts) do
+    Static.refute_has(session, locator, opts)
   end
 
   @impl true
   def assert_value(%__MODULE__{} = session, %Locator{} = locator, expected, opts)
       when (is_binary(expected) or is_struct(expected, Regex)) and is_list(opts) do
-    run_value_assertion(session, locator, expected, opts, :assert)
+    run_transition_aware_assertion(session, live_action_timeout_ms(session, opts), fn current_session ->
+      run_value_assertion_once(current_session, locator, expected, opts, :assert)
+    end)
   end
 
   @impl true
   def refute_value(%__MODULE__{} = session, %Locator{} = locator, expected, opts)
       when (is_binary(expected) or is_struct(expected, Regex)) and is_list(opts) do
-    run_value_assertion(session, locator, expected, opts, :refute)
+    run_transition_aware_assertion(session, live_action_timeout_ms(session, opts), fn current_session ->
+      run_value_assertion_once(current_session, locator, expected, opts, :refute)
+    end)
   end
 
-  defp run_value_assertion(%__MODULE__{} = session, %Locator{} = locator, expected, opts, mode)
+  defp run_value_assertion_once(%__MODULE__{} = session, %Locator{} = locator, expected, opts, mode)
        when mode in [:assert, :refute] do
     session = with_latest_document(session)
     {field_expected, match_opts} = LocatorOps.form(locator, opts)
@@ -624,6 +671,11 @@ defmodule Cerberus.Driver.Live do
 
         {:error, session, observed, "no form field matched locator"}
     end
+  end
+
+  defp run_value_assertion_once(%Static{} = session, %Locator{} = locator, expected, opts, mode)
+       when mode in [:assert, :refute] do
+    apply(Static, value_assertion_op(mode), [session, locator, expected, opts])
   end
 
   defp run_locator_assertion(%__MODULE__{} = session, %Locator{} = locator, opts, mode) when mode in [:assert, :refute] do
@@ -723,7 +775,7 @@ defmodule Cerberus.Driver.Live do
         timeout_ms = Keyword.fetch!(opts, :timeout)
 
         session
-        |> PhoenixLoop.run(timeout_ms, &download_redirect_target!/1)
+        |> await_live_download_target(timeout_ms)
         |> DownloadAssertion.assert_from_conn!(filename)
 
       :static ->
@@ -731,25 +783,65 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp download_redirect_target!(%StaticSession{} = timed_session), do: timed_session
-  defp download_redirect_target!(%__MODULE__{view: nil} = timed_session), do: timed_session
-
-  defp download_redirect_target!(_timed_session) do
-    raise AssertionError,
-      message: "assert_download/3 timed out waiting for live download redirect to a static response"
-  end
-
   @impl true
   def default_timeout_ms(%__MODULE__{} = session), do: session.timeout_ms
+
+  defp run_transition_aware_assertion(session, timeout_ms, attempt_fun)
+       when is_integer(timeout_ms) and timeout_ms >= 0 and is_function(attempt_fun, 1) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    do_run_transition_aware_assertion(session, deadline, attempt_fun)
+  end
+
+  defp do_run_transition_aware_assertion(%Static{} = session, _deadline, attempt_fun) when is_function(attempt_fun, 1) do
+    attempt_fun.(session)
+  end
+
+  defp do_run_transition_aware_assertion(%__MODULE__{} = session, deadline, attempt_fun)
+       when is_function(attempt_fun, 1) do
+    case attempt_fun.(session) do
+      {:ok, _updated_session, _observed} = ok ->
+        ok
+
+      {:error, failed_session, observed, reason} ->
+        maybe_retry_transition_aware_assertion(failed_session, observed, reason, deadline, attempt_fun)
+    end
+  end
+
+  defp maybe_retry_transition_aware_assertion(%Static{} = session, observed, reason, _deadline, _attempt_fun) do
+    {:error, session, observed, reason}
+  end
+
+  defp maybe_retry_transition_aware_assertion(%__MODULE__{} = session, observed, reason, deadline, attempt_fun)
+       when is_function(attempt_fun, 1) do
+    if live_action_time_remaining?(deadline) do
+      baseline_version = live_progress_version(session)
+
+      case await_live_action_progress(session, baseline_version, deadline) do
+        {:ok, next_session} ->
+          do_run_transition_aware_assertion(next_session, deadline, attempt_fun)
+
+        :timeout ->
+          {:error, session, observed, reason}
+      end
+    else
+      {:error, session, observed, reason}
+    end
+  end
 
   @impl true
   def run_path_assertion(%__MODULE__{} = session, expected, opts, timeout, op) when op in [:assert_path, :refute_path] do
     driver_opts = Keyword.put(opts, :timeout, timeout)
 
-    PhoenixLoop.run(session, timeout, fn timed_session ->
-      timed_driver = path_assertion_driver_for_session!(timed_session)
-      run_path_assertion_operation!(timed_driver, timed_session, expected, driver_opts, op)
-    end)
+    case run_transition_aware_assertion(session, timeout, fn current_session ->
+           run_path_assertion_once(current_session, expected, driver_opts, op)
+         end) do
+      {:ok, updated_session, _observed} ->
+        updated_session
+
+      {:error, _failed_session, observed, _reason} ->
+        raise AssertionError,
+          message: Cerberus.Path.format_assertion_error(Atom.to_string(op), observed)
+    end
   end
 
   @impl true
@@ -790,19 +882,40 @@ defmodule Cerberus.Driver.Live do
     }
   end
 
-  defp run_path_assertion_operation!(driver, session, expected, driver_opts, op) do
-    case apply(driver, op, [session, expected, driver_opts]) do
-      {:ok, updated_session, _observed} ->
-        updated_session
-
-      {:error, _failed_session, observed, _reason} ->
-        raise AssertionError,
-          message: Cerberus.Path.format_assertion_error(Atom.to_string(op), observed)
-    end
+  defp run_path_assertion_once(%__MODULE__{} = session, expected, driver_opts, op)
+       when op in [:assert_path, :refute_path] do
+    apply(__MODULE__, op, [session, expected, driver_opts])
   end
 
-  defp path_assertion_driver_for_session!(%__MODULE__{}), do: __MODULE__
-  defp path_assertion_driver_for_session!(%StaticSession{}), do: StaticSession
+  defp run_path_assertion_once(%Static{} = session, expected, driver_opts, op) when op in [:assert_path, :refute_path] do
+    apply(Static, op, [session, expected, driver_opts])
+  end
+
+  defp await_live_download_target(%__MODULE__{} = session, timeout_ms) when is_integer(timeout_ms) and timeout_ms >= 0 do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    do_await_live_download_target(session, deadline)
+  end
+
+  defp do_await_live_download_target(%Static{} = session, _deadline), do: session
+  defp do_await_live_download_target(%__MODULE__{view: nil} = session, _deadline), do: session
+
+  defp do_await_live_download_target(%__MODULE__{} = session, deadline) do
+    if live_action_time_remaining?(deadline) do
+      baseline_version = live_progress_version(session)
+
+      case await_live_action_progress(session, baseline_version, deadline) do
+        {:ok, next_session} ->
+          do_await_live_download_target(next_session, deadline)
+
+        :timeout ->
+          raise AssertionError,
+            message: "assert_download/3 timed out waiting for live download redirect to a static response"
+      end
+    else
+      raise AssertionError,
+        message: "assert_download/3 timed out waiting for live download redirect to a static response"
+    end
+  end
 
   defp click_live_button(session, %{dispatch_change: true} = button, _kind) do
     click_live_dispatch_change_button(session, button)
@@ -1358,7 +1471,7 @@ defmodule Cerberus.Driver.Live do
     %{session | last_result: LastResult.new(op, observed, session)}
   end
 
-  defp update_last_result(%StaticSession{} = session, op, observed) do
+  defp update_last_result(%Static{} = session, op, observed) do
     %{session | last_result: LastResult.new(op, observed, session)}
   end
 
@@ -2963,7 +3076,7 @@ defmodule Cerberus.Driver.Live do
     %{session | form_data: form_data, last_result: LastResult.new(op, observed, session)}
   end
 
-  defp clear_submitted_session(%StaticSession{} = session, form_data, op, observed) do
+  defp clear_submitted_session(%Static{} = session, form_data, op, observed) do
     %{session | form_data: form_data, last_result: LastResult.new(op, observed, session)}
   end
 
@@ -3254,7 +3367,7 @@ defmodule Cerberus.Driver.Live do
       :error ->
         document = Html.parse!(conn.resp_body || "")
 
-        %StaticSession{
+        %Static{
           endpoint: session.endpoint,
           conn: conn,
           timeout_ms: timeout_for_driver(session, :static),
@@ -3283,7 +3396,7 @@ defmodule Cerberus.Driver.Live do
         redirected_session =
           session
           |> static_seed_from_session(conn)
-          |> StaticSession.visit(redirect_path, [])
+          |> Static.visit(redirect_path, [])
 
         unwrap_transition =
           transition(
@@ -3396,7 +3509,7 @@ defmodule Cerberus.Driver.Live do
         unwrap_transition = transition(from_driver, :static, :unwrap, session.current_path, current_path)
         document = Html.parse!(conn.resp_body || "")
 
-        %StaticSession{
+        %Static{
           endpoint: session.endpoint,
           conn: conn,
           timeout_ms: timeout_for_driver(session, :static),
@@ -3405,7 +3518,7 @@ defmodule Cerberus.Driver.Live do
           form_data: Map.get(session, :form_data),
           scope: session.scope,
           current_path: current_path,
-          last_result: LastResult.new(:unwrap, %{path: current_path, transition: unwrap_transition}, StaticSession)
+          last_result: LastResult.new(:unwrap, %{path: current_path, transition: unwrap_transition}, Static)
         }
     end
   end
@@ -3424,7 +3537,7 @@ defmodule Cerberus.Driver.Live do
   defp static_seed_from_session(session, conn) do
     document = Html.parse!(conn.resp_body || "")
 
-    %StaticSession{
+    %Static{
       endpoint: session.endpoint,
       conn: conn,
       timeout_ms: timeout_for_driver(session, :static),
@@ -3589,5 +3702,5 @@ defmodule Cerberus.Driver.Live do
   defp session_transition(_session), do: nil
 
   defp driver_kind(%__MODULE__{}), do: :live
-  defp driver_kind(%StaticSession{}), do: :static
+  defp driver_kind(%Static{}), do: :static
 end

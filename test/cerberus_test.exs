@@ -5,20 +5,20 @@ defmodule CerberusTest do
   import Phoenix.LiveViewTest, only: [element: 3, render_click: 1]
 
   alias Cerberus.Browser.Native, as: BrowserNative
-  alias Cerberus.Driver.Browser, as: BrowserSession
-  alias Cerberus.Driver.Live, as: LiveSession
-  alias Cerberus.Driver.Static, as: StaticSession
+  alias Cerberus.Driver.Browser
+  alias Cerberus.Driver.Live
+  alias Cerberus.Driver.Static
   alias ExUnit.AssertionError
 
   test "session constructor defaults to phoenix non-browser sessions" do
-    assert %StaticSession{} = session()
-    assert %StaticSession{} = session(:phoenix)
+    assert %Static{} = session()
+    assert %Static{} = session(:phoenix)
   end
 
   test "session(conn) reuses existing conn state" do
-    %StaticSession{conn: seeded_conn} = visit(session(), "/session/user/alice")
+    %Static{conn: seeded_conn} = visit(session(), "/session/user/alice")
 
-    assert %StaticSession{} =
+    assert %Static{} =
              seeded_conn
              |> session()
              |> visit("/session/user")
@@ -29,7 +29,7 @@ defmodule CerberusTest do
     email = "session-carry-#{System.unique_integer([:positive])}@example.com"
     password = "Password12345!"
 
-    %StaticSession{conn: seeded_conn} =
+    %Static{conn: seeded_conn} =
       session()
       |> visit("/auth/static/users/register")
       |> fill_in(~l"Email"l, email)
@@ -72,7 +72,7 @@ defmodule CerberusTest do
   end
 
   test "chrome alias constructs browser sessions" do
-    assert %BrowserSession{} = session(:chrome)
+    assert %Browser{} = session(:chrome)
   end
 
   test "new-session isolation plus open_tab/switch_tab API works for non-browser sessions" do
@@ -101,7 +101,7 @@ defmodule CerberusTest do
   end
 
   test "session constructor returns a browser session" do
-    assert %BrowserSession{} = session(:browser)
+    assert %Browser{} = session(:browser)
   end
 
   @tag :slow
@@ -623,7 +623,7 @@ defmodule CerberusTest do
       end)
       |> assert_has(text("Count: 0", exact: true))
 
-    assert %LiveSession{} = session
+    assert %Live{} = session
     assert session.current_path == "/live/counter"
   end
 
@@ -713,7 +713,7 @@ defmodule CerberusTest do
 
   test "unwrap rejects live sessions without an active LiveView" do
     assert_raise ArgumentError, ~r/requires an active LiveView/, fn ->
-      unwrap(LiveSession.new_session(), fn view -> view end)
+      unwrap(Live.new_session(), fn view -> view end)
     end
   end
 

@@ -4,9 +4,9 @@ defmodule Cerberus.FormButtonOwnershipTest do
   import Cerberus
   import Phoenix.ConnTest, only: [build_conn: 0]
 
-  alias Cerberus.Driver.Browser, as: BrowserSession
-  alias Cerberus.Driver.Live, as: LiveSession
-  alias Cerberus.Driver.Static, as: StaticSession
+  alias Cerberus.Driver.Browser
+  alias Cerberus.Driver.Live
+  alias Cerberus.Driver.Static
   alias Cerberus.TestSupport.SharedBrowserSession
 
   setup_all do
@@ -124,16 +124,16 @@ defmodule Cerberus.FormButtonOwnershipTest do
     assert String.starts_with?(session.current_path || "", "/owner-form/result")
   end
 
-  defp submit_for_session(%StaticSession{} = session, locator, opts) do
-    StaticSession.submit(session, locator, opts)
+  defp submit_for_session(%Static{} = session, locator, opts) do
+    Static.submit(session, locator, opts)
   end
 
-  defp submit_for_session(%LiveSession{} = session, locator, opts) do
-    LiveSession.submit(session, locator, opts)
+  defp submit_for_session(%Live{} = session, locator, opts) do
+    Live.submit(session, locator, opts)
   end
 
-  defp submit_for_session(%BrowserSession{} = session, locator, opts) do
-    BrowserSession.submit(session, locator, opts)
+  defp submit_for_session(%Browser{} = session, locator, opts) do
+    Browser.submit(session, locator, opts)
   end
 
   defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)

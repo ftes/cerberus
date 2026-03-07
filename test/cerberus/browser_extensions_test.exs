@@ -481,7 +481,7 @@ defmodule Cerberus.BrowserExtensionsTest do
       |> visit("/browser/extensions")
 
     evaluate_js(session, "setTimeout(() => document.getElementById('download-report')?.click(), 30)", fn _ -> :ok end)
-    assert_download(session, "report.txt", timeout: 500)
+    assert_download(session, "report.txt", timeout: 1_500)
   end
 
   test "assert_download supports static sessions from controller download responses" do

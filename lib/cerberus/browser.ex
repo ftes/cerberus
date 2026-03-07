@@ -6,7 +6,7 @@ defmodule Cerberus.Browser do
   """
 
   alias Cerberus.Assertions
-  alias Cerberus.Driver.Browser, as: BrowserSession
+  alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Browser.Extensions
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
@@ -95,11 +95,11 @@ defmodule Cerberus.Browser do
   @spec screenshot(session, String.t() | Options.screenshot_opts(), (binary() -> term())) :: session when session: var
   def screenshot(session, opts \\ [])
 
-  def screenshot(%BrowserSession{} = session, path) when is_binary(path) do
+  def screenshot(%Browser{} = session, path) when is_binary(path) do
     screenshot(session, path: path)
   end
 
-  def screenshot(%BrowserSession{} = session, opts) when is_list(opts) do
+  def screenshot(%Browser{} = session, opts) when is_list(opts) do
     opts = Options.validate_screenshot!(opts)
     {updated_session, png_binary, path} = capture_screenshot(session, opts)
 
@@ -116,11 +116,11 @@ defmodule Cerberus.Browser do
     raise ArgumentError, "Browser.screenshot/2 expects a path string or keyword options"
   end
 
-  def screenshot(%BrowserSession{} = session, path, callback) when is_binary(path) and is_function(callback, 1) do
+  def screenshot(%Browser{} = session, path, callback) when is_binary(path) and is_function(callback, 1) do
     screenshot(session, [path: path], callback)
   end
 
-  def screenshot(%BrowserSession{} = session, opts, callback) when is_list(opts) and is_function(callback, 1) do
+  def screenshot(%Browser{} = session, opts, callback) when is_list(opts) and is_function(callback, 1) do
     opts = Options.validate_screenshot!(opts)
     {updated_session, png_binary, path} = capture_screenshot(session, opts)
     _ = callback.(png_binary)
@@ -322,14 +322,14 @@ defmodule Cerberus.Browser do
   Returns all browser cookies visible to the active page.
   """
   @spec cookies(Session.t()) :: [cookie]
-  def cookies(%BrowserSession{} = session), do: Extensions.cookies(session)
+  def cookies(%Browser{} = session), do: Extensions.cookies(session)
   def cookies(session), do: Assertions.unsupported(session, :cookies)
 
   @doc """
   Passes all browser cookies visible to the active page to `callback` and returns `session`.
   """
   @spec cookies(session, ([cookie] -> term())) :: session when session: var
-  def cookies(%BrowserSession{} = session, callback) when is_function(callback, 1) do
+  def cookies(%Browser{} = session, callback) when is_function(callback, 1) do
     _ = callback.(Extensions.cookies(session))
     session
   end
@@ -344,14 +344,14 @@ defmodule Cerberus.Browser do
   Returns the cookie by `name` or `nil` when not present.
   """
   @spec cookie(Session.t(), String.t()) :: cookie | nil
-  def cookie(%BrowserSession{} = session, name) when is_binary(name), do: Extensions.cookie(session, name)
+  def cookie(%Browser{} = session, name) when is_binary(name), do: Extensions.cookie(session, name)
   def cookie(session, _name), do: Assertions.unsupported(session, :cookie)
 
   @doc """
   Passes the cookie by `name` (or `nil`) to `callback` and returns `session`.
   """
   @spec cookie(session, String.t(), (cookie | nil -> term())) :: session when session: var
-  def cookie(%BrowserSession{} = session, name, callback) when is_binary(name) and is_function(callback, 1) do
+  def cookie(%Browser{} = session, name, callback) when is_binary(name) and is_function(callback, 1) do
     _ = callback.(Extensions.cookie(session, name))
     session
   end
@@ -366,14 +366,14 @@ defmodule Cerberus.Browser do
   Returns the session cookie (commonly `_app_key`) when present.
   """
   @spec session_cookie(Session.t()) :: cookie | nil
-  def session_cookie(%BrowserSession{} = session), do: Extensions.session_cookie(session)
+  def session_cookie(%Browser{} = session), do: Extensions.session_cookie(session)
   def session_cookie(session), do: Assertions.unsupported(session, :session_cookie)
 
   @doc """
   Passes the session cookie (or `nil`) to `callback` and returns `session`.
   """
   @spec session_cookie(session, (cookie | nil -> term())) :: session when session: var
-  def session_cookie(%BrowserSession{} = session, callback) when is_function(callback, 1) do
+  def session_cookie(%Browser{} = session, callback) when is_function(callback, 1) do
     _ = callback.(Extensions.session_cookie(session))
     session
   end
@@ -474,22 +474,22 @@ defmodule Cerberus.Browser do
     raise ArgumentError, @add_session_cookie_args_error
   end
 
-  defp evaluate_js_value(%BrowserSession{} = session, expression) when is_binary(expression) do
+  defp evaluate_js_value(%Browser{} = session, expression) when is_binary(expression) do
     {:ok, Extensions.evaluate_js(session, expression)}
   end
 
   defp evaluate_js_value(session, _expression), do: {:unsupported, session}
 
-  defp capture_screenshot(%BrowserSession{} = session, validated_opts) when is_list(validated_opts) do
-    resolved_path = BrowserSession.screenshot_path(validated_opts)
+  defp capture_screenshot(%Browser{} = session, validated_opts) when is_list(validated_opts) do
+    resolved_path = Browser.screenshot_path(validated_opts)
     opts = Keyword.put(validated_opts, :path, resolved_path)
-    updated_session = BrowserSession.screenshot(session, opts)
+    updated_session = Browser.screenshot(session, opts)
     png_binary = File.read!(resolved_path)
     {updated_session, png_binary, resolved_path}
   end
 
-  defp resolve_extension_selector!(%BrowserSession{} = session, %Locator{} = locator, op_name) do
-    case BrowserSession.resolve_within_scope(session, locator, Session.scope(session)) do
+  defp resolve_extension_selector!(%Browser{} = session, %Locator{} = locator, op_name) do
+    case Browser.resolve_within_scope(session, locator, Session.scope(session)) do
       {:ok, selector} when is_binary(selector) and selector != "" ->
         selector
 
@@ -514,7 +514,7 @@ defmodule Cerberus.Browser do
     :ok
   end
 
-  defp encode_session_cookie!(%BrowserSession{} = session, cookie, session_options)
+  defp encode_session_cookie!(%Browser{} = session, cookie, session_options)
        when is_list(cookie) and is_list(session_options) do
     secret_key_base = session_secret_key_base!(session, "Browser.add_session_cookie/3")
 
@@ -549,7 +549,7 @@ defmodule Cerberus.Browser do
     Enum.reduce(values, conn, fn {key, value}, acc -> Plug.Conn.put_session(acc, key, value) end)
   end
 
-  defp session_secret_key_base!(%BrowserSession{endpoint: endpoint}, op_name) when is_atom(endpoint) do
+  defp session_secret_key_base!(%Browser{endpoint: endpoint}, op_name) when is_atom(endpoint) do
     if function_exported?(endpoint, :config, 1) do
       case endpoint.config(:secret_key_base) do
         value when is_binary(value) and value != "" ->
@@ -572,7 +572,7 @@ defmodule Cerberus.Browser do
   defp browser_only(session, op, opts, invalid_args_message, validator, fun)
        when is_list(opts) and is_function(validator, 1) and is_function(fun, 2) do
     case session do
-      %BrowserSession{} = browser_session ->
+      %Browser{} = browser_session ->
         validated_opts = validator.(opts)
 
         case fun.(browser_session, validated_opts) do
@@ -591,7 +591,7 @@ defmodule Cerberus.Browser do
 
   defp browser_only_list(session, op, args, _invalid_args_message, fun) when is_list(args) and is_function(fun, 1) do
     case session do
-      %BrowserSession{} = browser_session ->
+      %Browser{} = browser_session ->
         fun.(browser_session)
 
       _other ->

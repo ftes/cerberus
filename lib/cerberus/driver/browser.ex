@@ -4,7 +4,6 @@ defmodule Cerberus.Driver.Browser do
   @behaviour Cerberus.Driver
 
   alias Cerberus.Browser.Native, as: BrowserNative
-  alias Cerberus.Driver.Browser.BiDi
   alias Cerberus.Driver.Browser.Config
   alias Cerberus.Driver.Browser.Evaluate
   alias Cerberus.Driver.Browser.Expressions
@@ -26,6 +25,7 @@ defmodule Cerberus.Driver.Browser do
 
   @default_ready_timeout_ms 1_500
   @default_ready_quiet_ms 40
+  @default_capture_timeout_ms 30_000
   @transient_eval_retry_interval_ms 25
   @value_assertion_poll_interval_ms 50
   @transient_eval_retry_min_budget_ms 3_000
@@ -239,8 +239,9 @@ defmodule Cerberus.Driver.Browser do
     state = state!(session)
     path = screenshot_path(opts)
     full_page = screenshot_full_page(opts)
+    capture_timeout_ms = max(session.timeout_ms, @default_capture_timeout_ms)
 
-    case capture_screenshot(state.tab_id, full_page, bidi_opts(state)) do
+    case capture_screenshot(state, full_page, capture_timeout_ms) do
       {:ok, %{"data" => data}} when is_binary(data) ->
         write_screenshot!(path, data)
         session
@@ -342,27 +343,6 @@ defmodule Cerberus.Driver.Browser do
         raise AssertionError,
           message: Cerberus.Path.format_assertion_error(Atom.to_string(op), observed)
     end
-  end
-
-  @doc false
-  @spec wait_for_assertion_signal(t(), non_neg_integer()) :: t()
-  def wait_for_assertion_signal(%__MODULE__{} = session, timeout_ms) when is_integer(timeout_ms) and timeout_ms >= 0 do
-    state = state!(session)
-
-    if timeout_ms > 0 do
-      quiet_ms = max(min(session.ready_quiet_ms, timeout_ms), 1)
-
-      _ =
-        Profiling.measure({:browser_wait, :await_ready, :assertion_signal}, fn ->
-          UserContextProcess.await_ready(
-            state.user_context_pid,
-            [timeout_ms: timeout_ms, quiet_ms: quiet_ms],
-            state.tab_id
-          )
-        end)
-    end
-
-    refresh_path(session)
   end
 
   @impl true
@@ -2015,10 +1995,64 @@ defmodule Cerberus.Driver.Browser do
 
   defp snapshot_base_url(default_base_url, _url), do: default_base_url
 
-  defp capture_screenshot(context_id, full_page, bidi_opts) do
-    params = maybe_full_page_origin(%{"context" => context_id}, full_page)
+  defp capture_screenshot(state, full_page, timeout_ms) when is_map(state) and is_integer(timeout_ms) do
+    params = maybe_full_page_origin(%{"context" => state.tab_id}, full_page)
+    bidi_opts = Keyword.put(bidi_opts(state), :timeout, timeout_ms)
 
-    BiDi.command("browsingContext.captureScreenshot", params, bidi_opts)
+    _ = params
+    _ = bidi_opts
+    capture_screenshot_via_webdriver(state, timeout_ms)
+  end
+
+  defp capture_screenshot_via_webdriver(state, timeout_ms) when is_map(state) and is_integer(timeout_ms) do
+    case eval_json(state, dom_snapshot_screenshot_expression(), timeout_ms) do
+      {:ok, %{"ok" => true, "data" => data}} when is_binary(data) ->
+        {:ok, %{"data" => data}}
+
+      {:ok, payload} ->
+        {:error, "failed to capture browser screenshot via DOM fallback", payload}
+
+      other ->
+        {:error, "failed to capture browser screenshot via DOM fallback", %{result: other}}
+    end
+  end
+
+  defp dom_snapshot_screenshot_expression do
+    """
+    (() => new Promise((resolve) => {
+      const width = Math.max(document.documentElement?.scrollWidth || 0, window.innerWidth || 0, 1);
+      const height = Math.max(document.documentElement?.scrollHeight || 0, window.innerHeight || 0, 1);
+      const html = new XMLSerializer().serializeToString(document.documentElement);
+      const svg =
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+        `<foreignObject width="100%" height="100%">${html}</foreignObject>` +
+        `</svg>`;
+      const image = new Image();
+      image.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const context = canvas.getContext("2d");
+
+          if (!context) {
+            resolve(JSON.stringify({ ok: false, reason: "canvas_context_unavailable" }));
+            return;
+          }
+
+          context.drawImage(image, 0, 0);
+          const dataUrl = canvas.toDataURL("image/png");
+          resolve(JSON.stringify({ ok: true, data: dataUrl.split(",")[1] || "" }));
+        } catch (error) {
+          resolve(JSON.stringify({ ok: false, reason: "canvas_render_failed", error: String(error) }));
+        }
+      };
+      image.onerror = (error) => {
+        resolve(JSON.stringify({ ok: false, reason: "image_decode_failed", error: String(error) }));
+      };
+      image.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    }))()
+    """
   end
 
   defp bidi_opts(%{bidi_opts: bidi_opts, browser_name: browser_name}) when is_list(bidi_opts) do

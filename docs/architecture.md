@@ -33,6 +33,13 @@ flowchart LR
 >
 > This split keeps HTML rules testable without Phoenix internals and isolates LiveView-specific quirks to one layer.
 
+## Waiting Model
+
+- Static stays one-shot. It inspects the current document and path snapshot and returns immediately.
+- Live owns its own waiting. Actions and assertions wait on LiveView progress and follow redirects or static transitions inside the live driver.
+- Browser owns its own waiting. Actions and assertions wait natively in the browser driver and browser-side JS.
+- Cerberus does not use a shared timeout loop across static, live, and browser. The public layer computes timeout values once and passes them down to the active driver.
+
 ## Driver Module Map
 
 Driver-first organization is the primary code layout rule:

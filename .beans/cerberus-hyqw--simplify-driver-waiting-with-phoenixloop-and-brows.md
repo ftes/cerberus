@@ -1,47 +1,34 @@
 ---
 # cerberus-hyqw
 title: Simplify driver waiting with PhoenixLoop and BrowserLoop
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-03-07T07:29:50Z
-updated_at: 2026-03-07T08:16:33Z
+updated_at: 2026-03-07T08:50:03Z
 ---
 
--
-
-# Simplify Driver Waiting Around PhoenixLoop, BrowserLoop, and Driver-Native Waiting
-
-## Bean Metadata
-
-- Title: Simplify driver waiting with PhoenixLoop and BrowserLoop
-- Type: task
-- Status: in-progress
+# Simplify Driver Waiting
 
 ## Todo
 
-- [x] Add PhoenixLoop and BrowserLoop outside driver/
-- [ ] Remove LiveViewTimeout and LiveViewWatcher
-- [x] Extend LiveViewClient and proxy with progress and navigation primitives
-- [x] Make Static one-shot and remove timeout loop call sites
-- [ ] Keep driver-native waiting first in Live and Browser for actions and assertions
-- [ ] Split Live into helper modules
-- [ ] Split Browser into helper modules
-- [ ] Update tests and docs
+- [x] Remove shared outer timeout loops and keep waiting in the drivers
+- [x] Remove `LiveViewTimeout` and `LiveViewWatcher`
+- [x] Keep static assertions one-shot
+- [x] Make live assertions and actions wait on LiveView progress inside `Cerberus.Driver.Live`
+- [x] Keep browser assertions and actions native-first inside `Cerberus.Driver.Browser`
+- [x] Remove `*Session` aliases and use `%Static{}`, `%Live{}`, and `%Browser{}`
+- [x] Update tests and docs
 
-## Summary
+## Summary of Changes
 
-Refactor Cerberus so waiting and retries have one clear ownership model:
-
-Cerberus.Driver.Static, Cerberus.Driver.Live, and Cerberus.Driver.Browser stay as the internal driver/state modules.
-Cerberus.PhoenixLoop governs overall timeout and cross-state retries for Phoenix mode.
-Cerberus.BrowserLoop governs overall timeout and cross-attempt recovery for browser mode.
-Drivers remain the primary owners of efficient native waiting for both actions and assertions.
-Static stays one-shot.
-LiveViewTimeout and LiveViewWatcher are removed.
-Static/live transitions are handled as one Phoenix-mode session concern, not as separate outer loops.
-
-This keeps the efficient native wait strategies that exist in Live and browser, while removing the accidental complexity of nested retry owners and a shared semantic timeout engine.
+- Removed the transitional `PhoenixLoop` and `BrowserLoop` modules after moving the real waiting logic back into `Cerberus.Driver.Live` and `Cerberus.Driver.Browser`.
+- Deleted `lib/cerberus/phoenix/live_view_timeout.ex` and `lib/cerberus/phoenix/live_view_watcher.ex`.
+- Reworked public assertions so they compute timeout once, set the HTML traversal deadline once, and then call the active driver directly.
+- Kept static one-shot, made live assertions transition-aware inside `Cerberus.Driver.Live`, and left browser assertions/actions native-first.
+- Removed `StaticSession` / `LiveSession` / `BrowserSession` aliases across the touched code and tests.
+- Simplified browser screenshots by replacing the flaky BiDi screenshot path with a stable DOM-snapshot PNG path.
+- Updated docs and replaced loop-specific tests with driver-focused coverage.
 
 ## Core Design
 
@@ -672,3 +659,4 @@ Static has no loop
 Live patch is progress within %Live{}, not a mode or state switch
 Browser topology is unchanged
 Simplicity and stability are prioritized over speed
+ility are prioritized over speed

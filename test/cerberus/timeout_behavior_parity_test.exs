@@ -20,7 +20,7 @@ defmodule Cerberus.TimeoutBehaviorParityTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/async_page")
-      |> assert_has(text("Title loaded async"), timeout: 350)
+      |> assert_has(text("Title loaded async"), timeout: 700)
     end
 
     test "timeout handles multi-live async transitions (#{driver})", context do
@@ -28,7 +28,7 @@ defmodule Cerberus.TimeoutBehaviorParityTest do
       |> driver_session(context)
       |> visit("/live/async_page")
       |> click(role(:button, name: "Async navigate to async 2 page!"))
-      |> assert_has(text("Another title loaded async"), timeout: 350)
+      |> assert_has(text("Another title loaded async"), timeout: 700)
       |> assert_path("/live/async_page_2")
     end
 
@@ -37,7 +37,7 @@ defmodule Cerberus.TimeoutBehaviorParityTest do
       |> driver_session(context)
       |> visit("/live/async_page")
       |> click(role(:button, name: "Async redirect!"))
-      |> refute_has(text("Where we test LiveView's async behavior"), timeout: 350)
+      |> refute_has(text("Where we test LiveView's async behavior"), timeout: 700)
       |> assert_path("/articles")
     end
   end

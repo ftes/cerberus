@@ -4,9 +4,9 @@ defmodule Cerberus.SQLSandboxBehaviorTest do
   import Cerberus
   import Cerberus.Browser
 
-  alias Cerberus.Driver.Browser, as: BrowserSession
-  alias Cerberus.Driver.Live, as: LiveSession
-  alias Cerberus.Driver.Static, as: StaticSession
+  alias Cerberus.Driver.Browser
+  alias Cerberus.Driver.Live
+  alias Cerberus.Driver.Static
   alias Cerberus.Fixtures.SandboxMessages
 
   setup context do
@@ -53,7 +53,7 @@ defmodule Cerberus.SQLSandboxBehaviorTest do
   defp sandbox_session(:browser, context), do: session(:browser, user_agent: context.sandbox_user_agent)
   defp sandbox_session(:phoenix, _context), do: session(:phoenix)
 
-  defp driver_tag(%StaticSession{}), do: "static"
-  defp driver_tag(%LiveSession{}), do: "live"
-  defp driver_tag(%BrowserSession{}), do: "browser"
+  defp driver_tag(%Static{}), do: "static"
+  defp driver_tag(%Live{}), do: "live"
+  defp driver_tag(%Browser{}), do: "browser"
 end

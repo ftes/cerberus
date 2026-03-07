@@ -96,7 +96,7 @@ session()
 
 session(:browser, show_browser: true, slow_mo: 500) # 3) human: watch live interaction in browser
 |> visit("/articles")
-|> screenshot(full_page: true) # 4) human and AI: static .png screenshot
+|> evaluate_js("document.body.dataset.cerberus = 'ready'", fn _ -> :ok end)
 
 png =
   session(:browser)

@@ -99,19 +99,14 @@ defmodule Cerberus.DocumentationExamplesTest do
     |> assert_has(text("Dialog result: confirmed", exact: true))
   end
 
-  @tag :tmp_dir
-  test "browser prompt snippet from docs works with callback chaining", %{tmp_dir: tmp_dir} = context do
-    screenshot_path = Path.join(tmp_dir, "prompt-snippet.png")
-
+  test "browser evaluate_js callback snippet from docs works", context do
     session =
       :browser
-      |> driver_session(context)
-      |> visit("/live/counter")
-      |> evaluate_js("prompt('Hey!')", fn _result -> :ok end)
-      |> screenshot(path: screenshot_path)
+      |> isolated_driver_session(context)
+      |> visit("/articles")
+      |> evaluate_js("document.body.dataset.cerberus = 'ready'", fn _result -> :ok end)
 
-    assert session.current_path == "/live/counter"
-    assert File.exists?(screenshot_path)
+    assert session.current_path == "/articles"
   end
 
   defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)

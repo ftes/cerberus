@@ -1,7 +1,7 @@
 defmodule Cerberus.Driver.Browser.Extensions do
   @moduledoc false
 
-  alias Cerberus.Driver.Browser, as: BrowserSession
+  alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Browser.BiDi
   alias Cerberus.Driver.Browser.Evaluate
   alias Cerberus.Driver.Browser.Types
@@ -17,8 +17,8 @@ defmodule Cerberus.Driver.Browser.Extensions do
   @default_evaluate_timeout_ms 10_000
   @popup_task_poll_ms 10
 
-  @spec type(BrowserSession.t(), String.t(), Options.browser_type_opts()) :: BrowserSession.t()
-  def type(%BrowserSession{} = session, text, opts \\ []) when is_binary(text) and is_list(opts) do
+  @spec type(Browser.t(), String.t(), Options.browser_type_opts()) :: Browser.t()
+  def type(%Browser{} = session, text, opts \\ []) when is_binary(text) and is_list(opts) do
     selector = selector_opt!(opts)
     clear? = Keyword.get(opts, :clear, false)
     timeout_ms = extension_timeout_ms(session, opts)
@@ -35,8 +35,8 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  @spec press(BrowserSession.t(), String.t(), Options.browser_press_opts()) :: BrowserSession.t()
-  def press(%BrowserSession{} = session, key, opts \\ []) when is_binary(key) and is_list(opts) do
+  @spec press(Browser.t(), String.t(), Options.browser_press_opts()) :: Browser.t()
+  def press(%Browser{} = session, key, opts \\ []) when is_binary(key) and is_list(opts) do
     selector = selector_opt!(opts)
     timeout_ms = extension_timeout_ms(session, opts)
 
@@ -52,8 +52,8 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  @spec drag(BrowserSession.t(), String.t(), String.t(), Options.browser_drag_opts()) :: BrowserSession.t()
-  def drag(%BrowserSession{} = session, source_selector, target_selector, opts \\ [])
+  @spec drag(Browser.t(), String.t(), String.t(), Options.browser_drag_opts()) :: Browser.t()
+  def drag(%Browser{} = session, source_selector, target_selector, opts \\ [])
       when is_binary(source_selector) and is_binary(target_selector) and is_list(opts) do
     source_selector = non_empty_selector!(source_selector, "drag/4 source selector")
     target_selector = non_empty_selector!(target_selector, "drag/4 target selector")
@@ -71,8 +71,8 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  @spec assert_dialog(BrowserSession.t(), Locator.t(), Options.browser_assert_dialog_opts()) :: BrowserSession.t()
-  def assert_dialog(%BrowserSession{} = session, %Locator{} = locator, opts \\ []) when is_list(opts) do
+  @spec assert_dialog(Browser.t(), Locator.t(), Options.browser_assert_dialog_opts()) :: Browser.t()
+  def assert_dialog(%Browser{} = session, %Locator{} = locator, opts \\ []) when is_list(opts) do
     timeout_ms = dialog_timeout_ms(opts)
     dialog = await_open_dialog!(session, locator, timeout_ms)
     assert_dialog_text_match!(locator, dialog)
@@ -81,12 +81,12 @@ defmodule Cerberus.Driver.Browser.Extensions do
   end
 
   @spec with_popup(
-          BrowserSession.t(),
-          (BrowserSession.t() -> term()),
-          (BrowserSession.t(), BrowserSession.t() -> term()),
+          Browser.t(),
+          (Browser.t() -> term()),
+          (Browser.t(), Browser.t() -> term()),
           Options.browser_with_popup_opts()
-        ) :: BrowserSession.t()
-  def with_popup(%BrowserSession{} = session, trigger_fun, callback_fun, opts \\ [])
+        ) :: Browser.t()
+  def with_popup(%Browser{} = session, trigger_fun, callback_fun, opts \\ [])
       when is_function(trigger_fun, 1) and is_function(callback_fun, 2) and is_list(opts) do
     timeout_ms = popup_timeout_ms(opts)
     main_tab_id = session.tab_id
@@ -113,7 +113,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
       restore_main_tab!(session, main_tab_id, "with_popup/4")
 
-      BrowserSession.refresh_path(session)
+      Browser.refresh_path(session)
     rescue
       error ->
         _ = restore_main_tab_safe(session, main_tab_id)
@@ -127,16 +127,16 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  @spec assert_download(BrowserSession.t(), String.t(), Options.assert_download_opts()) :: BrowserSession.t()
-  def assert_download(%BrowserSession{} = session, filename, opts \\ []) when is_binary(filename) and is_list(opts) do
+  @spec assert_download(Browser.t(), String.t(), Options.assert_download_opts()) :: Browser.t()
+  def assert_download(%Browser{} = session, filename, opts \\ []) when is_binary(filename) and is_list(opts) do
     filename = non_empty_text!(filename, "assert_download/3 filename")
     timeout_ms = download_timeout_ms(opts)
     _download = await_download_match!(session, filename, timeout_ms)
     session
   end
 
-  @spec evaluate_js(BrowserSession.t(), String.t()) :: term()
-  def evaluate_js(%BrowserSession{} = session, expression) when is_binary(expression) do
+  @spec evaluate_js(Browser.t(), String.t()) :: term()
+  def evaluate_js(%Browser{} = session, expression) when is_binary(expression) do
     timeout_ms = @default_evaluate_timeout_ms
 
     case Evaluate.with_dialog_unblock(
@@ -160,8 +160,8 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  @spec cookies(BrowserSession.t()) :: [Types.cookie()]
-  def cookies(%BrowserSession{} = session) do
+  @spec cookies(Browser.t()) :: [Types.cookie()]
+  def cookies(%Browser{} = session) do
     params = %{"partition" => %{"type" => "context", "context" => session.tab_id}}
 
     case BiDi.command("storage.getCookies", params, bidi_opts(session)) do
@@ -176,21 +176,21 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  @spec cookie(BrowserSession.t(), String.t()) :: Types.cookie() | nil
-  def cookie(%BrowserSession{} = session, name) when is_binary(name) do
+  @spec cookie(Browser.t(), String.t()) :: Types.cookie() | nil
+  def cookie(%Browser{} = session, name) when is_binary(name) do
     Enum.find(cookies(session), fn cookie -> cookie.name == name end)
   end
 
-  @spec session_cookie(BrowserSession.t()) :: Types.cookie() | nil
-  def session_cookie(%BrowserSession{} = session) do
+  @spec session_cookie(Browser.t()) :: Types.cookie() | nil
+  def session_cookie(%Browser{} = session) do
     cookies = cookies(session)
 
     Enum.find(cookies, &(&1.http_only and &1.session)) ||
       Enum.find(cookies, & &1.session)
   end
 
-  @spec add_cookies(BrowserSession.t(), [Options.browser_cookie_arg()]) :: BrowserSession.t()
-  def add_cookies(%BrowserSession{} = session, cookies) when is_list(cookies) do
+  @spec add_cookies(Browser.t(), [Options.browser_cookie_arg()]) :: Browser.t()
+  def add_cookies(%Browser{} = session, cookies) when is_list(cookies) do
     Enum.each(cookies, fn cookie_args ->
       cookie =
         cookie_args
@@ -203,9 +203,9 @@ defmodule Cerberus.Driver.Browser.Extensions do
     session
   end
 
-  @spec add_cookie(BrowserSession.t(), String.t(), String.t(), Options.browser_add_cookie_opts()) ::
-          BrowserSession.t()
-  def add_cookie(%BrowserSession{} = session, name, value, opts \\ [])
+  @spec add_cookie(Browser.t(), String.t(), String.t(), Options.browser_add_cookie_opts()) ::
+          Browser.t()
+  def add_cookie(%Browser{} = session, name, value, opts \\ [])
       when is_binary(name) and is_binary(value) and is_list(opts) do
     cookie =
       [name: name, value: value]
@@ -215,8 +215,8 @@ defmodule Cerberus.Driver.Browser.Extensions do
     set_cookie(session, cookie, "add_cookie")
   end
 
-  @spec clear_cookies(BrowserSession.t()) :: BrowserSession.t()
-  def clear_cookies(%BrowserSession{} = session) do
+  @spec clear_cookies(Browser.t()) :: Browser.t()
+  def clear_cookies(%Browser{} = session) do
     params = %{"partition" => %{"type" => "context", "context" => session.tab_id}}
 
     case BiDi.command("storage.deleteCookies", params, bidi_opts(session)) do
@@ -248,10 +248,10 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  defp extension_timeout_ms(%BrowserSession{} = session, opts) when is_list(opts) do
+  defp extension_timeout_ms(%Browser{} = session, opts) when is_list(opts) do
     case Keyword.get(opts, :timeout) do
       timeout when is_integer(timeout) and timeout > 0 -> timeout
-      _ -> session.timeout_ms
+      _ -> max(session.timeout_ms, @default_evaluate_timeout_ms)
     end
   end
 
@@ -682,7 +682,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  defp build_remote_cookie(cookie_args, %BrowserSession{} = session, op_name) when is_list(cookie_args) do
+  defp build_remote_cookie(cookie_args, %Browser{} = session, op_name) when is_list(cookie_args) do
     name = non_empty_text!(Keyword.fetch!(cookie_args, :name), "#{op_name} cookie :name")
     value = non_empty_text!(Keyword.fetch!(cookie_args, :value), "#{op_name} cookie :value")
     url = Keyword.get(cookie_args, :url)
@@ -710,7 +710,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  defp set_cookie(%BrowserSession{} = session, cookie, op_name) when is_map(cookie) do
+  defp set_cookie(%Browser{} = session, cookie, op_name) when is_map(cookie) do
     params = %{
       "cookie" => cookie,
       "partition" => %{"type" => "context", "context" => session.tab_id}
@@ -792,11 +792,11 @@ defmodule Cerberus.Driver.Browser.Extensions do
         "assert_download/3 timed out waiting for #{inspect(expected_filename)}; observed downloads: #{inspect(observed_filenames)}"
   end
 
-  defp bidi_opts(%BrowserSession{bidi_opts: bidi_opts, browser_name: browser_name}) when is_list(bidi_opts) do
+  defp bidi_opts(%Browser{bidi_opts: bidi_opts, browser_name: browser_name}) when is_list(bidi_opts) do
     Keyword.put_new(bidi_opts, :browser_name, browser_name)
   end
 
-  defp bidi_opts(%BrowserSession{browser_name: browser_name}), do: [browser_name: browser_name]
+  defp bidi_opts(%Browser{browser_name: browser_name}), do: [browser_name: browser_name]
 
   defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
   defp normalize_positive_integer(_value, default), do: default

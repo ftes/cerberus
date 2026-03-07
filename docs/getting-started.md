@@ -244,7 +244,9 @@ session()
 > Timeouts are unified across assertions, actions, and path assertions.
 > Default timeout precedence is: global all-driver config, then global per-driver config, then session `timeout_ms`, then call `timeout: ...`.
 > The built-in defaults are `0ms` for static and `500ms` for live/browser.
-> In browser mode, text/path assertions run wait loops in browser JS and Cerberus adds bounded transient eval retries for navigation/context-reset races.
+> Static assertions are one-shot.
+> Live assertions and actions wait on LiveView progress before retrying.
+> Browser assertions and actions wait natively in the browser driver rather than through a shared outer timeout loop.
 
 ## Step 7: Browser-Only Extensions
 

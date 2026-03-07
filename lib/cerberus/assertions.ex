@@ -5,10 +5,10 @@ defmodule Cerberus.Assertions do
   alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Live
   alias Cerberus.Driver.Static
+  alias Cerberus.Html
   alias Cerberus.Locator
   alias Cerberus.Options
   alias Cerberus.Path
-  alias Cerberus.PhoenixLoop
   alias Cerberus.Profiling
   alias Cerberus.Session
   alias ExUnit.AssertionError
@@ -299,18 +299,9 @@ defmodule Cerberus.Assertions do
     validated_opts = call_opts |> Options.validate_assert!(op_name) |> prune_nil_match_by_opt()
     {validated_timeout, driver_opts} = Keyword.pop(validated_opts, :timeout, 0)
     timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
-    message_opts = Keyword.put(driver_opts, :timeout, timeout)
-
-    run_assertion_with_loop(session, timeout, fn timed_session ->
-      timed_driver_opts =
-        if match?(%Browser{}, timed_session) do
-          Keyword.put(driver_opts, :timeout, timeout)
-        else
-          driver_opts
-        end
-
-      run_assertion!(timed_session, op, locator, locator_input, timed_driver_opts, message_opts)
-    end)
+    driver_opts = Keyword.put(driver_opts, :timeout, timeout)
+    message_opts = driver_opts
+    run_assertion!(session, op, locator, locator_input, driver_opts, message_opts)
   end
 
   @spec run_state_assertion_with_timeout(
@@ -342,18 +333,9 @@ defmodule Cerberus.Assertions do
     validated_opts = Options.validate_assert_value!(call_opts, op_name)
     {validated_timeout, driver_opts} = Keyword.pop(validated_opts, :timeout, 0)
     timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
-    message_opts = Keyword.put(driver_opts, :timeout, timeout)
-
-    run_assertion_with_loop(session, timeout, fn timed_session ->
-      timed_driver_opts =
-        if match?(%Browser{}, timed_session) do
-          Keyword.put(driver_opts, :timeout, timeout)
-        else
-          driver_opts
-        end
-
-      run_value_assertion!(timed_session, op, locator, expected, locator_input, timed_driver_opts, message_opts)
-    end)
+    driver_opts = Keyword.put(driver_opts, :timeout, timeout)
+    message_opts = driver_opts
+    run_value_assertion!(session, op, locator, expected, locator_input, driver_opts, message_opts)
   end
 
   @spec run_assertion!(
@@ -366,7 +348,11 @@ defmodule Cerberus.Assertions do
         ) :: Session.t()
   defp run_assertion!(session, op, locator, locator_input, driver_opts, message_opts) do
     driver = driver_module_for_session!(session)
-    result = profile_driver_operation(session, op, fn -> apply(driver, op, [session, locator, driver_opts]) end)
+
+    result =
+      with_driver_assertion_deadline(Keyword.fetch!(driver_opts, :timeout), fn ->
+        profile_driver_operation(session, op, fn -> apply(driver, op, [session, locator, driver_opts]) end)
+      end)
 
     case result do
       {:ok, session, _observed} ->
@@ -399,8 +385,10 @@ defmodule Cerberus.Assertions do
     driver = driver_module_for_session!(session)
 
     result =
-      profile_driver_operation(session, op, fn ->
-        apply(driver, op, [session, locator, expected, driver_opts])
+      with_driver_assertion_deadline(Keyword.fetch!(driver_opts, :timeout), fn ->
+        profile_driver_operation(session, op, fn ->
+          apply(driver, op, [session, locator, expected, driver_opts])
+        end)
       end)
 
     case result do
@@ -421,13 +409,21 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  defp run_assertion_with_loop(%Browser{} = session, timeout, fun) when is_function(fun, 1) do
-    _ = timeout
-    fun.(session)
-  end
+  defp with_driver_assertion_deadline(timeout_ms, fun)
+       when is_integer(timeout_ms) and timeout_ms >= 0 and is_function(fun, 0) do
+    if timeout_ms == 0 do
+      fun.()
+    else
+      previous = Html.current_assertion_deadline_ms()
+      deadline_ms = System.monotonic_time(:millisecond) + timeout_ms
+      Html.put_assertion_deadline_ms(deadline_ms)
 
-  defp run_assertion_with_loop(session, timeout, fun) when is_function(fun, 1) do
-    PhoenixLoop.run(session, timeout, fun)
+      try do
+        fun.()
+      after
+        Html.put_assertion_deadline_ms(previous)
+      end
+    end
   end
 
   @spec format_error(

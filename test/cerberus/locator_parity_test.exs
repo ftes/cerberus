@@ -4,7 +4,7 @@ defmodule Cerberus.LocatorParityTest do
   import Cerberus
 
   alias Cerberus.Browser
-  alias Cerberus.Driver.Static, as: StaticSession
+  alias Cerberus.Driver.Static
   alias Cerberus.InvalidLocatorError
   alias ExUnit.AssertionError
 
@@ -910,7 +910,7 @@ defmodule Cerberus.LocatorParityTest do
   end
 
   defp static_snippet_session(html) when is_binary(html) do
-    %StaticSession{} = static_session = session()
+    %Static{} = static_session = session()
 
     %{
       static_session
