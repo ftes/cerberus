@@ -1,11 +1,14 @@
 defmodule Cerberus.OpenBrowser do
   @moduledoc false
 
-  @spec write_snapshot!(String.t(), String.t() | nil, module() | nil) :: String.t()
-  def write_snapshot!(html, base_url \\ nil, endpoint \\ nil) when is_binary(html) do
+  alias Cerberus.Html
+
+  @spec write_snapshot!(LazyHTML.t(), String.t() | nil, module() | nil) :: String.t()
+  def write_snapshot!(%LazyHTML{} = document, base_url \\ nil, endpoint \\ nil) do
     path = Path.join([System.tmp_dir!(), "cerberus-open-browser#{System.unique_integer([:monotonic])}.html"])
 
-    html
+    document
+    |> LazyHTML.to_html()
     |> maybe_wrap_snapshot(base_url)
     |> rewrite_static_paths(endpoint)
     |> then(&File.write!(path, &1))
@@ -100,7 +103,7 @@ defmodule Cerberus.OpenBrowser do
 
       static_path ->
         html
-        |> LazyHTML.from_document()
+        |> Html.parse!()
         |> LazyHTML.to_tree()
         |> LazyHTML.Tree.postwalk(&prefix_static_paths(&1, static_path))
         |> LazyHTML.Tree.to_html()

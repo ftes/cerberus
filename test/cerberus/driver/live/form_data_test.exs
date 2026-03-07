@@ -21,7 +21,7 @@ defmodule Cerberus.Driver.Live.FormDataTest do
     </main>
     """
 
-    session = %Live{html: html}
+    session = %Live{document: Cerberus.Html.parse!(html)}
 
     field = %{
       name: "custom_document[retain_across_projects?]",

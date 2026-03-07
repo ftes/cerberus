@@ -6,6 +6,8 @@ defmodule Cerberus.RemoteWebdriverBehaviorTest do
   alias Cerberus.Driver.Browser.BiDiSupervisor
   alias Cerberus.Driver.Browser.Runtime
 
+  @moduletag :slow
+
   setup_all do
     case remote_webdriver_skip_reason() do
       nil ->

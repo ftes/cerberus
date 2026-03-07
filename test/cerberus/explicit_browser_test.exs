@@ -3,6 +3,8 @@ defmodule Cerberus.ExplicitBrowserTest do
 
   import Cerberus
 
+  @moduletag :slow
+
   for driver <- [:chrome] do
     test "explicit chrome driver runs as expected (#{driver})" do
       session =

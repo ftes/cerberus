@@ -13,8 +13,10 @@ defmodule Cerberus.HtmlTest do
     </form>
     """
 
+    doc = Html.parse!(html)
+
     assert {:ok, %{name: "nested_q", label: "Search term *"}} =
-             Html.find_form_field(html, "Search term *", exact: true)
+             Html.find_form_field(doc, "Search term *", exact: true)
   end
 
   test "find_form_field remains framework-agnostic and omits phx metadata" do
@@ -29,7 +31,9 @@ defmodule Cerberus.HtmlTest do
     </main>
     """
 
-    assert {:ok, field} = Html.find_form_field(html, "Name", exact: true)
+    doc = Html.parse!(html)
+
+    assert {:ok, field} = Html.find_form_field(doc, "Name", exact: true)
     refute Map.has_key?(field, :input_phx_change)
     refute Map.has_key?(field, :form_phx_change)
   end
@@ -45,7 +49,9 @@ defmodule Cerberus.HtmlTest do
     </main>
     """
 
-    assert names = Html.form_field_names(html, ~s(form[id="prune-form"]))
+    doc = Html.parse!(html)
+
+    assert names = Html.form_field_names(doc, ~s(form[id="prune-form"]))
     assert MapSet.member?(names, "profile[version]")
     assert MapSet.member?(names, "profile[version_b_text]")
     refute MapSet.member?(names, "profile[version_a_text]")
@@ -65,10 +71,12 @@ defmodule Cerberus.HtmlTest do
     </form>
     """
 
-    assert {:ok, %{name: "codes[two]"}} = Html.find_form_field(html, "Code", nth: 2, count: 3)
-    assert {:ok, %{name: "codes[three]"}} = Html.find_form_field(html, "Code", last: true, between: {2, 3})
-    assert :error = Html.find_form_field(html, "Code", count: 2)
-    assert :error = Html.find_form_field(html, "Code", nth: 4)
+    doc = Html.parse!(html)
+
+    assert {:ok, %{name: "codes[two]"}} = Html.find_form_field(doc, "Code", nth: 2, count: 3)
+    assert {:ok, %{name: "codes[three]"}} = Html.find_form_field(doc, "Code", last: true, between: {2, 3})
+    assert :error = Html.find_form_field(doc, "Code", count: 2)
+    assert :error = Html.find_form_field(doc, "Code", nth: 4)
   end
 
   test "find_button supports count and position filters" do
@@ -79,10 +87,12 @@ defmodule Cerberus.HtmlTest do
     </main>
     """
 
-    assert {:ok, %{title: "Save secondary"}} =
-             Html.find_button(html, "Save", match_by: :title, last: true, count: 2)
+    doc = Html.parse!(html)
 
-    assert :error = Html.find_button(html, "Save", match_by: :title, count: 1)
+    assert {:ok, %{title: "Save secondary"}} =
+             Html.find_button(doc, "Save", match_by: :title, last: true, count: 2)
+
+    assert :error = Html.find_button(doc, "Save", match_by: :title, count: 1)
   end
 
   test "resolver APIs accept a pre-parsed LazyHTML document" do
@@ -96,7 +106,7 @@ defmodule Cerberus.HtmlTest do
     </main>
     """
 
-    doc = LazyHTML.from_document(html)
+    doc = Html.parse!(html)
 
     assert {:ok, %{name: "profile[name]"}} = Html.find_form_field(doc, "Name", exact: true)
     assert {:ok, %{text: "Save"}} = Html.find_submit_button(doc, "Save", exact: true)
@@ -122,10 +132,12 @@ defmodule Cerberus.HtmlTest do
     </main>
     """
 
+    doc = Html.parse!(html)
+
     assert %{
              "timecard_setting[week_ending_day]" => "7",
              "timecard_setting[crew_reminder_day]" => "4"
-           } = Html.form_defaults(html, ~s(form[id="settings-form"]))
+           } = Html.form_defaults(doc, ~s(form[id="settings-form"]))
   end
 
   test "checkbox_unchecked_value finds hidden default for boolean checkboxes" do
@@ -145,8 +157,10 @@ defmodule Cerberus.HtmlTest do
     </main>
     """
 
+    doc = Html.parse!(html)
+
     assert Html.checkbox_unchecked_value(
-             html,
+             doc,
              ~s(form[id="document-form"]),
              "custom_document[retain_across_projects?]"
            ) == "false"

@@ -217,7 +217,7 @@ defmodule Cerberus.Phoenix.LiveViewTimeoutTest do
       endpoint: Endpoint,
       conn: build_conn(),
       view: %{pid: view_pid},
-      html: "",
+      document: Cerberus.Html.parse!(""),
       form_data: %{active_form: nil, values: %{}},
       scope: nil,
       current_path: path,

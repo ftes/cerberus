@@ -914,7 +914,7 @@ defmodule Cerberus.LocatorParityTest do
 
     %{
       static_session
-      | html: html,
+      | document: Cerberus.Html.parse!(html),
         current_path: "/__locator_oracle__",
         form_data: %{active_form: nil, values: %{}}
     }

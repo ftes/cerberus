@@ -5,6 +5,7 @@ defmodule Cerberus.Phoenix.LiveViewTimeout do
   alias Cerberus.Driver.Live
   alias Cerberus.Driver.Static
   alias Cerberus.Html
+  alias Cerberus.Phoenix.LiveViewClient
   alias Cerberus.Phoenix.LiveViewWatcher
   alias ExUnit.AssertionError
   alias Phoenix.LiveView.Channel, as: LiveViewChannel
@@ -199,10 +200,8 @@ defmodule Cerberus.Phoenix.LiveViewTimeout do
   defp normalize_redirect_info(_other), do: "/"
 
   defp via_assert_redirect(session) do
-    case Phoenix.LiveViewTest.assert_redirect(session.view) do
-      {path, flash} -> %{kind: :redirect, to: path, flash: flash}
-      path -> path
-    end
+    {path, flash} = LiveViewClient.assert_redirect(session.view)
+    %{kind: :redirect, to: path, flash: flash}
   end
 
   defp with_assertion_deadline(deadline_ms, fun) when is_integer(deadline_ms) and is_function(fun, 0) do

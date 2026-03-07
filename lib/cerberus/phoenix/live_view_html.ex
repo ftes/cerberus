@@ -6,25 +6,18 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   alias Cerberus.Phoenix.LiveViewBindings
   alias Cerberus.Query
 
-  @spec find_live_clickable_button(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
+  @spec find_live_clickable_button(LazyHTML.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
           {:ok, map()} | :error
-  def find_live_clickable_button(html, expected, opts, scope \\ nil) when is_binary(html) do
-    case parse_document(html) do
-      {:ok, lazy_html} ->
-        find_live_clickable_button_in_doc(lazy_html, expected, opts, scope)
+  def find_live_clickable_button(%LazyHTML{} = html, expected, opts, scope \\ nil),
+    do: find_live_clickable_button_in_doc(html, expected, opts, scope)
 
-      _ ->
-        :error
-    end
-  end
-
-  @spec find_form_field(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
+  @spec find_form_field(LazyHTML.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
           {:ok, map()} | :error
-  def find_form_field(html, expected, opts, scope \\ nil) when is_binary(html) do
-    with {:ok, lazy_html} <- parse_document(html),
-         {:ok, field} <- find_form_field_with_fallback(lazy_html, expected, opts, scope) do
-      {:ok, Map.merge(field, form_field_live_flags(lazy_html, field, scope))}
-    else
+  def find_form_field(%LazyHTML{} = lazy_html, expected, opts, scope \\ nil) do
+    case find_form_field_with_fallback(lazy_html, expected, opts, scope) do
+      {:ok, field} ->
+        {:ok, Map.merge(field, form_field_live_flags(lazy_html, field, scope))}
+
       _ ->
         :error
     end
@@ -37,34 +30,20 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     end
   end
 
-  @spec find_submit_button(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
+  @spec find_submit_button(LazyHTML.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
           {:ok, map()} | :error
-  def find_submit_button(html, expected, opts, scope \\ nil) when is_binary(html) do
-    case parse_document(html) do
-      {:ok, lazy_html} ->
-        case Html.find_submit_button(lazy_html, expected, opts, scope) do
-          {:ok, button} ->
-            {:ok, Map.put(button, :form_phx_submit, form_phx_submit?(lazy_html, button, scope))}
+  def find_submit_button(%LazyHTML{} = lazy_html, expected, opts, scope \\ nil) do
+    case Html.find_submit_button(lazy_html, expected, opts, scope) do
+      {:ok, button} ->
+        {:ok, Map.put(button, :form_phx_submit, form_phx_submit?(lazy_html, button, scope))}
 
-          :error ->
-            :error
-        end
-
-      _ ->
+      :error ->
         :error
     end
   end
 
-  @spec trigger_action_forms(String.t()) :: [map()]
-  def trigger_action_forms(html) when is_binary(html) do
-    case parse_document(html) do
-      {:ok, lazy_html} ->
-        trigger_action_forms_in_doc(lazy_html)
-
-      _ ->
-        []
-    end
-  end
+  @spec trigger_action_forms(LazyHTML.t()) :: [map()]
+  def trigger_action_forms(%LazyHTML{} = html), do: trigger_action_forms_in_doc(html)
 
   defp find_live_clickable_button_in_doc(lazy_html, expected, opts, scope) do
     query_selector = selector_opt(opts) || "[phx-click]"
@@ -748,12 +727,6 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   defp attr_or_nil(node, name), do: attr(node, name)
 
   defp button_node?(node), do: node_tag(node) == "button"
-
-  defp parse_document(html) when is_binary(html) do
-    {:ok, LazyHTML.from_document(html)}
-  rescue
-    _ -> :error
-  end
 
   defp scoped_nodes(lazy_html, nil), do: [lazy_html]
   defp scoped_nodes(lazy_html, ""), do: [lazy_html]

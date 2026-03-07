@@ -3,6 +3,8 @@ defmodule Cerberus.Driver.Browser.WSTest do
 
   alias Cerberus.Driver.Browser.WS
 
+  @moduletag :slow
+
   test "handshake host header includes non-default port" do
     {:ok, listener} = :gen_tcp.listen(0, [:binary, {:active, false}, {:packet, :raw}, {:reuseaddr, true}])
     {:ok, port} = :inet.port(listener)

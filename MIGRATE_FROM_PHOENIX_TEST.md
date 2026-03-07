@@ -200,6 +200,29 @@ That kept migrated tests from filling up with repeated setup or field-container 
 
 If migrating again, I would create the support module earlier instead of waiting for the second or third browser file.
 
+## Browser JS Helpers Replace Some Playwright Frame APIs Cleanly
+
+One migration surprise was that a few old Playwright tests were not really about Playwright itself. They were using frame-level JS evaluation for app checks like accessibility audits.
+
+For Cerberus browser sessions, the practical replacement was usually `Browser.evaluate_js/3`.
+
+Example migration shape:
+
+```elixir
+Browser.evaluate_js(session, A11yAudit.JS.axe_core())
+
+results =
+  session
+  |> Browser.evaluate_js("(async () => JSON.stringify(await axe.run()))()", return_result: true)
+  |> Jason.decode!()
+  |> A11yAudit.Results.from_json()
+```
+
+What would have helped to know upfront:
+- Cerberus can handle these browser-side checks without dropping back to Playwright APIs
+- for this kind of audit, the result may be easiest to move through Cerberus as JSON text and decode in Elixir
+- this is a good candidate for a small browser-support helper if more than one file needs it
+
 ## `assert_value` Is A Better Mental Model Than `assert_has(..., value: ...)`
 
 PhoenixTest has patterns like asserting a field via `value: ...`.

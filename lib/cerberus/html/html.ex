@@ -8,10 +8,25 @@ defmodule Cerberus.Html do
   @assertion_deadline_key :cerberus_assertion_deadline_ms
   @assertion_deadline_throw :cerberus_assertion_deadline_exceeded
 
-  @spec texts(String.t() | LazyHTML.t(), true | false | :any, String.t() | nil) :: [String.t()]
-  def texts(html_or_doc, visibility \\ true, scope \\ nil)
+  @type document :: LazyHTML.t()
 
-  def texts(%LazyHTML{} = lazy_html, visibility, scope) do
+  @spec parse(String.t()) :: {:ok, document()} | :error
+  def parse(html) when is_binary(html) do
+    {:ok, LazyHTML.from_document(html)}
+  rescue
+    _ -> :error
+  end
+
+  @spec parse!(String.t()) :: document()
+  def parse!(html) when is_binary(html) do
+    LazyHTML.from_document(html)
+  end
+
+  @spec to_html(document()) :: String.t()
+  def to_html(%LazyHTML{} = document), do: LazyHTML.to_html(document)
+
+  @spec texts(document(), true | false | :any, String.t() | nil) :: [String.t()]
+  def texts(%LazyHTML{} = lazy_html, visibility \\ true, scope \\ nil) do
     {visible, hidden} =
       lazy_html
       |> scoped_nodes(scope)
@@ -31,17 +46,8 @@ defmodule Cerberus.Html do
     end
   end
 
-  def texts(html, visibility, scope) when is_binary(html) do
-    case parse_document(html) do
-      {:ok, lazy_html} -> texts(lazy_html, visibility, scope)
-      _ -> []
-    end
-  end
-
-  @spec assertion_values(String.t() | LazyHTML.t(), atom(), true | false | :any, String.t() | nil) ::
+  @spec assertion_values(document(), atom(), true | false | :any, String.t() | nil) ::
           [String.t()]
-  def assertion_values(html_or_doc, match_by, visibility \\ true, scope \\ nil)
-
   def assertion_values(%LazyHTML{} = lazy_html, :text, visibility, scope) do
     texts(lazy_html, visibility, scope)
   end
@@ -50,18 +56,9 @@ defmodule Cerberus.Html do
     collect_assertion_values_in_doc(lazy_html, match_by, visibility, scope)
   end
 
-  def assertion_values(html, match_by, visibility, scope) when is_binary(html) and is_atom(match_by) do
-    case parse_document(html) do
-      {:ok, lazy_html} -> assertion_values(lazy_html, match_by, visibility, scope)
-      _ -> []
-    end
-  end
-
-  @spec locator_assertion_values(String.t() | LazyHTML.t(), Locator.t(), true | false | :any, String.t() | nil) ::
+  @spec locator_assertion_values(document(), Locator.t(), true | false | :any, String.t() | nil) ::
           [String.t()]
-  def locator_assertion_values(html_or_doc, locator, visibility \\ true, scope \\ nil)
-
-  def locator_assertion_values(%LazyHTML{} = lazy_html, %Locator{} = locator, visibility, scope) do
+  def locator_assertion_values(%LazyHTML{} = lazy_html, %Locator{} = locator, visibility \\ true, scope \\ nil) do
     assert_deadline!()
     locator = locator_without_from(locator)
     from_locator = Keyword.get(locator.opts, :from)
@@ -82,13 +79,6 @@ defmodule Cerberus.Html do
     end)
   end
 
-  def locator_assertion_values(html, %Locator{} = locator, visibility, scope) when is_binary(html) do
-    case parse_document(html) do
-      {:ok, lazy_html} -> locator_assertion_values(lazy_html, locator, visibility, scope)
-      _ -> []
-    end
-  end
-
   @spec node_matches_locator_filters?(term(), Options.locator_filter_opts()) :: boolean()
   def node_matches_locator_filters?(node, opts) when is_list(opts) do
     matches_nested_filter?(node, Keyword.get(opts, :has), true) and
@@ -100,25 +90,28 @@ defmodule Cerberus.Html do
     not node_hidden_in_root?(hidden_nodes_in_root(root_node), node)
   end
 
-  @spec fragment_matches_locator_filters?(String.t(), Options.locator_filter_opts()) :: boolean()
-  def fragment_matches_locator_filters?(fragment_html, opts) when is_binary(fragment_html) and is_list(opts) do
+  @spec fragment_matches_locator_filters?(document(), Options.locator_filter_opts()) :: boolean()
+  def fragment_matches_locator_filters?(%LazyHTML{} = fragment_document, opts) when is_list(opts) do
     if Keyword.has_key?(opts, :has) or Keyword.has_key?(opts, :has_not) do
-      fragment_matches_locator_filters_in_doc?(fragment_html, opts)
+      fragment_matches_locator_filters_in_doc?(fragment_document, opts)
     else
       true
     end
   end
 
-  defp fragment_matches_locator_filters_in_doc?(fragment_html, opts) do
-    with {:ok, lazy_html} <- parse_document(fragment_wrapper(fragment_html)),
-         root_node when not is_nil(root_node) <- Enum.at(safe_query(lazy_html, "#__cerberus_fragment_root__ > *"), 0) do
-      node_matches_locator_filters?(root_node, opts)
-    else
+  defp fragment_matches_locator_filters_in_doc?(fragment_document, opts) do
+    root_node =
+      fragment_document
+      |> LazyHTML.to_tree()
+      |> List.first()
+
+    case root_node do
+      root_node when not is_nil(root_node) -> node_matches_locator_filters?(root_node, opts)
       _ -> false
     end
   end
 
-  @spec find_link(String.t(), String.t() | Regex.t(), Options.locator_filter_opts(), String.t() | nil) ::
+  @spec find_link(document(), String.t() | Regex.t(), Options.locator_filter_opts(), String.t() | nil) ::
           {:ok,
            %{
              required(:text) => String.t(),
@@ -126,92 +119,42 @@ defmodule Cerberus.Html do
              optional(:selector) => String.t()
            }}
           | :error
-  def find_link(html, expected, opts, scope \\ nil) when is_binary(html) do
-    case parse_document(html) do
-      {:ok, lazy_html} ->
-        find_link_in_doc(lazy_html, expected, opts, scope)
+  def find_link(%LazyHTML{} = html, expected, opts, scope \\ nil), do: find_link_in_doc(html, expected, opts, scope)
 
-      _ ->
-        :error
-    end
-  end
-
-  @spec find_button(String.t(), String.t() | Regex.t(), Options.locator_filter_opts(), String.t() | nil) ::
+  @spec find_button(document(), String.t() | Regex.t(), Options.locator_filter_opts(), String.t() | nil) ::
           {:ok, map()} | :error
-  def find_button(html, expected, opts, scope \\ nil) when is_binary(html) do
-    case parse_document(html) do
-      {:ok, lazy_html} ->
-        find_button_in_doc(lazy_html, expected, opts, scope)
-
-      _ ->
-        :error
-    end
-  end
+  def find_button(%LazyHTML{} = html, expected, opts, scope \\ nil), do: find_button_in_doc(html, expected, opts, scope)
 
   @spec find_form_field(
-          String.t() | LazyHTML.t(),
+          document(),
           String.t() | Regex.t(),
           Options.locator_filter_opts(),
           String.t() | nil
         ) ::
           {:ok, map()} | :error
-  def find_form_field(html_or_doc, expected, opts, scope \\ nil)
-
-  def find_form_field(%LazyHTML{} = lazy_html, expected, opts, scope) do
+  def find_form_field(%LazyHTML{} = lazy_html, expected, opts, scope \\ nil) do
     find_form_field_in_doc(lazy_html, expected, opts, scope)
   end
 
-  def find_form_field(html, expected, opts, scope) when is_binary(html) do
-    case parse_document(html) do
-      {:ok, lazy_html} -> find_form_field(lazy_html, expected, opts, scope)
-      _ -> :error
-    end
-  end
-
-  @spec select_values(String.t(), map(), String.t() | [String.t()], Options.locator_filter_opts(), String.t() | nil) ::
+  @spec select_values(document(), map(), String.t() | [String.t()], Options.locator_filter_opts(), String.t() | nil) ::
           {:ok, %{values: [String.t()], multiple?: boolean()}} | {:error, String.t()}
-  def select_values(html, field, option, opts, scope \\ nil) when is_binary(html) and is_map(field) do
-    case parse_document(html) do
-      {:ok, lazy_html} ->
-        select_values_in_doc(lazy_html, field, option, opts, scope)
+  def select_values(%LazyHTML{} = html, field, option, opts, scope \\ nil) when is_map(field),
+    do: select_values_in_doc(html, field, option, opts, scope)
 
-      _ ->
-        {:error, "failed to parse html while matching select options"}
-    end
-  end
-
-  @spec form_defaults(String.t() | LazyHTML.t(), String.t(), String.t() | nil) :: map()
-  def form_defaults(html_or_doc, form_selector, scope \\ nil)
-
-  def form_defaults(%LazyHTML{} = lazy_html, form_selector, scope) when is_binary(form_selector) do
+  @spec form_defaults(document(), String.t(), String.t() | nil) :: map()
+  def form_defaults(%LazyHTML{} = lazy_html, form_selector, scope \\ nil) when is_binary(form_selector) do
     lazy_html
     |> form_node_from_selector(form_selector, scope)
     |> collect_form_defaults()
   end
 
-  def form_defaults(html, form_selector, scope) when is_binary(html) and is_binary(form_selector) do
-    case parse_document(html) do
-      {:ok, lazy_html} -> form_defaults(lazy_html, form_selector, scope)
-      _ -> %{}
-    end
-  end
+  @spec form_field_names(document(), String.t(), String.t() | nil) :: MapSet.t(String.t())
+  def form_field_names(%LazyHTML{} = html, form_selector, scope \\ nil) when is_binary(form_selector),
+    do: form_field_names_in_doc(html, form_selector, scope)
 
-  @spec form_field_names(String.t(), String.t(), String.t() | nil) :: MapSet.t(String.t())
-  def form_field_names(html, form_selector, scope \\ nil) when is_binary(html) and is_binary(form_selector) do
-    case parse_document(html) do
-      {:ok, lazy_html} ->
-        form_field_names_in_doc(lazy_html, form_selector, scope)
-
-      _ ->
-        MapSet.new()
-    end
-  end
-
-  @spec checkbox_unchecked_value(String.t() | LazyHTML.t(), String.t(), String.t(), String.t() | nil) ::
+  @spec checkbox_unchecked_value(document(), String.t(), String.t(), String.t() | nil) ::
           String.t() | nil
-  def checkbox_unchecked_value(html_or_doc, form_selector, field_name, scope \\ nil)
-
-  def checkbox_unchecked_value(%LazyHTML{} = lazy_html, form_selector, field_name, scope)
+  def checkbox_unchecked_value(%LazyHTML{} = lazy_html, form_selector, field_name, scope \\ nil)
       when is_binary(form_selector) and is_binary(field_name) do
     with true <- form_selector != "",
          true <- field_name != "",
@@ -222,44 +165,20 @@ defmodule Cerberus.Html do
     end
   end
 
-  def checkbox_unchecked_value(html, form_selector, field_name, scope)
-      when is_binary(html) and is_binary(form_selector) and is_binary(field_name) do
-    case parse_document(html) do
-      {:ok, lazy_html} -> checkbox_unchecked_value(lazy_html, form_selector, field_name, scope)
-      _ -> nil
-    end
-  end
-
   @spec find_submit_button(
-          String.t() | LazyHTML.t(),
+          document(),
           String.t() | Regex.t(),
           Options.locator_filter_opts(),
           String.t() | nil
         ) :: {:ok, map()} | :error
-  def find_submit_button(html_or_doc, expected, opts, scope \\ nil)
-
-  def find_submit_button(%LazyHTML{} = lazy_html, expected, opts, scope) do
+  def find_submit_button(%LazyHTML{} = lazy_html, expected, opts, scope \\ nil) do
     find_submit_button_in_doc(lazy_html, expected, opts, scope)
   end
 
-  def find_submit_button(html, expected, opts, scope) when is_binary(html) do
-    case parse_document(html) do
-      {:ok, lazy_html} -> find_submit_button(lazy_html, expected, opts, scope)
-      _ -> :error
-    end
-  end
-
-  @spec find_scope_target(String.t(), Locator.t(), String.t() | nil) ::
+  @spec find_scope_target(document(), Locator.t(), String.t() | nil) ::
           {:ok, %{selector: String.t(), tag: String.t(), iframe?: boolean()}} | {:error, String.t()}
-  def find_scope_target(html, %Locator{} = locator, scope \\ nil) when is_binary(html) do
-    case parse_document(html) do
-      {:ok, lazy_html} ->
-        find_scope_target_in_doc(lazy_html, locator, scope)
-
-      _ ->
-        {:error, "failed to parse html while resolving within locator"}
-    end
-  end
+  def find_scope_target(%LazyHTML{} = html, %Locator{} = locator, scope \\ nil),
+    do: find_scope_target_in_doc(html, locator, scope)
 
   defp find_link_in_doc(lazy_html, expected, opts, scope) do
     case locator_opt(opts) do
@@ -1751,18 +1670,6 @@ defmodule Cerberus.Html do
 
   defp safe_query_in_node(_selector, _node), do: []
 
-  defp fragment_wrapper(fragment_html) do
-    """
-    <!doctype html>
-    <html>
-      <head><meta charset="utf-8" /></head>
-      <body>
-        <div id="__cerberus_fragment_root__">#{fragment_html}</div>
-      </body>
-    </html>
-    """
-  end
-
   defp field_for_label(root_node, label_node) do
     case attr(label_node, "for") do
       id when is_binary(id) and id != "" ->
@@ -1843,12 +1750,6 @@ defmodule Cerberus.Html do
     |> LazyHTML.attribute(name)
     |> List.wrap()
     |> List.first()
-  end
-
-  defp parse_document(html) when is_binary(html) do
-    {:ok, LazyHTML.from_document(html)}
-  rescue
-    _ -> :error
   end
 
   defp form_by_id(root_node, id) do

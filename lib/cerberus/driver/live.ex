@@ -26,6 +26,7 @@ defmodule Cerberus.Driver.Live do
   alias Cerberus.Locator
   alias Cerberus.OpenBrowser
   alias Cerberus.Phoenix.Conn
+  alias Cerberus.Phoenix.LiveViewClient
   alias Cerberus.Phoenix.LiveViewHTML
   alias Cerberus.Phoenix.LiveViewTimeout
   alias Cerberus.Query
@@ -44,7 +45,7 @@ defmodule Cerberus.Driver.Live do
           timeout_ms: non_neg_integer(),
           timeout_overridden?: boolean(),
           view: term() | nil,
-          html: String.t(),
+          document: LazyHTML.t() | nil,
           form_data: map(),
           scope: Session.scope_value(),
           current_path: String.t() | nil,
@@ -56,7 +57,7 @@ defmodule Cerberus.Driver.Live do
             timeout_ms: 0,
             timeout_overridden?: false,
             view: nil,
-            html: "",
+            document: nil,
             form_data: %{active_form: nil, active_form_selector: nil, values: %{}},
             scope: nil,
             current_path: nil,
@@ -109,7 +110,7 @@ defmodule Cerberus.Driver.Live do
   def open_browser(%__MODULE__{view: %{pid: pid} = view} = session, open_fun)
       when is_function(open_fun, 1) and is_pid(pid) do
     if Process.alive?(pid) do
-      _ = Phoenix.LiveViewTest.open_browser(view, open_fun)
+      _ = LiveViewClient.open_browser(view, open_fun)
       session
     else
       open_browser_snapshot(session, open_fun)
@@ -121,16 +122,15 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp open_browser_snapshot(%__MODULE__{} = session, open_fun) when is_function(open_fun, 1) do
-    html = snapshot_html(session)
-    path = OpenBrowser.write_snapshot!(html, endpoint_url(session.endpoint), session.endpoint)
+    document = snapshot_document(session)
+    path = OpenBrowser.write_snapshot!(document, endpoint_url(session.endpoint), session.endpoint)
     _ = open_fun.(path)
     session
   end
 
   @impl true
   def render_html(%__MODULE__{} = session, callback) when is_function(callback, 1) do
-    html = snapshot_html(session)
-    _ = callback.(LazyHTML.from_document(html))
+    _ = callback.(snapshot_document(session))
     session
   end
 
@@ -157,7 +157,7 @@ defmodule Cerberus.Driver.Live do
         child_session =
           session
           |> Map.put(:view, child_view)
-          |> Map.put(:html, render(child_view))
+          |> Map.put(:document, Html.parse!(render(child_view)))
           |> Session.with_scope(nil)
 
         callback_result = callback.(child_session)
@@ -181,12 +181,13 @@ defmodule Cerberus.Driver.Live do
     case try_live(conn) do
       {:ok, view, html} ->
         transition = transition(from_driver, :live, :visit, from_path, current_path)
+        document = Html.parse!(html)
 
         %{
           session
           | conn: conn,
             view: view,
-            html: html,
+            document: document,
             scope: session.scope,
             current_path: current_path,
             last_result: LastResult.new(:visit, %{path: current_path, transition: transition}, __MODULE__)
@@ -195,13 +196,14 @@ defmodule Cerberus.Driver.Live do
       :error ->
         html = conn.resp_body || ""
         transition = transition(from_driver, :static, :visit, from_path, current_path)
+        document = Html.parse!(html)
 
         %StaticSession{
           endpoint: session.endpoint,
           conn: conn,
           timeout_ms: timeout_for_driver(session, :static),
           timeout_overridden?: session.timeout_overridden?,
-          html: html,
+          document: document,
           form_data: session.form_data,
           scope: session.scope,
           current_path: current_path,
@@ -245,7 +247,7 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def click(%__MODULE__{} = session, %Locator{} = locator, opts) do
-    session = with_latest_html(session)
+    session = with_latest_document(session)
     {expected, match_opts} = LocatorOps.click(locator, opts)
     kind = Keyword.get(match_opts, :kind, :any)
     maybe_raise_live_link_ambiguity!(session, expected, match_opts, kind)
@@ -264,7 +266,7 @@ defmodule Cerberus.Driver.Live do
               action: :click,
               path: action_session.current_path,
               candidate_values: click_candidate_values(action_session, match_opts, kind),
-              texts: Html.texts(action_session.html, :any, Session.scope(action_session)),
+              texts: Html.texts(action_session.document, :any, Session.scope(action_session)),
               transition: session_transition(action_session)
             }
 
@@ -275,7 +277,7 @@ defmodule Cerberus.Driver.Live do
               action: :click,
               path: action_session.current_path,
               candidate_values: click_candidate_values(action_session, match_opts, kind),
-              texts: Html.texts(action_session.html, :any, Session.scope(action_session)),
+              texts: Html.texts(action_session.document, :any, Session.scope(action_session)),
               transition: session_transition(action_session)
             }
 
@@ -297,7 +299,7 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def fill_in(%__MODULE__{} = session, %Locator{} = locator, value, opts) do
-    session = with_latest_html(session)
+    session = with_latest_document(session)
     {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case route_kind(session) do
@@ -318,7 +320,7 @@ defmodule Cerberus.Driver.Live do
         end
 
       :static ->
-        case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
+        case Html.find_form_field(session.document, expected, match_opts, Session.scope(session)) do
           {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
             updated = %{
               session
@@ -359,7 +361,7 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def select(%__MODULE__{} = session, %Locator{} = locator, opts) do
-    session = with_latest_html(session)
+    session = with_latest_document(session)
     {expected, match_opts} = LocatorOps.form(locator, opts)
     option = Keyword.fetch!(opts, :option)
 
@@ -380,7 +382,7 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def choose(%__MODULE__{} = session, %Locator{} = locator, opts) do
-    session = with_latest_html(session)
+    session = with_latest_document(session)
     {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case route_kind(session) do
@@ -409,7 +411,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp toggle_checkbox(%__MODULE__{} = session, %Locator{} = locator, opts, checked?, op) do
-    session = with_latest_html(session)
+    session = with_latest_document(session)
     {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case route_kind(session) do
@@ -430,7 +432,7 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def upload(%__MODULE__{} = session, %Locator{} = locator, path, opts) do
-    session = with_latest_html(session)
+    session = with_latest_document(session)
     {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case route_kind(session) do
@@ -457,7 +459,7 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def submit(%__MODULE__{} = session, %Locator{} = locator, opts) do
-    session = with_latest_html(session)
+    session = with_latest_document(session)
     {expected, match_opts} = LocatorOps.submit(locator, opts)
 
     case route_kind(session) do
@@ -478,7 +480,7 @@ defmodule Cerberus.Driver.Live do
         end
 
       :static ->
-        case Html.find_submit_button(session.html, expected, match_opts, Session.scope(session)) do
+        case Html.find_submit_button(session.document, expected, match_opts, Session.scope(session)) do
           {:ok, button} ->
             do_submit(session, button)
 
@@ -497,7 +499,7 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def submit_active_form(%__MODULE__{} = session, _opts) do
-    session = with_latest_html(session)
+    session = with_latest_document(session)
 
     case active_form_submit_button(session) do
       {:ok, button} ->
@@ -596,11 +598,11 @@ defmodule Cerberus.Driver.Live do
 
   defp run_value_assertion(%__MODULE__{} = session, %Locator{} = locator, expected, opts, mode)
        when mode in [:assert, :refute] do
-    session = with_latest_html(session)
+    session = with_latest_document(session)
     {field_expected, match_opts} = LocatorOps.form(locator, opts)
     op = value_assertion_op(mode)
 
-    case Html.find_form_field(session.html, field_expected, match_opts, Session.scope(session)) do
+    case Html.find_form_field(session.document, field_expected, match_opts, Session.scope(session)) do
       {:ok, field} ->
         value = current_field_value(session, field)
         matched? = value_matches?(value, expected)
@@ -625,7 +627,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp run_locator_assertion(%__MODULE__{} = session, %Locator{} = locator, opts, mode) when mode in [:assert, :refute] do
-    session = with_latest_html(session)
+    session = with_latest_document(session)
     match_opts = locator_match_opts(locator, opts)
     visible = assertion_visibility(opts, locator)
 
@@ -668,7 +670,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp locator_assertion_values(%__MODULE__{} = session, %Locator{} = locator, visible) do
-    matched = Html.locator_assertion_values(session.html, locator, visible, Session.scope(session))
+    matched = Html.locator_assertion_values(session.document, locator, visible, Session.scope(session))
 
     matched =
       if matched == [] do
@@ -861,7 +863,7 @@ defmodule Cerberus.Driver.Live do
             path: Session.current_path(changed_session),
             phx_change: change.triggered,
             target: change.target,
-            texts: Html.texts(changed_session.html, :any, Session.scope(changed_session)),
+            texts: Html.texts(changed_session.document, :any, Session.scope(changed_session)),
             transition: change.transition
           }
 
@@ -883,7 +885,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp dispatch_change_payload(session, button, form_selector) do
-    defaults = Html.form_defaults(session.html, form_selector, Session.scope(session))
+    defaults = Html.form_defaults(session.document, form_selector, Session.scope(session))
     active = FormData.pruned_params_for_form(session, button.form, form_selector)
 
     defaults
@@ -914,7 +916,7 @@ defmodule Cerberus.Driver.Live do
           action: :button,
           clicked: button.text,
           path: Session.current_path(updated),
-          texts: Html.texts(updated.html, :any, Session.scope(updated)),
+          texts: Html.texts(updated.document, :any, Session.scope(updated)),
           transition: transition
         }
 
@@ -943,14 +945,14 @@ defmodule Cerberus.Driver.Live do
     case result do
       rendered when is_binary(rendered) ->
         path = maybe_live_patch_path(session.view, session.current_path)
-        updated = %{session | html: rendered, current_path: path}
+        updated = %{session | document: Html.parse!(rendered), current_path: path}
         transition = transition(route_kind(session), :live, :click, session.current_path, path)
 
         observed = %{
           action: :link,
           clicked: link.text,
           path: path,
-          texts: Html.texts(rendered, :any, Session.scope(updated)),
+          texts: Html.texts(updated.document, :any, Session.scope(updated)),
           transition: transition
         }
 
@@ -983,7 +985,7 @@ defmodule Cerberus.Driver.Live do
       action: :link,
       path: Session.current_path(updated),
       clicked: link.text,
-      texts: Html.texts(updated.html, :any, Session.scope(updated)),
+      texts: Html.texts(updated.document, :any, Session.scope(updated)),
       transition: transition
     }
 
@@ -1101,7 +1103,7 @@ defmodule Cerberus.Driver.Live do
       action: action,
       clicked: clicked.text,
       path: Session.current_path(updated),
-      texts: Html.texts(updated.html, :any, Session.scope(updated)),
+      texts: Html.texts(updated.document, :any, Session.scope(updated)),
       transition: transition
     }
 
@@ -1133,11 +1135,11 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp with_latest_html(%__MODULE__{view: view} = session) when not is_nil(view) do
-    %{session | html: render(view)}
+  defp with_latest_document(%__MODULE__{view: view} = session) when not is_nil(view) do
+    %{session | document: Html.parse!(render(view))}
   end
 
-  defp with_latest_html(session), do: session
+  defp with_latest_document(session), do: session
 
   defp assertion_texts(%__MODULE__{} = session, visibility) do
     case live_texts_from_tree(session, visibility) do
@@ -1145,8 +1147,8 @@ defmodule Cerberus.Driver.Live do
         {session, texts}
 
       :error ->
-        session = with_latest_html(session)
-        {session, Html.texts(session.html, visibility, Session.scope(session))}
+        session = with_latest_document(session)
+        {session, Html.texts(session.document, visibility, Session.scope(session))}
     end
   end
 
@@ -1155,8 +1157,8 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp assertion_values(%__MODULE__{} = session, visibility, match_by) do
-    session = with_latest_html(session)
-    {session, Html.assertion_values(session.html, match_by, visibility, Session.scope(session))}
+    session = with_latest_document(session)
+    {session, Html.assertion_values(session.document, match_by, visibility, Session.scope(session))}
   end
 
   defp live_texts_from_tree(%__MODULE__{view: view} = session, visibility) when not is_nil(view) do
@@ -1188,13 +1190,11 @@ defmodule Cerberus.Driver.Live do
 
   defp live_texts_from_tree(_session, _visibility), do: :error
 
-  defp live_html_tree(%{proxy: {_ref, _topic, proxy_pid}}) when is_pid(proxy_pid) do
-    case GenServer.call(proxy_pid, :html, :infinity) do
-      {:ok, {html_tree, _static_path}} -> {:ok, html_tree}
-      _ -> :error
+  defp live_html_tree(%{proxy: {_ref, _topic, proxy_pid}} = view) when is_pid(proxy_pid) do
+    case LiveViewClient.html_tree(view) do
+      {:ok, html_tree} -> {:ok, html_tree}
+      :error -> :error
     end
-  catch
-    :exit, _ -> :error
   end
 
   defp live_html_tree(_view), do: :error
@@ -1270,8 +1270,8 @@ defmodule Cerberus.Driver.Live do
     _ -> []
   end
 
-  defp snapshot_html(%__MODULE__{view: view}) when not is_nil(view), do: render(view)
-  defp snapshot_html(%__MODULE__{html: html}) when is_binary(html), do: html
+  defp snapshot_document(%__MODULE__{document: %LazyHTML{} = document}), do: document
+  defp snapshot_document(%__MODULE__{view: view}) when not is_nil(view), do: Html.parse!(render(view))
 
   defp endpoint_url(endpoint) when is_atom(endpoint) do
     endpoint.url()
@@ -1280,7 +1280,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp resolve_within_scope!(session, locator, previous_scope) do
-    case Html.find_scope_target(session_html!(session), locator, previous_scope) do
+    case Html.find_scope_target(session_document!(session), locator, previous_scope) do
       {:ok, %{selector: selector}} when is_binary(selector) and selector != "" ->
         selector
 
@@ -1289,8 +1289,9 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp session_html!(%{html: html}) when is_binary(html), do: html
-  defp session_html!(_session), do: raise(ArgumentError, "within/3 requires a session with rendered html")
+  defp session_document!(%{document: %LazyHTML{} = document}), do: document
+
+  defp session_document!(_session), do: raise(ArgumentError, "within/3 requires a session with rendered document")
 
   defp restore_scope!(%{__struct__: _} = session, previous_scope) do
     Session.with_scope(session, previous_scope)
@@ -1313,7 +1314,7 @@ defmodule Cerberus.Driver.Live do
         if Session.current_path(live_result) == Session.current_path(parent_session) do
           live_result
           |> Map.put(:view, parent_session.view)
-          |> Map.put(:html, render(parent_session.view))
+          |> Map.put(:document, Html.parse!(render(parent_session.view)))
           |> Session.with_scope(previous_scope)
         else
           Session.with_scope(live_result, previous_scope)
@@ -1330,7 +1331,7 @@ defmodule Cerberus.Driver.Live do
 
   defp live_child_view_for_scope(%__MODULE__{view: %View{} = view}, scope) when is_binary(scope) do
     if simple_id_selector?(scope) do
-      case Phoenix.LiveViewTest.find_live_child(view, String.trim_leading(scope, "#")) do
+      case LiveViewClient.find_live_child(view, String.trim_leading(scope, "#")) do
         %View{} = child_view -> {:ok, child_view}
         _ -> :error
       end
@@ -1364,7 +1365,7 @@ defmodule Cerberus.Driver.Live do
   defp find_clickable_link(_session, _expected, _opts, :button), do: :error
 
   defp find_clickable_link(session, expected, opts, _kind) do
-    Html.find_link(session.html, expected, opts, Session.scope(session))
+    Html.find_link(session.document, expected, opts, Session.scope(session))
   end
 
   defp maybe_raise_live_link_ambiguity!(_session, _expected, _opts, kind) when kind != :link do
@@ -1374,7 +1375,7 @@ defmodule Cerberus.Driver.Live do
   defp maybe_raise_live_link_ambiguity!(session, expected, opts, :link) do
     if simple_live_link_ambiguity_check?(opts) do
       match_count =
-        live_link_match_count(session.html, expected, opts, CandidateScope.click_scope(opts, Session.scope(session)))
+        live_link_match_count(session.document, expected, opts, CandidateScope.click_scope(opts, Session.scope(session)))
 
       if match_count > 1 do
         raise ArgumentError, "#{match_count} of them matched the text filter"
@@ -1394,33 +1395,20 @@ defmodule Cerberus.Driver.Live do
   defp simple_link_locator?(%Locator{kind: :role} = locator), do: Locator.resolved_kind(locator) == :link
   defp simple_link_locator?(_), do: false
 
-  defp live_link_match_count(html, expected, opts, scope) when is_binary(html) do
-    lazy_html =
-      try do
-        LazyHTML.from_document(html)
-      rescue
-        _ -> nil
+  defp live_link_match_count(%LazyHTML{} = document, expected, opts, scope) do
+    roots =
+      if is_binary(scope) and scope != "" do
+        safe_query(document, scope)
+      else
+        [document]
       end
 
-    case lazy_html do
-      %LazyHTML{} = root ->
-        roots =
-          if is_binary(scope) and scope != "" do
-            safe_query(root, scope)
-          else
-            [root]
-          end
-
-        roots
-        |> Enum.flat_map(&safe_query(&1, "a[href]"))
-        |> Enum.count(fn node ->
-          Query.match_text?(link_node_text(node), expected, opts) and
-            Html.node_matches_locator_filters?(node, opts)
-        end)
-
-      _ ->
-        0
-    end
+    roots
+    |> Enum.flat_map(&safe_query(&1, "a[href]"))
+    |> Enum.count(fn node ->
+      Query.match_text?(link_node_text(node), expected, opts) and
+        Html.node_matches_locator_filters?(node, opts)
+    end)
   end
 
   defp live_link_match_count(_html, _expected, _opts, _scope), do: 0
@@ -1435,23 +1423,23 @@ defmodule Cerberus.Driver.Live do
   defp find_clickable_button(_session, _expected, _opts, :link), do: :error
 
   defp find_clickable_button(%{view: view} = session, expected, opts, _kind) when not is_nil(view) do
-    case LiveViewHTML.find_live_clickable_button(session.html, expected, opts, Session.scope(session)) do
+    case LiveViewHTML.find_live_clickable_button(session.document, expected, opts, Session.scope(session)) do
       {:ok, button} ->
         {:ok, button}
 
       :error ->
-        case LiveViewHTML.find_submit_button(session.html, expected, opts, Session.scope(session)) do
+        case LiveViewHTML.find_submit_button(session.document, expected, opts, Session.scope(session)) do
           {:ok, button} ->
             {:ok, button}
 
           :error ->
-            Html.find_button(session.html, expected, opts, Session.scope(session))
+            Html.find_button(session.document, expected, opts, Session.scope(session))
         end
     end
   end
 
   defp find_clickable_button(%__MODULE__{} = session, expected, opts, _kind) do
-    Html.find_button(session.html, expected, opts, Session.scope(session))
+    Html.find_button(session.document, expected, opts, Session.scope(session))
   end
 
   defp click_button_error(_kind), do: "live driver can only click buttons on live routes"
@@ -1468,20 +1456,20 @@ defmodule Cerberus.Driver.Live do
     values =
       case {css_scoped_text?, kind, match_by} do
         {true, _, :text} ->
-          Html.assertion_values(session.html, :text, :any, scope)
+          Html.assertion_values(session.document, :text, :any, scope)
 
         {false, :link, :text} ->
-          Html.assertion_values(session.html, :link, :any, scope)
+          Html.assertion_values(session.document, :link, :any, scope)
 
         {false, :button, :text} ->
-          Html.assertion_values(session.html, :button, :any, scope)
+          Html.assertion_values(session.document, :button, :any, scope)
 
         {false, :any, :text} ->
-          Html.assertion_values(session.html, :link, :any, scope) ++
-            Html.assertion_values(session.html, :button, :any, scope)
+          Html.assertion_values(session.document, :link, :any, scope) ++
+            Html.assertion_values(session.document, :button, :any, scope)
 
         _ ->
-          Html.assertion_values(session.html, match_by, :any, scope)
+          Html.assertion_values(session.document, match_by, :any, scope)
       end
 
     Enum.uniq(values)
@@ -1489,7 +1477,7 @@ defmodule Cerberus.Driver.Live do
 
   defp field_candidate_values(session, match_opts) do
     match_by = Keyword.get(match_opts, :match_by, :label)
-    Html.assertion_values(session.html, match_by, :any, Session.scope(session))
+    Html.assertion_values(session.document, match_by, :any, Session.scope(session))
   end
 
   defp submit_candidate_values(session, match_opts) do
@@ -1499,7 +1487,7 @@ defmodule Cerberus.Driver.Live do
         other -> other
       end
 
-    Html.assertion_values(session.html, match_by, :any, Session.scope(session))
+    Html.assertion_values(session.document, match_by, :any, Session.scope(session))
   end
 
   defp value_assertion_satisfied?(:assert, matched?), do: matched?
@@ -1536,7 +1524,7 @@ defmodule Cerberus.Driver.Live do
   defp form_defaults_for_selector(_session, selector) when selector in [nil, ""], do: %{}
 
   defp form_defaults_for_selector(session, selector) do
-    Html.form_defaults(session.html, selector, Session.scope(session))
+    Html.form_defaults(session.document, selector, Session.scope(session))
   end
 
   defp normalize_field_value(%{input_type: type, input_value: input_value}, _raw) when type in ["checkbox", "radio"] do
@@ -1578,7 +1566,7 @@ defmodule Cerberus.Driver.Live do
   defp find_active_form_submit_button(selector, session) when is_binary(selector) do
     match_opts = [match_by: :button, selector: selector <> " button"]
     finder = submit_button_finder(route_kind(session))
-    finder.(session.html, "", match_opts, Session.scope(session))
+    finder.(session.document, "", match_opts, Session.scope(session))
   end
 
   defp normalize_active_submit_button_result({:ok, button}, _session, _selector), do: {:ok, button}
@@ -1599,7 +1587,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp active_form_submit_fallback(%__MODULE__{} = session, selector) when is_binary(selector) do
-    with {:ok, attrs} <- active_form_attributes(session.html, selector) do
+    with {:ok, attrs} <- active_form_attributes(session.document, selector) do
       form_phx_submit = present_attr?(Map.get(attrs, "phx-submit"))
       action = blank_to_nil(Map.get(attrs, "action"))
 
@@ -1621,14 +1609,24 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp active_form_attributes(html, selector) when is_binary(html) and is_binary(selector) do
+  defp active_form_attributes(%LazyHTML{} = document, selector) when is_binary(selector) do
     case form_id_from_selector(selector) do
       id when is_binary(id) ->
-        escaped_id = Regex.escape(id)
+        case document
+             |> safe_query(~s(form[id="#{css_attr_escape(id)}"]))
+             |> Enum.to_list()
+             |> List.first() do
+          nil ->
+            :error
 
-        case Regex.run(~r/<form\b(?=[^>]*\bid=(['"])#{escaped_id}\1)([^>]*)>/is, html, capture: :all_but_first) do
-          [_, attrs] -> {:ok, parse_html_attributes(attrs)}
-          _ -> :error
+          form ->
+            {:ok,
+             %{
+               "id" => first_attr(form, "id"),
+               "phx-submit" => first_attr(form, "phx-submit"),
+               "action" => first_attr(form, "action"),
+               "method" => first_attr(form, "method")
+             }}
         end
 
       _ ->
@@ -1649,18 +1647,17 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp parse_html_attributes(attrs) when is_binary(attrs) do
-    ~r/([A-Za-z_:][-A-Za-z0-9_:.]*)\s*=\s*(['"])(.*?)\2/s
-    |> Regex.scan(attrs)
-    |> Enum.reduce(%{}, fn [_, key, _quote, value], acc ->
-      Map.put(acc, String.downcase(key), value)
-    end)
-  end
-
   defp present_attr?(value) when is_binary(value), do: String.trim(value) != ""
   defp present_attr?(_), do: false
   defp blank_to_nil(value) when is_binary(value), do: if(String.trim(value) == "", do: nil, else: value)
   defp blank_to_nil(_), do: nil
+
+  defp first_attr(node, name) when is_binary(name) do
+    node
+    |> LazyHTML.attribute(name)
+    |> List.wrap()
+    |> List.first()
+  end
 
   defp data_method_target(element) do
     blank_to_nil(Map.get(element, :data_to)) || blank_to_nil(Map.get(element, :href))
@@ -1763,7 +1760,7 @@ defmodule Cerberus.Driver.Live do
           clicked: element[:text] || "",
           method: method,
           path: Session.current_path(updated),
-          texts: Html.texts(updated.html, :any, Session.scope(updated)),
+          texts: Html.texts(updated.document, :any, Session.scope(updated)),
           transition: transition
         }
 
@@ -1852,7 +1849,7 @@ defmodule Cerberus.Driver.Live do
     case result do
       rendered when is_binary(rendered) ->
         path = maybe_live_patch_path(session.view, session.current_path)
-        updated = %{session | html: rendered, current_path: path}
+        updated = %{session | document: Html.parse!(rendered), current_path: path}
         transition = transition(route_kind(session), :live, :upload, session.current_path, path)
 
         observed = %{
@@ -1860,7 +1857,7 @@ defmodule Cerberus.Driver.Live do
           path: path,
           field: field,
           file_name: file_name,
-          texts: Html.texts(rendered, :any, Session.scope(updated)),
+          texts: Html.texts(updated.document, :any, Session.scope(updated)),
           transition: transition
         }
 
@@ -1875,7 +1872,7 @@ defmodule Cerberus.Driver.Live do
       {:error, {:live_patch, %{to: to}}} ->
         rendered = render(session.view)
         path = to_request_path(to, session.current_path)
-        updated = %{session | html: rendered, current_path: path}
+        updated = %{session | document: Html.parse!(rendered), current_path: path}
         transition = transition(route_kind(session), :live, :live_patch, session.current_path, path)
 
         observed = %{
@@ -1883,7 +1880,7 @@ defmodule Cerberus.Driver.Live do
           path: path,
           field: field,
           file_name: file_name,
-          texts: Html.texts(rendered, :any, Session.scope(updated)),
+          texts: Html.texts(updated.document, :any, Session.scope(updated)),
           transition: transition
         }
 
@@ -1920,7 +1917,7 @@ defmodule Cerberus.Driver.Live do
       path: Session.current_path(updated),
       field: field,
       file_name: file_name,
-      texts: Html.texts(updated.html, :any, Session.scope(updated)),
+      texts: Html.texts(updated.document, :any, Session.scope(updated)),
       transition: transition
     }
 
@@ -2242,9 +2239,9 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp select_in_static_mode(session, expected, option, opts) do
-    case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+    case Html.find_form_field(session.document, expected, opts, Session.scope(session)) do
       {:ok, %{name: name, input_type: "select"} = field} when is_binary(name) and name != "" ->
-        case Html.select_values(session.html, field, option, opts, Session.scope(session)) do
+        case Html.select_values(session.document, field, option, opts, Session.scope(session)) do
           {:ok, %{values: values, multiple?: multiple?}} ->
             value = FormData.select_value_for_update(session, field, option, values, multiple?, :static)
 
@@ -2306,7 +2303,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp choose_in_static_mode(session, expected, opts) do
-    case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+    case Html.find_form_field(session.document, expected, opts, Session.scope(session)) do
       {:ok, %{name: name, input_type: "radio"} = field} when is_binary(name) and name != "" ->
         value = field[:input_value] || "on"
 
@@ -2355,7 +2352,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp upload_in_static_mode(session, expected, path, opts) do
-    case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+    case Html.find_form_field(session.document, expected, opts, Session.scope(session)) do
       {:ok, %{name: name, input_type: "file"} = field} when is_binary(name) and name != "" ->
         file = UploadFile.read!(path)
         value = FormData.upload_value_for_update(session, field, file, path, :static)
@@ -2415,7 +2412,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp do_live_select(session, field, option, opts) do
-    case Html.select_values(session.html, field, option, opts, Session.scope(session)) do
+    case Html.select_values(session.document, field, option, opts, Session.scope(session)) do
       {:ok, %{values: values, multiple?: multiple?}} ->
         if select_requires_option_click?(field) and not select_has_option_clicks?(field) do
           raise ArgumentError, select_option_click_contract_error()
@@ -2661,7 +2658,7 @@ defmodule Cerberus.Driver.Live do
 
   defp wait_for_live_form_field(session, expected, opts, op) do
     finder = fn refreshed ->
-      refreshed.html
+      refreshed.document
       |> LiveViewHTML.find_form_field(expected, opts, Session.scope(refreshed))
       |> resolve_live_form_field_actionability(op)
     end
@@ -2670,7 +2667,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp toggle_checkbox_in_static_mode(session, expected, opts, checked?, op) do
-    case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+    case Html.find_form_field(session.document, expected, opts, Session.scope(session)) do
       {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
         value = FormData.toggled_checkbox_value(session, field, checked?)
 
@@ -2712,7 +2709,7 @@ defmodule Cerberus.Driver.Live do
 
   defp wait_for_live_submit_button(session, expected, opts) do
     finder = fn refreshed ->
-      case LiveViewHTML.find_submit_button(refreshed.html, expected, opts, Session.scope(refreshed)) do
+      case LiveViewHTML.find_submit_button(refreshed.document, expected, opts, Session.scope(refreshed)) do
         {:ok, %{disabled: true}} -> {:retry, "matched field is disabled"}
         {:ok, button} -> {:ok, button}
         :error -> {:error, "no submit button matched locator"}
@@ -2740,7 +2737,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp do_wait_for_live_actionable(session, deadline, pending_reason, finder) when is_function(finder, 1) do
-    refreshed = with_latest_html(session)
+    refreshed = with_latest_document(session)
 
     case finder.(refreshed) do
       {:ok, candidate} ->
@@ -3079,7 +3076,7 @@ defmodule Cerberus.Driver.Live do
     case maybe_follow_trigger_action(session, rendered) do
       :no_trigger ->
         path = path_override || maybe_live_patch_path(session.view, session.current_path)
-        updated = %{session | html: rendered, current_path: path}
+        updated = %{session | document: Html.parse!(rendered), current_path: path}
         transition = transition(route_kind(session), :live, reason, session.current_path, path)
         {:ok, updated, transition}
 
@@ -3101,7 +3098,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp maybe_follow_trigger_action(session, rendered) do
-    case LiveViewHTML.trigger_action_forms(rendered) do
+    case LiveViewHTML.trigger_action_forms(Html.parse!(rendered)) do
       [] ->
         :no_trigger
 
@@ -3174,21 +3171,25 @@ defmodule Cerberus.Driver.Live do
 
     case try_live(conn) do
       {:ok, view, html} ->
+        document = Html.parse!(html)
+
         %{
           session
           | conn: conn,
             view: view,
-            html: html,
+            document: document,
             current_path: current_path
         }
 
       :error ->
+        document = Html.parse!(conn.resp_body || "")
+
         %StaticSession{
           endpoint: session.endpoint,
           conn: conn,
           timeout_ms: timeout_for_driver(session, :static),
           timeout_overridden?: session.timeout_overridden?,
-          html: conn.resp_body || "",
+          document: document,
           form_data: session.form_data,
           scope: session.scope,
           current_path: current_path,
@@ -3280,7 +3281,7 @@ defmodule Cerberus.Driver.Live do
     unwrap_transition = transition(:live, :live, :live_patch, session.current_path, path)
 
     session
-    |> Map.put(:html, html)
+    |> Map.put(:document, Html.parse!(html))
     |> Map.put(:current_path, path)
     |> update_last_result(:unwrap, %{path: path, transition: unwrap_transition})
   end
@@ -3290,7 +3291,7 @@ defmodule Cerberus.Driver.Live do
     unwrap_transition = transition(:live, :live, :unwrap, session.current_path, path)
 
     session
-    |> Map.put(:html, rendered)
+    |> Map.put(:document, Html.parse!(rendered))
     |> Map.put(:current_path, path)
     |> update_last_result(:unwrap, %{path: path, transition: unwrap_transition})
   end
@@ -3306,6 +3307,7 @@ defmodule Cerberus.Driver.Live do
     case try_live(conn) do
       {:ok, view, html} ->
         unwrap_transition = transition(from_driver, :live, :unwrap, session.current_path, current_path)
+        document = Html.parse!(html)
 
         %__MODULE__{
           endpoint: session.endpoint,
@@ -3313,7 +3315,7 @@ defmodule Cerberus.Driver.Live do
           timeout_ms: timeout_for_driver(session, :live),
           timeout_overridden?: session.timeout_overridden?,
           view: view,
-          html: html,
+          document: document,
           form_data: Map.get(session, :form_data),
           scope: session.scope,
           current_path: current_path,
@@ -3322,13 +3324,14 @@ defmodule Cerberus.Driver.Live do
 
       :error ->
         unwrap_transition = transition(from_driver, :static, :unwrap, session.current_path, current_path)
+        document = Html.parse!(conn.resp_body || "")
 
         %StaticSession{
           endpoint: session.endpoint,
           conn: conn,
           timeout_ms: timeout_for_driver(session, :static),
           timeout_overridden?: session.timeout_overridden?,
-          html: conn.resp_body || "",
+          document: document,
           form_data: Map.get(session, :form_data),
           scope: session.scope,
           current_path: current_path,
@@ -3343,18 +3346,20 @@ defmodule Cerberus.Driver.Live do
 
     session
     |> Map.put(:view, view)
-    |> Map.put(:html, html)
+    |> Map.put(:document, Html.parse!(html))
     |> Map.put(:current_path, path)
     |> update_last_result(:unwrap, %{path: path, transition: unwrap_transition})
   end
 
   defp static_seed_from_session(session, conn) do
+    document = Html.parse!(conn.resp_body || "")
+
     %StaticSession{
       endpoint: session.endpoint,
       conn: conn,
       timeout_ms: timeout_for_driver(session, :static),
       timeout_overridden?: session.timeout_overridden?,
-      html: conn.resp_body || "",
+      document: document,
       form_data: Map.get(session, :form_data),
       scope: session.scope,
       current_path: Conn.current_path(conn, session.current_path),

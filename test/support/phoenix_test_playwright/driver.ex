@@ -39,7 +39,7 @@ defmodule Cerberus.TestSupport.PhoenixTestPlaywright.Driver do
 
   defp normalize_title(title), do: title |> String.replace(~r/\s+/, " ") |> String.trim()
 
-  def render_html(%{html: html}) when is_binary(html), do: html
+  def render_html(%{document: %LazyHTML{} = document}), do: LazyHTML.to_html(document)
 
   def render_html(session) do
     rendered = :erlang.make_ref()

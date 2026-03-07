@@ -173,7 +173,7 @@ defmodule Cerberus.Driver.Live.FormData do
   defp submit_form_defaults(session, button) do
     case submit_form_selector(button) do
       selector when is_binary(selector) and selector != "" ->
-        Html.form_defaults(session.html, selector, Session.scope(session))
+        Html.form_defaults(session.document, selector, Session.scope(session))
 
       _ ->
         %{}
@@ -183,7 +183,7 @@ defmodule Cerberus.Driver.Live.FormData do
   defp form_defaults_for_change(%{} = session, field) do
     case field[:form_selector] do
       selector when is_binary(selector) and selector != "" ->
-        Html.form_defaults(session.html, selector, Session.scope(session))
+        Html.form_defaults(session.document, selector, Session.scope(session))
 
       _ ->
         %{}
@@ -249,7 +249,7 @@ defmodule Cerberus.Driver.Live.FormData do
     form_selector = field[:form_selector]
 
     if is_binary(form_selector) and form_selector != "" do
-      Html.checkbox_unchecked_value(session.html, form_selector, field.name, Session.scope(session))
+      Html.checkbox_unchecked_value(session.document, form_selector, field.name, Session.scope(session))
     end
   end
 
@@ -281,7 +281,7 @@ defmodule Cerberus.Driver.Live.FormData do
   defp submit_defaults_for_selector(_session, selector) when selector in [nil, ""], do: %{}
 
   defp submit_defaults_for_selector(session, selector) when is_binary(selector) do
-    Html.form_defaults(session.html, selector, Session.scope(session))
+    Html.form_defaults(session.document, selector, Session.scope(session))
   end
 
   @spec pruned_params_for_form(struct(), String.t() | nil, String.t() | nil) :: map()
@@ -300,7 +300,7 @@ defmodule Cerberus.Driver.Live.FormData do
   defp form_field_name_allowlist(_session, selector) when selector in [nil, ""], do: nil
 
   defp form_field_name_allowlist(session, selector) do
-    Html.form_field_names(session.html, selector, Session.scope(session))
+    Html.form_field_names(session.document, selector, Session.scope(session))
   end
 
   defp prune_form_params(params, nil) when is_map(params), do: params

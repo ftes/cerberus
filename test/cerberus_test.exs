@@ -104,6 +104,7 @@ defmodule CerberusTest do
     assert %BrowserSession{} = session(:browser)
   end
 
+  @tag :slow
   test "browser session applies init script and viewport defaults across new tabs" do
     session =
       :browser

@@ -313,6 +313,7 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_has(returned_main, text("Popup opened", exact: true))
   end
 
+  @tag :slow
   test "with_popup waits for popup opened after waiter registration" do
     main =
       :browser
@@ -386,6 +387,7 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert UserContextProcess.active_tab(session.user_context_pid) == session.tab_id
   end
 
+  @tag :slow
   test "assert_dialog handles a dialog that is already open" do
     session =
       :browser
@@ -399,6 +401,7 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_has(session, text("Dialog result: confirmed", exact: true))
   end
 
+  @tag :slow
   test "assert_dialog waits for a dialog that opens after assertion starts" do
     session =
       :browser
@@ -431,6 +434,7 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_has(session, text("Dialog result: confirmed", exact: true))
   end
 
+  @tag :slow
   test "assertion operations complete when a blocking prompt dialog is already open" do
     session =
       :browser
@@ -444,6 +448,7 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_prompt_result(session, "Prompt result: ")
   end
 
+  @tag :slow
   test "assertion operations complete when a blocking alert dialog is already open" do
     session =
       :browser
@@ -468,6 +473,7 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_download(session, "report.txt")
   end
 
+  @tag :slow
   test "assert_download waits for download emitted after assertion starts" do
     session =
       :browser
@@ -497,6 +503,7 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   for driver <- [:phoenix, :browser] do
+    @tag :slow
     test "assert_download waits for delayed live redirect to static download response (#{driver})" do
       session =
         unquote(driver)
@@ -550,6 +557,7 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert error.message =~ "report.txt"
   end
 
+  @tag :slow
   test "assert_dialog raises when observed dialog message does not match expected text" do
     session =
       :browser
@@ -583,6 +591,7 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert error.message =~ "assert_dialog/3 timed out waiting for dialog text \"Delete item?\""
   end
 
+  @tag :slow
   test "assert_dialog supports prompt dialogs with auto-accepted empty input" do
     session =
       :browser
@@ -594,6 +603,7 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_prompt_result(session, "Prompt result: ")
   end
 
+  @tag :slow
   test "assert_dialog supports alert dialogs" do
     session =
       :browser

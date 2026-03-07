@@ -77,6 +77,10 @@ defmodule Cerberus.FormActionsTest do
       |> assert_has(~l"Count: 1"e)
     end
 
+    if driver == :browser do
+      @tag :slow
+    end
+
     test "action failures include possible candidate hints (#{driver})", context do
       click_error =
         assert_raise ExUnit.AssertionError, fn ->

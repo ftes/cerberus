@@ -48,6 +48,10 @@ defmodule Cerberus.DocumentationExamplesTest do
       |> assert_path("/search")
     end
 
+    if driver == :browser do
+      @tag :slow
+    end
+
     test "multi-user and multi-tab flow from docs preserves isolation semantics (#{driver})", context do
       primary =
         unquote(driver)
@@ -77,7 +81,7 @@ defmodule Cerberus.DocumentationExamplesTest do
   end
 
   test "browser extension snippet from docs works", context do
-    session =
+    m
       :browser
       |> driver_session(context)
       |> visit("/browser/extensions")

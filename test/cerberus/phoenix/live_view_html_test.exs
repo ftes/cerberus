@@ -12,8 +12,10 @@ defmodule Cerberus.Phoenix.LiveViewHTMLTest do
     </main>
     """
 
+    doc = Cerberus.Html.parse!(html)
+
     assert {:ok, %{selector: selector}} =
-             LiveViewHTML.find_live_clickable_button(html, "Create", exact: true)
+             LiveViewHTML.find_live_clickable_button(doc, "Create", exact: true)
 
     assert is_binary(selector)
     assert selector =~ "data-confirm="
@@ -34,6 +36,8 @@ defmodule Cerberus.Phoenix.LiveViewHTMLTest do
     </main>
     """
 
+    doc = Cerberus.Html.parse!(html)
+
     assert {:ok,
             %{
               dispatch_change: true,
@@ -41,7 +45,7 @@ defmodule Cerberus.Phoenix.LiveViewHTMLTest do
               button_value: "1",
               form: "dynamic-form",
               form_selector: ~s(form[id="dynamic-form"])
-            }} = LiveViewHTML.find_live_clickable_button(html, "delete", exact: true)
+            }} = LiveViewHTML.find_live_clickable_button(doc, "delete", exact: true)
   end
 
   test "find_live_clickable_button supports count and position filters" do
@@ -56,14 +60,16 @@ defmodule Cerberus.Phoenix.LiveViewHTMLTest do
     </main>
     """
 
+    doc = Cerberus.Html.parse!(html)
+
     assert {:ok, %{button_value: "1"}} =
-             LiveViewHTML.find_live_clickable_button(html, "Apply", exact: true, first: true, count: 2)
+             LiveViewHTML.find_live_clickable_button(doc, "Apply", exact: true, first: true, count: 2)
 
     assert {:ok, %{button_value: "2"}} =
-             LiveViewHTML.find_live_clickable_button(html, "Apply", exact: true, last: true, count: 2)
+             LiveViewHTML.find_live_clickable_button(doc, "Apply", exact: true, last: true, count: 2)
 
-    assert :error = LiveViewHTML.find_live_clickable_button(html, "Apply", exact: true, count: 1)
-    assert :error = LiveViewHTML.find_live_clickable_button(html, "Apply", exact: true, nth: 3)
+    assert :error = LiveViewHTML.find_live_clickable_button(doc, "Apply", exact: true, count: 1)
+    assert :error = LiveViewHTML.find_live_clickable_button(doc, "Apply", exact: true, nth: 3)
   end
 
   test "find_live_clickable_button excludes dispatch-only buttons without form phx-change context" do
@@ -73,7 +79,10 @@ defmodule Cerberus.Phoenix.LiveViewHTMLTest do
     </main>
     """
 
-    assert :error = LiveViewHTML.find_live_clickable_button(html, "dispatch only", exact: true)
+    assert :error =
+             html
+             |> Cerberus.Html.parse!()
+             |> LiveViewHTML.find_live_clickable_button("dispatch only", exact: true)
   end
 
   test "find_form_field enriches with input/form phx-change metadata" do
@@ -88,7 +97,11 @@ defmodule Cerberus.Phoenix.LiveViewHTMLTest do
     </main>
     """
 
-    assert {:ok, field} = LiveViewHTML.find_form_field(html, "Name", exact: true)
+    assert {:ok, field} =
+             html
+             |> Cerberus.Html.parse!()
+             |> LiveViewHTML.find_form_field("Name", exact: true)
+
     assert field.input_phx_change
     assert field.form_phx_change
   end
@@ -102,7 +115,11 @@ defmodule Cerberus.Phoenix.LiveViewHTMLTest do
     </main>
     """
 
-    assert {:ok, button} = LiveViewHTML.find_submit_button(html, "Save", exact: true)
+    assert {:ok, button} =
+             html
+             |> Cerberus.Html.parse!()
+             |> LiveViewHTML.find_submit_button("Save", exact: true)
+
     assert button.form_phx_submit
   end
 
@@ -123,6 +140,9 @@ defmodule Cerberus.Phoenix.LiveViewHTMLTest do
                method: "post",
                defaults: %{"profile[name]" => "Aragorn"}
              }
-           ] = LiveViewHTML.trigger_action_forms(html)
+           ] =
+             html
+             |> Cerberus.Html.parse!()
+             |> LiveViewHTML.trigger_action_forms()
   end
 end

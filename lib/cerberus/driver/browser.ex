@@ -209,17 +209,17 @@ defmodule Cerberus.Driver.Browser do
 
   @impl true
   def open_browser(%__MODULE__{} = session, open_fun) when is_function(open_fun, 1) do
-    {state, html, url} = html_snapshot!(session)
+    {state, document, url} = html_snapshot!(session)
     endpoint = Application.get_env(:cerberus, :endpoint)
-    path = OpenBrowser.write_snapshot!(html, snapshot_base_url(state.base_url, url), endpoint)
+    path = OpenBrowser.write_snapshot!(document, snapshot_base_url(state.base_url, url), endpoint)
     _ = open_fun.(path)
     session
   end
 
   @impl true
   def render_html(%__MODULE__{} = session, callback) when is_function(callback, 1) do
-    {_state, html, _url} = html_snapshot!(session)
-    _ = callback.(LazyHTML.from_document(html))
+    {_state, document, _url} = html_snapshot!(session)
+    _ = callback.(document)
     session
   end
 
@@ -276,7 +276,8 @@ defmodule Cerberus.Driver.Browser do
     with {:ok, snapshot} <- eval_json_transient_read(state, Expressions.within_scope_snapshot(scope)),
          :ok <- validate_within_scope_snapshot(snapshot),
          html when is_binary(html) <- Map.get(snapshot, "html"),
-         {:ok, target} <- Html.find_scope_target(html, locator, Map.get(snapshot, "scopeSelector")),
+         {:ok, document} <- Html.parse(html),
+         {:ok, target} <- Html.find_scope_target(document, locator, Map.get(snapshot, "scopeSelector")),
          {:ok, resolved_scope} <- build_within_scope_from_target(state, scope, snapshot, target) do
       {:ok, resolved_scope}
     else
@@ -1984,7 +1985,8 @@ defmodule Cerberus.Driver.Browser do
 
     case eval_json_transient_read(state, Expressions.browser_html()) do
       {:ok, payload} ->
-        {state, Map.get(payload, "html", ""), Map.get(payload, "url")}
+        html = Map.get(payload, "html", "")
+        {state, Html.parse!(html), Map.get(payload, "url")}
 
       {:error, reason, details} ->
         raise ArgumentError, "failed to collect browser HTML snapshot: #{reason} (#{inspect(details)})"
