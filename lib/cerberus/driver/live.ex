@@ -3,7 +3,17 @@ defmodule Cerberus.Driver.Live do
 
   @behaviour Cerberus.Driver
 
-  import Phoenix.LiveViewTest, only: [element: 2, element: 3, render: 1, render_click: 2]
+  import Cerberus.Phoenix.LiveViewClient,
+    only: [
+      element: 2,
+      element: 3,
+      form: 2,
+      form: 3,
+      render: 1,
+      render_change: 2,
+      render_click: 2,
+      render_submit: 2
+    ]
 
   alias Cerberus.Driver.Browser, as: BrowserSession
   alias Cerberus.Driver.CandidateScope
@@ -147,7 +157,7 @@ defmodule Cerberus.Driver.Live do
         child_session =
           session
           |> Map.put(:view, child_view)
-          |> Map.put(:html, Phoenix.LiveViewTest.render(child_view))
+          |> Map.put(:html, render(child_view))
           |> Session.with_scope(nil)
 
         callback_result = callback.(child_session)
@@ -817,11 +827,6 @@ defmodule Cerberus.Driver.Live do
       {:error, {:redirect, %{to: to}}} ->
         redirected_result(session, button, to, :redirect)
 
-      {:error, {:live_patch, %{to: to}}} ->
-        rendered = render(session.view)
-        path = to_request_path(to, session.current_path)
-        click_live_button_rendered(session, button, rendered, :live_patch, path)
-
       {:error, {:invalid_live_click, reason}} ->
         observed = %{
           action: :button,
@@ -832,17 +837,6 @@ defmodule Cerberus.Driver.Live do
         }
 
         {:error, session, observed, no_clickable_error(kind)}
-
-      other ->
-        observed = %{
-          action: :button,
-          clicked: button.text,
-          path: session.current_path,
-          result: other,
-          transition: session_transition(session)
-        }
-
-        {:error, session, observed, "unexpected live click result"}
     end
   end
 
@@ -856,8 +850,8 @@ defmodule Cerberus.Driver.Live do
 
       result =
         session.view
-        |> Phoenix.LiveViewTest.form(form_selector, payload)
-        |> Phoenix.LiveViewTest.render_change(additional)
+        |> form(form_selector, payload)
+        |> render_change(additional)
 
       case resolve_live_change_result(session, result, target || []) do
         {:ok, changed_session, change} ->
@@ -968,26 +962,7 @@ defmodule Cerberus.Driver.Live do
       {:error, {:redirect, %{to: to}}} ->
         redirected_result(session, link, to, :redirect, :link)
 
-      {:error, {:live_patch, %{to: to}}} ->
-        rendered = render(session.view)
-        path = to_request_path(to, session.current_path)
-        updated = %{session | html: rendered, current_path: path}
-        transition = transition(route_kind(session), :live, :live_patch, session.current_path, path)
-
-        observed = %{
-          action: :link,
-          clicked: link.text,
-          path: path,
-          texts: Html.texts(rendered, :any, Session.scope(updated)),
-          transition: transition
-        }
-
-        {:ok, update_session(updated, :click, observed), observed}
-
       {:error, :live_click_unsupported} ->
-        click_link_via_visit(session, link, :click)
-
-      _other ->
         click_link_via_visit(session, link, :click)
     end
   end
@@ -1338,7 +1313,7 @@ defmodule Cerberus.Driver.Live do
         if Session.current_path(live_result) == Session.current_path(parent_session) do
           live_result
           |> Map.put(:view, parent_session.view)
-          |> Map.put(:html, Phoenix.LiveViewTest.render(parent_session.view))
+          |> Map.put(:html, render(parent_session.view))
           |> Session.with_scope(previous_scope)
         else
           Session.with_scope(live_result, previous_scope)
@@ -1977,14 +1952,14 @@ defmodule Cerberus.Driver.Live do
 
   defp maybe_upload_change_result(session, form_selector, %{input_phx_change: true, name: name}) do
     session.view
-    |> Phoenix.LiveViewTest.form(form_selector)
-    |> Phoenix.LiveViewTest.render_change(%{"_target" => name})
+    |> form(form_selector)
+    |> render_change(%{"_target" => name})
   end
 
   defp maybe_upload_change_result(session, form_selector, %{form_phx_change: true, name: name}) do
     session.view
-    |> Phoenix.LiveViewTest.form(form_selector)
-    |> Phoenix.LiveViewTest.render_change(%{"_target" => name})
+    |> form(form_selector)
+    |> render_change(%{"_target" => name})
   end
 
   defp maybe_upload_change_result(session, _form_selector, _field), do: render(session.view)
@@ -2131,8 +2106,8 @@ defmodule Cerberus.Driver.Live do
     if is_binary(form_selector) and form_selector != "" do
       result =
         session.view
-        |> Phoenix.LiveViewTest.form(form_selector, form_payload)
-        |> Phoenix.LiveViewTest.render_submit(additional)
+        |> form(form_selector, form_payload)
+        |> render_submit(additional)
 
       resolve_live_submit_result(session, result, button, Map.merge(form_payload, additional))
     else
@@ -2212,37 +2187,6 @@ defmodule Cerberus.Driver.Live do
 
   defp resolve_live_submit_result(session, {:error, {:redirect, %{to: to}}}, button, submitted_params) do
     submitted_redirect_result(session, button, to, submitted_params, :redirect)
-  end
-
-  defp resolve_live_submit_result(session, {:error, {:live_patch, %{to: to}}}, button, submitted_params) do
-    rendered = render(session.view)
-    path = to_request_path(to, session.current_path)
-
-    case apply_live_rendered_result(session, rendered, :live_patch, path) do
-      {:ok, updated, transition} ->
-        observed = %{
-          action: :submit,
-          clicked: button.text,
-          path: Session.current_path(updated),
-          method: normalize_submit_method(button.method),
-          params: submitted_params,
-          transition: transition
-        }
-
-        cleared_form_data = submitted_form_data_after_success(session.form_data, button)
-        {:ok, clear_submitted_session(updated, cleared_form_data, :submit, observed), observed}
-
-      {:error, failed_session, reason, details} ->
-        observed = %{
-          action: :submit,
-          clicked: button.text,
-          path: session.current_path,
-          details: details,
-          transition: session_transition(session)
-        }
-
-        {:error, failed_session, observed, reason}
-    end
   end
 
   defp resolve_live_submit_result(session, other, _button, _submitted_params) do
@@ -2648,7 +2592,7 @@ defmodule Cerberus.Driver.Live do
         result =
           current_session.view
           |> element(scoped_selector(selector, Session.scope(current_session)))
-          |> Phoenix.LiveViewTest.render_click(%{"value" => selected_value})
+          |> render_click(%{"value" => selected_value})
 
         case resolve_live_change_result(current_session, result, target) do
           {:ok, next_session, change} -> {:cont, {:ok, next_session, change}}
@@ -3013,7 +2957,7 @@ defmodule Cerberus.Driver.Live do
       result =
         session.view
         |> element(scoped_selector(selector, Session.scope(session)))
-        |> Phoenix.LiveViewTest.render_change(payload)
+        |> render_change(payload)
 
       resolve_live_change_result(session, result, target)
     else
@@ -3031,8 +2975,8 @@ defmodule Cerberus.Driver.Live do
 
       result =
         session.view
-        |> Phoenix.LiveViewTest.form(form_selector, payload)
-        |> Phoenix.LiveViewTest.render_change(additional)
+        |> form(form_selector, payload)
+        |> render_change(additional)
 
       resolve_live_change_result(session, result, target)
     else
@@ -3125,19 +3069,6 @@ defmodule Cerberus.Driver.Live do
       )
 
     {:ok, redirected, %{triggered: true, target: target, transition: transition}}
-  end
-
-  defp resolve_live_change_result(session, {:error, {:live_patch, %{to: to}}}, target) do
-    rendered = render(session.view)
-    path = to_request_path(to, session.current_path)
-
-    case apply_live_rendered_result(session, rendered, :live_patch, path) do
-      {:ok, updated, transition} ->
-        {:ok, updated, %{triggered: true, target: target, transition: transition}}
-
-      {:error, failed_session, reason, details} ->
-        {:error, failed_session, reason, details}
-    end
   end
 
   defp resolve_live_change_result(session, other, _target) do
@@ -3317,11 +3248,11 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp unwrap_live_result({:ok, %View{} = view, _extra}, %__MODULE__{} = session) do
-    build_live_session_from_view(session, view, Phoenix.LiveViewTest.render(view))
+    build_live_session_from_view(session, view, render(view))
   end
 
   defp unwrap_live_result(%View{} = view, %__MODULE__{} = session) do
-    build_live_session_from_view(session, view, Phoenix.LiveViewTest.render(view))
+    build_live_session_from_view(session, view, render(view))
   end
 
   defp unwrap_live_result({:error, {kind, %{to: to}}}, %__MODULE__{} = session)
@@ -3345,7 +3276,7 @@ defmodule Cerberus.Driver.Live do
 
   defp unwrap_live_result({:error, {:live_patch, %{to: to}}}, %__MODULE__{} = session) when is_binary(to) do
     path = Cerberus.Path.normalize(to) || session.current_path
-    html = Phoenix.LiveViewTest.render(session.view)
+    html = render(session.view)
     unwrap_transition = transition(:live, :live, :live_patch, session.current_path, path)
 
     session
