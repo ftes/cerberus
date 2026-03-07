@@ -137,7 +137,7 @@ defmodule Cerberus.Html do
   end
 
   @spec find_button(String.t(), String.t() | Regex.t(), Options.locator_filter_opts(), String.t() | nil) ::
-          {:ok, %{text: String.t(), selector: String.t() | nil}} | :error
+          {:ok, map()} | :error
   def find_button(html, expected, opts, scope \\ nil) when is_binary(html) do
     case parse_document(html) do
       {:ok, lazy_html} ->
@@ -235,18 +235,7 @@ defmodule Cerberus.Html do
           String.t() | Regex.t(),
           Options.locator_filter_opts(),
           String.t() | nil
-        ) ::
-          {:ok,
-           %{
-             text: String.t(),
-             action: String.t() | nil,
-             method: String.t() | nil,
-             form: String.t() | nil,
-             form_selector: String.t() | nil,
-             button_name: String.t() | nil,
-             button_value: String.t() | nil
-           }}
-          | :error
+        ) :: {:ok, map()} | :error
   def find_submit_button(html_or_doc, expected, opts, scope \\ nil)
 
   def find_submit_button(%LazyHTML{} = lazy_html, expected, opts, scope) do

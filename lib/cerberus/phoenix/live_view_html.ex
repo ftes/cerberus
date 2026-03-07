@@ -7,17 +7,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   alias Cerberus.Query
 
   @spec find_live_clickable_button(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
-          {:ok,
-           %{
-             text: String.t(),
-             selector: String.t() | nil,
-             button_name: String.t() | nil,
-             button_value: String.t() | nil,
-             form: String.t() | nil,
-             form_selector: String.t() | nil,
-             dispatch_change: boolean()
-           }}
-          | :error
+          {:ok, map()} | :error
   def find_live_clickable_button(html, expected, opts, scope \\ nil) when is_binary(html) do
     case parse_document(html) do
       {:ok, lazy_html} ->
@@ -48,18 +38,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   end
 
   @spec find_submit_button(String.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
-          {:ok,
-           %{
-             text: String.t(),
-             action: String.t() | nil,
-             method: String.t() | nil,
-             form: String.t() | nil,
-             form_selector: String.t() | nil,
-             form_phx_submit: boolean(),
-             button_name: String.t() | nil,
-             button_value: String.t() | nil
-           }}
-          | :error
+          {:ok, map()} | :error
   def find_submit_button(html, expected, opts, scope \\ nil) when is_binary(html) do
     case parse_document(html) do
       {:ok, lazy_html} ->

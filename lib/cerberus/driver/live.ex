@@ -390,133 +390,31 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def check(%__MODULE__{} = session, %Locator{} = locator, opts) do
-    session = with_latest_html(session)
-    {expected, match_opts} = LocatorOps.form(locator, opts)
-
-    case route_kind(session) do
-      :live ->
-        case wait_for_live_form_field(session, expected, match_opts, :check) do
-          {:ok, action_session, field} ->
-            do_live_toggle_checkbox(action_session, field, true, :check)
-
-          {:error, failed_session, reason} ->
-            observed = checkbox_error_observed(failed_session, :check)
-            {:error, failed_session, observed, reason}
-        end
-
-      :static ->
-        case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
-          {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
-            value = FormData.toggled_checkbox_value(session, field, true)
-
-            updated = %{
-              session
-              | form_data: FormData.put_form_value(session.form_data, field.form, field.form_selector, name, value)
-            }
-
-            observed = %{
-              action: :check,
-              path: session.current_path,
-              field: field,
-              checked: true,
-              transition: session_transition(session)
-            }
-
-            {:ok, update_session(updated, :check, observed), observed}
-
-          {:ok, %{name: name}} when is_binary(name) and name != "" ->
-            observed = %{
-              action: :check,
-              path: session.current_path,
-              transition: session_transition(session)
-            }
-
-            {:error, session, observed, "matched field is not a checkbox"}
-
-          {:ok, _field} ->
-            observed = %{
-              action: :check,
-              path: session.current_path,
-              transition: session_transition(session)
-            }
-
-            {:error, session, observed, "matched field does not include a name attribute"}
-
-          :error ->
-            observed = %{
-              action: :check,
-              path: session.current_path,
-              transition: session_transition(session)
-            }
-
-            {:error, session, observed, "no form field matched locator"}
-        end
-    end
+    toggle_checkbox(session, locator, opts, true, :check)
   end
 
   @impl true
   def uncheck(%__MODULE__{} = session, %Locator{} = locator, opts) do
+    toggle_checkbox(session, locator, opts, false, :uncheck)
+  end
+
+  defp toggle_checkbox(%__MODULE__{} = session, %Locator{} = locator, opts, checked?, op) do
     session = with_latest_html(session)
     {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case route_kind(session) do
       :live ->
-        case wait_for_live_form_field(session, expected, match_opts, :uncheck) do
+        case wait_for_live_form_field(session, expected, match_opts, op) do
           {:ok, action_session, field} ->
-            do_live_toggle_checkbox(action_session, field, false, :uncheck)
+            do_live_toggle_checkbox(action_session, field, checked?, op)
 
           {:error, failed_session, reason} ->
-            observed = checkbox_error_observed(failed_session, :uncheck)
+            observed = checkbox_error_observed(failed_session, op)
             {:error, failed_session, observed, reason}
         end
 
       :static ->
-        case Html.find_form_field(session.html, expected, match_opts, Session.scope(session)) do
-          {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
-            value = FormData.toggled_checkbox_value(session, field, false)
-
-            updated = %{
-              session
-              | form_data: FormData.put_form_value(session.form_data, field.form, field.form_selector, name, value)
-            }
-
-            observed = %{
-              action: :uncheck,
-              path: session.current_path,
-              field: field,
-              checked: false,
-              transition: session_transition(session)
-            }
-
-            {:ok, update_session(updated, :uncheck, observed), observed}
-
-          {:ok, %{name: name}} when is_binary(name) and name != "" ->
-            observed = %{
-              action: :uncheck,
-              path: session.current_path,
-              transition: session_transition(session)
-            }
-
-            {:error, session, observed, "matched field is not a checkbox"}
-
-          {:ok, _field} ->
-            observed = %{
-              action: :uncheck,
-              path: session.current_path,
-              transition: session_transition(session)
-            }
-
-            {:error, session, observed, "matched field does not include a name attribute"}
-
-          :error ->
-            observed = %{
-              action: :uncheck,
-              path: session.current_path,
-              transition: session_transition(session)
-            }
-
-            {:error, session, observed, "no form field matched locator"}
-        end
+        toggle_checkbox_in_static_mode(session, expected, match_opts, checked?, op)
     end
   end
 
@@ -2819,36 +2717,53 @@ defmodule Cerberus.Driver.Live do
 
   defp wait_for_live_form_field(session, expected, opts, op) do
     finder = fn refreshed ->
-      case LiveViewHTML.find_form_field(refreshed.html, expected, opts, Session.scope(refreshed)) do
-        {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
-          live_field_actionability(field, op)
-
-        {:ok, %{input_type: "checkbox"} = field} ->
-          if checkbox_click_without_name_supported?(field) do
-            live_field_actionability(field, op)
-          else
-            {:error, "matched field does not include a name attribute"}
-          end
-
-        {:ok, %{input_type: "radio"} = field} ->
-          if radio_click_without_name_supported?(field) do
-            live_field_actionability(field, op)
-          else
-            {:error, "matched field does not include a name attribute"}
-          end
-
-        {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
-          {:error, live_field_type_error(op, field)}
-
-        {:ok, _field} ->
-          {:error, live_field_missing_name_error(op)}
-
-        :error ->
-          {:error, live_field_not_found_error(op)}
-      end
+      refreshed.html
+      |> LiveViewHTML.find_form_field(expected, opts, Session.scope(refreshed))
+      |> resolve_live_form_field_actionability(op)
     end
 
     wait_for_live_actionable(session, live_action_timeout_ms(session, opts), finder)
+  end
+
+  defp toggle_checkbox_in_static_mode(session, expected, opts, checked?, op) do
+    case Html.find_form_field(session.html, expected, opts, Session.scope(session)) do
+      {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
+        value = FormData.toggled_checkbox_value(session, field, checked?)
+
+        updated = %{
+          session
+          | form_data: FormData.put_form_value(session.form_data, field.form, field.form_selector, name, value)
+        }
+
+        observed = %{
+          action: op,
+          path: session.current_path,
+          field: field,
+          checked: checked?,
+          transition: session_transition(session)
+        }
+
+        {:ok, update_session(updated, op, observed), observed}
+
+      {:ok, %{name: name}} when is_binary(name) and name != "" ->
+        static_checkbox_error(session, op, "matched field is not a checkbox")
+
+      {:ok, _field} ->
+        static_checkbox_error(session, op, "matched field does not include a name attribute")
+
+      :error ->
+        static_checkbox_error(session, op, "no form field matched locator")
+    end
+  end
+
+  defp static_checkbox_error(session, op, reason) do
+    observed = %{
+      action: op,
+      path: session.current_path,
+      transition: session_transition(session)
+    }
+
+    {:error, session, observed, reason}
   end
 
   defp wait_for_live_submit_button(session, expected, opts) do
@@ -2917,6 +2832,21 @@ defmodule Cerberus.Driver.Live do
   defp live_field_disabled_reason(%{input_disabled: true}, _op), do: "matched field is disabled"
   defp live_field_disabled_reason(_field, _op), do: nil
 
+  defp resolve_live_form_field_actionability({:ok, field}, op) do
+    cond do
+      live_form_field_named?(field) ->
+        live_field_actionability(field, op)
+
+      live_form_field_clickable_without_name?(field) ->
+        live_field_actionability(field, op)
+
+      true ->
+        {:error, live_field_missing_name_error(op)}
+    end
+  end
+
+  defp resolve_live_form_field_actionability(:error, op), do: {:error, live_field_not_found_error(op)}
+
   defp live_field_actionability(field, op) do
     cond do
       reason = live_field_type_error(op, field) ->
@@ -2929,6 +2859,19 @@ defmodule Cerberus.Driver.Live do
         {:ok, field}
     end
   end
+
+  defp live_form_field_named?(%{name: name}) when is_binary(name), do: name != ""
+  defp live_form_field_named?(_field), do: false
+
+  defp live_form_field_clickable_without_name?(%{input_type: "checkbox"} = field) do
+    checkbox_click_without_name_supported?(field)
+  end
+
+  defp live_form_field_clickable_without_name?(%{input_type: "radio"} = field) do
+    radio_click_without_name_supported?(field)
+  end
+
+  defp live_form_field_clickable_without_name?(_field), do: false
 
   defp live_field_not_found_error(:upload), do: "no file input matched locator"
   defp live_field_not_found_error(_op), do: "no form field matched locator"
