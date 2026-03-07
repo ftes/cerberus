@@ -121,6 +121,15 @@ fill_in(~l"Email"l, "new@example.com")
 
 This is especially important now that legacy link/button locator styles are gone.
 
+Preserving structured locator semantics from PhoenixTest assertions also helped more than expected.
+
+If the original assertion carried meaningful structure, keep it:
+- keep CSS/class constraints when they narrow the right UI fragment
+- keep role-based locators when the intent is really about a button/link/textbox
+- keep field-container scoping when the assertion is about one labeled field, not page text in general
+
+Flattening everything to plain text made failures harder to classify and usually produced worse debugging signal.
+
 ## Do Not Carry Over `text:` Assertion Style
 
 PhoenixTest code often combined selector and text like:
@@ -171,6 +180,12 @@ This was especially useful for:
 
 If a PhoenixTest assertion was really saying “inside this section, assert X”, rewrite it that way directly.
 
+This mattered for disabled field assertions too. In one EV2 case, the stable migration was not a plain field assertion but:
+- scope to the labeled field container
+- assert on the rendered input inside that container
+
+That matched the original PhoenixTest intent better than treating it as a generic page-wide text or value assertion.
+
 ## Browser Tests Sometimes Need App-Specific Helpers
 
 A small support module was worth it.
@@ -198,6 +213,10 @@ assert_value(~l"New job title"l, "")
 This maps better to browser semantics and avoids mixing text assertions with current input value checks.
 
 If a migrated test is really about the current JS-visible field value, use `assert_value`, not `assert_has`.
+
+One caveat from migration: `assert_value` was not always the right replacement for old `value:` assertions on disabled fields.
+
+If the field is disabled or effectively read-only, a scoped rendered-input assertion may be a better match than `assert_value`.
 
 ## Dependent LiveView Controls Were A Repeated Migration Friction Point
 
@@ -234,6 +253,22 @@ What would have helped:
 - a failure immediately after browser login redirect does not necessarily mean login failed
 
 That would have shortened a lot of debugging loops during migration.
+
+Another useful split:
+- if submit already navigated to the expected destination, prefer asserting that stable destination over waiting on a transient success toast
+- if a post-submit toast is the only assertion and the page has already moved, the toast may be the flaky part rather than the action itself
+
+In practice, a destination-path assertion was often the better success signal for browser migrations.
+
+One small detail that cost time once: regex `assert_path` checks needed `exact: false` in that migration.
+
+If the path visibly matches and the regex assertion still fails, try:
+
+```elixir
+assert_path(~r|/projects/\d+/contacts|, exact: false)
+```
+
+before assuming the navigation itself is wrong.
 
 ## Migrate Vertically, Not Mechanically
 
