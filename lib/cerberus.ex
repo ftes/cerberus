@@ -131,7 +131,9 @@ defmodule Cerberus do
       |> Options.validate_session_browser!()
       |> maybe_put_browser_name(browser_name)
 
-    Browser.new_session(opts)
+    Profiling.measure({:driver_session, :browser, :new_session}, fn ->
+      Browser.new_session(opts)
+    end)
   end
 
   defp maybe_put_browser_name(opts, nil), do: opts

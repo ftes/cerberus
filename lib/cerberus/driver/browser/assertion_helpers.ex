@@ -808,9 +808,28 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         case "css":
           return typeof locator.value === "string" && locator.value.trim() !== "" ? locator.value : "*";
         case "text":
-        case "and":
+          return "*";
+        case "and": {
+          const members = Array.isArray(locator.members) ? locator.members : [];
+
+          for (const member of members) {
+            const selector = helper.locatorQuerySelector(member);
+            if (selector && selector !== "*") return selector;
+          }
+
+          return "*";
+        }
+        case "not": {
+          const members = Array.isArray(locator.members) ? locator.members : [];
+
+          if (members.length === 1) {
+            const selector = helper.locatorQuerySelector(members[0]);
+            if (selector && selector !== "*") return selector;
+          }
+
+          return "*";
+        }
         case "or":
-        case "not":
           return "*";
         case "link":
           return "a[href]";

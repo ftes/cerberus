@@ -3,11 +3,11 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Browser.BiDi
-  alias Cerberus.Driver.Browser.Evaluate
   alias Cerberus.Driver.Browser.Types
   alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.Locator
   alias Cerberus.Options
+  alias Cerberus.Profiling
   alias Cerberus.Query
   alias ExUnit.AssertionError
 
@@ -16,6 +16,17 @@ defmodule Cerberus.Driver.Browser.Extensions do
   @default_download_timeout_ms 1_500
   @default_evaluate_timeout_ms 10_000
   @popup_task_poll_ms 10
+  @transient_eval_retry_interval_ms 25
+  @transient_navigation_eval_markers [
+    "JSWindowActorChild cannot send",
+    "argument is not a global object",
+    "Inspected target navigated or closed",
+    "Cannot find context with specified id",
+    "execution contexts cleared",
+    "DiscardedBrowsingContextError",
+    "no such frame",
+    "navigation canceled by concurrent navigation"
+  ]
   @webdriver_key_values %{
     "Alt" => <<0xE00A::utf8>>,
     "AltLeft" => <<0xE00A::utf8>>,
@@ -235,13 +246,12 @@ defmodule Cerberus.Driver.Browser.Extensions do
   def evaluate_js(%Browser{} = session, expression) when is_binary(expression) do
     timeout_ms = @default_evaluate_timeout_ms
 
-    case Evaluate.with_dialog_unblock(
-           session.user_context_pid,
-           session.tab_id,
-           expression,
-           timeout_ms,
-           bidi_opts(session)
-         ) do
+    result =
+      Profiling.measure({:driver_operation, :browser, :evaluate_js}, fn ->
+        evaluate_with_transient_retry(session, expression, timeout_ms)
+      end)
+
+    case result do
       {:ok, %{"result" => result}} ->
         decode_remote_value(result)
 
@@ -326,13 +336,9 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   defp evaluate_json(session, expression, timeout_ms) do
     with {:ok, result} <-
-           Evaluate.with_dialog_unblock(
-             session.user_context_pid,
-             session.tab_id,
-             expression,
-             max(timeout_ms, 1),
-             bidi_opts(session)
-           ),
+           Profiling.measure({:driver_operation, :browser, :evaluate_json}, fn ->
+             evaluate_with_transient_retry(session, expression, max(timeout_ms, 1))
+           end),
          {:ok, json} <- decode_remote_json(result) do
       {:ok, json}
     else
@@ -350,6 +356,52 @@ defmodule Cerberus.Driver.Browser.Extensions do
       _ -> max(session.timeout_ms, @default_evaluate_timeout_ms)
     end
   end
+
+  defp evaluate_with_transient_retry(%Browser{} = session, expression, timeout_ms)
+       when is_binary(expression) and is_integer(timeout_ms) and timeout_ms > 0 do
+    started_at_ms = System.monotonic_time(:millisecond)
+    do_evaluate_with_transient_retry(session, expression, timeout_ms, started_at_ms)
+  end
+
+  defp do_evaluate_with_transient_retry(session, expression, timeout_ms, started_at_ms) do
+    remaining_timeout_ms = max(timeout_ms - elapsed_ms(started_at_ms), 1)
+    tab_id = recovered_tab_id(session)
+
+    case UserContextProcess.evaluate_with_timeout(
+           session.user_context_pid,
+           expression,
+           remaining_timeout_ms,
+           tab_id
+         ) do
+      {:error, reason, details} = error ->
+        if navigation_transition_error?(reason, details) and remaining_timeout_ms > @transient_eval_retry_interval_ms do
+          Process.sleep(@transient_eval_retry_interval_ms)
+          do_evaluate_with_transient_retry(session, expression, timeout_ms, started_at_ms)
+        else
+          error
+        end
+
+      result ->
+        result
+    end
+  end
+
+  defp recovered_tab_id(%Browser{} = session) do
+    case UserContextProcess.recover_active_tab(session.user_context_pid, session.tab_id) do
+      {:ok, tab_id} when is_binary(tab_id) -> tab_id
+      _ -> session.tab_id
+    end
+  end
+
+  defp elapsed_ms(started_at_ms), do: System.monotonic_time(:millisecond) - started_at_ms
+
+  defp navigation_transition_error?(reason, details) when is_binary(reason) and is_map(details) do
+    message = details["message"] || details[:message] || ""
+    payload = "#{reason}: #{message}"
+    Enum.any?(@transient_navigation_eval_markers, &String.contains?(payload, &1))
+  end
+
+  defp navigation_transition_error?(_reason, _details), do: false
 
   defp decode_remote_json(%{"result" => %{"type" => "string", "value" => payload}}) when is_binary(payload) do
     case JSON.decode(payload) do
