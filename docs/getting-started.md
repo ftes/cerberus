@@ -356,6 +356,15 @@ mix test.websocket --browsers chrome,firefox
 `mix test.websocket` defaults to `--browsers all`.
 For regular project runs, use Chrome-first invocations unless you are explicitly validating Firefox behavior.
 
+For a full local Firefox lane against the normal suite:
+
+```bash
+mix test.firefox
+```
+
+`mix test.firefox` is equivalent to running the regular `mix test` alias with
+`CERBERUS_BROWSER_NAME=firefox`.
+
 ## Step 11: Headed Browser and Runtime Launch Options
 
 ```elixir

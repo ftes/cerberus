@@ -171,6 +171,14 @@ mix test test/cerberus
 
 Cerberus uses mixed-driver suites (no dedicated `:browser` tag lane), so browser coverage runs as part of normal `test/cerberus` execution.
 
+Full local Firefox lane:
+
+```bash
+mix test.firefox
+```
+
+This runs the regular `mix test` alias with `CERBERUS_BROWSER_NAME=firefox`.
+
 Explicit browser-lane override coverage:
 
 ```bash
