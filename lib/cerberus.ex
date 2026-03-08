@@ -578,14 +578,7 @@ defmodule Cerberus do
   @spec reload_page(arg, Options.reload_opts()) :: arg when arg: var
   def reload_page(session, opts \\ [])
 
-  def reload_page(%Browser{} = session, _opts) do
-    refreshed_session = Browser.refresh_path(session)
-
-    case refreshed_session.current_path do
-      nil -> visit(session, "/")
-      _path -> Browser.reload_page(refreshed_session)
-    end
-  end
+  def reload_page(%Browser{} = session, _opts), do: Browser.reload_page(session)
 
   def reload_page(session, opts) do
     visit(session, resolved_current_path(session) || "/", opts)

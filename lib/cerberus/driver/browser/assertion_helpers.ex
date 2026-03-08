@@ -7,6 +7,10 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
     const helper = {};
     helper.__version = 9;
+    helper.now = () =>
+      typeof performance !== "undefined" && typeof performance.now === "function"
+        ? performance.now()
+        : Date.now();
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -1002,6 +1006,20 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         return helper.scopeMembersMatch(element, hidden, members, context) && helper.matchesLocatorCommonOpts(element, locator, context);
       }
 
+      const cssAndText = helper.cssAndTextMembers(locator);
+      if (cssAndText) {
+        if (!helper.matchesSelector(element, cssAndText.cssMember.value)) return false;
+
+        const locatorOpts = helper.locatorOpts(cssAndText.textMember);
+        const exact = locatorOpts.exact === true;
+        const normalizeWs = locatorOpts.normalizeWs !== false;
+        const matchText = helper.buildTextMatcher(cssAndText.textMember.expected, exact, normalizeWs);
+        const textValue = hidden ? element.textContent : element.innerText || element.textContent;
+        if (!matchText(textValue || "")) return false;
+
+        return helper.matchesLocatorCommonOpts(element, locator, context);
+      }
+
       if (kind === "and" || kind === "or") {
         const members = Array.isArray(locator.members) ? locator.members : [];
         if (members.length === 0) return false;
@@ -1091,6 +1109,18 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       });
     };
 
+    helper.cssAndTextMembers = (locator) => {
+      if (!locator || helper.locatorKind(locator) !== "and") return null;
+      const members = Array.isArray(locator.members) ? locator.members : [];
+      if (members.length !== 2) return null;
+
+      const cssMember = members.find((member) => helper.locatorKind(member) === "css");
+      const textMember = members.find((member) => helper.locatorKind(member) === "text");
+
+      if (!cssMember || !textMember || typeof cssMember.value !== "string") return null;
+      return { cssMember, textMember };
+    };
+
     helper.scopeCandidateIsClosestForFrom = (candidate, candidates, fromNode) => {
       return candidates.every((other) => {
         if (other.element === candidate.element) return true;
@@ -1111,9 +1141,12 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
     };
 
     helper.collectLocatorMatches = (options) => {
+      const jsTiming = {};
+      const rootsStartedAt = helper.now();
       const roots = helper.resolveRoots(options.scopeSelector || null);
+      jsTiming.locatorResolveRootsMs = helper.now() - rootsStartedAt;
       const locator = options.locator && typeof options.locator === "object" ? options.locator : null;
-      if (!locator) return [];
+      if (!locator) return { matches: [], jsTiming };
 
       const locatorWithoutFrom = helper.locatorWithoutFrom(locator);
       const fromLocator = helper.locatorOpts(locator).from || null;
@@ -1122,6 +1155,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const context = { altCache: new Map(), labelCache: new WeakMap() };
       const candidates = [];
 
+      const collectStartedAt = helper.now();
       helper.eachCandidateElement(roots, selector, null, (element) => {
         const hidden = helper.isHidden(element);
         if (visibility !== "all" && !helper.selectedVisibility(visibility, hidden)) return true;
@@ -1130,26 +1164,32 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         candidates.push({ element, hidden });
         return true;
       });
+      jsTiming.locatorCollectCandidatesMs = helper.now() - collectStartedAt;
 
-      if (!fromLocator) return candidates;
+      if (!fromLocator) return { matches: candidates, jsTiming };
 
       const fromCandidates = [];
       const fromSelector = helper.locatorQuerySelector(fromLocator);
 
+      const fromStartedAt = helper.now();
       helper.eachCandidateElement(roots, fromSelector, null, (element) => {
         const hidden = helper.isHidden(element);
         if (!helper.matchesLocator(element, fromLocator, hidden, context)) return true;
         fromCandidates.push({ element, hidden });
         return true;
       });
+      jsTiming.locatorFromCandidatesMs = helper.now() - fromStartedAt;
 
-      return candidates.filter((candidate) => helper.closestScopeCandidateForAnyFrom(candidate, candidates, fromCandidates));
+      const filterStartedAt = helper.now();
+      const matches = candidates.filter((candidate) => helper.closestScopeCandidateForAnyFrom(candidate, candidates, fromCandidates));
+      jsTiming.locatorFromFilterMs = helper.now() - filterStartedAt;
+      return { matches, jsTiming };
     };
 
     helper.locatorQuick = (options) => {
       const mode = options.mode || "assert";
       const filters = helper.matchFilters(options);
-      const matches = helper.collectLocatorMatches(options);
+      const { matches, jsTiming } = helper.collectLocatorMatches(options);
       const matchCount = matches.length;
       const ok = helper.assertionSatisfied(mode, matchCount, filters);
       const reason = helper.assertionReason(mode, matchCount, filters, ok);
@@ -1159,7 +1199,8 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         reason,
         matchCount,
         path: window.location.pathname + window.location.search,
-        title: document.title || ""
+        title: document.title || "",
+        jsTiming
       };
     };
 
@@ -1169,10 +1210,12 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const locator = options.locator && typeof options.locator === "object" ? options.locator : null;
       const locatorWithoutFrom = locator ? helper.locatorWithoutFrom(locator) : null;
       const context = { altCache: new Map(), labelCache: new WeakMap() };
-      const matches = helper.collectLocatorMatches(options);
+      const { matches, jsTiming } = helper.collectLocatorMatches(options);
+      const observationStartedAt = helper.now();
       const values = matches
         .map((entry) => helper.locatorObservationValue(entry.element, entry.hidden, locatorWithoutFrom, context))
         .filter((value) => value !== "");
+      jsTiming.locatorObservationMs = helper.now() - observationStartedAt;
       const matchCount = matches.length;
       const ok = helper.assertionSatisfied(mode, matchCount, filters);
       const reason = helper.assertionReason(mode, matchCount, filters, ok);
@@ -1184,7 +1227,8 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         path: window.location.pathname + window.location.search,
         title: document.title || "",
         texts: values,
-        matched: values
+        matched: values,
+        jsTiming
       };
     };
 

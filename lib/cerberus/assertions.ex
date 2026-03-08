@@ -437,7 +437,7 @@ defmodule Cerberus.Assertions do
   defp format_error(op, locator, opts, reason, observed, session) do
     transition = observed_transition(observed) || session_transition(session)
     scope = Session.scope(session)
-    current_path = Path.normalize(session.current_path)
+    current_path = observed_path(observed) || session_current_path(session)
 
     base_message = """
     #{op} failed: #{reason}
@@ -567,7 +567,16 @@ defmodule Cerberus.Assertions do
     Profiling.measure({:driver_operation, driver_kind(session), op}, fun)
   end
 
-  defp session_transition(%{last_result: %{transition: transition}}), do: transition
+  defp observed_path(observed) when is_map(observed) do
+    observed[:path] || observed["path"]
+  end
+
+  defp session_current_path(%Static{current_path: current_path}), do: Path.normalize(current_path)
+  defp session_current_path(%Live{current_path: current_path}), do: Path.normalize(current_path)
+  defp session_current_path(%Browser{}), do: nil
+
+  defp session_transition(%Static{last_result: %{transition: transition}}), do: transition
+  defp session_transition(%Live{last_result: %{transition: transition}}), do: transition
   defp session_transition(_session), do: nil
 
   defp driver_kind(%Static{}), do: :static

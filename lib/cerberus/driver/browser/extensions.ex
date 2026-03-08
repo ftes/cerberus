@@ -212,15 +212,14 @@ defmodule Cerberus.Driver.Browser.Extensions do
       popup_session = %{
         session
         | tab_id: popup_tab_id,
-          scope: nil,
-          current_path: nil
+          scope: nil
       }
 
       run_popup_callback!(callback_fun, [session, popup_session], "callback")
 
       restore_main_tab!(session, main_tab_id, "with_popup/4")
 
-      Browser.refresh_path(session)
+      session
     rescue
       error ->
         _ = restore_main_tab_safe(session, main_tab_id)

@@ -3,7 +3,7 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
 
   import Cerberus
 
-  alias Cerberus.Driver.Browser
+  alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.TestSupport.SharedBrowserSession
 
   setup_all do
@@ -21,9 +21,8 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> SharedBrowserSession.driver_session(context)
     |> visit("/live/counter")
     |> then(fn updated ->
-      readiness = updated.last_result.observed.readiness
+      readiness = last_readiness(updated)
       assert is_map(readiness)
-      assert updated.last_result.observed.driver == Browser
       refute readiness["reason"] == "in-action-settle"
       refute readiness["skippedAwaitReady"] == true
       updated
@@ -36,7 +35,7 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> SharedBrowserSession.driver_session(context)
     |> visit("/browser/readiness/mixed-live-roots")
     |> then(fn updated ->
-      readiness = updated.last_result.observed.readiness
+      readiness = last_readiness(updated)
       assert is_map(readiness)
       assert readiness["reason"] == "settled"
       assert readiness["lastLiveState"] == "connected"
@@ -46,17 +45,20 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
   end
 
   test "browser navigation to mixed live roots does not require post-click readiness", context do
-    :browser
-    |> SharedBrowserSession.driver_session(context)
-    |> visit("/browser/readiness/source")
+    session =
+      :browser
+      |> SharedBrowserSession.driver_session(context)
+      |> visit("/browser/readiness/source")
+
+    readiness = last_readiness(session)
+
+    session
     |> click(role(:link, name: "Open mixed roots", exact: true))
+    |> assert_path("/browser/readiness/mixed-live-roots")
     |> then(fn updated ->
-      readiness = updated.last_result.observed.readiness
-      assert is_map(readiness)
-      assert readiness["reason"] in ["settled", "no_post_action_wait"]
+      assert last_readiness(updated) == readiness
       updated
     end)
-    |> assert_path("/browser/readiness/mixed-live-roots")
   end
 
   @tag :slow
@@ -65,10 +67,9 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> SharedBrowserSession.driver_session(context)
     |> visit("/browser/readiness/disconnected-live-root")
     |> then(fn updated ->
-      readiness = updated.last_result.observed.readiness
+      readiness = last_readiness(updated)
       assert is_map(readiness)
-      assert readiness["reason"] == "visit_snapshot_recovery"
-      assert readiness["recoveredFrom"] == "browser readiness timeout"
+      assert readiness["reason"] == "timeout"
       assert readiness["lastLiveState"] == "disconnected"
       updated
     end)
@@ -87,36 +88,37 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
   end
 
   test "browser click on live non-navigation actions does not force post-action readiness", context do
-    :browser
-    |> SharedBrowserSession.driver_session(context)
-    |> visit("/live/counter")
-    |> click(role(:button, name: "Increment", exact: true))
-    |> then(fn updated ->
-      readiness = updated.last_result.observed.readiness
-      assert is_map(readiness)
-      assert updated.last_result.observed.driver == Browser
-      assert readiness["reason"] == "no_post_action_wait"
-      assert readiness["skippedAwaitReady"] == true
+    session =
+      :browser
+      |> SharedBrowserSession.driver_session(context)
+      |> visit("/live/counter")
 
+    readiness = last_readiness(session)
+
+    session
+    |> click(role(:button, name: "Increment", exact: true))
+    |> assert_has(text("Count: 1", exact: true))
+    |> then(fn updated ->
+      assert last_readiness(updated) == readiness
       updated
     end)
-    |> assert_has(text("Count: 1", exact: true))
   end
 
   test "browser label clicks on live form controls do not force post-action readiness", context do
-    :browser
-    |> SharedBrowserSession.driver_session(context)
-    |> visit("/live/controls")
+    session =
+      :browser
+      |> SharedBrowserSession.driver_session(context)
+      |> visit("/live/controls")
+
+    readiness = last_readiness(session)
+
+    session
     |> click(css("label[for='live_controls_contact_email']"))
+    |> assert_has(text("contact: email", exact: true))
     |> then(fn updated ->
-      readiness = updated.last_result.observed.readiness
-      assert is_map(readiness)
-      assert updated.last_result.observed.driver == Browser
-      assert readiness["reason"] == "no_post_action_wait"
-      assert readiness["skippedAwaitReady"] == true
+      assert last_readiness(updated) == readiness
       updated
     end)
-    |> assert_has(text("contact: email", exact: true))
   end
 
   @tag :slow
@@ -129,21 +131,21 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
   end
 
   test "browser submit on live non-navigation forms does not force post-action readiness", context do
-    :browser
-    |> SharedBrowserSession.driver_session(context)
-    |> visit("/live/form-sync")
-    |> fill_in(~l"Nickname (submit only)"l, "Aragorn")
-    |> submit(role(:button, name: "Save No Change", exact: true))
-    |> then(fn updated ->
-      readiness = updated.last_result.observed.readiness
-      assert is_map(readiness)
-      assert updated.last_result.observed.driver == Browser
-      assert readiness["reason"] == "no_post_action_wait"
-      assert readiness["skippedAwaitReady"] == true
+    session =
+      :browser
+      |> SharedBrowserSession.driver_session(context)
+      |> visit("/live/form-sync")
+      |> fill_in(~l"Nickname (submit only)"l, "Aragorn")
 
+    readiness = last_readiness(session)
+
+    session
+    |> submit(role(:button, name: "Save No Change", exact: true))
+    |> assert_has(text("no-change submitted: Aragorn", exact: true))
+    |> then(fn updated ->
+      assert last_readiness(updated) == readiness
       updated
     end)
-    |> assert_has(text("no-change submitted: Aragorn", exact: true))
   end
 
   test "browser click that navigates can still await when navigation is already observed", context do
@@ -152,12 +154,15 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> visit("/live/redirects")
     |> click(role(:link, name: "Navigate link", exact: true))
     |> then(fn updated ->
-      readiness = updated.last_result.observed.readiness
+      readiness = last_readiness(updated)
       assert is_map(readiness)
-      assert updated.last_result.observed.driver == Browser
-      assert readiness["reason"] in ["settled", "no_post_action_wait"]
+      assert readiness["reason"] == "settled"
       updated
     end)
     |> assert_path("/live/counter")
+  end
+
+  defp last_readiness(session) do
+    UserContextProcess.last_readiness(session.user_context_pid, session.tab_id)
   end
 end

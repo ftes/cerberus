@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-08T09:18:04Z
-updated_at: 2026-03-08T14:56:12Z
+updated_at: 2026-03-08T17:27:31Z
 ---
 
 ## Scope
@@ -25,3 +25,12 @@ updated_at: 2026-03-08T14:56:12Z
 ## Profiling update\n\n- Profiled EV2 register_and_accept_offer_cerberus_test.exs with CERBERUS_PROFILE=1. The dominant buckets are still Elixir-side browser round trips, not browser JS.\n- register_and_accept_offer_cerberus_test.exs: evaluate_with_dialog_unblock 17 calls / 4590.639ms, click 7 / 1918.385ms, evaluate_direct 12 / 1636.502ms, assert_has 4 / 1562.046ms, check 2 / 1426.864ms, visit 4 / 1263.293ms, fill_in 7 / 1162.400ms.\n- Browser JS timings remain tiny. The remaining gap is mostly transport and driver-operation count.\n- New likely hot path: browser actions still route through Evaluate.with_dialog_unblock even when no blocking dialog exists. In EV2 this wrapper is materially slower than direct evaluate reads and now appears to be the largest remaining single bucket.
 
 ## Latest optimization loop\n\n- Switched browser action evals, Browser.evaluate_js, and internal extension JSON evals to direct script.evaluate with transient navigation retry instead of dialog-unblock polling.\n- Browser dialog-action tests were explicitly skipped; assert_dialog remains supported, but normal browser actions no longer auto-unblock dialogs.\n- Added profiling buckets for browser session startup and evaluate_js.\n- Added composed-locator query prefiltering for browser action/assertion helpers so and_(css(...), text(...)) no longer prefilters with *.\n- Added candidate-collection narrowing in browser action helpers so click/form/file candidate collection can use locator-derived selectors instead of scanning every candidate family across the page.\n- Fair EV2 comparison correction: project_form_feature_test.exs original Playwright file was using direct session login via log_in(conn, pm); switched it to Ev2Web.PlaywrightCase.log_in(conn, pm) for UI-login comparison.\n- Latest fair comparison on project_form_feature: Playwright 4.6s vs Cerberus 15.3s. This is down from the earlier ~23.7s Cerberus runtime, but still about 3.3x slower.\n- Latest profiling on project_form_feature shows the remaining hotspot is browser helper resolution/assertion work on large composed-locator pages, not transport or readiness.\n- register_and_accept_offer comparisons improved dramatically in profiling after direct evaluate_js, but the Cerberus migrated comparison file still has a modal checkbox interaction/scoping issue that needs cleanup before it can serve as a stable timing row.
+
+## Browser state-cache cut
+
+- Removed browser session current_path/last_result writeback and stopped Browser.reload_page from re-reading cached path.
+- Browser tests now assert readiness via UserContextProcess.last_readiness/2 instead of session.last_result.
+- Focused browser suite remained green after the cut.
+- Fair EV2 project_form_feature comparison did not improve from this change: Playwright 4.9s vs Cerberus 18.0s on the immediate sequential rerun.
+- Fresh CERBERUS_PROFILE=1 run on project_form_feature_cerberus_test.exs shows the remaining cost is still browser assertions and direct evaluate round trips, not path/result session bookkeeping.
+- Added a fast matcher path for and_(css(...), text(...)) in both browser action and assertion helpers. It materially reduced the worst-case JS matcher timings in some cases, but the overall EV2 row is still dominated by repeated browser assertions and evaluate_direct transport cost.

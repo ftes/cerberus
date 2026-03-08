@@ -19,7 +19,6 @@ defmodule Cerberus.Driver.Browser do
   alias Cerberus.Query
   alias Cerberus.Session
   alias Cerberus.Session.Config, as: SessionConfig
-  alias Cerberus.Session.LastResult
   alias Cerberus.UploadFile
   alias ExUnit.AssertionError
 
@@ -79,9 +78,7 @@ defmodule Cerberus.Driver.Browser do
             ready_quiet_ms: @default_ready_quiet_ms,
             browser_context_defaults: @empty_browser_context_defaults,
             active_form_selector: nil,
-            scope: nil,
-            current_path: nil,
-            last_result: nil
+            scope: nil
 
   @impl true
   def new_session(opts \\ []) do
@@ -137,8 +134,7 @@ defmodule Cerberus.Driver.Browser do
           session
           | tab_id: tab_id,
             active_form_selector: nil,
-            scope: nil,
-            current_path: nil
+            scope: nil
         }
 
       {:error, reason, details} ->
@@ -179,8 +175,7 @@ defmodule Cerberus.Driver.Browser do
             session
             | tab_id: next_tab_id,
               active_form_selector: nil,
-              scope: nil,
-              current_path: nil
+              scope: nil
           }
         else
           raise ArgumentError, "failed to close browser tab: no active tab selected"
@@ -235,20 +230,6 @@ defmodule Cerberus.Driver.Browser do
 
       {:error, reason, details} ->
         raise ArgumentError, "failed to capture browser screenshot: #{reason} (#{inspect(details)})"
-    end
-  end
-
-  @doc false
-  @spec refresh_path(t()) :: t()
-  def refresh_path(%__MODULE__{} = session) do
-    state = state!(session)
-
-    case eval_json_transient_read(state, Expressions.current_path()) do
-      {:ok, %{"path" => path}} when is_binary(path) ->
-        %{session | current_path: path}
-
-      _ ->
-        session
     end
   end
 
@@ -431,7 +412,7 @@ defmodule Cerberus.Driver.Browser do
         end
 
       _ ->
-        observed = %{action: :submit, path: state.current_path}
+        observed = %{action: :submit, path: current_path_or_nil(state)}
 
         {:error, session, observed,
          "submit/1 requires an active form; call fill_in/select/choose/check/uncheck/upload first"}
@@ -448,7 +429,7 @@ defmodule Cerberus.Driver.Browser do
 
     case run_assertion_by_mode(assertion_runner, state, locator, expected, visible, match_opts, timeout_ms, :assert) do
       {:ok, next_state, observed} ->
-        {:ok, update_session(session, next_state, :assert_has, observed), observed}
+        {:ok, update_session(session, next_state, observed), observed}
 
       {:error, reason, observed} ->
         {:error, session, observed, reason}
@@ -464,7 +445,7 @@ defmodule Cerberus.Driver.Browser do
 
     case run_assertion_by_mode(:locator, state, locator, nil, visible, match_opts, timeout_ms, :assert) do
       {:ok, next_state, observed} ->
-        {:ok, update_session(session, next_state, :assert_has, observed), observed}
+        {:ok, update_session(session, next_state, observed), observed}
 
       {:error, reason, observed} ->
         {:error, session, observed, reason}
@@ -481,7 +462,7 @@ defmodule Cerberus.Driver.Browser do
 
     case run_assertion_by_mode(assertion_runner, state, locator, expected, visible, match_opts, timeout_ms, :refute) do
       {:ok, next_state, observed} ->
-        {:ok, update_session(session, next_state, :refute_has, observed), observed}
+        {:ok, update_session(session, next_state, observed), observed}
 
       {:error, reason, observed} ->
         {:error, session, observed, reason}
@@ -497,7 +478,7 @@ defmodule Cerberus.Driver.Browser do
 
     case run_assertion_by_mode(:locator, state, locator, nil, visible, match_opts, timeout_ms, :refute) do
       {:ok, next_state, observed} ->
-        {:ok, update_session(session, next_state, :refute_has, observed), observed}
+        {:ok, update_session(session, next_state, observed), observed}
 
       {:error, reason, observed} ->
         {:error, session, observed, reason}
@@ -513,7 +494,7 @@ defmodule Cerberus.Driver.Browser do
 
     case run_value_assertion_by_mode(state, field_expected, match_opts, expected, timeout_ms, :assert) do
       {:ok, next_state, observed} ->
-        {:ok, update_session(session, next_state, :assert_value, observed), observed}
+        {:ok, update_session(session, next_state, observed), observed}
 
       {:error, reason, observed} ->
         {:error, session, observed, reason}
@@ -529,7 +510,7 @@ defmodule Cerberus.Driver.Browser do
 
     case run_value_assertion_by_mode(state, field_expected, match_opts, expected, timeout_ms, :refute) do
       {:ok, next_state, observed} ->
-        {:ok, update_session(session, next_state, :refute_value, observed), observed}
+        {:ok, update_session(session, next_state, observed), observed}
 
       {:error, reason, observed} ->
         {:error, session, observed, reason}
@@ -550,7 +531,7 @@ defmodule Cerberus.Driver.Browser do
 
       {:ok, result} ->
         target = Map.get(result, "target")
-        observed = %{action: :click, path: state.current_path, target: target}
+        observed = %{action: :click, path: current_path_or_nil(state), target: target}
         {:error, session, observed, no_clickable_error(kind)}
 
       {:error, _failed_session, _observed, _reason} = error ->
@@ -565,7 +546,7 @@ defmodule Cerberus.Driver.Browser do
 
       {:ok, result} ->
         target = Map.get(result, "target")
-        observed = %{action: :submit, path: state.current_path, target: target}
+        observed = %{action: :submit, path: current_path_or_nil(state), target: target}
         {:error, session, observed, "no submit button matched locator"}
 
       {:error, _failed_session, _observed, _reason} = error ->
@@ -645,7 +626,7 @@ defmodule Cerberus.Driver.Browser do
     end
   rescue
     error in [ArgumentError, File.Error] ->
-      observed = %{action: :upload, path: state.current_path, file_path: path}
+      observed = %{action: :upload, path: current_path_or_nil(state), file_path: path}
       {:error, session, observed, Exception.message(error)}
   end
 
@@ -664,7 +645,7 @@ defmodule Cerberus.Driver.Browser do
         action_perform_result(session, state, op, opts, result)
 
       {:error, reason, details} ->
-        observed = %{action: op, path: state.current_path, details: details}
+        observed = %{action: op, path: current_path_or_nil(state), details: details}
         {:error, session, observed, "#{inspect_failure_prefix(op)}: #{reason}"}
     end
   end
@@ -673,12 +654,12 @@ defmodule Cerberus.Driver.Browser do
     {:ok, result}
   end
 
-  defp action_perform_result(session, state, op, opts, %{"ok" => false} = result) do
+  defp action_perform_result(session, _state, op, opts, %{"ok" => false} = result) do
     reason = action_failure_reason(op, opts, result, "failed to perform browser action")
 
     observed = %{
       action: op,
-      path: Map.get(result, "path", state.current_path),
+      path: Map.get(result, "path"),
       match_count: Map.get(result, "matchCount"),
       candidate_count: Map.get(result, "candidateCount"),
       candidate_values: Map.get(result, "candidateValues", []),
@@ -690,7 +671,7 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp action_perform_result(session, state, op, _opts, result) do
-    observed = %{action: op, path: state.current_path, result: result}
+    observed = %{action: op, path: current_path_or_nil(state), result: result}
     {:error, session, observed, "unexpected action execution payload"}
   end
 
@@ -862,17 +843,17 @@ defmodule Cerberus.Driver.Browser do
     await_failure_observed = %{
       action: :click,
       clicked: target["text"],
-      path: state.current_path,
+      path: current_path_or_nil(state),
       target: target
     }
 
     finalize_action_result(session, state, result, opts, await_failure_observed, fn {ready_state, readiness} ->
       path =
         result
-        |> action_result_path(ready_state.current_path)
+        |> action_result_path()
         |> ready_path(readiness)
 
-      next_state = %{ready_state | current_path: path, active_form_selector: nil}
+      next_state = %{ready_state | active_form_selector: nil}
 
       observed = %{
         action: :click,
@@ -882,7 +863,7 @@ defmodule Cerberus.Driver.Browser do
         readiness: readiness
       }
 
-      {:ok, update_session(session, next_state, :click, observed), observed}
+      {:ok, update_session(session, next_state, observed), observed}
     end)
   end
 
@@ -890,17 +871,17 @@ defmodule Cerberus.Driver.Browser do
     await_failure_observed = %{
       action: :submit,
       clicked: button["text"],
-      path: state.current_path,
+      path: current_path_or_nil(state),
       target: button
     }
 
     finalize_action_result(session, state, result, opts, await_failure_observed, fn {ready_state, readiness} ->
       path =
         result
-        |> action_result_path(ready_state.current_path)
+        |> action_result_path()
         |> ready_path(readiness)
 
-      next_state = %{ready_state | current_path: path}
+      next_state = ready_state
 
       observed = %{
         action: :submit,
@@ -910,13 +891,13 @@ defmodule Cerberus.Driver.Browser do
         readiness: readiness
       }
 
-      {:ok, update_session(session, next_state, :submit, observed), observed}
+      {:ok, update_session(session, next_state, observed), observed}
     end)
   end
 
   defp fill_in_result(session, state, field, value, result) when is_map(result) do
-    path = action_result_path(result, state.current_path)
-    next_state = %{state | current_path: path, active_form_selector: target_form_selector(field, state)}
+    path = action_result_path(result)
+    next_state = %{state | active_form_selector: target_form_selector(field, state)}
 
     observed = %{
       action: :fill_in,
@@ -925,12 +906,12 @@ defmodule Cerberus.Driver.Browser do
       value: value
     }
 
-    {:ok, update_session(session, next_state, :fill_in, observed), observed}
+    {:ok, update_session(session, next_state, observed), observed}
   end
 
   defp select_result(session, state, field, option, result) when is_map(result) do
-    path = action_result_path(result, state.current_path)
-    next_state = %{state | current_path: path, active_form_selector: target_form_selector(field, state)}
+    path = action_result_path(result)
+    next_state = %{state | active_form_selector: target_form_selector(field, state)}
 
     observed = %{
       action: :select,
@@ -940,12 +921,12 @@ defmodule Cerberus.Driver.Browser do
       value: Map.get(result, "value")
     }
 
-    {:ok, update_session(session, next_state, :select, observed), observed}
+    {:ok, update_session(session, next_state, observed), observed}
   end
 
   defp choose_result(session, state, field, result) when is_map(result) do
-    path = action_result_path(result, state.current_path)
-    next_state = %{state | current_path: path, active_form_selector: target_form_selector(field, state)}
+    path = action_result_path(result)
+    next_state = %{state | active_form_selector: target_form_selector(field, state)}
 
     observed = %{
       action: :choose,
@@ -954,12 +935,12 @@ defmodule Cerberus.Driver.Browser do
       value: Map.get(result, "value")
     }
 
-    {:ok, update_session(session, next_state, :choose, observed), observed}
+    {:ok, update_session(session, next_state, observed), observed}
   end
 
   defp checkbox_result(session, state, field, checked?, op, result) when is_map(result) do
-    path = action_result_path(result, state.current_path)
-    next_state = %{state | current_path: path, active_form_selector: target_form_selector(field, state)}
+    path = action_result_path(result)
+    next_state = %{state | active_form_selector: target_form_selector(field, state)}
 
     observed = %{
       action: op,
@@ -968,12 +949,12 @@ defmodule Cerberus.Driver.Browser do
       checked: checked?
     }
 
-    {:ok, update_session(session, next_state, op, observed), observed}
+    {:ok, update_session(session, next_state, observed), observed}
   end
 
   defp upload_result(session, state, field, file_name, result) when is_map(result) do
-    path = action_result_path(result, state.current_path)
-    next_state = %{state | current_path: path, active_form_selector: target_form_selector(field, state)}
+    path = action_result_path(result)
+    next_state = %{state | active_form_selector: target_form_selector(field, state)}
 
     observed = %{
       action: :upload,
@@ -982,7 +963,7 @@ defmodule Cerberus.Driver.Browser do
       file_name: file_name
     }
 
-    {:ok, update_session(session, next_state, :upload, observed), observed}
+    {:ok, update_session(session, next_state, observed), observed}
   end
 
   defp target_form_selector(target, state) when is_map(target) do
@@ -1048,31 +1029,14 @@ defmodule Cerberus.Driver.Browser do
     }
   end
 
-  defp action_result_path(%{"path" => path}, _fallback_path) when is_binary(path), do: path
-  defp action_result_path(_result, fallback_path), do: fallback_path
+  defp action_result_path(%{"path" => path}) when is_binary(path), do: path
+  defp action_result_path(_result), do: nil
 
   defp ready_path(path, %{"path" => ready_path}) when is_binary(path) and is_binary(ready_path) and ready_path != "" do
     ready_path
   end
 
   defp ready_path(path, _readiness) when is_binary(path), do: path
-
-  defp with_snapshot(state) do
-    case eval_json_transient_read(state, Expressions.snapshot(Session.scope(state))) do
-      {:ok, snapshot} ->
-        snapshot = %{
-          path: snapshot["path"],
-          title: snapshot["title"] || "",
-          visible: snapshot["visible"] || [],
-          hidden: snapshot["hidden"] || []
-        }
-
-        {%{state | current_path: snapshot.path}, snapshot}
-
-      {:error, reason, details} ->
-        {:error, reason, details}
-    end
-  end
 
   defp navigate_browser(state, url) do
     Profiling.measure({:browser_wait, :navigate}, fn ->
@@ -1087,13 +1051,14 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp snapshot_after_visit!(session, state, readiness) do
-    case with_snapshot(state) do
-      {state, snapshot} ->
-        update_session(session, state, :visit, %{path: snapshot.path, title: snapshot.title, readiness: readiness})
+    observed = %{path: current_path_or_nil(state), readiness: readiness}
+    update_session(session, state, observed)
+  end
 
-      {:error, reason, details} ->
-        raise ArgumentError,
-              "failed to collect browser snapshot after visit: #{reason} (#{inspect(details)})"
+  defp current_path_or_nil(state) do
+    case eval_json_transient_read(state, Expressions.current_path()) do
+      {:ok, %{"path" => path}} when is_binary(path) -> path
+      _ -> nil
     end
   end
 
@@ -1528,23 +1493,21 @@ defmodule Cerberus.Driver.Browser do
     case eval_result do
       {:ok, %{"ok" => true, "target" => target} = result} when is_map(target) ->
         value = target |> Map.get("value") |> normalize_field_value()
-        next_state = %{state | current_path: result["path"] || state.current_path}
 
         observed = %{
-          path: next_state.current_path,
+          path: Map.get(result, "path"),
           field: target,
           value: value,
           candidate_values: [value]
         }
 
-        {:ok, next_state, observed}
+        {:ok, state, observed}
 
       {:ok, %{"ok" => false} = result} ->
         reason = action_failure_reason(:fill_in, match_opts, result, "no form field matched locator")
-        next_state = %{state | current_path: result["path"] || state.current_path}
 
         observed = %{
-          path: next_state.current_path,
+          path: Map.get(result, "path"),
           reason: Map.get(result, "reason"),
           match_count: Map.get(result, "matchCount"),
           candidate_count: Map.get(result, "candidateCount"),
@@ -1552,14 +1515,14 @@ defmodule Cerberus.Driver.Browser do
           result: result
         }
 
-        {:error, reason, next_state, observed}
+        {:error, reason, state, observed}
 
       {:ok, result} ->
-        observed = %{path: state.current_path, result: result}
+        observed = %{path: current_path_or_nil(state), result: result}
         {:error, "unexpected value assertion payload", state, observed}
 
       {:error, reason, details} ->
-        observed = %{path: state.current_path, details: details}
+        observed = %{path: current_path_or_nil(state), details: details}
         {:error, "failed to evaluate browser value assertion: #{reason}", state, observed}
     end
   end
@@ -1581,16 +1544,15 @@ defmodule Cerberus.Driver.Browser do
 
     case eval_result do
       {:ok, result} ->
-        next_state = %{state | current_path: result["path"] || state.current_path}
         observed = text_assertion_observed(result, expected, visible, match_by)
 
         case text_assertion_outcome(result, match_opts, mode) do
-          :ok -> {:ok, next_state, observed}
+          :ok -> {:ok, state, observed}
           {:error, reason} -> {:error, reason, observed}
         end
 
       {:error, reason, details} ->
-        observed = %{path: state.current_path, details: details}
+        observed = %{path: current_path_or_nil(state), details: details}
         {:error, "failed to evaluate browser text assertion: #{reason}", observed}
     end
   end
@@ -1608,16 +1570,15 @@ defmodule Cerberus.Driver.Browser do
 
     case eval_result do
       {:ok, result} ->
-        next_state = %{state | current_path: result["path"] || state.current_path}
         observed = locator_assertion_observed(result, locator, visible)
 
         case locator_assertion_outcome(result, match_opts, mode) do
-          :ok -> {:ok, next_state, observed}
+          :ok -> {:ok, state, observed}
           {:error, reason} -> {:error, reason, observed}
         end
 
       {:error, reason, details} ->
-        observed = %{path: state.current_path, details: details}
+        observed = %{path: current_path_or_nil(state), details: details}
         {:error, "failed to evaluate browser locator assertion: #{reason}", observed}
     end
   end
@@ -1748,7 +1709,7 @@ defmodule Cerberus.Driver.Browser do
     case eval_result do
       {:ok, result} ->
         observed = %{
-          path: result["path"] || state.current_path,
+          path: result["path"],
           scope: Session.scope(session),
           expected: expected,
           query: expected_query,
@@ -1759,15 +1720,14 @@ defmodule Cerberus.Driver.Browser do
         }
 
         if result["ok"] == true do
-          updated = %{session | current_path: observed.path}
-          {:ok, updated, observed}
+          {:ok, session, observed}
         else
           {:error, session, observed, "path assertion failed"}
         end
 
       {:error, reason, details} ->
         observed = %{
-          path: state.current_path,
+          path: current_path_or_nil(state),
           scope: Session.scope(session),
           expected: expected,
           query: expected_query,
@@ -2003,7 +1963,7 @@ defmodule Cerberus.Driver.Browser do
   defp scope_from_parts([], selector), do: selector
   defp scope_from_parts(frame_chain, selector), do: %{frame_chain: frame_chain, selector: selector}
 
-  defp update_session(%__MODULE__{} = session, %{} = state, op, observed) do
+  defp update_session(%__MODULE__{} = session, %{} = state, _observed) do
     %{
       session
       | user_context_pid: state.user_context_pid,
@@ -2016,9 +1976,7 @@ defmodule Cerberus.Driver.Browser do
         ready_quiet_ms: state.ready_quiet_ms,
         browser_context_defaults: state.browser_context_defaults,
         active_form_selector: state.active_form_selector,
-        scope: session.scope,
-        current_path: state.current_path,
-        last_result: LastResult.new(op, observed, session)
+        scope: session.scope
     }
   end
 

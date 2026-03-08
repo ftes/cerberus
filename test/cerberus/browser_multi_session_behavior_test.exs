@@ -43,7 +43,7 @@ defmodule Cerberus.BrowserMultiSessionBehaviorTest do
       close_tab(primary)
     end
 
-    assert primary.current_path == "/articles"
+    assert_path(primary, "/articles")
   end
 
   test "parallel browser sessions remain isolated under concurrent actions" do

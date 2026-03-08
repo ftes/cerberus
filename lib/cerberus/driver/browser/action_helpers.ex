@@ -7,6 +7,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
     const helper = {};
     helper.__version = 17;
+    helper.now = () =>
+      typeof performance !== "undefined" && typeof performance.now === "function"
+        ? performance.now()
+        : Date.now();
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -1347,6 +1351,18 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       });
     };
 
+    helper.cssAndTextMembers = (locator) => {
+      if (!locator || String(locator.kind || "").toLowerCase() !== "and") return null;
+      const members = Array.isArray(locator.members) ? locator.members : [];
+      if (members.length !== 2) return null;
+
+      const cssMember = members.find((member) => String(member && member.kind || "").toLowerCase() === "css");
+      const textMember = members.find((member) => String(member && member.kind || "").toLowerCase() === "text");
+
+      if (!cssMember || !textMember || typeof cssMember.value !== "string") return null;
+      return { cssMember, textMember };
+    };
+
     helper.matchesLocator = (candidate, locator, op) => {
       if (!locator || typeof locator !== "object") return false;
 
@@ -1366,6 +1382,19 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         const members = Array.isArray(locator.members) ? locator.members : [];
 
         return helper.scopeMembersMatch(candidate, members, op) && helper.matchesLocatorCommonOpts(candidate, locator.opts, op);
+      }
+
+      const cssAndText = helper.cssAndTextMembers(locator);
+      if (cssAndText) {
+        if (!candidate.__el || !helper.matchesSelector(candidate.__el, cssAndText.cssMember.value)) return false;
+
+        const locatorOpts = cssAndText.textMember.opts && typeof cssAndText.textMember.opts === "object" ? cssAndText.textMember.opts : {};
+        const exact = locatorOpts.exact === true;
+        const normalizeWs = locatorOpts.normalizeWs !== false;
+        const matchText = helper.buildTextMatcher(cssAndText.textMember.expected, exact, normalizeWs);
+        if (!matchText(candidate.text || "")) return false;
+
+        return helper.matchesLocatorCommonOpts(candidate, locator.opts, op);
       }
 
       if (kind === "and" || kind === "or") {
@@ -1441,23 +1470,33 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
     };
 
     helper.resolveOnce = (options) => {
+      const jsTiming = {};
       const op = options.op || "click";
       const matchBy = options.matchBy || (op === "click" || op === "submit" ? "text" : "label");
       const normalizeWs = options.normalizeWs !== false;
       const exact = options.exact === true;
       const filters = helper.matchFilters(options);
+      const rootsStartedAt = helper.now();
       const roots = helper.resolveRoots(options.scopeSelector || null);
+      jsTiming.resolveRootsMs = helper.now() - rootsStartedAt;
+      const candidatesStartedAt = helper.now();
       const candidates = helper.resolveCandidates(options, roots);
+      jsTiming.resolveCandidatesMs = helper.now() - candidatesStartedAt;
       const locator = options.locator && typeof options.locator === "object" ? options.locator : null;
       const matchText = helper.buildTextMatcher(options.expected, exact, normalizeWs);
       const prefilterSelector = locator ? helper.querySelectorForLocator(locator) : null;
+      const prefilterStartedAt = helper.now();
       const prefilteredCandidates =
         prefilterSelector && prefilterSelector !== "*"
           ? candidates.filter((candidate) => candidate && candidate.__el && helper.matchesSelector(candidate.__el, prefilterSelector))
           : candidates;
+      jsTiming.prefilterCandidatesMs = helper.now() - prefilterStartedAt;
 
+      const stateFiltersStartedAt = helper.now();
       const stateMatched = prefilteredCandidates.filter((candidate) => helper.matchesStateFilters(candidate, options));
+      jsTiming.stateFilterMs = helper.now() - stateFiltersStartedAt;
 
+      const matchCandidatesStartedAt = helper.now();
       const matched = stateMatched.filter((candidate) => {
         if (locator) {
           return helper.matchesLocator(candidate, locator, op);
@@ -1466,10 +1505,13 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         const value = helper.matchValue(candidate, op, matchBy);
         return matchText(value);
       });
+      jsTiming.matchCandidatesMs = helper.now() - matchCandidatesStartedAt;
 
+      const previewStartedAt = helper.now();
       const previewCandidates = helper.previewCandidates(stateMatched, locator, op);
       const candidateValues = helper.previewValues(previewCandidates, op, matchBy);
       const matchedValues = helper.previewValues(matched, op, matchBy);
+      jsTiming.previewMs = helper.now() - previewStartedAt;
 
       if (!helper.countSatisfiesFilters(matched.length, filters)) {
         return {
@@ -1478,7 +1520,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           matchCount: matched.length,
           candidateValues: matchedValues,
           candidateCount: matched.length,
-          path: window.location.pathname + window.location.search
+          path: window.location.pathname + window.location.search,
+          jsTiming
         };
       }
 
@@ -1489,7 +1532,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           matchCount: 0,
           candidateValues,
           candidateCount: previewCandidates.length,
-          path: window.location.pathname + window.location.search
+          path: window.location.pathname + window.location.search,
+          jsTiming
         };
       }
 
@@ -1501,7 +1545,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           matchCount: matched.length,
           candidateValues: matchedValues,
           candidateCount: matched.length,
-          path: window.location.pathname + window.location.search
+          path: window.location.pathname + window.location.search,
+          jsTiming
         };
       }
 
@@ -1509,7 +1554,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         ok: true,
         target: matched[position.index],
         matchCount: matched.length,
-        path: window.location.pathname + window.location.search
+        path: window.location.pathname + window.location.search,
+        jsTiming
       };
     };
 

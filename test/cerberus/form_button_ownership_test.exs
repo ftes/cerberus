@@ -76,7 +76,7 @@ defmodule Cerberus.FormButtonOwnershipTest do
         |> assert_has(~l"name: Aragorn"e)
         |> assert_has(~l"form-button: save-owner-form-redirect"e)
 
-      assert String.starts_with?(session.current_path || "", "/owner-form/result")
+      assert_path(session, ~r|/owner-form/result|, exact: false)
     end
   end
 
@@ -121,7 +121,7 @@ defmodule Cerberus.FormButtonOwnershipTest do
       |> assert_has(~l"form-button: save-owner-form-redirect"e)
       |> assert_has(~l"x-flow-token: flow-123"e)
 
-    assert String.starts_with?(session.current_path || "", "/owner-form/result")
+    assert_path(session, ~r|/owner-form/result|, exact: false)
   end
 
   defp submit_for_session(%Static{} = session, locator, opts) do

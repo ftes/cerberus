@@ -178,7 +178,7 @@ defmodule CerberusTest do
       |> submit(~l"search-submit"t)
       |> assert_has(~l"Search query: phoenix"e)
 
-    assert session.current_path == "/search/results?q=phoenix"
+    assert_path(session, "/search/results", query: %{q: "phoenix"})
   end
 
   test "click with label locator defers to driver matching while assertions treat label locators as text" do
@@ -204,7 +204,7 @@ defmodule CerberusTest do
       |> click(role(:button, name: "Increment"))
       |> assert_has(text("Count: 1"))
 
-    assert session.current_path == "/live/counter"
+    assert_path(session, "/live/counter")
 
     assert is_struct(
              session()
@@ -222,7 +222,7 @@ defmodule CerberusTest do
       |> fill_in(testid("search-input"), "phoenix")
       |> submit(testid("search-submit"))
 
-    assert session.current_path == "/search/results?q=phoenix"
+    assert_path(session, "/search/results", query: %{q: "phoenix"})
   end
 
   test "unsupported driver is rejected" do
@@ -405,7 +405,7 @@ defmodule CerberusTest do
         send(self(), {:open_browser_snapshot, path})
       end)
 
-    assert session.current_path == "/articles"
+    assert_path(session, "/articles")
     assert_receive {:open_browser_snapshot, path}
     assert File.exists?(path)
     assert File.read!(path) =~ "Articles"
@@ -420,7 +420,7 @@ defmodule CerberusTest do
         send(self(), {:render_html_snapshot, lazy_html, Cerberus.Html.texts(lazy_html, :any, nil)})
       end)
 
-    assert session.current_path == "/articles"
+    assert_path(session, "/articles")
 
     assert_receive {:render_html_snapshot, %LazyHTML{} = lazy_html, texts}
     assert is_list(texts)
@@ -451,7 +451,7 @@ defmodule CerberusTest do
         send(self(), {:open_browser_snapshot, path})
       end)
 
-    assert session.current_path == "/live/counter"
+    assert_path(session, "/live/counter")
     assert_receive {:open_browser_snapshot, path}
     assert File.exists?(path)
     assert File.read!(path) =~ "Count: 0"
@@ -466,7 +466,7 @@ defmodule CerberusTest do
         send(self(), {:render_html_snapshot, lazy_html, Cerberus.Html.texts(lazy_html, :any, nil)})
       end)
 
-    assert session.current_path == "/live/counter"
+    assert_path(session, "/live/counter")
 
     assert_receive {:render_html_snapshot, %LazyHTML{} = lazy_html, texts}
     assert is_list(texts)
@@ -633,7 +633,7 @@ defmodule CerberusTest do
         send(self(), {:unwrap_native, native})
       end)
 
-    assert session.current_path == "/articles"
+    assert_path(session, "/articles")
 
     assert_receive {:unwrap_native, %BrowserNative{} = native}
 
@@ -654,7 +654,7 @@ defmodule CerberusTest do
         send(self(), {:open_browser_snapshot, path})
       end)
 
-    assert session.current_path == "/articles"
+    assert_path(session, "/articles")
     assert_receive {:open_browser_snapshot, path}
     assert File.exists?(path)
     assert File.read!(path) =~ "Articles"
@@ -670,7 +670,7 @@ defmodule CerberusTest do
         send(self(), {:render_html_snapshot, lazy_html, Cerberus.Html.texts(lazy_html, :any, nil)})
       end)
 
-    assert session.current_path == "/articles"
+    assert_path(session, "/articles")
 
     assert_receive {:render_html_snapshot, %LazyHTML{} = lazy_html, texts}
     assert is_list(texts)
