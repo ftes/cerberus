@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-08T09:18:04Z
-updated_at: 2026-03-08T17:27:31Z
+updated_at: 2026-03-08T19:40:37Z
 ---
 
 ## Scope
@@ -34,3 +34,48 @@ updated_at: 2026-03-08T17:27:31Z
 - Fair EV2 project_form_feature comparison did not improve from this change: Playwright 4.9s vs Cerberus 18.0s on the immediate sequential rerun.
 - Fresh CERBERUS_PROFILE=1 run on project_form_feature_cerberus_test.exs shows the remaining cost is still browser assertions and direct evaluate round trips, not path/result session bookkeeping.
 - Added a fast matcher path for and_(css(...), text(...)) in both browser action and assertion helpers. It materially reduced the worst-case JS matcher timings in some cases, but the overall EV2 row is still dominated by repeated browser assertions and evaluate_direct transport cost.
+
+## 2026-03-08 Playwright engine comparison notes
+
+- Playwright does use injected in-page JS for selector resolution and expect logic, but it caches the injected script handle per execution context (`dom.ts`, `javascript.ts`) and then calls typed protocol operations around it.
+- Playwright browser assertions run through `Frame.expect` -> `frames.ts:_expectInternal` -> one injected `querySelectorAll` plus one injected `expect` path. Cerberus browser assertions currently run a generic action/assertion helper over BiDi `script.evaluate`, rebuilding payload-driven candidate scans and recursive `matchesLocator` filtering on every assertion.
+- Playwright does not appear to use BiDi `browsingContext.locateNodes` in core; there are protocol types but no call sites under `packages/playwright-core/src/server/bidi`.
+- Playwright default isolation still creates a fresh browser context/page per test, so Cerberus needing a fresh user context / browsing context is not the main gap by itself.
+- The current Cerberus browser gap is more likely due to the generic locator engine shape than `new_session` alone:
+  - broad candidate collection (`clickCandidates`, `formCandidates`, `candidateFromElement`)
+  - repeated label/accessibility/text extraction per candidate
+  - recursive composed-locator matching (`matchesLocator`, `scopeMembersMatch`, `elementHasLocator`)
+  - preview candidate generation for error reporting in the hot path
+- BiDi `locateNodes` is promising for a subset of locators because the protocol supports `css`, `xpath`, `innerText`, and `accessibility {role,name}` locators, but it is not sufficient by itself for full Cerberus locator semantics such as `has`, `has_not`, scope/closest composition, label-derived control matching, placeholder/title/alt/testid composition, and state-filtered combinations.
+
+
+## 2026-03-08 transport experiment
+
+- Tried a direct BiDi `script.callFunction` transport for browser helper invocations (actions/assertions/path) to mirror Playwright's BiDi execution style more closely.
+- On the EV2 `project_form_feature_cerberus_test.exs` timing row this did not help. The hotspot simply moved from `evaluate_direct` to `call_direct` / `call_action_direct`, with per-call round trips still dominating and the overall row staying around 18-19s.
+- Reverted that experiment to keep the browser driver simpler. The kept changes from this loop are:
+  - positive browser locator assertions use an early depth-first first-match path when count constraints are not involved
+  - browser action preview/candidate-value generation now only happens on error paths
+- Latest fair sequential comparison on the row remains roughly Playwright 4.4s vs Cerberus 19.3s.
+- Current evidence says the remaining browser gap is not mostly browser-side matching JS anymore; it is browser startup plus the sheer cost of many BiDi round trips through the current Cerberus transport/process model.
+
+## 2026-03-08 timing split update
+
+- Added transport timing splits around browser evaluate calls:
+  - user-context queue and dispatch
+  - browsing-context queue and dispatch
+  - BiDi command queue, send_command, encode_message, ensure_connected, decode_response, and per-method roundtrip
+- Added browser-side expression total/packaging timing for action/text/locator helper expressions.
+- Profiled EV2 project_form_feature_cerberus_test.exs again with CERBERUS_PROFILE=1.
+- Result: the remaining browser gap is overwhelmingly BiDi roundtrip latency, especially script.evaluate, not helper JS or Elixir JSON decode.
+- On that row:
+  - browser_bidi roundtrip: 165 calls / 15062ms total / 91ms avg
+  - browser_bidi script.evaluate roundtrip: 136 calls / 11003ms total / 81ms avg
+  - browser_transport user_context_dispatch: 130 calls / 9951ms total / 76.6ms avg
+  - browser_transport browsing_context_dispatch: 130 calls / 9950ms total / 76.5ms avg
+  - browser_transport user_context_queue: 130 calls / 0.741ms total
+  - browser_bidi ensure_connected: 165 calls / 1.012ms total
+  - browser_bidi encode_message: 165 calls / 3.574ms total
+  - browser_elixir decode_remote_json: 50 calls / 2.109ms total in the hot test
+  - browser_js expressionLocatorTotalMs and expressionActionTotalMs stay tiny (sub-millisecond avg for assertions; roughly 1-2ms avg for actions)
+- Conclusion: the missing time is mostly browser/protocol roundtrip latency for many script.evaluate calls. It is not GenServer queueing, not helper JS execution, and not JSON encode/decode on the Elixir side.

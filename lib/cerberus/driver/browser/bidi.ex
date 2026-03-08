@@ -14,7 +14,13 @@ defmodule Cerberus.Driver.Browser.BiDi do
   @type state :: %{
           next_id: pos_integer(),
           pending: %{
-            optional(pos_integer()) => %{from: GenServer.from(), timer: reference(), browser_name: browser_name()}
+            optional(pos_integer()) => %{
+              from: GenServer.from(),
+              timer: reference(),
+              browser_name: browser_name(),
+              method: String.t(),
+              sent_us: non_neg_integer()
+            }
           },
           sockets: %{optional(browser_name()) => pid()},
           subscribers: %{optional(browser_name()) => %{optional(pid()) => reference()}}
@@ -43,7 +49,8 @@ defmodule Cerberus.Driver.Browser.BiDi do
 
     message =
       if pid == __MODULE__ do
-        {:command, method, params, timeout, slow_mo_ms, opts}
+        started_us = System.monotonic_time(:microsecond)
+        {:command, method, params, timeout, slow_mo_ms, opts, started_us}
       else
         {:command, method, params, timeout}
       end
@@ -84,14 +91,21 @@ defmodule Cerberus.Driver.Browser.BiDi do
     {:reply, :ok, state}
   end
 
-  def handle_call({:command, method, params, timeout, slow_mo_ms, opts}, from, state) do
+  def handle_call({:command, method, params, timeout, slow_mo_ms, opts, started_us}, from, state) do
+    record_transport_delay({:browser_bidi, :command_queue}, started_us)
     browser_name = Runtime.browser_name(opts)
 
     maybe_sleep_for_slow_mo(slow_mo_ms)
 
     with {:ok, web_socket_url} <- Runtime.web_socket_url(opts),
-         {:ok, socket} <- BiDiSocket.ensure_connected(browser_name, web_socket_url),
-         {:ok, next_state} <- send_command(state, browser_name, socket, method, params, timeout, from) do
+         {:ok, socket} <-
+           Cerberus.Profiling.measure({:browser_bidi, :ensure_connected}, fn ->
+             BiDiSocket.ensure_connected(browser_name, web_socket_url)
+           end),
+         {:ok, next_state} <-
+           Cerberus.Profiling.measure({:browser_bidi, :send_command}, fn ->
+             send_command(state, browser_name, socket, method, params, timeout, from)
+           end) do
       {:noreply, next_state}
     else
       {:error, reason} ->
@@ -194,21 +208,42 @@ defmodule Cerberus.Driver.Browser.BiDi do
       {nil, pending} ->
         %{state | pending: pending}
 
-      {entry, pending} ->
+      {%{method: method, sent_us: sent_us} = entry, pending} ->
         Process.cancel_timer(entry.timer)
-        GenServer.reply(entry.from, decode_response(response))
+        record_transport_delay({:browser_bidi, :roundtrip}, sent_us)
+        record_transport_delay({:browser_bidi, method, :roundtrip}, sent_us)
+
+        reply =
+          Cerberus.Profiling.measure({:browser_bidi, :decode_response}, fn ->
+            decode_response(response)
+          end)
+
+        GenServer.reply(entry.from, reply)
         %{state | pending: pending}
     end
   end
 
   defp send_command(state, browser_name, socket, method, params, timeout, from) do
     id = state.next_id
-    message = JSON.encode!(%{"id" => id, "method" => method, "params" => params})
+
+    message =
+      Cerberus.Profiling.measure({:browser_bidi, :encode_message}, fn ->
+        JSON.encode!(%{"id" => id, "method" => method, "params" => params})
+      end)
 
     case BiDiSocket.send_text(browser_name, message) do
       :ok ->
         timer = Process.send_after(self(), {:command_timeout, id}, timeout)
-        pending = Map.put(state.pending, id, %{from: from, timer: timer, browser_name: browser_name})
+        sent_us = System.monotonic_time(:microsecond)
+
+        pending =
+          Map.put(state.pending, id, %{
+            from: from,
+            timer: timer,
+            browser_name: browser_name,
+            method: method,
+            sent_us: sent_us
+          })
 
         {:ok, %{state | next_id: id + 1, pending: pending, sockets: Map.put(state.sockets, browser_name, socket)}}
 
@@ -313,4 +348,8 @@ defmodule Cerberus.Driver.Browser.BiDi do
   end
 
   defp maybe_sleep_for_slow_mo(_delay_ms), do: :ok
+
+  defp record_transport_delay(bucket, started_us) when is_integer(started_us) do
+    Cerberus.Profiling.record_us(bucket, max(System.monotonic_time(:microsecond) - started_us, 0))
+  end
 end

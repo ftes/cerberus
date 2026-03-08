@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAction && window.__cerberusAction.__version === 17) return;
+    if (window.__cerberusAction && window.__cerberusAction.__version === 18) return;
 
     const helper = {};
-    helper.__version = 17;
+    helper.__version = 18;
     helper.now = () =>
       typeof performance !== "undefined" && typeof performance.now === "function"
         ? performance.now()
@@ -1507,13 +1507,11 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       });
       jsTiming.matchCandidatesMs = helper.now() - matchCandidatesStartedAt;
 
-      const previewStartedAt = helper.now();
-      const previewCandidates = helper.previewCandidates(stateMatched, locator, op);
-      const candidateValues = helper.previewValues(previewCandidates, op, matchBy);
-      const matchedValues = helper.previewValues(matched, op, matchBy);
-      jsTiming.previewMs = helper.now() - previewStartedAt;
-
       if (!helper.countSatisfiesFilters(matched.length, filters)) {
+        const previewStartedAt = helper.now();
+        const matchedValues = helper.previewValues(matched, op, matchBy);
+        jsTiming.previewMs = helper.now() - previewStartedAt;
+
         return {
           ok: false,
           reason: "matched element count did not satisfy count constraints",
@@ -1526,6 +1524,11 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       }
 
       if (matched.length === 0) {
+        const previewStartedAt = helper.now();
+        const previewCandidates = helper.previewCandidates(stateMatched, locator, op);
+        const candidateValues = helper.previewValues(previewCandidates, op, matchBy);
+        jsTiming.previewMs = helper.now() - previewStartedAt;
+
         return {
           ok: false,
           reason: "no elements matched locator",
@@ -1539,6 +1542,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
       const position = helper.positionIndex(matched.length, options);
       if (position.error) {
+        const previewStartedAt = helper.now();
+        const matchedValues = helper.previewValues(matched, op, matchBy);
+        jsTiming.previewMs = helper.now() - previewStartedAt;
+
         return {
           ok: false,
           reason: position.error,

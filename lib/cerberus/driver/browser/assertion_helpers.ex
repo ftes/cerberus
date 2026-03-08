@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAssert && window.__cerberusAssert.__version === 9) return;
+    if (window.__cerberusAssert && window.__cerberusAssert.__version === 10) return;
 
     const helper = {};
-    helper.__version = 9;
+    helper.__version = 10;
     helper.now = () =>
       typeof performance !== "undefined" && typeof performance.now === "function"
         ? performance.now()
@@ -1186,9 +1186,58 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       return { matches, jsTiming };
     };
 
+    helper.findFirstLocatorMatch = (options) => {
+      const jsTiming = {};
+      const rootsStartedAt = helper.now();
+      const roots = helper.resolveRoots(options.scopeSelector || null);
+      jsTiming.locatorResolveRootsMs = helper.now() - rootsStartedAt;
+      const locator = options.locator && typeof options.locator === "object" ? options.locator : null;
+      if (!locator) return { match: null, jsTiming };
+
+      const locatorWithoutFrom = helper.locatorWithoutFrom(locator);
+      const fromLocator = helper.locatorOpts(locator).from || null;
+      if (fromLocator) return null;
+
+      const visibility = options.visibility || "visible";
+      const selector = helper.locatorQuerySelector(locatorWithoutFrom);
+      const context = { altCache: new Map(), labelCache: new WeakMap() };
+      let match = null;
+
+      const collectStartedAt = helper.now();
+      helper.eachCandidateElement(roots, selector, null, (element) => {
+        const hidden = helper.isHidden(element);
+        if (visibility !== "all" && !helper.selectedVisibility(visibility, hidden)) return true;
+        if (!helper.matchesLocator(element, locatorWithoutFrom, hidden, context)) return true;
+        match = { element, hidden };
+        return false;
+      });
+      jsTiming.locatorCollectCandidatesMs = helper.now() - collectStartedAt;
+
+      return { match, jsTiming };
+    };
+
     helper.locatorQuick = (options) => {
       const mode = options.mode || "assert";
       const filters = helper.matchFilters(options);
+      const noCountFilters = !helper.hasMatchFilters(filters);
+
+      if (mode === "assert" && noCountFilters) {
+        const firstMatch = helper.findFirstLocatorMatch(options);
+
+        if (firstMatch) {
+          const ok = !!firstMatch.match;
+
+          return {
+            ok,
+            reason: helper.assertionReason(mode, ok ? 1 : 0, filters, ok),
+            matchCount: ok ? 1 : 0,
+            path: window.location.pathname + window.location.search,
+            title: document.title || "",
+            jsTiming: firstMatch.jsTiming
+          };
+        }
+      }
+
       const { matches, jsTiming } = helper.collectLocatorMatches(options);
       const matchCount = matches.length;
       const ok = helper.assertionSatisfied(mode, matchCount, filters);

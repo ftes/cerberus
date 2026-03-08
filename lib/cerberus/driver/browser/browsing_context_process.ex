@@ -63,7 +63,8 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   @spec evaluate(pid(), String.t(), pos_integer()) :: Types.bidi_response()
   def evaluate(pid, expression, timeout_ms)
       when is_pid(pid) and is_binary(expression) and is_integer(timeout_ms) and timeout_ms > 0 do
-    GenServer.call(pid, {:evaluate, expression, timeout_ms}, command_call_timeout_ms(timeout_ms))
+    started_us = System.monotonic_time(:microsecond)
+    GenServer.call(pid, {:evaluate, expression, timeout_ms, started_us}, command_call_timeout_ms(timeout_ms))
   end
 
   @spec await_ready(pid(), keyword()) ::
@@ -244,9 +245,14 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     end
   end
 
-  def handle_call({:evaluate, expression, timeout_ms}, _from, state) do
+  def handle_call({:evaluate, expression, timeout_ms, started_us}, _from, state) do
+    record_transport_delay(:browsing_context_queue, started_us)
     bidi_opts = Keyword.put(state.bidi_opts, :timeout, timeout_ms)
-    result = evaluate_script(state.id, expression, bidi_opts)
+
+    result =
+      Cerberus.Profiling.measure({:browser_transport, :browsing_context_dispatch}, fn ->
+        evaluate_script(state.id, expression, bidi_opts)
+      end)
 
     {:reply, result, state}
   end
@@ -483,6 +489,13 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   defp decode_remote_json(result) do
     {:error, "unexpected script.evaluate result: #{inspect(result)}"}
+  end
+
+  defp record_transport_delay(bucket, started_us) when is_atom(bucket) and is_integer(started_us) do
+    Cerberus.Profiling.record_us(
+      {:browser_transport, bucket},
+      max(System.monotonic_time(:microsecond) - started_us, 0)
+    )
   end
 
   defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value

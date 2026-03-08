@@ -91,6 +91,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
         typeof performance !== "undefined" && typeof performance.now === "function"
           ? performance.now()
           : Date.now();
+      const expressionStartedAt = now();
 
       const helper = window.__cerberusAction;
 
@@ -100,9 +101,15 @@ defmodule Cerberus.Driver.Browser.Expressions do
         const elapsedMs = now() - startedAt;
 
         try {
+          const packagingStartedAt = now();
           const parsed = JSON.parse(raw);
           const jsTiming = parsed && parsed.jsTiming && typeof parsed.jsTiming === "object" ? parsed.jsTiming : {};
-          parsed.jsTiming = { ...jsTiming, expressionActionPerformMs: elapsedMs };
+          parsed.jsTiming = {
+            ...jsTiming,
+            expressionActionPerformMs: elapsedMs,
+            expressionActionPackagingMs: now() - packagingStartedAt,
+            expressionActionTotalMs: now() - expressionStartedAt
+          };
           return JSON.stringify(parsed);
         } catch (_error) {
           return raw;
@@ -114,7 +121,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
         reason: "action helper is not available",
         helperMissing: true,
         path: #{current_path_expression()},
-        jsTiming: { expressionActionPerformMs: 0 }
+        jsTiming: { expressionActionPerformMs: 0, expressionActionPackagingMs: 0, expressionActionTotalMs: 0 }
       });
     })()
     """
@@ -131,6 +138,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
         typeof performance !== "undefined" && typeof performance.now === "function"
           ? performance.now()
           : Date.now();
+      const expressionStartedAt = now();
 
       #{assert_helper_binding_snippet()}
       if (helper && typeof helper.text === "function") {
@@ -139,9 +147,15 @@ defmodule Cerberus.Driver.Browser.Expressions do
         const elapsedMs = now() - startedAt;
 
         try {
+          const packagingStartedAt = now();
           const parsed = JSON.parse(raw);
           const jsTiming = parsed && parsed.jsTiming && typeof parsed.jsTiming === "object" ? parsed.jsTiming : {};
-          parsed.jsTiming = { ...jsTiming, expressionTextAssertionMs: elapsedMs };
+          parsed.jsTiming = {
+            ...jsTiming,
+            expressionTextAssertionMs: elapsedMs,
+            expressionTextPackagingMs: now() - packagingStartedAt,
+            expressionTextTotalMs: now() - expressionStartedAt
+          };
           return JSON.stringify(parsed);
         } catch (_error) {
           return raw;
@@ -159,7 +173,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
         texts: [],
         matched: [],
         helperMissing: true,
-        jsTiming: { expressionTextAssertionMs: 0 }
+        jsTiming: { expressionTextAssertionMs: 0, expressionTextPackagingMs: 0, expressionTextTotalMs: 0 }
       });
     })()
     """
@@ -176,6 +190,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
         typeof performance !== "undefined" && typeof performance.now === "function"
           ? performance.now()
           : Date.now();
+      const expressionStartedAt = now();
 
       #{assert_helper_binding_snippet()}
       if (helper && typeof helper.locator === "function") {
@@ -184,9 +199,15 @@ defmodule Cerberus.Driver.Browser.Expressions do
         const elapsedMs = now() - startedAt;
 
         try {
+          const packagingStartedAt = now();
           const parsed = JSON.parse(raw);
           const jsTiming = parsed && parsed.jsTiming && typeof parsed.jsTiming === "object" ? parsed.jsTiming : {};
-          parsed.jsTiming = { ...jsTiming, expressionLocatorAssertionMs: elapsedMs };
+          parsed.jsTiming = {
+            ...jsTiming,
+            expressionLocatorAssertionMs: elapsedMs,
+            expressionLocatorPackagingMs: now() - packagingStartedAt,
+            expressionLocatorTotalMs: now() - expressionStartedAt
+          };
           return JSON.stringify(parsed);
         } catch (_error) {
           return raw;
@@ -204,7 +225,7 @@ defmodule Cerberus.Driver.Browser.Expressions do
         texts: [],
         matched: [],
         helperMissing: true,
-        jsTiming: { expressionLocatorAssertionMs: 0 }
+        jsTiming: { expressionLocatorAssertionMs: 0, expressionLocatorPackagingMs: 0, expressionLocatorTotalMs: 0 }
       });
     })()
     """

@@ -66,14 +66,16 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   @spec evaluate_with_timeout(pid(), String.t(), pos_integer()) :: Types.bidi_response()
   def evaluate_with_timeout(pid, expression, timeout_ms)
       when is_pid(pid) and is_binary(expression) and is_integer(timeout_ms) and timeout_ms > 0 do
-    GenServer.call(pid, {:evaluate, expression, timeout_ms}, timeout_ms + 5_000)
+    started_us = System.monotonic_time(:microsecond)
+    GenServer.call(pid, {:evaluate, expression, timeout_ms, started_us}, timeout_ms + 5_000)
   end
 
   @spec evaluate_with_timeout(pid(), String.t(), pos_integer(), String.t() | nil) ::
           Types.bidi_response()
   def evaluate_with_timeout(pid, expression, timeout_ms, tab_id)
       when is_pid(pid) and is_binary(expression) and is_integer(timeout_ms) and timeout_ms > 0 do
-    GenServer.call(pid, {:evaluate_tab, tab_id, expression, timeout_ms}, timeout_ms + 5_000)
+    started_us = System.monotonic_time(:microsecond)
+    GenServer.call(pid, {:evaluate_tab, tab_id, expression, timeout_ms, started_us}, timeout_ms + 5_000)
   end
 
   @spec await_ready(pid(), keyword()) ::
@@ -295,14 +297,28 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     end
   end
 
-  def handle_call({:evaluate, expression, timeout_ms}, _from, state) do
-    {:reply, BrowsingContextProcess.evaluate(active_browsing_context_pid!(state), expression, timeout_ms), state}
+  def handle_call({:evaluate, expression, timeout_ms, started_us}, _from, state) do
+    record_transport_delay(:user_context_queue, started_us)
+
+    reply =
+      Cerberus.Profiling.measure({:browser_transport, :user_context_dispatch}, fn ->
+        BrowsingContextProcess.evaluate(active_browsing_context_pid!(state), expression, timeout_ms)
+      end)
+
+    {:reply, reply, state}
   end
 
-  def handle_call({:evaluate_tab, tab_id, expression, timeout_ms}, _from, state) do
+  def handle_call({:evaluate_tab, tab_id, expression, timeout_ms, started_us}, _from, state) do
+    record_transport_delay(:user_context_queue, started_us)
+
     case browsing_context_pid(state, tab_id) do
       {:ok, pid} ->
-        {:reply, BrowsingContextProcess.evaluate(pid, expression, timeout_ms), state}
+        reply =
+          Cerberus.Profiling.measure({:browser_transport, :user_context_dispatch}, fn ->
+            BrowsingContextProcess.evaluate(pid, expression, timeout_ms)
+          end)
+
+        {:reply, reply, state}
 
       {:error, reason, details} ->
         {:reply, {:error, reason, details}, state}
@@ -687,6 +703,13 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
       {:ok, entry} -> {:ok, entry.pid}
       :error -> {:error, "unknown tab", %{tab_id: tab_id}}
     end
+  end
+
+  defp record_transport_delay(bucket, started_us) when is_atom(bucket) and is_integer(started_us) do
+    Cerberus.Profiling.record_us(
+      {:browser_transport, bucket},
+      max(System.monotonic_time(:microsecond) - started_us, 0)
+    )
   end
 
   defp set_user_agent_override(user_context_id, user_agent, bidi_opts) do
