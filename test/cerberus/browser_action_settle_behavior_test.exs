@@ -120,12 +120,12 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
   end
 
   @tag :slow
-  test "browser actions budget enough time for live connect resolve and settle phases", context do
+  test "browser actions budget enough time for pre-action resolve and leave settle to the next assertion", context do
     :browser
     |> SharedBrowserSession.driver_session(context)
     |> visit("/browser/actionability/long-budget")
     |> select(~l"Slow role"l, option: ~l"Analyst"e, timeout: 1_500)
-    |> assert_has(text("selected", exact: true), timeout: 0)
+    |> assert_has(text("selected", exact: true), timeout: 1_500)
   end
 
   test "browser submit on live non-navigation forms does not force post-action readiness", context do

@@ -652,9 +652,14 @@ defmodule Cerberus.Driver.Browser do
   defp perform_action(session, state, op, expected, opts, extra_payload \\ %{})
        when is_list(opts) and is_map(extra_payload) do
     timeout_ms = action_timeout_ms(state, opts)
-    payload = build_action_payload(state, op, expected, opts, timeout_ms, extra_payload)
 
-    case eval_json(state, Expressions.action_perform(payload), action_command_timeout_ms(timeout_ms)) do
+    eval_result =
+      eval_json_action_with_transient_retry(state, timeout_ms, fn remaining_timeout_ms ->
+        payload = build_action_payload(state, op, expected, opts, remaining_timeout_ms, extra_payload)
+        Expressions.action_perform(payload)
+      end)
+
+    case eval_result do
       {:ok, result} ->
         action_perform_result(session, state, op, opts, result)
 
@@ -756,7 +761,7 @@ defmodule Cerberus.Driver.Browser do
         visible: Keyword.get(opts, :visible),
         readyTimeoutMs: timeout_ms,
         timeoutMs: timeout_ms,
-        pollMs: 100
+        pollMs: 50
       },
       extra_payload
     )
@@ -1139,11 +1144,11 @@ defmodule Cerberus.Driver.Browser do
 
   defp navigate_interrupted_by_followup?(_reason, _details), do: false
 
-  defp eval_json(state, expression, timeout_ms)
+  defp eval_json_action(state, expression, timeout_ms)
 
-  defp eval_json(state, expression, timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
+  defp eval_json_action(state, expression, timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
     evaluate_result =
-      Profiling.measure({:browser_wait, :evaluate_with_timeout}, fn ->
+      Profiling.measure({:browser_wait, :evaluate_with_dialog_unblock}, fn ->
         Evaluate.with_dialog_unblock(
           state.user_context_pid,
           state.tab_id,
@@ -1164,6 +1169,61 @@ defmodule Cerberus.Driver.Browser do
       {:error, reason} ->
         {:error, reason, %{}}
     end
+  end
+
+  defp eval_json_read(state, expression, timeout_ms)
+
+  defp eval_json_read(state, expression, timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
+    evaluate_result =
+      Profiling.measure({:browser_wait, :evaluate_direct}, fn ->
+        UserContextProcess.evaluate_with_timeout(
+          state.user_context_pid,
+          expression,
+          timeout_ms,
+          state.tab_id
+        )
+      end)
+
+    evaluate_result =
+      case evaluate_result do
+        {:error, _reason, _details} = error ->
+          maybe_retry_eval_json_read_with_dialog_unblock(state, expression, timeout_ms, error)
+
+        other ->
+          other
+      end
+
+    with {:ok, result} <- evaluate_result,
+         {:ok, json} <-
+           Profiling.measure({:browser_elixir, :decode_remote_json}, fn -> decode_remote_json(result) end) do
+      {:ok, maybe_record_js_timing(json)}
+    else
+      {:error, reason, details} ->
+        {:error, reason, details}
+
+      {:error, reason} ->
+        {:error, reason, %{}}
+    end
+  end
+
+  defp maybe_retry_eval_json_read_with_dialog_unblock(state, expression, timeout_ms, {:error, _reason, _details} = error) do
+    if blocking_dialog_open?(state) do
+      Profiling.measure({:browser_wait, :evaluate_direct_dialog_fallback}, fn ->
+        Evaluate.with_dialog_unblock(
+          state.user_context_pid,
+          state.tab_id,
+          expression,
+          timeout_ms,
+          bidi_opts(state)
+        )
+      end)
+    else
+      error
+    end
+  end
+
+  defp blocking_dialog_open?(state) do
+    match?(%{}, UserContextProcess.active_dialog(state.user_context_pid, state.tab_id))
   end
 
   defp decode_remote_json(%{"result" => %{"type" => "string", "value" => payload}}) when is_binary(payload) do
@@ -1580,7 +1640,7 @@ defmodule Cerberus.Driver.Browser do
       max: Keyword.get(match_opts, :max),
       betweenMin: between_min,
       betweenMax: between_max,
-      pollMs: 250
+      pollMs: 50
     }
   end
 
@@ -1598,7 +1658,7 @@ defmodule Cerberus.Driver.Browser do
       max: Keyword.get(match_opts, :max),
       betweenMin: between_min,
       betweenMax: between_max,
-      pollMs: 250
+      pollMs: 50
     }
   end
 
@@ -1683,7 +1743,7 @@ defmodule Cerberus.Driver.Browser do
   defp do_run_path_assertion(session, state, expected, expected_query, exact, timeout_ms, op, expected_payload) do
     eval_result =
       eval_json_with_transient_retry(state, timeout_ms, fn remaining_timeout_ms ->
-        Expressions.path_assertion(expected_payload, expected_query, exact, op, remaining_timeout_ms, 100)
+        Expressions.path_assertion(expected_payload, expected_query, exact, op, remaining_timeout_ms, 50)
       end)
 
     case eval_result do
@@ -1771,11 +1831,18 @@ defmodule Cerberus.Driver.Browser do
     do_eval_json_with_transient_retry(state, started_at_ms, timeout_ms, retry_budget_ms, build_expression)
   end
 
+  defp eval_json_action_with_transient_retry(state, timeout_ms, build_expression)
+       when is_integer(timeout_ms) and timeout_ms >= 0 and is_function(build_expression, 1) do
+    started_at_ms = System.monotonic_time(:millisecond)
+    retry_budget_ms = max(timeout_ms, @transient_eval_retry_min_budget_ms)
+    do_eval_json_action_with_transient_retry(state, started_at_ms, timeout_ms, retry_budget_ms, build_expression)
+  end
+
   defp do_eval_json_with_transient_retry(state, started_at_ms, timeout_ms, retry_budget_ms, build_expression) do
     remaining_timeout_ms = remaining_budget_ms(started_at_ms, timeout_ms)
     expression = build_expression.(remaining_timeout_ms)
 
-    case eval_json(state, expression, command_timeout_ms(remaining_timeout_ms)) do
+    case eval_json_read(state, expression, command_timeout_ms(remaining_timeout_ms)) do
       {:error, reason, details} = error ->
         remaining_retry_ms = remaining_budget_ms(started_at_ms, retry_budget_ms)
 
@@ -1784,6 +1851,34 @@ defmodule Cerberus.Driver.Browser do
           Process.sleep(min(@transient_eval_retry_interval_ms, remaining_retry_ms))
 
           do_eval_json_with_transient_retry(
+            recovered_state,
+            started_at_ms,
+            timeout_ms,
+            retry_budget_ms,
+            build_expression
+          )
+        else
+          error
+        end
+
+      result ->
+        result
+    end
+  end
+
+  defp do_eval_json_action_with_transient_retry(state, started_at_ms, timeout_ms, retry_budget_ms, build_expression) do
+    remaining_timeout_ms = remaining_budget_ms(started_at_ms, timeout_ms)
+    expression = build_expression.(remaining_timeout_ms)
+
+    case eval_json_action(state, expression, action_command_timeout_ms(remaining_timeout_ms)) do
+      {:error, reason, details} = error ->
+        remaining_retry_ms = remaining_budget_ms(started_at_ms, retry_budget_ms)
+
+        if navigation_transition_error?(reason, details) and remaining_retry_ms > 0 do
+          recovered_state = maybe_recover_transient_state(state, reason, details)
+          Process.sleep(min(@transient_eval_retry_interval_ms, remaining_retry_ms))
+
+          do_eval_json_action_with_transient_retry(
             recovered_state,
             started_at_ms,
             timeout_ms,
@@ -2010,7 +2105,7 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp capture_screenshot_via_webdriver(state, timeout_ms) when is_map(state) and is_integer(timeout_ms) do
-    case eval_json(state, dom_snapshot_screenshot_expression(), timeout_ms) do
+    case eval_json_read(state, dom_snapshot_screenshot_expression(), timeout_ms) do
       {:ok, %{"ok" => true, "data" => data}} when is_binary(data) ->
         {:ok, %{"data" => data}}
 

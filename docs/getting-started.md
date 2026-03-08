@@ -306,6 +306,9 @@ SQL sandbox user-agent helper:
 metadata = Cerberus.Browser.user_agent_for_sandbox(MyApp.Repo, context)
 
 session(:browser, user_agent: metadata)
+
+# Optional: delay sandbox-owner shutdown for LiveView-heavy browser tests.
+config :cerberus, ecto_sandbox_stop_owner_delay: 100
 ```
 
 ## Step 9: Install Local Browser Runtimes

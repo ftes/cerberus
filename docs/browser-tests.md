@@ -28,6 +28,12 @@ metadata = Cerberus.Browser.user_agent_for_sandbox(MyApp.Repo, context)
 session(:browser, user_agent: metadata)
 ```
 
+`user_agent_for_sandbox/2` starts dedicated sandbox owners when needed and encodes metadata for the current test process. If browser-driven LiveViews outlive the test briefly, you can delay owner shutdown with:
+
+```elixir
+config :cerberus, ecto_sandbox_stop_owner_delay: 100
+```
+
 Popup behavior:
 - Preferred: use `Browser.with_popup/4` for deterministic popup capture and two-session assertions.
 - `popup_mode: :allow` keeps browser default popup/new-window behavior (default).

@@ -604,10 +604,8 @@ defmodule Cerberus.Browser do
   end
 
   defp sandbox_metadata_for_repos([repo], context) do
-    case maybe_start_sandbox_owner(repo, context) do
-      {:owner, owner_pid} -> PhoenixSandbox.metadata_for(repo, owner_pid)
-      :already_checked_out -> PhoenixSandbox.metadata_for(repo, self())
-    end
+    _ = maybe_start_sandbox_owner(repo, context)
+    PhoenixSandbox.metadata_for(repo, self())
   end
 
   defp sandbox_metadata_for_repos(repos, context) when is_list(repos) do
@@ -617,7 +615,7 @@ defmodule Cerberus.Browser do
 
   defp maybe_start_sandbox_owner(repo, context) do
     pid = EctoSandbox.start_owner!(repo, shared: not Map.get(context, :async, false))
-    ExUnit.Callbacks.on_exit(fn -> stop_sandbox_owner(pid) end)
+    ExUnit.Callbacks.on_exit(fn -> stop_sandbox_owner(pid, context) end)
     {:owner, pid}
   rescue
     e in MatchError ->
@@ -626,7 +624,18 @@ defmodule Cerberus.Browser do
         else: reraise(e, __STACKTRACE__)
   end
 
-  defp stop_sandbox_owner(checkout_pid) do
+  defp stop_sandbox_owner(checkout_pid, context) when is_pid(checkout_pid) and is_map(context) do
+    if Map.get(context, :async, false) do
+      spawn(fn -> do_stop_sandbox_owner(checkout_pid) end)
+      :ok
+    else
+      do_stop_sandbox_owner(checkout_pid)
+    end
+  end
+
+  defp do_stop_sandbox_owner(checkout_pid) when is_pid(checkout_pid) do
+    delay = Application.get_env(:cerberus, :ecto_sandbox_stop_owner_delay, 0)
+    if delay > 0, do: Process.sleep(delay)
     EctoSandbox.stop_owner(checkout_pid)
   catch
     :exit, {:noproc, _} -> :ok
