@@ -237,32 +237,45 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       |> assert_path("/search/nested/results", query: [nested_q: "gondor"])
     end
 
-    test "placeholder/title/alt/aria_label helpers behave consistently in static and browser (#{driver})", context do
+    test "placeholder/title/alt helpers and accessible name locators behave consistently in static and browser (#{driver})",
+         context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/articles")
       |> assert_has(title("Articles heading", exact: true))
-      |> assert_has(~l"Articles heading aria"ae)
+      |> assert_has(role(:heading, name: "Articles heading aria", exact: true))
+      |> assert_has(role(:heading, name: "Articles heading labelledby", exact: true))
       |> assert_has(alt("Articles hero image", exact: true))
+      |> assert_has(role(:link, name: "Counter link aria", exact: true))
+      |> assert_has(role(:link, name: "Counter link labelledby", exact: true))
       |> visit("/search")
-      |> assert_has(~l"Search heading aria"ae)
+      |> assert_has(role(:heading, name: "Search heading aria", exact: true))
+      |> assert_has(role(:heading, name: "Search heading labelledby", exact: true))
       |> assert_has(testid("search-title"))
       |> assert_has(placeholder("Search by term", exact: true))
-      |> fill_in(~l"Search term aria"a, "boromir")
-      |> submit(~l"Run search aria"ae)
+      |> fill_in(~l"Search term aria"l, "boromir")
+      |> submit(role(:button, name: "Run search aria", exact: true))
       |> assert_has(text("Search query: boromir", exact: true))
+      |> visit("/search")
+      |> fill_in(~l"Search term labelledby"l, "aramis")
+      |> submit(role(:button, name: "Run search labelledby", exact: true))
+      |> assert_has(text("Search query: aramis", exact: true))
     end
 
-    test "placeholder/title/testid/aria_label helpers behave consistently in live and browser (#{driver})", context do
+    test "placeholder/title/testid helpers and label fallbacks behave consistently in live and browser (#{driver})",
+         context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/form-change")
       |> assert_has(title("Live name input", exact: true))
       |> assert_has(placeholder("Live name", exact: true))
-      |> assert_has(~l"Live name aria"ae)
-      |> fill_in(~l"Live name aria"a, "Eowyn")
+      |> assert_has(~l"Live name aria"l)
+      |> assert_has(~l"Live name labelledby"l)
+      |> fill_in(~l"Live name aria"l, "Eowyn")
       |> assert_has(testid("live-change-name"))
       |> assert_has(text("name: Eowyn", exact: true))
+      |> fill_in(~l"Live name labelledby"l, "Faramir")
+      |> assert_has(text("name: Faramir", exact: true))
     end
 
     test "state filters can target selected radios in live and browser (#{driver})", context do

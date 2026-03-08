@@ -388,37 +388,6 @@ defmodule Cerberus do
   end
 
   @doc """
-  Builds an `aria-label` locator.
-  """
-  @spec aria_label(String.t() | Regex.t()) :: Locator.t()
-  def aria_label(value) when is_binary(value) or is_struct(value, Regex), do: aria_label(value, [])
-
-  @doc """
-  Builds or composes an `aria-label` locator.
-
-  Supported forms:
-  - `aria_label(value, opts)` for a leaf locator
-  - `aria_label(locator, value)` to compose with an existing locator
-  """
-  @spec aria_label(String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
-  def aria_label(value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
-    Locator.leaf(:aria_label, value, opts)
-  end
-
-  @spec aria_label(Locator.t(), String.t() | Regex.t()) :: Locator.t()
-  def aria_label(locator, value) when is_binary(value) or is_struct(value, Regex) do
-    scope(locator, aria_label(value))
-  end
-
-  @doc """
-  Composes an `aria-label` constraint into an existing locator with locator options.
-  """
-  @spec aria_label(Locator.t(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: Locator.t()
-  def aria_label(locator, value, opts) when (is_binary(value) or is_struct(value, Regex)) and is_list(opts) do
-    scope(locator, aria_label(value, opts))
-  end
-
-  @doc """
   Builds a CSS locator.
   """
   @spec css(String.t()) :: Locator.t()
@@ -578,11 +547,10 @@ defmodule Cerberus do
   - `~l"text"l` label locator form
   - `~l"ROLE:NAME"r` role locator form
   - `~l"selector"c` CSS locator form
-  - `~l"text"a` `aria-label` locator form
   - `~l"test-id"t` testid locator form (defaults to exact matching)
 
   Rules:
-  - use at most one locator-kind modifier (`r`, `c`, `l`, `a`, or `t`)
+  - use at most one locator-kind modifier (`r`, `c`, `l`, or `t`)
   - `e` and `i` are mutually exclusive
   - `r` requires `ROLE:NAME` input
   """
@@ -751,7 +719,7 @@ defmodule Cerberus do
   Bare string/regex shorthand is not supported.
 
   Use explicit locators like `~l"..."l`, `role(...)`, `placeholder(...)`,
-  `title(...)`, `aria_label(...)`, `testid(...)`, `css(...)`, or explicit text sigils
+  `title(...)`, `testid(...)`, `css(...)`, or explicit text sigils
   (`~l"..."e` / `~l"..."i`).
 
   Sigil examples: `fill_in(session, ~l"#search_q"c, "Aragorn")`,

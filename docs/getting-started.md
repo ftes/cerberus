@@ -140,11 +140,11 @@ Locator sigil quick look:
 - `~l"Save"` exact text (default)
 - `~l"Save"e` exact text
 - `~l"Save"i` inexact text
+- `~l"Email"l` field label form (`<label>`, `aria-labelledby`, or `aria-label`)
 - `~l"button:Save"r` role form (`ROLE:NAME`)
 - `~l"button[type='submit']"c` css form
-- `~l"Run search"a` aria-label form
 - `~l"save-button"t` testid form (`exact: true` default)
-- at most one kind modifier (`r`, `c`, `a`, or `t`)
+- at most one kind modifier (`r`, `c`, `l`, or `t`)
 - `e` and `i` are mutually exclusive
 - `r` requires `ROLE:NAME`
 - regex values are supported for text-like locators and role names, but cannot be combined with `exact: true|false`

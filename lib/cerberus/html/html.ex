@@ -512,6 +512,20 @@ defmodule Cerberus.Html do
     |> Enum.any?(&same_node?(&1, node))
   end
 
+  defp node_matches_within_locator?(root_node, node, %Locator{kind: :label} = locator) do
+    assert_deadline!()
+
+    form_control_node?(node) and field_label_matches?(root_node, node, locator.value, locator.opts)
+  end
+
+  defp node_matches_within_locator?(root_node, node, %Locator{kind: :role} = locator) do
+    assert_deadline!()
+
+    root_node
+    |> role_locator_match_values(node, locator)
+    |> Enum.any?(&Query.match_text?(&1, locator.value, locator.opts))
+  end
+
   defp node_matches_within_locator?(root_node, node, %Locator{} = locator) do
     assert_deadline!()
     resolved_locator = resolve_role_locator(locator)
@@ -534,7 +548,6 @@ defmodule Cerberus.Html do
 
   defp within_locator_match_value(_root_node, node, %Locator{kind: :placeholder}), do: attr(node, "placeholder") || ""
   defp within_locator_match_value(_root_node, node, %Locator{kind: :title}), do: attr(node, "title") || ""
-  defp within_locator_match_value(_root_node, node, %Locator{kind: :aria_label}), do: attr(node, "aria-label") || ""
   defp within_locator_match_value(root_node, node, %Locator{kind: :alt}), do: node_alt_text(root_node, node)
   defp within_locator_match_value(_root_node, node, %Locator{kind: :testid}), do: attr(node, "data-testid") || ""
   defp within_locator_match_value(_root_node, _node, _locator), do: nil
@@ -595,15 +608,35 @@ defmodule Cerberus.Html do
     do: "input[placeholder],textarea[placeholder],select[placeholder]"
 
   defp within_query_selector(%Locator{kind: :title}), do: "[title]"
-  defp within_query_selector(%Locator{kind: :aria_label}), do: "[aria-label]"
 
   defp within_query_selector(%Locator{kind: :alt}),
     do: "[alt],img[alt],input[type='image'][alt],[role='img'][alt],button,a[href]"
 
   defp within_query_selector(%Locator{kind: :testid}), do: "[data-testid]"
 
-  defp within_query_selector(%Locator{kind: :role} = locator),
-    do: locator |> resolve_role_locator() |> within_query_selector()
+  defp within_query_selector(%Locator{kind: :role} = locator), do: role_query_selector(locator)
+
+  defp role_query_selector(%Locator{} = locator) do
+    case role_name(locator) do
+      role when role in ["button", "menuitem", "tab"] ->
+        button_selector()
+
+      "link" ->
+        "a[href]"
+
+      role when role in ["textbox", "searchbox", "combobox", "listbox", "spinbutton", "checkbox", "radio", "switch"] ->
+        "input,textarea,select"
+
+      "heading" ->
+        "h1,h2,h3,h4,h5,h6,[role='heading']"
+
+      "img" ->
+        "img,[role='img'],input[type='image'],button,a[href]"
+
+      _ ->
+        "*"
+    end
+  end
 
   defp match_select_values(select_node, requested, option_opts, multiple?) do
     options = safe_query(select_node, "option")
@@ -1007,11 +1040,9 @@ defmodule Cerberus.Html do
 
     case match_by do
       :label ->
-        root_node
-        |> safe_query("label")
-        |> Enum.flat_map(&maybe_form_field_match_list(&1, root_node, expected, opts, selector))
+        find_form_field_by_control_label(root_node, expected, opts, selector)
 
-      kind when kind in [:placeholder, :title, :aria_label, :testid] ->
+      kind when kind in [:placeholder, :title, :testid] ->
         find_form_field_by_control_attr(root_node, expected, opts, selector, kind)
 
       _ ->
@@ -1019,22 +1050,26 @@ defmodule Cerberus.Html do
     end
   end
 
-  defp maybe_form_field_match(label_node, root_node, expected, opts, selector) do
-    label_text = label_text_for_matching(label_node)
+  defp find_form_field_by_control_label(root_node, expected, opts, selector) do
+    root_node
+    |> safe_query("input,textarea,select")
+    |> Enum.flat_map(&maybe_form_field_match_list(&1, root_node, expected, opts, selector))
+  end
 
-    with true <- Query.match_text?(label_text, expected, opts),
-         {:ok, %{name: name, node: field_node} = field} <- field_for_label(root_node, label_node),
+  defp maybe_form_field_match(field_node, root_node, expected, opts, selector) do
+    with {:ok, %{name: name} = field} <- field_node_to_map(root_node, field_node),
          true <- is_binary(name) and name != "",
+         true <- field_label_matches?(root_node, field_node, expected, opts),
          true <- field_matches_selector?(root_node, field, selector),
          true <- node_matches_locator_filters?(field_node, opts) do
-      build_form_field_match(root_node, label_text, name, field, field_node)
+      build_form_field_match(root_node, field_label_for_node(root_node, field_node), name, field, field_node)
     else
       _ -> nil
     end
   end
 
-  defp maybe_form_field_match_list(label_node, root_node, expected, opts, selector) do
-    case maybe_form_field_match(label_node, root_node, expected, opts, selector) do
+  defp maybe_form_field_match_list(field_node, root_node, expected, opts, selector) do
+    case maybe_form_field_match(field_node, root_node, expected, opts, selector) do
       nil -> []
       match -> [match]
     end
@@ -1153,6 +1188,24 @@ defmodule Cerberus.Html do
     node_matches_selector?(root_node, node, selector) and action_node_matches_common_opts?(root_node, node, opts)
   end
 
+  defp locator_matches_action_node?(root_node, node, %Locator{kind: :label} = locator, :form_field) do
+    with true <- action_node_matches_common_opts?(root_node, node, locator.opts),
+         true <- field_label_matches?(root_node, node, locator.value, locator.opts) do
+      true
+    else
+      _ -> false
+    end
+  end
+
+  defp locator_matches_action_node?(root_node, node, %Locator{kind: :role} = locator, context) do
+    with true <- action_node_matches_common_opts?(root_node, node, locator.opts),
+         true <- role_action_locator_matches?(root_node, node, locator, context) do
+      true
+    else
+      _ -> false
+    end
+  end
+
   defp locator_matches_action_node?(root_node, node, %Locator{kind: kind, value: expected, opts: opts}, context) do
     resolved_kind = Locator.resolved_kind(%Locator{kind: kind, value: expected, opts: opts})
 
@@ -1188,7 +1241,6 @@ defmodule Cerberus.Html do
 
   defp action_locator_match_value(_root_node, node, :placeholder, _context), do: attr(node, "placeholder") || ""
   defp action_locator_match_value(_root_node, node, :title, _context), do: attr(node, "title") || ""
-  defp action_locator_match_value(_root_node, node, :aria_label, _context), do: attr(node, "aria-label") || ""
   defp action_locator_match_value(_root_node, node, :testid, _context), do: attr(node, "data-testid") || ""
 
   defp action_locator_match_value(root_node, node, :alt, :link), do: node_alt_text(root_node, node)
@@ -1388,7 +1440,6 @@ defmodule Cerberus.Html do
     do: attr_from_attrs(attrs, "placeholder")
 
   defp assertion_value_for(_tag, attrs, _children, :alt), do: attr_from_attrs(attrs, "alt")
-  defp assertion_value_for(_tag, attrs, _children, :aria_label), do: attr_from_attrs(attrs, "aria-label")
   defp assertion_value_for(_tag, attrs, _children, :testid), do: attr_from_attrs(attrs, "data-testid")
   defp assertion_value_for(_tag, _attrs, _children, _match_by), do: nil
 
@@ -1547,15 +1598,37 @@ defmodule Cerberus.Html do
 
   defp field_match_value(_root_node, field_node, :placeholder), do: attr(field_node, "placeholder") || ""
   defp field_match_value(_root_node, field_node, :title), do: attr(field_node, "title") || ""
-  defp field_match_value(_root_node, field_node, :aria_label), do: attr(field_node, "aria-label") || ""
   defp field_match_value(_root_node, field_node, :testid), do: attr(field_node, "data-testid") || ""
 
   defp action_match_attr_value(node, :title, _fallback), do: attr(node, "title") || ""
-  defp action_match_attr_value(node, :aria_label, _fallback), do: attr(node, "aria-label") || ""
   defp action_match_attr_value(node, :testid, _fallback), do: attr(node, "data-testid") || ""
   defp action_match_attr_value(_node, _match_by, fallback), do: fallback
 
   defp field_label_for_node(root_node, field_node) do
+    root_node
+    |> field_label_sources(field_node)
+    |> List.first()
+    |> Kernel.||("")
+  end
+
+  defp field_label_matches?(root_node, field_node, expected, opts) do
+    root_node
+    |> field_label_sources(field_node)
+    |> Enum.any?(&Query.match_text?(&1, expected, opts))
+  end
+
+  defp field_label_sources(root_node, field_node) do
+    [
+      explicit_field_label_text(root_node, field_node),
+      wrapped_field_label_text(root_node, field_node),
+      labelledby_text(root_node, field_node),
+      attr(field_node, "aria-label")
+    ]
+    |> Enum.filter(&(is_binary(&1) and &1 != ""))
+    |> Enum.uniq()
+  end
+
+  defp explicit_field_label_text(root_node, field_node) do
     id = attr(field_node, "id")
 
     with value when is_binary(value) <- id,
@@ -1563,11 +1636,7 @@ defmodule Cerberus.Html do
          label when not is_nil(label) <- label_for_id(root_node, value) do
       label_text_for_matching(label)
     else
-      _ ->
-        case wrapping_label_for_control(root_node, field_node) do
-          nil -> ""
-          label -> label_text_for_matching(label)
-        end
+      _ -> ""
     end
   end
 
@@ -1585,6 +1654,91 @@ defmodule Cerberus.Html do
       |> safe_query("input,textarea,select")
       |> Enum.any?(&same_node?(&1, field_node))
     end)
+  end
+
+  defp wrapped_field_label_text(root_node, field_node) do
+    case wrapping_label_for_control(root_node, field_node) do
+      nil -> ""
+      label -> label_text_for_matching(label)
+    end
+  end
+
+  defp labelledby_text(root_node, node) do
+    node
+    |> attr("aria-labelledby")
+    |> referenced_text(root_node)
+  end
+
+  defp referenced_text(value, root_node) when is_binary(value) do
+    value
+    |> String.split()
+    |> Enum.map_join(" ", fn id ->
+      root_node
+      |> safe_query_by_id(id)
+      |> Enum.find_value("", &node_text/1)
+    end)
+    |> normalize_text()
+  end
+
+  defp referenced_text(_value, _root_node), do: ""
+
+  defp role_action_locator_matches?(root_node, node, %Locator{} = locator, context) do
+    root_node
+    |> role_locator_match_values(node, locator, context)
+    |> Enum.any?(&Query.match_text?(&1, locator.value, locator.opts))
+  end
+
+  defp role_locator_match_values(root_node, node, %Locator{} = locator, context \\ nil) do
+    case role_name(locator) do
+      role when role in ["button", "menuitem", "tab"] and context in [nil, :button, :submit_button] ->
+        accessible_name_sources(root_node, node, &button_node?/1, &button_text/1)
+
+      "link" when context in [nil, :link] ->
+        accessible_name_sources(root_node, node, &link_node?/1, &node_text/1)
+
+      role
+      when role in ["textbox", "searchbox", "combobox", "listbox", "spinbutton", "checkbox", "radio", "switch"] and
+             context in [nil, :form_field] ->
+        field_label_sources(root_node, node)
+
+      "heading" when context == nil ->
+        accessible_name_sources(root_node, node, &heading_node?/1, &node_text/1)
+
+      "img" when context == nil ->
+        Enum.filter([node_alt_text(root_node, node)], &(&1 != ""))
+
+      _ ->
+        []
+    end
+  end
+
+  defp accessible_name_sources(root_node, node, predicate, text_fun)
+       when is_function(predicate, 1) and is_function(text_fun, 1) do
+    if predicate.(node) do
+      [
+        labelledby_text(root_node, node),
+        attr(node, "aria-label"),
+        text_fun.(node)
+      ]
+      |> Enum.filter(&(is_binary(&1) and &1 != ""))
+      |> Enum.uniq()
+    else
+      []
+    end
+  end
+
+  defp role_name(%Locator{opts: opts}) do
+    case Keyword.get(opts, :role) do
+      value when is_binary(value) and value != "" -> value
+      _ -> nil
+    end
+  end
+
+  defp heading_node?(node) do
+    case node_tag(node) do
+      tag when tag in ["h1", "h2", "h3", "h4", "h5", "h6"] -> true
+      _ -> attr(node, "role") == "heading"
+    end
   end
 
   defp node_alt_text(root_node, node) do
@@ -1669,40 +1823,6 @@ defmodule Cerberus.Html do
   end
 
   defp safe_query_in_node(_selector, _node), do: []
-
-  defp field_for_label(root_node, label_node) do
-    case attr(label_node, "for") do
-      id when is_binary(id) and id != "" ->
-        root_node
-        |> safe_query_by_id(id)
-        |> field_match(root_node)
-        |> fallback_label_field_match(label_node, root_node)
-
-      _ ->
-        label_field_match(label_node, root_node)
-    end
-  end
-
-  defp fallback_label_field_match(:error, label_node, root_node), do: label_field_match(label_node, root_node)
-  defp fallback_label_field_match(match, _label_node, _root_node), do: match
-
-  defp label_field_match(label_node, root_node) do
-    label_node
-    |> safe_query("input,textarea,select")
-    |> field_match(root_node)
-  end
-
-  defp field_match(nodes, root_node) when is_list(nodes) do
-    Enum.find_value(nodes, :error, fn node -> field_node_to_map(root_node, node) end)
-  end
-
-  defp field_match(nodes, root_node) do
-    nodes
-    |> Enum.to_list()
-    |> field_match(root_node)
-  rescue
-    Protocol.UndefinedError -> :error
-  end
 
   defp label_text_for_matching(label_node) do
     label_text = node_text(label_node)
@@ -2139,7 +2259,7 @@ defmodule Cerberus.Html do
 
   defp match_by_opt(opts, default \\ :text) do
     case Keyword.get(opts, :match_by) do
-      value when value in [:label, :link, :button, :placeholder, :title, :alt, :aria_label, :testid] -> value
+      value when value in [:label, :link, :button, :placeholder, :title, :alt, :testid] -> value
       _ -> default
     end
   end

@@ -124,8 +124,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           return "input[placeholder],textarea[placeholder],select[placeholder]";
         case "title":
           return "[title]";
-        case "aria_label":
-          return "[aria-label]";
         case "alt":
           return "[alt],img[alt],input[type='image'][alt],[role='img'][alt],button,a[href]";
         case "testid":
@@ -304,21 +302,97 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       return labels;
     };
 
+    helper.referencedText = (element, hidden) => {
+      if (!element || typeof element.getAttribute !== "function") return "";
+
+      const ids = (element.getAttribute("aria-labelledby") || "").trim();
+      if (ids === "") return "";
+
+      const doc = element.ownerDocument || document;
+
+      return helper.normalize(
+        ids
+          .split(/\s+/)
+          .map((id) => {
+            if (!doc || typeof doc.getElementById !== "function") return "";
+            const ref = doc.getElementById(id);
+            return ref ? (hidden ? ref.textContent : ref.innerText || ref.textContent || "") : "";
+          })
+          .filter((value) => value !== "")
+          .join(" "),
+        true
+      );
+    };
+
     helper.labelForControl = (element, hidden, context) => {
       const doc = element.ownerDocument || document;
       const labels = helper.labelMapForDocument(doc, context && context.labelCache);
-      const byId = labels.get(element.id || "");
+      return helper.labelSourcesForControl(element, hidden, labels)[0] || "";
+    };
 
-      if (byId) return byId;
+    helper.labelSourcesForControl = (element, hidden, labels = null) => {
+      if (!element) return [];
+
+      const sources = [];
+      const byId = labels instanceof Map ? labels.get(element.id || "") : "";
+      if (byId) sources.push(helper.normalize(byId, true));
+
+      try {
+        if (element.labels && element.labels.length > 0) {
+          const labelText = Array.from(element.labels)
+            .map((label) => helper.normalize(hidden ? label.textContent : label.innerText || label.textContent, true))
+            .filter((value) => value !== "")
+            .join(" ");
+
+          if (labelText !== "") sources.push(labelText);
+        }
+      } catch (_error) {
+        // ignored
+      }
 
       if (typeof element.closest === "function") {
         const wrappingLabel = element.closest("label");
         if (wrappingLabel) {
-          return hidden ? wrappingLabel.textContent || "" : wrappingLabel.innerText || wrappingLabel.textContent || "";
+          sources.push(helper.normalize(hidden ? wrappingLabel.textContent : wrappingLabel.innerText || wrappingLabel.textContent, true));
         }
       }
 
-      return "";
+      const labelledby = helper.referencedText(element, hidden);
+      if (labelledby) sources.push(labelledby);
+
+      const ariaLabel = helper.normalize(element.getAttribute("aria-label") || "", true);
+      if (ariaLabel) sources.push(ariaLabel);
+
+      return Array.from(new Set(sources.filter((value) => value !== "")));
+    };
+
+    helper.accessibleNameSources = (element, hidden, kind, context) => {
+      if (!element) return [];
+
+      const tag = (element.tagName || "").toLowerCase();
+      const sources = [helper.referencedText(element, hidden), helper.normalize(element.getAttribute("aria-label") || "", true)];
+
+      switch (kind) {
+        case "button":
+          if (!helper.isButtonLikeElement(element)) return [];
+          sources.push(helper.normalize(helper.buttonText(element, hidden), true));
+          break;
+        case "link":
+          if (tag !== "a" || !element.hasAttribute("href")) return [];
+          sources.push(helper.normalize(hidden ? element.textContent : element.innerText || element.textContent, true));
+          break;
+        case "heading":
+          if (!/^h[1-6]$/.test(tag) && element.getAttribute("role") !== "heading") return [];
+          sources.push(helper.normalize(hidden ? element.textContent : element.innerText || element.textContent, true));
+          break;
+        case "img":
+          sources.push(helper.normalize(helper.altSourceForElement(element, context && context.altCache), true));
+          break;
+        default:
+          return [];
+      }
+
+      return Array.from(new Set(sources.filter((value) => value !== "")));
     };
 
     helper.valueForMatch = (element, hidden, matchBy, normalizeWs, context) => {
@@ -339,8 +413,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           if (!(tag === "input" || tag === "textarea" || tag === "select")) return null;
           break;
         case "title":
-          break;
-        case "aria_label":
           break;
         case "alt":
           break;
@@ -366,9 +438,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           break;
         case "title":
           source = element.getAttribute("title") || "";
-          break;
-        case "aria_label":
-          source = element.getAttribute("aria-label") || "";
           break;
         case "testid":
           source = element.getAttribute("data-testid") || "";
@@ -671,6 +740,32 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       }
     };
 
+    helper.roleSelector = (roleName) => {
+      switch (String(roleName || "").toLowerCase()) {
+        case "button":
+        case "menuitem":
+        case "tab":
+          return helper.buttonSelector;
+        case "link":
+          return "a[href]";
+        case "textbox":
+        case "searchbox":
+        case "combobox":
+        case "listbox":
+        case "spinbutton":
+        case "checkbox":
+        case "radio":
+        case "switch":
+          return "input,textarea,select";
+        case "heading":
+          return "h1,h2,h3,h4,h5,h6,[role='heading']";
+        case "img":
+          return "img,[role='img'],input[type='image'],button,a[href]";
+        default:
+          return "*";
+      }
+    };
+
     helper.locatorKind = (locator) => {
       if (!locator || typeof locator !== "object") return null;
 
@@ -701,6 +796,12 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
     helper.locatorQuerySelector = (locator) => {
       if (!locator || typeof locator !== "object") return "*";
 
+      const rawKind = String(locator.kind || "").toLowerCase();
+      if (rawKind === "role") {
+        const opts = helper.locatorOpts(locator);
+        return helper.roleSelector(opts.role);
+      }
+
       const kind = helper.locatorKind(locator);
 
       switch (kind) {
@@ -721,8 +822,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           return "input[placeholder],textarea[placeholder],select[placeholder]";
         case "title":
           return "[title]";
-        case "aria_label":
-          return "[aria-label]";
         case "alt":
           return "[alt],img[alt],input[type='image'][alt],[role='img'][alt],button,a[href]";
         case "testid":
@@ -783,43 +882,72 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       return true;
     };
 
-    helper.locatorValueForMatch = (element, hidden, kind, context) => {
+    helper.locatorValuesForMatch = (element, hidden, locator, context) => {
+      const rawKind = String((locator && locator.kind) || "").toLowerCase();
+      const kind = helper.locatorKind(locator);
       const tag = (element.tagName || "").toLowerCase();
       if (tag === "script" || tag === "style" || tag === "noscript") return null;
 
+      if (rawKind === "role") {
+        const opts = helper.locatorOpts(locator);
+        const role = String(opts.role || "").toLowerCase();
+
+        switch (role) {
+          case "button":
+          case "menuitem":
+          case "tab":
+            return helper.accessibleNameSources(element, hidden, "button", context);
+          case "link":
+            return helper.accessibleNameSources(element, hidden, "link", context);
+          case "textbox":
+          case "searchbox":
+          case "combobox":
+          case "listbox":
+          case "spinbutton":
+          case "checkbox":
+          case "radio":
+          case "switch":
+            return helper.labelSourcesForControl(element, hidden);
+          case "heading":
+            return helper.accessibleNameSources(element, hidden, "heading", context);
+          case "img":
+            return helper.accessibleNameSources(element, hidden, "img", context);
+          default:
+            return [];
+        }
+      }
+
       switch (kind) {
         case "text":
-          return hidden ? element.textContent : element.innerText || element.textContent;
+          return [hidden ? element.textContent : element.innerText || element.textContent];
         case "link":
-          if (tag !== "a" || !element.hasAttribute("href")) return null;
-          return hidden ? element.textContent : element.innerText || element.textContent;
+          if (tag !== "a" || !element.hasAttribute("href")) return [];
+          return [hidden ? element.textContent : element.innerText || element.textContent];
         case "button":
-          if (!helper.isButtonLikeElement(element)) return null;
-          return helper.buttonText(element, hidden);
+          if (!helper.isButtonLikeElement(element)) return [];
+          return [helper.buttonText(element, hidden)];
         case "label":
           if (tag === "input" || tag === "textarea" || tag === "select") {
-            return helper.labelForControl(element, hidden, context);
+            return helper.labelSourcesForControl(element, hidden);
           }
-          return null;
+          return [];
         case "placeholder":
-          if (!(tag === "input" || tag === "textarea" || tag === "select")) return null;
-          return element.getAttribute("placeholder") || "";
+          if (!(tag === "input" || tag === "textarea" || tag === "select")) return [];
+          return [element.getAttribute("placeholder") || ""];
         case "title":
-          return element.getAttribute("title") || "";
-        case "aria_label":
-          return element.getAttribute("aria-label") || "";
+          return [element.getAttribute("title") || ""];
         case "testid":
-          return element.getAttribute("data-testid") || "";
+          return [element.getAttribute("data-testid") || ""];
         case "alt":
-          return helper.altSourceForElement(element, context && context.altCache);
+          return [helper.altSourceForElement(element, context && context.altCache)];
         default:
-          return null;
+          return [];
       }
     };
 
     helper.locatorObservationValue = (element, hidden, locator, context) => {
-      const kind = helper.locatorKind(locator);
-      const value = helper.locatorValueForMatch(element, hidden, kind, context);
+      const values = helper.locatorValuesForMatch(element, hidden, locator, context) || [];
+      const value = values.find((entry) => typeof entry === "string" && entry !== "") || "";
       const fallback = hidden ? element.textContent : element.innerText || element.textContent;
       return helper.normalize(value || fallback || "", true);
     };
@@ -873,15 +1001,13 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         return helper.matchesLocatorCommonOpts(element, locator, context);
       }
 
-      const value = helper.locatorValueForMatch(element, hidden, kind, context);
-      if (typeof value !== "string") return false;
-
       const locatorOpts = helper.locatorOpts(locator);
       const exact = locatorOpts.exact === true;
       const normalizeWs = locatorOpts.normalizeWs !== false;
       const matchText = helper.buildTextMatcher(locator.expected, exact, normalizeWs);
 
-      if (!matchText(value)) return false;
+      const values = helper.locatorValuesForMatch(element, hidden, locator, context) || [];
+      if (!values.some((value) => typeof value === "string" && matchText(value))) return false;
       return helper.matchesLocatorCommonOpts(element, locator, context);
     };
 

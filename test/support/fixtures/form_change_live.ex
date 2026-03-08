@@ -54,6 +54,7 @@ defmodule Cerberus.Fixtures.FormChangeLive do
       <h1>Live Form Change</h1>
 
       <form id="change-form" phx-change="validate">
+        <span id="live-name-label">Live name labelledby</span>
         <label for="change_name">Name</label>
         <input
           id="change_name"
@@ -63,6 +64,7 @@ defmodule Cerberus.Fixtures.FormChangeLive do
           placeholder="Live name"
           title="Live name input"
           aria-label="Live name aria"
+          aria-labelledby="live-name-label"
           data-testid="live-change-name"
         />
 

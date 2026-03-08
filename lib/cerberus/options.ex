@@ -6,7 +6,7 @@ defmodule Cerberus.Options do
   option lists (`click`, `fill_in`, `assert_has`, `submit`, and related helpers).
   """
 
-  @type locator_match_by :: :text | :label | :link | :button | :placeholder | :title | :alt | :aria_label | :testid
+  @type locator_match_by :: :text | :label | :link | :button | :placeholder | :title | :alt | :testid
   @type role_locator_name :: String.t() | Regex.t() | nil
   @type visibility_filter :: boolean() | :any
   @type fill_in_value :: String.t() | integer() | float() | boolean()
@@ -144,7 +144,6 @@ defmodule Cerberus.Options do
   @type assert_opts :: [
           visible: visibility_filter(),
           timeout: non_neg_integer(),
-          match_by: locator_match_by() | nil,
           count: non_neg_integer() | nil,
           min: non_neg_integer() | nil,
           max: non_neg_integer() | nil,
@@ -361,11 +360,6 @@ defmodule Cerberus.Options do
       type: {:in, [true, false, :any]},
       default: true,
       doc: "Chooses visible text only, hidden only, or both."
-    ],
-    match_by: [
-      type: {:in, [nil, :text, :label, :link, :button, :placeholder, :title, :alt, :aria_label, :testid]},
-      default: nil,
-      doc: "Chooses which attribute/source to match against for text assertions."
     ],
     timeout: [
       type: :non_neg_integer,

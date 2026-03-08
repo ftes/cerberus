@@ -3,7 +3,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAction && window.__cerberusAction.__version === 15) return;
+    if (window.__cerberusAction && window.__cerberusAction.__version === 16) return;
 
     const helper = {};
     helper.__version = 15;
@@ -74,6 +74,11 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       if (tag !== "input") return false;
       const type = (element.getAttribute("type") || "").toLowerCase();
       return type === "submit" || type === "button" || type === "image";
+    };
+
+    helper.isButtonLikeElement = (element) => {
+      const tag = (element.tagName || "").toLowerCase();
+      return tag === "button" || helper.isButtonLikeInput(element);
     };
 
     helper.buttonText = (element) => {
@@ -224,6 +229,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       }
     };
 
+    helper.clickUsesInlineSettle = (target) => {
+      return !!(target && target.kind === "label");
+    };
+
     helper.needsAwaitReady = (options, result, prePath, settle) => {
       const op = options && options.op ? options.op : "click";
       const target = result && result.target && typeof result.target === "object" ? result.target : null;
@@ -232,12 +241,15 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       const path = result && typeof result.path === "string" ? result.path : helper.currentPath();
       const pathChanged = typeof prePath === "string" && prePath !== path;
       const settled = settle && settle.settled === true;
+      const clickUsesInlineSettle = helper.clickUsesInlineSettle(target);
 
       if (op === "fill_in" || op === "select" || op === "choose" || op === "check" || op === "uncheck" || op === "upload") {
         return liveDriven ? !settled : false;
       }
 
       if (op === "click") {
+        if (pathChanged) return true;
+        if (clickUsesInlineSettle) return liveDriven ? !settled : false;
         return true;
       }
 
@@ -841,16 +853,90 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       return labels;
     };
 
-    helper.labelForControl = (labels, element) => {
+    helper.referencedText = (element) => {
+      if (!element || typeof element.getAttribute !== "function") return "";
+
+      const ids = (element.getAttribute("aria-labelledby") || "").trim();
+      if (ids === "") return "";
+
+      const doc = element.ownerDocument || document;
+
+      return helper.normalize(
+        ids
+          .split(/\s+/)
+          .map((id) => {
+            if (!doc || typeof doc.getElementById !== "function") return "";
+            const ref = doc.getElementById(id);
+            return ref ? (ref.innerText || ref.textContent || "") : "";
+          })
+          .filter((value) => value !== "")
+          .join(" "),
+        true
+      );
+    };
+
+    helper.labelSourcesForControl = (labels, element) => {
+      const sources = [];
       const byId = labels.get(element.id || "");
-      if (byId) return byId;
+      if (byId) sources.push(byId);
+
+      try {
+        if (element.labels && element.labels.length > 0) {
+          const labelText = Array.from(element.labels)
+            .map((label) => helper.normalize(label.textContent, true))
+            .filter((value) => value !== "")
+            .join(" ");
+
+          if (labelText !== "") sources.push(labelText);
+        }
+      } catch (_error) {
+        // ignored
+      }
 
       if (typeof element.closest === "function") {
         const wrappingLabel = element.closest("label");
-        if (wrappingLabel) return helper.normalize(wrappingLabel.textContent, true);
+        if (wrappingLabel) sources.push(helper.normalize(wrappingLabel.textContent, true));
       }
 
-      return "";
+      const labelledby = helper.referencedText(element);
+      if (labelledby) sources.push(labelledby);
+
+      const ariaLabel = helper.normalize(element.getAttribute("aria-label") || "", true);
+      if (ariaLabel) sources.push(ariaLabel);
+
+      return Array.from(new Set(sources.filter((value) => value !== "")));
+    };
+
+    helper.labelForControl = (labels, element) => {
+      return helper.labelSourcesForControl(labels, element)[0] || "";
+    };
+
+    helper.accessibleNameSources = (element, kind) => {
+      if (!element) return [];
+
+      const tag = (element.tagName || "").toLowerCase();
+      const labelledby = helper.referencedText(element);
+      const ariaLabel = helper.normalize(element.getAttribute("aria-label") || "", true);
+      const sources = [labelledby, ariaLabel];
+
+      switch (kind) {
+        case "button":
+          if (!helper.isButtonLikeElement(element)) return [];
+          sources.push(helper.buttonText(element));
+          break;
+        case "link":
+          if (tag !== "a" || !element.hasAttribute("href")) return [];
+          sources.push(helper.normalize(element.textContent, true));
+          break;
+        case "heading":
+          if (!/^h[1-6]$/.test(tag) && element.getAttribute("role") !== "heading") return [];
+          sources.push(helper.normalize(element.textContent, true));
+          break;
+        default:
+          return [];
+      }
+
+      return Array.from(new Set(sources.filter((value) => value !== "")));
     };
 
     helper.formCandidates = (roots) => {
@@ -928,8 +1014,6 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         switch (matchBy) {
           case "title":
             return candidate.title || "";
-          case "aria_label":
-            return candidate.ariaLabel || "";
           case "alt":
             return candidate.alt || "";
           case "testid":
@@ -944,8 +1028,6 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           return candidate.placeholder || "";
         case "title":
           return candidate.title || "";
-        case "aria_label":
-          return candidate.ariaLabel || "";
         case "testid":
           return candidate.testid || "";
         default:
@@ -976,6 +1058,32 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           return "text";
         default:
           return null;
+      }
+    };
+
+    helper.roleSelector = (roleName) => {
+      switch (String(roleName || "").toLowerCase()) {
+        case "button":
+        case "menuitem":
+        case "tab":
+          return helper.buttonSelector;
+        case "link":
+          return "a[href]";
+        case "textbox":
+        case "searchbox":
+        case "combobox":
+        case "listbox":
+        case "spinbutton":
+        case "checkbox":
+        case "radio":
+        case "switch":
+          return "input,textarea,select";
+        case "heading":
+          return "h1,h2,h3,h4,h5,h6,[role='heading']";
+        case "img":
+          return "img,[role='img'],input[type='image'],button,a[href]";
+        default:
+          return "*";
       }
     };
 
@@ -1041,7 +1149,12 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       if (!locator || typeof locator !== "object") return "*";
 
       const rawKind = String(locator.kind || "").toLowerCase();
-      const kind = rawKind === "role" ? helper.locatorKind(locator) : rawKind;
+      if (rawKind === "role") {
+        const opts = locator.opts && typeof locator.opts === "object" ? locator.opts : {};
+        return helper.roleSelector(opts.role);
+      }
+
+      const kind = rawKind;
 
       switch (kind) {
         case "css":
@@ -1058,8 +1171,6 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           return "input[placeholder],textarea[placeholder],select[placeholder]";
         case "title":
           return "[title]";
-        case "aria_label":
-          return "[aria-label]";
         case "alt":
           return "[alt],img[alt],input[type='image'][alt],[role='img'][alt],button,a[href]";
         case "testid":
@@ -1079,42 +1190,72 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       }
     };
 
-    helper.candidateValueForKind = (candidate, kind, op) => {
+    helper.locatorValuesForKind = (candidate, kind, op) => {
+      const element = candidate && candidate.__el ? candidate.__el : null;
+
       if (op === "click" || op === "submit") {
         switch (kind) {
           case "text":
-            return candidate.text || "";
+            return [candidate.text || ""].filter((value) => value !== "");
           case "link":
-            return candidate.kind === "link" ? candidate.text || "" : null;
+            return candidate.kind === "link" ? helper.accessibleNameSources(element, "link") : [];
           case "button":
-            return candidate.kind === "button" ? candidate.text || "" : null;
+            return candidate.kind === "button" ? helper.accessibleNameSources(element, "button") : [];
           case "title":
-            return candidate.title || "";
-          case "aria_label":
-            return candidate.ariaLabel || "";
+            return [candidate.title || ""].filter((value) => value !== "");
           case "alt":
-            return candidate.alt || "";
+            return [candidate.alt || ""].filter((value) => value !== "");
           case "testid":
-            return candidate.testid || "";
+            return [candidate.testid || ""].filter((value) => value !== "");
           default:
-            return null;
+            return [];
         }
       }
 
       switch (kind) {
         case "text":
+          return [candidate.label || ""].filter((value) => value !== "");
         case "label":
-          return candidate.label || "";
+          return element ? helper.labelSourcesForControl(new Map(), element) : [];
         case "placeholder":
-          return candidate.placeholder || "";
+          return [candidate.placeholder || ""].filter((value) => value !== "");
         case "title":
-          return candidate.title || "";
-        case "aria_label":
-          return candidate.ariaLabel || "";
+          return [candidate.title || ""].filter((value) => value !== "");
         case "testid":
-          return candidate.testid || "";
+          return [candidate.testid || ""].filter((value) => value !== "");
         default:
-          return null;
+          return [];
+      }
+    };
+
+    helper.roleLocatorValues = (candidate, locator) => {
+      if (!candidate || !candidate.__el || !locator || typeof locator !== "object") return [];
+
+      const opts = locator.opts && typeof locator.opts === "object" ? locator.opts : {};
+      const role = String(opts.role || "").toLowerCase();
+
+      switch (role) {
+        case "button":
+        case "menuitem":
+        case "tab":
+          return helper.accessibleNameSources(candidate.__el, "button");
+        case "link":
+          return helper.accessibleNameSources(candidate.__el, "link");
+        case "textbox":
+        case "searchbox":
+        case "combobox":
+        case "listbox":
+        case "spinbutton":
+        case "checkbox":
+        case "radio":
+        case "switch":
+          return helper.labelSourcesForControl(new Map(), candidate.__el);
+        case "heading":
+          return helper.accessibleNameSources(candidate.__el, "heading");
+        case "img":
+          return [helper.altSourceForElement(candidate.__el, "img[alt],input[type='image'][alt],[role='img'][alt]")].filter((value) => value !== "");
+        default:
+          return [];
       }
     };
 
@@ -1301,15 +1442,18 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         return helper.matchesLocatorCommonOpts(candidate, locator.opts, op);
       }
 
-      const value = helper.candidateValueForKind(candidate, kind, op);
-      if (typeof value !== "string") return false;
-
       const locatorOpts = locator.opts && typeof locator.opts === "object" ? locator.opts : {};
       const exact = locatorOpts.exact === true;
       const normalizeWs = locatorOpts.normalizeWs !== false;
       const matchText = helper.buildTextMatcher(locator.expected, exact, normalizeWs);
 
-      if (!matchText(value)) return false;
+      const values =
+        rawKind === "role"
+          ? helper.roleLocatorValues(candidate, locator)
+          : helper.locatorValuesForKind(candidate, kind, op);
+
+      if (!Array.isArray(values) || values.length === 0) return false;
+      if (!values.some((value) => typeof value === "string" && matchText(value))) return false;
       return helper.matchesLocatorCommonOpts(candidate, locator.opts, op);
     };
 
@@ -1801,7 +1945,13 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         if (result && result.ok === true) {
           const op = options && options.op ? options.op : "click";
           const settleEligible =
-            op === "fill_in" || op === "select" || op === "choose" || op === "check" || op === "uncheck" || op === "upload";
+            op === "fill_in" ||
+            op === "select" ||
+            op === "choose" ||
+            op === "check" ||
+            op === "uncheck" ||
+            op === "upload" ||
+            (op === "click" && helper.clickUsesInlineSettle(result.target));
 
           let settle = { attempted: false, settled: false, reason: "not_attempted" };
 

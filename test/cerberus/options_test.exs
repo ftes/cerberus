@@ -9,6 +9,12 @@ defmodule Cerberus.OptionsTest do
     end
   end
 
+  test "validate_assert! rejects removed public match_by option" do
+    assert_raise ArgumentError, ~r/unknown options \[:match_by\]/, fn ->
+      Options.validate_assert!([match_by: :title], "assert_has/3")
+    end
+  end
+
   test "validate_fill_in! enforces valid between bounds" do
     assert_raise ArgumentError, ~r/:between/, fn ->
       Options.validate_fill_in!(between: {2, 1})

@@ -87,7 +87,6 @@ Default strategy:
 ### Helper constructors
 - `text("...")`
 - `~l"..."l`
-- `~l"..."a`
 - `testid("...")`
 - `css("...")`
 - `role(:button | :link | :textbox | ..., name: "...")`
@@ -110,19 +109,21 @@ Default strategy:
 | `~l"Save"` | exact text (default) |
 | `~l"Save"e` | exact text |
 | `~l"Save"i` | inexact text |
+| `~l"Email"l` | field label locator (`<label>`, `aria-labelledby`, or `aria-label`) |
 | `~l"button:Save"r` | role-style locator |
 | `~l"button[type='submit']"c` | css locator |
-| `~l"Run search"a` | aria-label locator |
 | `~l"save-button"t` | testid locator (`exact: true` default) |
 | `~l"button:Save"re` | role + exact |
 
 Rules:
-- at most one kind modifier (`r`, `c`, `a`, or `t`)
+- at most one kind modifier (`r`, `c`, `l`, or `t`)
 - `e` and `i` are mutually exclusive
 - `r` requires `ROLE:NAME`
 - regex values are supported for text-like locators and role names, but cannot be combined with `exact: true|false`
 - text-like matching normalizes whitespace by default (`normalize_ws: true`), including NBSP characters
 - use `normalize_ws: false` to require exact raw whitespace matching
+
+Use `role(..., name: ...)` for supported accessible-name matching on buttons, links, headings, and similar non-form elements.
 
 ## Browser-Only Extensions
 

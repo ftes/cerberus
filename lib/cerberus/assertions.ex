@@ -296,7 +296,7 @@ defmodule Cerberus.Assertions do
        when op in [:assert_has, :refute_has] and is_function(normalize_fun, 2) and is_list(call_opts) do
     call_has_timeout = Keyword.has_key?(call_opts, :timeout)
     {locator, call_opts} = normalize_fun.(locator_input, call_opts)
-    validated_opts = call_opts |> Options.validate_assert!(op_name) |> prune_nil_match_by_opt()
+    validated_opts = Options.validate_assert!(call_opts, op_name)
     {validated_timeout, driver_opts} = Keyword.pop(validated_opts, :timeout, 0)
     timeout = resolve_assert_timeout(session, call_has_timeout, validated_timeout)
     driver_opts = Keyword.put(driver_opts, :timeout, timeout)
@@ -679,20 +679,16 @@ defmodule Cerberus.Assertions do
   defp normalize_assert_locator_simple_kind(%Locator{kind: :text} = locator, opts), do: {locator, opts}
   defp normalize_assert_locator_simple_kind(%Locator{kind: :label} = locator, opts), do: {locator, opts}
 
-  defp normalize_assert_locator_simple_kind(%Locator{kind: :role, value: value} = locator, opts) do
-    role_match_by = Locator.resolved_kind(locator)
-    normalized_locator_opts = locator.opts |> Keyword.delete(:role) |> put_match_by(role_match_by)
-    {%{locator | kind: :text, value: value, opts: normalized_locator_opts}, opts}
+  defp normalize_assert_locator_simple_kind(%Locator{kind: :role} = locator, opts), do: {locator, opts}
+
+  defp normalize_assert_locator_simple_kind(%Locator{kind: kind} = locator, opts)
+       when kind in [:placeholder, :title, :alt] do
+    {locator, opts}
   end
 
-  defp normalize_assert_locator_simple_kind(%Locator{kind: kind, value: value} = locator, opts)
-       when kind in [:placeholder, :title, :alt, :aria_label] do
-    {%{locator | kind: :text, value: value, opts: put_match_by(locator.opts, kind)}, opts}
-  end
-
-  defp normalize_assert_locator_simple_kind(%Locator{kind: :testid, value: value} = locator, opts) do
-    normalized_opts = locator.opts |> put_match_by(:testid) |> ensure_exact_opt(true)
-    {%{locator | kind: :text, value: value, opts: normalized_opts}, opts}
+  defp normalize_assert_locator_simple_kind(%Locator{kind: :testid} = locator, opts) do
+    normalized_opts = ensure_exact_opt(locator.opts, true)
+    {%{locator | opts: normalized_opts}, opts}
   end
 
   defp locator_assertion_requires_locator_engine?(%Locator{kind: kind}) when kind in [:scope, :and, :or, :not, :css],
@@ -707,18 +703,6 @@ defmodule Cerberus.Assertions do
       Keyword.has_key?(locator_opts, :disabled) or
       Keyword.has_key?(locator_opts, :selected) or
       Keyword.has_key?(locator_opts, :readonly)
-  end
-
-  defp prune_nil_match_by_opt(opts) do
-    if Keyword.get(opts, :match_by) == nil do
-      Keyword.delete(opts, :match_by)
-    else
-      opts
-    end
-  end
-
-  defp put_match_by(opts, value) when is_list(opts) do
-    Keyword.put(opts, :match_by, value)
   end
 
   defp ensure_exact_opt(opts, default) when is_list(opts) and is_boolean(default) do

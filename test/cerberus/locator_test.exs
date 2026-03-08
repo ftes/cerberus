@@ -98,9 +98,10 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :css, value: "#search_q"} = ~l"#search_q"c
   end
 
-  test "~l supports aria-label modifier" do
-    assert %Locator{kind: :aria_label, value: "Run search"} = ~l"Run search"a
-    assert %Locator{kind: :aria_label, value: "Run search", opts: [exact: true]} = ~l"Run search"ae
+  test "~l rejects removed aria-label modifier" do
+    assert_raise InvalidLocatorError, ~r/unsupported modifier "a"/, fn ->
+      ~l"Run search"a
+    end
   end
 
   test "~l supports testid modifier with default exact matching" do
@@ -144,7 +145,6 @@ defmodule Cerberus.LocatorTest do
     assert %Locator{kind: :placeholder, value: "Search"} = Locator.normalize!(placeholder("Search"))
     assert %Locator{kind: :title, value: "Main Heading"} = Locator.normalize!(title("Main Heading"))
     assert %Locator{kind: :alt, value: "Hero image"} = Locator.normalize!(alt("Hero image"))
-    assert %Locator{kind: :aria_label, value: "Search field"} = Locator.normalize!(~l"Search field"a)
     assert %Locator{kind: :css, value: "#save"} = Locator.normalize!(css("#save"))
     assert %Locator{kind: :testid, value: "submit-btn"} = Locator.normalize!(testid("submit-btn"))
   end

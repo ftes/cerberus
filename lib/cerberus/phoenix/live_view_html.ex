@@ -121,6 +121,15 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     node_matches_selector?(root_node, node, selector) and live_clickable_common_opts_match?(root_node, node, opts)
   end
 
+  defp live_clickable_locator_match?(root_node, node, %Locator{kind: :role} = locator) do
+    with true <- live_clickable_common_opts_match?(root_node, node, locator.opts),
+         true <- role_locator_matches?(root_node, node, locator) do
+      true
+    else
+      _ -> false
+    end
+  end
+
   defp live_clickable_locator_match?(root_node, node, %Locator{kind: kind, value: expected, opts: opts}) do
     resolved_kind = Locator.resolved_kind(%Locator{kind: kind, value: expected, opts: opts})
 
@@ -140,7 +149,6 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   end
 
   defp live_clickable_locator_value(_root_node, node, :title), do: attr(node, "title") || ""
-  defp live_clickable_locator_value(_root_node, node, :aria_label), do: attr(node, "aria-label") || ""
   defp live_clickable_locator_value(_root_node, node, :testid), do: attr(node, "data-testid") || ""
   defp live_clickable_locator_value(root_node, node, :alt), do: button_alt_text(node, root_node)
   defp live_clickable_locator_value(_root_node, _node, :link), do: nil
@@ -197,7 +205,6 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   end
 
   defp clickable_attr_match_value(node, :title, _fallback), do: attr(node, "title") || ""
-  defp clickable_attr_match_value(node, :aria_label, _fallback), do: attr(node, "aria-label") || ""
   defp clickable_attr_match_value(node, :testid, _fallback), do: attr(node, "data-testid") || ""
   defp clickable_attr_match_value(_node, _match_by, fallback), do: fallback
 
@@ -269,15 +276,33 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   end
 
   defp field_label_text(root_node, field_node) do
+    root_node
+    |> field_label_sources(field_node)
+    |> List.first()
+    |> Kernel.||("")
+  end
+
+  defp field_label_sources(root_node, field_node) do
+    [
+      explicit_field_label_text(root_node, field_node),
+      wrapped_field_label_text(root_node, field_node),
+      labelledby_text(root_node, field_node),
+      attr(field_node, "aria-label")
+    ]
+    |> Enum.filter(&(is_binary(&1) and &1 != ""))
+    |> Enum.uniq()
+  end
+
+  defp explicit_field_label_text(root_node, field_node) do
     case attr(field_node, "id") do
       id when is_binary(id) and id != "" ->
         case root_node |> safe_query(~s(label[for="#{css_attr_escape(id)}"])) |> Enum.at(0) do
-          nil -> wrapped_field_label_text(root_node, field_node)
+          nil -> ""
           label_node -> node_text(label_node)
         end
 
       _ ->
-        wrapped_field_label_text(root_node, field_node)
+        ""
     end
   end
 
@@ -291,6 +316,69 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
         node_text(label_node)
       end
     end)
+  end
+
+  defp labelledby_text(root_node, node) do
+    node
+    |> attr("aria-labelledby")
+    |> referenced_text(root_node)
+  end
+
+  defp referenced_text(value, root_node) when is_binary(value) do
+    value
+    |> String.split()
+    |> Enum.map_join(" ", fn id ->
+      root_node
+      |> safe_query_by_id(id)
+      |> Enum.find_value("", &node_text/1)
+    end)
+    |> String.trim()
+  end
+
+  defp referenced_text(_value, _root_node), do: ""
+
+  defp role_locator_matches?(root_node, node, %Locator{} = locator) do
+    root_node
+    |> role_locator_match_values(node, locator)
+    |> Enum.any?(&Query.match_text?(&1, locator.value, locator.opts))
+  end
+
+  defp role_locator_match_values(root_node, node, %Locator{} = locator) do
+    case role_name(locator) do
+      role when role in ["button", "menuitem", "tab"] ->
+        accessible_name_sources(root_node, node, &button_node?/1, &node_text/1)
+
+      "link" ->
+        accessible_name_sources(root_node, node, &link_node?/1, &node_text/1)
+
+      role when role in ["textbox", "searchbox", "combobox", "listbox", "spinbutton", "checkbox", "radio", "switch"] ->
+        field_label_sources(root_node, node)
+
+      _ ->
+        []
+    end
+  end
+
+  defp accessible_name_sources(root_node, node, predicate, text_fun)
+       when is_function(predicate, 1) and is_function(text_fun, 1) do
+    if predicate.(node) do
+      [
+        labelledby_text(root_node, node),
+        attr(node, "aria-label"),
+        text_fun.(node)
+      ]
+      |> Enum.filter(&(is_binary(&1) and &1 != ""))
+      |> Enum.uniq()
+    else
+      []
+    end
+  end
+
+  defp role_name(%Locator{opts: opts}) do
+    case Keyword.get(opts, :role) do
+      value when is_binary(value) and value != "" -> value
+      _ -> nil
+    end
   end
 
   defp field_form_node(root_node, field_node) do
@@ -578,10 +666,6 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     attr_selector(node_tag(node), "title", attr(node, "title"))
   end
 
-  defp match_selector_for(node, :aria_label) do
-    attr_selector(node_tag(node), "aria-label", attr(node, "aria-label"))
-  end
-
   defp match_selector_for(_node, _match_by), do: nil
 
   defp attr_selector(tag, attr_name, value)
@@ -726,6 +810,8 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   defp attr_or_nil(nil, _name), do: nil
   defp attr_or_nil(node, name), do: attr(node, name)
 
+  defp link_node?(node), do: node_tag(node) == "a" and is_binary(attr(node, "href"))
+
   defp button_node?(node), do: node_tag(node) == "button"
 
   defp scoped_nodes(lazy_html, nil), do: [lazy_html]
@@ -773,7 +859,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
 
   defp match_by_opt(opts) do
     case Keyword.get(opts, :match_by) do
-      value when value in [:button, :title, :aria_label, :testid, :alt] -> value
+      value when value in [:button, :title, :testid, :alt] -> value
       _ -> :text
     end
   end

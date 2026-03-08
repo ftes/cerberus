@@ -17,7 +17,15 @@ defmodule Cerberus.Fixtures.PageController do
       </head>
       <body>
         <main>
-          <h1 data-testid="articles-title" title="Articles heading" aria-label="Articles heading aria">Articles</h1>
+          <span id="articles-title-label">Articles heading labelledby</span>
+          <h1
+            data-testid="articles-title"
+            title="Articles heading"
+            aria-label="Articles heading aria"
+            aria-labelledby="articles-title-label"
+          >
+            Articles
+          </h1>
           <p>This is an articles index page</p>
           <img
             src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="
@@ -25,7 +33,15 @@ defmodule Cerberus.Fixtures.PageController do
             title="Hero image"
           />
           <p style="display:none">Hidden helper text</p>
-          <a href="/live/counter" data-testid="articles-counter-link" aria-label="Counter link aria">Counter</a>
+          <span id="articles-counter-link-label">Counter link labelledby</span>
+          <a
+            href="/live/counter"
+            data-testid="articles-counter-link"
+            aria-label="Counter link aria"
+            aria-labelledby="articles-counter-link-label"
+          >
+            Counter
+          </a>
         </main>
       </body>
     </html>
@@ -193,9 +209,19 @@ defmodule Cerberus.Fixtures.PageController do
       </head>
       <body>
         <main>
-          <h1 data-testid="search-title" title="Search heading" aria-label="Search heading aria">Search</h1>
+          <span id="search-title-label">Search heading labelledby</span>
+          <h1
+            data-testid="search-title"
+            title="Search heading"
+            aria-label="Search heading aria"
+            aria-labelledby="search-title-label"
+          >
+            Search
+          </h1>
           <a href="/articles">Articles</a>
           <form action="/search/results" method="get">
+            <span id="search-field-label">Search term labelledby</span>
+            <span id="search-submit-label">Run search labelledby</span>
             <label for="search_q">Search term</label>
             <input
               id="search_q"
@@ -205,9 +231,18 @@ defmodule Cerberus.Fixtures.PageController do
               placeholder="Search by term"
               title="Search input"
               aria-label="Search term aria"
+              aria-labelledby="search-field-label"
               data-testid="search-input"
             />
-            <button type="submit" title="Run search button" aria-label="Run search aria" data-testid="search-submit">Run Search</button>
+            <button
+              type="submit"
+              title="Run search button"
+              aria-label="Run search aria"
+              aria-labelledby="search-submit-label"
+              data-testid="search-submit"
+            >
+              Run Search
+            </button>
           </form>
 
           <form action="/search/nested/results" method="get">
@@ -552,6 +587,7 @@ defmodule Cerberus.Fixtures.PageController do
             <label for="keyboard-input">Keyboard input</label>
             <input id="keyboard-input" type="text" value="" />
             <p id="keyboard-value">Keyboard value: </p>
+            <p id="keyboard-keydown-count">Keyboard keydown count: 0</p>
           </section>
 
           <section>
@@ -561,6 +597,16 @@ defmodule Cerberus.Fixtures.PageController do
               <input id="press-input" type="text" value="" />
             </form>
             <p id="press-result">Press result: pending</p>
+          </section>
+
+          <section>
+            <h2>Tab blur</h2>
+            <label for="tab-input">Tab input</label>
+            <input id="tab-input" type="text" value="" />
+            <label for="tab-next">Next input</label>
+            <input id="tab-next" type="text" value="" />
+            <p id="tab-result">Tab result: pending</p>
+            <p id="blur-result">Blur result: pending</p>
           </section>
 
           <section>
@@ -608,8 +654,14 @@ defmodule Cerberus.Fixtures.PageController do
           (() => {
             const keyboardInput = document.getElementById("keyboard-input");
             const keyboardValue = document.getElementById("keyboard-value");
+            const keyboardKeydownCount = document.getElementById("keyboard-keydown-count");
             const pressForm = document.getElementById("press-form");
+            const pressInput = document.getElementById("press-input");
             const pressResult = document.getElementById("press-result");
+            const tabInput = document.getElementById("tab-input");
+            const tabNext = document.getElementById("tab-next");
+            const tabResult = document.getElementById("tab-result");
+            const blurResult = document.getElementById("blur-result");
             const dialogButton = document.getElementById("confirm-dialog");
             const dialogResult = document.getElementById("dialog-result");
             const promptButton = document.getElementById("prompt-dialog");
@@ -625,14 +677,32 @@ defmodule Cerberus.Fixtures.PageController do
             const offscreenActionResult = document.getElementById("offscreen-action-result");
             const labelCheckbox = document.getElementById("label-checkbox");
             const labelClickResult = document.getElementById("label-click-result");
+            let keyboardKeydownTotal = 0;
 
             keyboardInput.addEventListener("input", () => {
               keyboardValue.textContent = "Keyboard value: " + keyboardInput.value;
             });
 
+            keyboardInput.addEventListener("keydown", () => {
+              keyboardKeydownTotal += 1;
+              keyboardKeydownCount.textContent = "Keyboard keydown count: " + keyboardKeydownTotal;
+            });
+
             pressForm.addEventListener("submit", (event) => {
               event.preventDefault();
               pressResult.textContent = "Press result: submitted";
+            });
+
+            pressInput.addEventListener("input", () => {
+              pressResult.textContent = "Press result: value=" + pressInput.value;
+            });
+
+            tabInput.addEventListener("blur", () => {
+              blurResult.textContent = "Blur result: blurred";
+            });
+
+            tabNext.addEventListener("focus", () => {
+              tabResult.textContent = "Tab result: focused next";
             });
 
             dialogButton.addEventListener("click", () => {

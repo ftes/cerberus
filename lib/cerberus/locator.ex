@@ -16,7 +16,7 @@ defmodule Cerberus.Locator do
   @enforce_keys [:kind, :value]
   defstruct [:kind, :value, opts: []]
 
-  @type leaf_kind :: :text | :label | :placeholder | :title | :alt | :aria_label | :testid | :css
+  @type leaf_kind :: :text | :label | :placeholder | :title | :alt | :testid | :css
   @type role_kind :: :role
   @type resolved_role_kind :: :text | :label | :link | :button | :alt
   @type composite_kind :: :scope | :and | :or | :not
@@ -50,7 +50,6 @@ defmodule Cerberus.Locator do
     :placeholder,
     :title,
     :alt,
-    :aria_label,
     :testid,
     :css,
     :role,
@@ -85,7 +84,7 @@ defmodule Cerberus.Locator do
   @spec leaf(leaf_kind(), String.t() | Regex.t(), Options.locator_leaf_opts()) :: t()
   def leaf(kind, value, opts \\ [])
 
-  def leaf(kind, value, opts) when kind in [:text, :label, :placeholder, :title, :alt, :aria_label] do
+  def leaf(kind, value, opts) when kind in [:text, :label, :placeholder, :title, :alt] do
     ensure_text_value!(kind, value, {kind, value, opts})
     normalized_opts = opts |> normalize_leaf_constructor_opts({kind, value, opts}) |> maybe_default_exact_opt(value)
     ensure_regex_exact_compatible!(kind, value, normalized_opts, {kind, value, opts})
@@ -287,11 +286,6 @@ defmodule Cerberus.Locator do
   defp sigil_base_locator!(%{kind: :testid}, value, modifiers) do
     ensure_testid_sigil_value!(value, {:l, value, modifiers})
     %__MODULE__{kind: :testid, value: value}
-  end
-
-  defp sigil_base_locator!(%{kind: :aria_label}, value, modifiers) do
-    ensure_text_value!(:aria_label, value, {:l, value, modifiers})
-    %__MODULE__{kind: :aria_label, value: value}
   end
 
   defp sigil_base_locator!(%{kind: :role, role: role_name}, value, modifiers) do
@@ -503,9 +497,6 @@ defmodule Cerberus.Locator do
         ?l ->
           put_sigil_kind!(acc, :label, nil, {:l, value, modifiers})
 
-        ?a ->
-          put_sigil_kind!(acc, :aria_label, nil, {:l, value, modifiers})
-
         ?t ->
           put_sigil_kind!(acc, :testid, nil, {:l, value, modifiers})
 
@@ -530,7 +521,7 @@ defmodule Cerberus.Locator do
   defp put_sigil_kind!(_acc, _kind, _role, original) do
     raise InvalidLocatorError,
       locator: original,
-      message: "invalid locator sigil ~l: use at most one locator-kind modifier (r, c, l, a, or t)"
+      message: "invalid locator sigil ~l: use at most one locator-kind modifier (r, c, l, or t)"
   end
 
   defp put_sigil_exact!(%{exact: :unset} = acc, exact, _original), do: %{acc | exact: exact}
@@ -676,7 +667,7 @@ defmodule Cerberus.Locator do
   end
 
   defp normalize_locator(%__MODULE__{kind: kind, value: value, opts: opts} = locator, original)
-       when kind in [:text, :label, :placeholder, :title, :alt, :aria_label] do
+       when kind in [:text, :label, :placeholder, :title, :alt] do
     ensure_text_value!(kind, value, original)
     normalized_opts = opts |> normalize_leaf_opts(original) |> maybe_default_exact_opt(value)
     ensure_regex_exact_compatible!(kind, value, normalized_opts, original)
