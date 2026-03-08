@@ -1,7 +1,7 @@
 defmodule Cerberus.Driver.Browser.Types do
   @moduledoc false
 
-  @type browser_name :: :chrome | :firefox
+  @type browser_name :: :chrome
   @type payload_key :: String.t() | atom()
   @type payload :: %{optional(payload_key()) => term()}
   @type bidi_params :: %{optional(String.t()) => term()}

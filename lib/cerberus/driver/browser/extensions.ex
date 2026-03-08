@@ -2,7 +2,6 @@ defmodule Cerberus.Driver.Browser.Extensions do
   @moduledoc false
 
   alias Cerberus.Driver.Browser
-  alias Cerberus.Driver.Browser.BiDi
   alias Cerberus.Driver.Browser.Types
   alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.Locator
@@ -27,85 +26,6 @@ defmodule Cerberus.Driver.Browser.Extensions do
     "no such frame",
     "navigation canceled by concurrent navigation"
   ]
-  @webdriver_key_values %{
-    "Alt" => <<0xE00A::utf8>>,
-    "AltLeft" => <<0xE00A::utf8>>,
-    "AltRight" => <<0xE00A::utf8>>,
-    "ArrowDown" => <<0xE015::utf8>>,
-    "ArrowLeft" => <<0xE012::utf8>>,
-    "ArrowRight" => <<0xE014::utf8>>,
-    "ArrowUp" => <<0xE013::utf8>>,
-    "Backquote" => "`",
-    "Backslash" => "\\",
-    "Backspace" => <<0xE003::utf8>>,
-    "BracketLeft" => "[",
-    "BracketRight" => "]",
-    "Clear" => <<0xE005::utf8>>,
-    "Comma" => ",",
-    "Command" => <<0xE03D::utf8>>,
-    "ContextMenu" => <<0xE03D::utf8>>,
-    "Control" => <<0xE009::utf8>>,
-    "ControlLeft" => <<0xE009::utf8>>,
-    "ControlRight" => <<0xE009::utf8>>,
-    "Delete" => <<0xE017::utf8>>,
-    "Down" => <<0xE015::utf8>>,
-    "End" => <<0xE010::utf8>>,
-    "Enter" => <<0xE007::utf8>>,
-    "Equal" => "=",
-    "Escape" => <<0xE00C::utf8>>,
-    "Esc" => <<0xE00C::utf8>>,
-    "F1" => <<0xE031::utf8>>,
-    "F2" => <<0xE032::utf8>>,
-    "F3" => <<0xE033::utf8>>,
-    "F4" => <<0xE034::utf8>>,
-    "F5" => <<0xE035::utf8>>,
-    "F6" => <<0xE036::utf8>>,
-    "F7" => <<0xE037::utf8>>,
-    "F8" => <<0xE038::utf8>>,
-    "F9" => <<0xE039::utf8>>,
-    "F10" => <<0xE03A::utf8>>,
-    "F11" => <<0xE03B::utf8>>,
-    "F12" => <<0xE03C::utf8>>,
-    "Home" => <<0xE011::utf8>>,
-    "Insert" => <<0xE016::utf8>>,
-    "Left" => <<0xE012::utf8>>,
-    "Meta" => <<0xE03D::utf8>>,
-    "MetaLeft" => <<0xE03D::utf8>>,
-    "MetaRight" => <<0xE03D::utf8>>,
-    "Minus" => "-",
-    "Numpad0" => "0",
-    "Numpad1" => "1",
-    "Numpad2" => "2",
-    "Numpad3" => "3",
-    "Numpad4" => "4",
-    "Numpad5" => "5",
-    "Numpad6" => "6",
-    "Numpad7" => "7",
-    "Numpad8" => "8",
-    "Numpad9" => "9",
-    "NumpadAdd" => "+",
-    "NumpadDecimal" => ".",
-    "NumpadDivide" => "/",
-    "NumpadEnter" => <<0xE007::utf8>>,
-    "NumpadMultiply" => "*",
-    "NumpadSubtract" => "-",
-    "Option" => <<0xE00A::utf8>>,
-    "PageDown" => <<0xE00F::utf8>>,
-    "PageUp" => <<0xE00E::utf8>>,
-    "Period" => ".",
-    "Plus" => "+",
-    "Quote" => "'",
-    "Return" => <<0xE006::utf8>>,
-    "Right" => <<0xE014::utf8>>,
-    "Semicolon" => ";",
-    "Shift" => <<0xE008::utf8>>,
-    "ShiftLeft" => <<0xE008::utf8>>,
-    "ShiftRight" => <<0xE008::utf8>>,
-    "Slash" => "/",
-    "Space" => <<0xE00D::utf8>>,
-    "Tab" => <<0xE004::utf8>>,
-    "Up" => <<0xE013::utf8>>
-  }
   @modifier_key_tokens MapSet.new([
                          "Alt",
                          "AltLeft",
@@ -215,6 +135,9 @@ defmodule Cerberus.Driver.Browser.Extensions do
           scope: nil
       }
 
+      _ = UserContextProcess.await_ready(session.user_context_pid, [timeout_ms: timeout_ms], popup_tab_id)
+      _ = await_popup_loaded!(popup_session, timeout_ms)
+
       run_popup_callback!(callback_fun, [session, popup_session], "callback")
 
       restore_main_tab!(session, main_tab_id, "with_popup/4")
@@ -251,11 +174,11 @@ defmodule Cerberus.Driver.Browser.Extensions do
       end)
 
     case result do
+      {:ok, %{"exceptionDetails" => details} = payload} ->
+        raise ArgumentError, "browser evaluate_js failed: #{exception_details_message(details, payload)}"
+
       {:ok, %{"result" => result}} ->
         decode_remote_value(result)
-
-      {:ok, %{"type" => "exception", "exceptionDetails" => details} = payload} ->
-        raise ArgumentError, "browser evaluate_js failed: #{exception_details_message(details, payload)}"
 
       {:ok, payload} ->
         raise ArgumentError, "unexpected browser evaluate result: #{inspect(payload)}"
@@ -267,14 +190,12 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   @spec cookies(Browser.t()) :: [Types.cookie()]
   def cookies(%Browser{} = session) do
-    params = %{"partition" => %{"type" => "context", "context" => session.tab_id}}
-
-    case BiDi.command("storage.getCookies", params, bidi_opts(session)) do
+    case UserContextProcess.cookies(session.user_context_pid) do
       {:ok, %{"cookies" => cookies}} when is_list(cookies) ->
         Enum.map(cookies, &normalize_cookie/1)
 
       {:ok, payload} ->
-        raise ArgumentError, "unexpected storage.getCookies result: #{inspect(payload)}"
+        raise ArgumentError, "unexpected browser cookies result: #{inspect(payload)}"
 
       {:error, reason, details} ->
         raise ArgumentError, "browser cookies failed: #{reason} (#{inspect(details)})"
@@ -322,9 +243,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   @spec clear_cookies(Browser.t()) :: Browser.t()
   def clear_cookies(%Browser{} = session) do
-    params = %{"partition" => %{"type" => "context", "context" => session.tab_id}}
-
-    case BiDi.command("storage.deleteCookies", params, bidi_opts(session)) do
+    case UserContextProcess.clear_cookies(session.user_context_pid) do
       {:ok, _} ->
         session
 
@@ -422,6 +341,10 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   defp decode_remote_value(%{"type" => "array", "value" => values}) when is_list(values) do
     Enum.map(values, &decode_remote_value/1)
+  end
+
+  defp decode_remote_value(%{"type" => "object", "value" => entries}) when is_map(entries) do
+    Map.new(entries, fn {key, value} -> {key, decode_remote_value(value)} end)
   end
 
   defp decode_remote_value(%{"type" => "object", "value" => entries}) when is_list(entries) do
@@ -571,7 +494,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   defp matching_observed_dialog(events, locator) when is_list(events) do
     events
-    |> Enum.filter(&match?(%{"method" => "browsingContext.userPromptOpened"}, &1))
+    |> Enum.filter(&match?(%{"method" => "Page.javascriptDialogOpening"}, &1))
     |> Enum.reverse()
     |> Enum.find(&dialog_matches_locator?(&1, locator))
     |> case do
@@ -584,7 +507,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   defp latest_observed_dialog(events) when is_list(events) do
     events
-    |> Enum.filter(&match?(%{"method" => "browsingContext.userPromptOpened"}, &1))
+    |> Enum.filter(&match?(%{"method" => "Page.javascriptDialogOpening"}, &1))
     |> List.last()
     |> case do
       %{} = dialog -> {:ok, dialog}
@@ -603,7 +526,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
   defp raise_dialog_timeout!(locator, events) when is_list(events) do
     observed_messages =
       events
-      |> Enum.filter(&match?(%{"method" => "browsingContext.userPromptOpened"}, &1))
+      |> Enum.filter(&match?(%{"method" => "Page.javascriptDialogOpening"}, &1))
       |> Enum.map(&Map.get(&1, "message"))
       |> Enum.filter(&is_binary/1)
       |> Enum.uniq()
@@ -644,10 +567,9 @@ defmodule Cerberus.Driver.Browser.Extensions do
   end
 
   defp ensure_dialog_auto_accepted!(session, timeout_ms, dialog) do
-    params = dialog_prompt_params(session.tab_id, dialog["type"])
-    opts = Keyword.put(bidi_opts(session), :timeout, timeout_ms)
+    user_text = if dialog["type"] == "prompt", do: ""
 
-    case BiDi.command("browsingContext.handleUserPrompt", params, opts) do
+    case UserContextProcess.handle_dialog(session.user_context_pid, session.tab_id, true, user_text, timeout_ms) do
       {:ok, _payload} ->
         :ok
 
@@ -822,6 +744,107 @@ defmodule Cerberus.Driver.Browser.Extensions do
     :ok
   end
 
+  defp await_popup_loaded!(session, timeout_ms)
+       when is_struct(session, Browser) and is_integer(timeout_ms) and timeout_ms > 0 do
+    expression = """
+    (() => {
+      const deadline = Date.now() + #{timeout_ms};
+
+      const payload = (ok, details = {}) => JSON.stringify({
+        ok,
+        path: (() => {
+          try {
+            return window.location.pathname + window.location.search;
+          } catch (_error) {
+            return "";
+          }
+        })(),
+        readyState: (() => {
+          try {
+            return document.readyState || "unknown";
+          } catch (_error) {
+            return "unknown";
+          }
+        })(),
+        bodyText: (() => {
+          try {
+            return (document.body && document.body.innerText) || "";
+          } catch (_error) {
+            return "";
+          }
+        })(),
+        ...details
+      });
+
+      return new Promise((resolve) => {
+        const tick = () => {
+          const readyState = (() => {
+            try {
+              return document.readyState || "unknown";
+            } catch (_error) {
+              return "unknown";
+            }
+          })();
+
+          const bodyText = (() => {
+            try {
+              return ((document.body && document.body.innerText) || "").trim();
+            } catch (_error) {
+              return "";
+            }
+          })();
+
+          const href = (() => {
+            try {
+              return window.location.href || "";
+            } catch (_error) {
+              return "";
+            }
+          })();
+
+          const path = (() => {
+            try {
+              return window.location.pathname + window.location.search;
+            } catch (_error) {
+              return "";
+            }
+          })();
+
+          const nonBlankDocument = href !== "about:blank" && path !== "";
+          const bodyReady = bodyText !== "";
+
+          if (readyState !== "loading" && (nonBlankDocument || bodyReady)) {
+            resolve(payload(true));
+            return;
+          }
+
+          if (Date.now() >= deadline) {
+            resolve(payload(false, { href }));
+            return;
+          }
+
+          setTimeout(tick, 25);
+        };
+
+        tick();
+      });
+    })()
+    """
+
+    case evaluate_json(session, expression, timeout_ms) do
+      {:ok, %{"ok" => true}} ->
+        :ok
+
+      {:ok, details} ->
+        raise AssertionError,
+          message: "with_popup/4 popup did not finish initial load: #{inspect(details)}"
+
+      {:error, reason, details} ->
+        raise AssertionError,
+          message: "with_popup/4 popup load wait failed: #{reason} (#{inspect(details)})"
+    end
+  end
+
   defp host_from_base_url(base_url) when is_binary(base_url) do
     case URI.parse(base_url) do
       %URI{host: host} when is_binary(host) and host != "" -> host
@@ -839,31 +862,32 @@ defmodule Cerberus.Driver.Browser.Extensions do
     secure = Keyword.get(cookie_args, :secure, false)
     same_site = normalize_same_site(Keyword.get(cookie_args, :same_site, :lax))
 
-    %{
-      "name" => name,
-      "value" => %{"type" => "string", "value" => value},
-      "domain" => domain,
-      "path" => path,
-      "httpOnly" => http_only,
-      "secure" => secure,
-      "sameSite" => same_site
-    }
+    maybe_put_cookie_url(
+      %{
+        "name" => name,
+        "value" => value,
+        "domain" => domain,
+        "path" => path,
+        "httpOnly" => http_only,
+        "secure" => secure,
+        "sameSite" => same_site
+      },
+      url
+    )
   end
 
   defp put_expiry(cookie, cookie_args) when is_map(cookie) and is_list(cookie_args) do
     case Keyword.get(cookie_args, :expires) do
       nil -> cookie
-      expires -> Map.put(cookie, "expiry", expires)
+      expires -> Map.put(cookie, "expires", expires)
     end
   end
 
-  defp set_cookie(%Browser{} = session, cookie, op_name) when is_map(cookie) do
-    params = %{
-      "cookie" => cookie,
-      "partition" => %{"type" => "context", "context" => session.tab_id}
-    }
+  defp maybe_put_cookie_url(cookie, url) when is_binary(url), do: Map.put(cookie, "url", url)
+  defp maybe_put_cookie_url(cookie, _url), do: cookie
 
-    case BiDi.command("storage.setCookie", params, bidi_opts(session)) do
+  defp set_cookie(%Browser{} = session, cookie, op_name) when is_map(cookie) do
+    case UserContextProcess.set_cookies(session.user_context_pid, [cookie]) do
       {:ok, _} ->
         session
 
@@ -909,9 +933,6 @@ defmodule Cerberus.Driver.Browser.Extensions do
           "add_cookie/4 :same_site must be :lax, :strict, :none (or equivalent strings), got: #{inspect(value)}"
   end
 
-  defp dialog_prompt_params(context_id, "prompt"), do: %{"context" => context_id, "accept" => true, "userText" => ""}
-  defp dialog_prompt_params(context_id, _type), do: %{"context" => context_id, "accept" => true}
-
   defp await_download_match!(session, expected_filename, timeout_ms) do
     case UserContextProcess.await_download(session.user_context_pid, expected_filename, timeout_ms, session.tab_id) do
       {:ok, event} when is_map(event) ->
@@ -938,12 +959,6 @@ defmodule Cerberus.Driver.Browser.Extensions do
       message:
         "assert_download/3 timed out waiting for #{inspect(expected_filename)}; observed downloads: #{inspect(observed_filenames)}"
   end
-
-  defp bidi_opts(%Browser{bidi_opts: bidi_opts, browser_name: browser_name}) when is_list(bidi_opts) do
-    Keyword.put_new(bidi_opts, :browser_name, browser_name)
-  end
-
-  defp bidi_opts(%Browser{browser_name: browser_name}), do: [browser_name: browser_name]
 
   defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
   defp normalize_positive_integer(_value, default), do: default
@@ -1037,18 +1052,12 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   defp perform_keyboard_actions(%Browser{} = session, actions, timeout_ms)
        when is_list(actions) and is_integer(timeout_ms) do
-    params = %{
-      "context" => session.tab_id,
-      "actions" => [
-        %{
-          "id" => "cerberus-keyboard",
-          "type" => "key",
-          "actions" => actions
-        }
-      ]
-    }
-
-    case BiDi.command("input.performActions", params, Keyword.put(bidi_opts(session), :timeout, max(timeout_ms, 1))) do
+    case UserContextProcess.perform_keyboard_actions(
+           session.user_context_pid,
+           session.tab_id,
+           actions,
+           max(timeout_ms, 1)
+         ) do
       {:ok, _payload} ->
         :ok
 
@@ -1123,38 +1132,100 @@ defmodule Cerberus.Driver.Browser.Extensions do
   end
 
   defp key_action(action_type, token) when action_type in ["keyDown", "keyUp"] and is_binary(token) do
-    %{"type" => action_type, "value" => webdriver_key_value!(token)}
+    cdp_key_action(action_type, token)
   end
 
-  defp webdriver_key_value!(token) when is_binary(token) do
-    case resolve_webdriver_key_value(token) do
-      nil -> raise ArgumentError, "browser press failed: unknown key #{inspect(token)}"
-      value -> value
-    end
+  defp cdp_key_action(action_type, token) when action_type in ["keyDown", "keyUp"] and is_binary(token) do
+    descriptor = key_descriptor!(token)
+
+    maybe_put_key_text(
+      %{
+        "type" => action_type,
+        "key" => descriptor.key,
+        "code" => descriptor.code,
+        "windowsVirtualKeyCode" => descriptor.key_code,
+        "nativeVirtualKeyCode" => descriptor.key_code
+      },
+      action_type,
+      descriptor.text
+    )
   end
 
-  defp resolve_webdriver_key_value(""), do: raise(ArgumentError, "browser press failed: empty key token")
-  defp resolve_webdriver_key_value("\n"), do: Map.fetch!(@webdriver_key_values, "Enter")
-  defp resolve_webdriver_key_value("\r"), do: Map.fetch!(@webdriver_key_values, "Enter")
-  defp resolve_webdriver_key_value("\t"), do: Map.fetch!(@webdriver_key_values, "Tab")
+  defp maybe_put_key_text(payload, "keyUp", _text), do: payload
+  defp maybe_put_key_text(payload, _action_type, nil), do: payload
 
-  defp resolve_webdriver_key_value(token) when is_binary(token) do
+  defp maybe_put_key_text(payload, _action_type, text) when is_binary(text) do
+    payload
+    |> Map.put("text", text)
+    |> Map.put("unmodifiedText", text)
+  end
+
+  defp key_descriptor!(""), do: raise(ArgumentError, "browser press failed: empty key token")
+  defp key_descriptor!("\n"), do: key_descriptor!("Enter")
+  defp key_descriptor!("\r"), do: key_descriptor!("Enter")
+  defp key_descriptor!("\t"), do: key_descriptor!("Tab")
+
+  defp key_descriptor!(token) when is_binary(token) do
     cond do
       String.length(token) == 1 ->
-        token
-
-      value = Map.get(@webdriver_key_values, token) ->
-        value
+        printable_key_descriptor(token)
 
       Regex.match?(~r/^Key[A-Z]$/, token) ->
-        token |> String.replace_prefix("Key", "") |> String.downcase()
+        token |> String.replace_prefix("Key", "") |> String.downcase() |> printable_key_descriptor(token)
 
       Regex.match?(~r/^Digit[0-9]$/, token) ->
-        String.replace_prefix(token, "Digit", "")
+        digit = String.replace_prefix(token, "Digit", "")
+        printable_key_descriptor(digit, token)
 
       true ->
-        nil
+        non_printable_key_descriptor(token)
     end
+  end
+
+  defp printable_key_descriptor(char, code_override \\ nil) when is_binary(char) do
+    [codepoint] = String.to_charlist(char)
+
+    %{
+      key: char,
+      code: code_override || printable_code(char),
+      text: char,
+      key_code: codepoint
+    }
+  end
+
+  defp printable_code(" "), do: "Space"
+  defp printable_code(char) when char in ~w(- = [ ] \\ ; ' , . / `), do: char
+
+  defp printable_code(char) when is_binary(char) do
+    cond do
+      Regex.match?(~r/^[A-Za-z]$/, char) -> "Key" <> String.upcase(char)
+      Regex.match?(~r/^[0-9]$/, char) -> "Digit" <> char
+      true -> char
+    end
+  end
+
+  defp non_printable_key_descriptor("Space"), do: %{key: " ", code: "Space", text: " ", key_code: 32}
+  defp non_printable_key_descriptor("Enter"), do: %{key: "Enter", code: "Enter", text: "\r", key_code: 13}
+  defp non_printable_key_descriptor("Return"), do: non_printable_key_descriptor("Enter")
+  defp non_printable_key_descriptor("Backspace"), do: %{key: "Backspace", code: "Backspace", text: nil, key_code: 8}
+  defp non_printable_key_descriptor("Tab"), do: %{key: "Tab", code: "Tab", text: "\t", key_code: 9}
+  defp non_printable_key_descriptor("Escape"), do: %{key: "Escape", code: "Escape", text: nil, key_code: 27}
+  defp non_printable_key_descriptor("Esc"), do: non_printable_key_descriptor("Escape")
+  defp non_printable_key_descriptor("Shift"), do: %{key: "Shift", code: "ShiftLeft", text: nil, key_code: 16}
+  defp non_printable_key_descriptor("ShiftLeft"), do: %{key: "Shift", code: "ShiftLeft", text: nil, key_code: 16}
+  defp non_printable_key_descriptor("ShiftRight"), do: %{key: "Shift", code: "ShiftRight", text: nil, key_code: 16}
+  defp non_printable_key_descriptor("Control"), do: %{key: "Control", code: "ControlLeft", text: nil, key_code: 17}
+  defp non_printable_key_descriptor("ControlLeft"), do: %{key: "Control", code: "ControlLeft", text: nil, key_code: 17}
+  defp non_printable_key_descriptor("ControlRight"), do: %{key: "Control", code: "ControlRight", text: nil, key_code: 17}
+  defp non_printable_key_descriptor("Alt"), do: %{key: "Alt", code: "AltLeft", text: nil, key_code: 18}
+  defp non_printable_key_descriptor("AltLeft"), do: %{key: "Alt", code: "AltLeft", text: nil, key_code: 18}
+  defp non_printable_key_descriptor("AltRight"), do: %{key: "Alt", code: "AltRight", text: nil, key_code: 18}
+  defp non_printable_key_descriptor("Meta"), do: %{key: "Meta", code: "MetaLeft", text: nil, key_code: 91}
+  defp non_printable_key_descriptor("MetaLeft"), do: %{key: "Meta", code: "MetaLeft", text: nil, key_code: 91}
+  defp non_printable_key_descriptor("MetaRight"), do: %{key: "Meta", code: "MetaRight", text: nil, key_code: 92}
+
+  defp non_printable_key_descriptor(token) do
+    raise ArgumentError, "browser press failed: unknown key #{inspect(token)}"
   end
 
   defp drag_expression(source_selector, target_selector) do

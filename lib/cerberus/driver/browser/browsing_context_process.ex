@@ -3,23 +3,14 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   use GenServer
 
-  alias Cerberus.Driver.Browser.BiDi
-  alias Cerberus.Driver.Browser.Runtime
+  alias Cerberus.Driver.Browser.CdpBrowserProcess
+  alias Cerberus.Driver.Browser.CdpPageProcess
   alias Cerberus.Driver.Browser.Types
 
   @default_ready_timeout_ms 1_500
   @default_ready_quiet_ms 40
-  @bidi_events [
-    "browsingContext.navigationStarted",
-    "browsingContext.domContentLoaded",
-    "browsingContext.load",
-    "browsingContext.downloadWillBegin",
-    "browsingContext.downloadEnd",
-    "browsingContext.userPromptOpened",
-    "browsingContext.userPromptClosed"
-  ]
-  @download_events ["browsingContext.downloadWillBegin", "browsingContext.downloadEnd"]
-  @dialog_events ["browsingContext.userPromptOpened", "browsingContext.userPromptClosed"]
+  @download_events ["Page.downloadWillBegin", "Page.downloadProgress"]
+  @dialog_events ["Page.javascriptDialogOpening", "Page.javascriptDialogClosed"]
   @download_history_limit 50
   @dialog_history_limit 50
   @call_timeout_padding_ms 5_000
@@ -45,6 +36,11 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     GenServer.call(pid, :id)
   end
 
+  @spec cdp_page_pid(pid()) :: pid() | nil
+  def cdp_page_pid(pid) when is_pid(pid) do
+    GenServer.call(pid, :cdp_page_pid)
+  end
+
   @spec navigate(pid(), String.t()) :: Types.bidi_response()
   def navigate(pid, url) when is_pid(pid) and is_binary(url) do
     GenServer.call(pid, {:navigate, url}, 10_000)
@@ -65,6 +61,31 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
       when is_pid(pid) and is_binary(expression) and is_integer(timeout_ms) and timeout_ms > 0 do
     started_us = System.monotonic_time(:microsecond)
     GenServer.call(pid, {:evaluate, expression, timeout_ms, started_us}, command_call_timeout_ms(timeout_ms))
+  end
+
+  @spec handle_dialog(pid(), boolean(), String.t() | nil, pos_integer()) :: Types.bidi_response()
+  def handle_dialog(pid, accept, nil, timeout_ms)
+      when is_pid(pid) and is_boolean(accept) and is_integer(timeout_ms) and timeout_ms > 0 do
+    GenServer.call(pid, {:handle_dialog, accept, nil, timeout_ms}, timeout_ms + @call_timeout_padding_ms)
+  end
+
+  def handle_dialog(pid, accept, user_text, timeout_ms)
+      when is_pid(pid) and is_boolean(accept) and is_binary(user_text) and is_integer(timeout_ms) and timeout_ms > 0 do
+    GenServer.call(pid, {:handle_dialog, accept, user_text, timeout_ms}, timeout_ms + @call_timeout_padding_ms)
+  end
+
+  @spec perform_keyboard_actions(pid(), [map()], pos_integer()) :: Types.bidi_response()
+  def perform_keyboard_actions(pid, actions, timeout_ms)
+      when is_pid(pid) and is_list(actions) and is_integer(timeout_ms) and timeout_ms > 0 do
+    GenServer.call(pid, {:perform_keyboard_actions, actions, timeout_ms}, timeout_ms + @call_timeout_padding_ms)
+  end
+
+  @spec set_user_agent(pid(), String.t()) :: :ok | {:error, String.t(), Types.bidi_error_details()}
+  def set_user_agent(pid, user_agent) when is_pid(pid) and is_binary(user_agent) do
+    case GenServer.call(pid, {:set_user_agent, user_agent}, 10_000) do
+      {:ok, _result} -> :ok
+      {:error, reason, details} -> {:error, reason, details}
+    end
   end
 
   @spec await_ready(pid(), keyword()) ::
@@ -113,25 +134,33 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   @impl true
   def init(opts) do
-    user_context_id = Keyword.fetch!(opts, :user_context_id)
+    browser_context_id = Keyword.fetch!(opts, :browser_context_id)
+    cdp_browser_pid = Keyword.fetch!(opts, :cdp_browser_pid)
+    debugger_address = Keyword.fetch!(opts, :debugger_address)
     viewport = Keyword.get(opts, :viewport)
+    user_agent = Keyword.get(opts, :user_agent)
+    init_scripts = Keyword.get(opts, :init_scripts, [])
     context_id = Keyword.get(opts, :context_id)
-    bidi_opts = Keyword.get(opts, :bidi_opts, opts)
-    browser_name = Runtime.browser_name(bidi_opts)
-    bidi_opts = Keyword.put_new(bidi_opts, :browser_name, browser_name)
+    slow_mo_ms = Keyword.get(opts, :slow_mo_ms, 0)
 
-    with {:ok, browsing_context_id} <- resolve_browsing_context_id(user_context_id, context_id, bidi_opts),
-         :ok <- maybe_set_viewport_for_context(context_id, browsing_context_id, viewport, bidi_opts),
-         :ok <- BiDi.subscribe(self(), bidi_opts),
-         {:ok, _} <-
-           BiDi.command("session.subscribe", %{"events" => @bidi_events, "contexts" => [browsing_context_id]}, bidi_opts) do
+    with {:ok, target_id} <- resolve_target_id(browser_context_id, context_id, cdp_browser_pid),
+         {:ok, cdp_page_pid} <-
+           CdpPageProcess.start_link(
+             target_id: target_id,
+             debugger_address: debugger_address,
+             owner: self(),
+             slow_mo_ms: slow_mo_ms
+           ),
+         :ok <- bootstrap_page(cdp_page_pid, viewport, user_agent, init_scripts) do
       {:ok,
        %{
-         id: browsing_context_id,
-         user_context_id: user_context_id,
-         browser_name: browser_name,
-         bidi_opts: bidi_opts,
-         last_bidi_event: nil,
+         id: target_id,
+         browser_context_id: browser_context_id,
+         cdp_browser_pid: cdp_browser_pid,
+         cdp_page_pid: cdp_page_pid,
+         debugger_address: debugger_address,
+         slow_mo_ms: slow_mo_ms,
+         last_page_event: nil,
          last_readiness: %{},
          download_events: [],
          dialog_events: [],
@@ -151,6 +180,10 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   @impl true
   def handle_call(:id, _from, state) do
     {:reply, state.id, state}
+  end
+
+  def handle_call(:cdp_page_pid, _from, state) do
+    {:reply, state.cdp_page_pid, state}
   end
 
   def handle_call(:last_readiness, _from, state) do
@@ -199,45 +232,39 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   end
 
   def handle_call({:navigate, url}, _from, state) do
-    result =
-      BiDi.command(
-        "browsingContext.navigate",
-        %{
-          "context" => state.id,
-          "url" => url,
-          "wait" => "complete"
-        },
-        state.bidi_opts
-      )
-
-    {:reply, result, state}
+    {:reply, page_command(state, "Page.navigate", %{"url" => url}, 10_000), state}
   end
 
   def handle_call(:reload, _from, state) do
-    result =
-      BiDi.command(
-        "browsingContext.reload",
-        %{
-          "context" => state.id,
-          "wait" => "complete"
-        },
-        state.bidi_opts
-      )
+    {:reply, page_command(state, "Page.reload", %{}, 10_000), state}
+  end
 
-    {:reply, result, state}
+  def handle_call({:handle_dialog, accept, user_text, timeout_ms}, _from, state) do
+    params = maybe_put_user_prompt(%{"accept" => accept}, user_text)
+
+    {:reply, page_command(state, "Page.handleJavaScriptDialog", params, timeout_ms), state}
+  end
+
+  def handle_call({:perform_keyboard_actions, actions, timeout_ms}, _from, state) do
+    reply = perform_key_actions(state, actions, timeout_ms)
+    {:reply, reply, state}
+  end
+
+  def handle_call({:set_user_agent, user_agent}, _from, state) do
+    {:reply, page_command(state, "Emulation.setUserAgentOverride", %{"userAgent" => user_agent}, 10_000), state}
   end
 
   def handle_call({:await_ready, opts}, _from, state) do
     timeout_ms = normalize_positive_integer(Keyword.get(opts, :timeout_ms), @default_ready_timeout_ms)
     quiet_ms = normalize_positive_integer(Keyword.get(opts, :quiet_ms), @default_ready_quiet_ms)
 
-    case evaluate_readiness(state.id, timeout_ms, quiet_ms, state.bidi_opts) do
+    case evaluate_readiness(state, timeout_ms, quiet_ms) do
       {:ok, %{"ok" => true} = readiness} ->
-        readiness = Map.put_new(readiness, "lastBidiEvent", state.last_bidi_event)
+        readiness = Map.put_new(readiness, "lastPageEvent", state.last_page_event)
         {:reply, {:ok, readiness}, %{state | last_readiness: readiness}}
 
       {:ok, readiness} ->
-        readiness = Map.put_new(readiness, "lastBidiEvent", state.last_bidi_event)
+        readiness = Map.put_new(readiness, "lastPageEvent", state.last_page_event)
         {:reply, {:error, "browser readiness timeout", readiness}, %{state | last_readiness: readiness}}
 
       {:error, reason, details} ->
@@ -247,64 +274,60 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   def handle_call({:evaluate, expression, timeout_ms, started_us}, _from, state) do
     record_transport_delay(:browsing_context_queue, started_us)
-    bidi_opts = Keyword.put(state.bidi_opts, :timeout, timeout_ms)
 
-    result =
+    {result, state} =
       Cerberus.Profiling.measure({:browser_transport, :browsing_context_dispatch}, fn ->
-        evaluate_script(state.id, expression, bidi_opts)
+        evaluate_expression(state, expression, timeout_ms)
       end)
 
     {:reply, result, state}
   end
 
   @impl true
-  def handle_info({:cerberus_bidi_event, %{"method" => method, "params" => params}}, state)
+  def handle_info({:cerberus_cdp_page_event, target_id, method, params}, %{id: target_id} = state)
       when is_binary(method) and is_map(params) do
     event =
-      if params["context"] == state.id do
-        %{
-          "method" => method,
-          "context" => params["context"],
-          "url" => params["url"],
-          "navigation" => params["navigation"],
-          "suggestedFilename" => params["suggestedFilename"],
-          "type" => params["type"],
-          "message" => params["message"],
-          "handler" => params["handler"],
-          "accepted" => params["accepted"],
-          "userText" => params["userText"],
-          "status" => params["status"],
-          "timestampMs" => System.monotonic_time(:millisecond)
-        }
-      end
+      params
+      |> Map.take([
+        "frameId",
+        "url",
+        "guid",
+        "suggestedFilename",
+        "type",
+        "message",
+        "hasBrowserHandler",
+        "result",
+        "userInput",
+        "state"
+      ])
+      |> Map.put("method", method)
+      |> Map.put("context", target_id)
+      |> Map.put("timestampMs", System.monotonic_time(:millisecond))
 
     cond do
-      is_map(event) and method in @download_events ->
+      method in @download_events ->
         state = %{
           state
-          | last_bidi_event: event,
+          | last_page_event: event,
             download_events: push_download_event(state.download_events, event)
         }
 
         {:noreply, resolve_download_waiters(state, event)}
 
-      is_map(event) and method in @dialog_events ->
+      method in @dialog_events ->
         next_dialog = next_active_dialog(method, event, state.active_dialog)
 
         state = %{
           state
-          | last_bidi_event: event,
+          | last_page_event: event,
             dialog_events: push_dialog_event(state.dialog_events, event),
             active_dialog: next_dialog
         }
 
         {:noreply, resolve_dialog_waiters(state, next_dialog)}
 
-      is_map(event) ->
-        {:noreply, %{state | last_bidi_event: event}}
-
       true ->
-        {:noreply, state}
+        {:noreply, %{state | last_page_event: event}}
     end
   end
 
@@ -336,108 +359,104 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   @impl true
   def terminate(_reason, state) do
-    _ = BiDi.command("session.unsubscribe", %{"events" => @bidi_events, "contexts" => [state.id]}, state.bidi_opts)
-    _ = BiDi.unsubscribe(self(), state.bidi_opts)
-    _ = BiDi.command("browsingContext.close", %{"context" => state.id}, state.bidi_opts)
+    maybe_stop_cdp_page(state.cdp_page_pid)
+    _ = CdpBrowserProcess.close_target(state.cdp_browser_pid, state.id)
     :ok
   end
 
-  defp create_browsing_context(user_context_id, bidi_opts) do
-    create_browsing_context(user_context_id, bidi_opts, 2)
-  end
-
-  defp resolve_browsing_context_id(_user_context_id, context_id, _bidi_opts)
+  defp resolve_target_id(_browser_context_id, context_id, _cdp_browser_pid)
        when is_binary(context_id) and context_id != "" do
     {:ok, context_id}
   end
 
-  defp resolve_browsing_context_id(user_context_id, nil, bidi_opts),
-    do: create_browsing_context(user_context_id, bidi_opts)
+  defp resolve_target_id(browser_context_id, nil, cdp_browser_pid) do
+    case CdpBrowserProcess.create_target(cdp_browser_pid, browser_context_id, 10_000) do
+      {:ok, %{"targetId" => target_id}} when is_binary(target_id) -> {:ok, target_id}
+      {:ok, _other} -> {:error, "unexpected Target.createTarget response", %{}}
+      {:error, reason, details} -> {:error, reason, details}
+    end
+  end
 
-  defp resolve_browsing_context_id(_user_context_id, context_id, _bidi_opts) do
+  defp resolve_target_id(_browser_context_id, context_id, _cdp_browser_pid) do
     {:error, "invalid browsing context", %{"context_id" => inspect(context_id)}}
   end
 
-  defp maybe_set_viewport_for_context(nil, context_id, viewport, bidi_opts),
-    do: maybe_set_viewport(context_id, viewport, bidi_opts)
-
-  defp maybe_set_viewport_for_context(_context_id, _resolved_context_id, _viewport, _bidi_opts), do: :ok
-
-  defp create_browsing_context(user_context_id, bidi_opts, retries_left)
-       when is_integer(retries_left) and retries_left >= 0 do
-    with {:ok, result} <-
-           BiDi.command(
-             "browsingContext.create",
-             %{
-               "type" => "tab",
-               "userContext" => user_context_id
-             },
-             bidi_opts
-           ),
-         browsing_context_id when is_binary(browsing_context_id) <- result["context"] do
-      {:ok, browsing_context_id}
-    else
-      {:error, reason, details} ->
-        if retries_left > 0 and transient_create_browsing_context_error?(reason, details) do
-          Process.sleep(25)
-          create_browsing_context(user_context_id, bidi_opts, retries_left - 1)
-        else
-          {:error, reason, details}
-        end
-
-      _ ->
-        {:error, "unexpected browsingContext.create response", %{}}
+  defp bootstrap_page(cdp_page_pid, viewport, user_agent, init_scripts) when is_pid(cdp_page_pid) do
+    with {:ok, _} <- CdpPageProcess.command(cdp_page_pid, "Page.enable", %{}, 5_000),
+         :ok <- maybe_set_viewport(cdp_page_pid, viewport),
+         :ok <- maybe_set_user_agent(cdp_page_pid, user_agent) do
+      with :ok <- maybe_add_init_scripts(cdp_page_pid, init_scripts) do
+        maybe_apply_init_scripts_now(cdp_page_pid, init_scripts)
+      end
     end
   end
 
-  defp transient_create_browsing_context_error?(reason, details) do
-    combined = "#{reason} #{inspect(details)}"
+  defp maybe_set_viewport(_cdp_page_pid, nil), do: :ok
 
-    String.contains?(combined, "DiscardedBrowsingContextError") or
-      String.contains?(combined, "no such frame") or
-      String.contains?(combined, "argument is not a global object")
-  end
-
-  defp maybe_set_viewport(_context_id, nil, _bidi_opts), do: :ok
-
-  defp maybe_set_viewport(context_id, %{width: width, height: height}, bidi_opts)
+  defp maybe_set_viewport(cdp_page_pid, %{width: width, height: height})
        when is_integer(width) and is_integer(height) and width > 0 and height > 0 do
-    params = %{
-      "context" => context_id,
-      "viewport" => %{"width" => width, "height" => height}
-    }
+    params = %{"width" => width, "height" => height, "deviceScaleFactor" => 1, "mobile" => false}
 
-    case BiDi.command("browsingContext.setViewport", params, bidi_opts) do
-      {:ok, _result} ->
-        :ok
-
-      {:error, reason, details} ->
-        {:error, reason, details}
+    case CdpPageProcess.command(cdp_page_pid, "Emulation.setDeviceMetricsOverride", params, 5_000) do
+      {:ok, _result} -> :ok
+      {:error, reason, details} -> {:error, reason, details}
     end
   end
 
-  defp maybe_set_viewport(_context_id, viewport, _bidi_opts) do
-    {:error, "invalid viewport", %{viewport: inspect(viewport)}}
+  defp maybe_set_viewport(_cdp_page_pid, viewport), do: {:error, "invalid viewport", %{viewport: inspect(viewport)}}
+
+  defp maybe_set_user_agent(_cdp_page_pid, nil), do: :ok
+
+  defp maybe_set_user_agent(cdp_page_pid, user_agent) when is_binary(user_agent) do
+    case CdpPageProcess.command(cdp_page_pid, "Emulation.setUserAgentOverride", %{"userAgent" => user_agent}, 5_000) do
+      {:ok, _result} -> :ok
+      {:error, reason, details} -> {:error, reason, details}
+    end
   end
 
-  defp evaluate_script(context_id, expression, bidi_opts) do
-    BiDi.command(
-      "script.evaluate",
-      %{
-        "target" => %{"context" => context_id},
-        "expression" => expression,
-        "awaitPromise" => true,
-        "resultOwnership" => "none"
-      },
-      bidi_opts
-    )
+  defp maybe_add_init_scripts(_cdp_page_pid, []), do: :ok
+
+  defp maybe_add_init_scripts(cdp_page_pid, init_scripts) when is_list(init_scripts) do
+    Enum.reduce_while(init_scripts, :ok, fn script, :ok ->
+      case CdpPageProcess.command(cdp_page_pid, "Page.addScriptToEvaluateOnNewDocument", %{"source" => script}, 5_000) do
+        {:ok, _result} -> {:cont, :ok}
+        {:error, reason, details} -> {:halt, {:error, reason, details}}
+      end
+    end)
   end
 
-  defp evaluate_json(context_id, expression, bidi_opts) do
-    with {:ok, result} <- evaluate_script(context_id, expression, bidi_opts),
+  defp maybe_apply_init_scripts_now(_cdp_page_pid, []), do: :ok
+
+  defp maybe_apply_init_scripts_now(cdp_page_pid, init_scripts) when is_list(init_scripts) do
+    Enum.reduce_while(init_scripts, :ok, fn script, :ok ->
+      case CdpPageProcess.evaluate(cdp_page_pid, script, 5_000) do
+        {:ok, _result} -> {:cont, :ok}
+        {:error, reason, details} -> {:halt, {:error, reason, details}}
+      end
+    end)
+  end
+
+  defp evaluate_expression(state, expression, timeout_ms) do
+    case ensure_cdp_page(state) do
+      {:ok, cdp_page_pid, state} ->
+        {CdpPageProcess.evaluate(cdp_page_pid, expression, timeout_ms), state}
+
+      {:error, reason} ->
+        {{:error, inspect(reason), %{}}, state}
+    end
+  end
+
+  defp evaluate_readiness(state, timeout_ms, quiet_ms) do
+    expression = readiness_expression(timeout_ms, quiet_ms)
+
+    with {:ok, cdp_page_pid, _state} <- ensure_cdp_page(state),
+         {:ok, result} <- CdpPageProcess.evaluate(cdp_page_pid, expression, timeout_ms),
          {:ok, json} <- decode_remote_json(result) do
       {:ok, json}
     else
+      {:error, "cdp command timeout", _details} ->
+        sample_timeout_readiness(state)
+
       {:error, reason, details} ->
         {:error, reason, details}
 
@@ -446,39 +465,70 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     end
   end
 
-  defp evaluate_readiness(context_id, timeout_ms, quiet_ms, bidi_opts) do
-    expression = readiness_expression(timeout_ms, quiet_ms)
+  defp sample_timeout_readiness(state) do
+    expression = readiness_sample_expression()
 
-    case evaluate_json(context_id, expression, bidi_opts) do
-      {:error, reason, details} ->
-        if transient_readiness_error?(reason, details) do
-          Process.sleep(25)
-          evaluate_json(context_id, expression, bidi_opts)
-        else
-          {:error, reason, details}
-        end
-
-      result ->
-        result
+    with {:ok, cdp_page_pid, _state} <- ensure_cdp_page(state),
+         {:ok, result} <- CdpPageProcess.evaluate(cdp_page_pid, expression, 1_000),
+         {:ok, json} <- decode_remote_json(result) do
+      {:ok, json}
+    else
+      _other ->
+        {:ok,
+         %{
+           "ok" => false,
+           "reason" => "timeout",
+           "path" => last_known_path(state),
+           "awaited" => ["phx:page-loading-stop", "dom-mutation", "window-load", "liveview-connected", "liveview-down"],
+           "lastSignal" => "timeout",
+           "lastLiveState" => "unknown",
+           "details" => %{}
+         }}
     end
   end
 
-  defp transient_readiness_error?(reason, details) do
-    combined = "#{reason} #{inspect(details)}"
+  defp last_known_path(%{last_page_event: %{"url" => url}}) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{path: path, query: query} when is_binary(path) and path != "" ->
+        if is_binary(query) and query != "", do: path <> "?" <> query, else: path
 
-    Enum.any?(
-      [
-        "JSWindowActorChild cannot send",
-        "argument is not a global object",
-        "Inspected target navigated or closed",
-        "Cannot find context with specified id",
-        "execution contexts cleared",
-        "DiscardedBrowsingContextError",
-        "no such frame"
-      ],
-      &String.contains?(combined, &1)
-    )
+      _ ->
+        ""
+    end
   end
+
+  defp last_known_path(_state), do: ""
+
+  defp ensure_cdp_page(%{cdp_page_pid: pid} = state) when is_pid(pid) do
+    if Process.alive?(pid), do: {:ok, pid, state}, else: ensure_cdp_page(clear_cdp_page(state))
+  end
+
+  defp ensure_cdp_page(%{debugger_address: debugger_address, id: context_id, slow_mo_ms: slow_mo_ms} = state)
+       when is_binary(debugger_address) do
+    case CdpPageProcess.start_link(
+           target_id: context_id,
+           debugger_address: debugger_address,
+           owner: self(),
+           slow_mo_ms: slow_mo_ms
+         ) do
+      {:ok, pid} -> {:ok, pid, %{state | cdp_page_pid: pid}}
+      {:error, _reason} -> {:error, :cdp_page_unavailable}
+    end
+  end
+
+  defp ensure_cdp_page(_state), do: {:error, :cdp_page_unavailable}
+
+  defp clear_cdp_page(%{cdp_page_pid: pid} = state) do
+    maybe_stop_cdp_page(pid)
+    %{state | cdp_page_pid: nil}
+  end
+
+  defp maybe_stop_cdp_page(pid) when is_pid(pid) do
+    if Process.alive?(pid), do: GenServer.stop(pid, :normal)
+    :ok
+  end
+
+  defp maybe_stop_cdp_page(_pid), do: :ok
 
   defp decode_remote_json(%{"result" => %{"type" => "string", "value" => payload}}) when is_binary(payload) do
     case JSON.decode(payload) do
@@ -513,8 +563,8 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     |> Enum.take(-@dialog_history_limit)
   end
 
-  defp next_active_dialog("browsingContext.userPromptOpened", event, _active_dialog), do: event
-  defp next_active_dialog("browsingContext.userPromptClosed", _event, _active_dialog), do: nil
+  defp next_active_dialog("Page.javascriptDialogOpening", event, _active_dialog), do: event
+  defp next_active_dialog("Page.javascriptDialogClosed", _event, _active_dialog), do: nil
   defp next_active_dialog(_method, _event, active_dialog), do: active_dialog
 
   defp find_download_event(download_events, expected_filename)
@@ -522,10 +572,7 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     Enum.find(download_events, &download_event_match?(&1, expected_filename))
   end
 
-  defp download_event_match?(
-         %{"method" => "browsingContext.downloadWillBegin", "suggestedFilename" => filename},
-         expected_filename
-       )
+  defp download_event_match?(%{"method" => "Page.downloadWillBegin", "suggestedFilename" => filename}, expected_filename)
        when is_binary(filename) and is_binary(expected_filename) do
     filename == expected_filename
   end
@@ -567,6 +614,27 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   defp command_call_timeout_ms(timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
     timeout_ms + @call_timeout_padding_ms
+  end
+
+  defp page_command(state, method, params, timeout_ms)
+       when is_binary(method) and is_map(params) and is_integer(timeout_ms) and timeout_ms > 0 do
+    with {:ok, cdp_page_pid, _state} <- ensure_cdp_page(state) do
+      CdpPageProcess.command(cdp_page_pid, method, params, timeout_ms)
+    end
+  end
+
+  defp maybe_put_user_prompt(params, nil), do: params
+  defp maybe_put_user_prompt(params, user_text), do: Map.put(params, "promptText", user_text)
+
+  defp perform_key_actions(_state, [], _timeout_ms), do: {:ok, %{}}
+
+  defp perform_key_actions(state, actions, timeout_ms) do
+    Enum.reduce_while(actions, {:ok, %{}}, fn action, _acc ->
+      case page_command(state, "Input.dispatchKeyEvent", action, timeout_ms) do
+        {:ok, _result} = ok -> {:cont, ok}
+        {:error, _reason, _details} = error -> {:halt, error}
+      end
+    end)
   end
 
   defp readiness_expression(timeout_ms, quiet_ms) do
@@ -782,6 +850,71 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
       } catch (error) {
         return payload(false, "setup-error", "setup-error", "unknown", { error: "" + error });
       }
+    })()
+    """
+  end
+
+  defp readiness_sample_expression do
+    """
+    (() => {
+      const awaited = [
+        "phx:page-loading-stop",
+        "dom-mutation",
+        "window-load",
+        "liveview-connected",
+        "liveview-down"
+      ];
+
+      const roots = () => {
+        try {
+          return Array.from(document.querySelectorAll("[data-phx-session]"));
+        } catch (_error) {
+          return [];
+        }
+      };
+
+      const liveState = () => {
+        const currentRoots = roots();
+        if (currentRoots.length === 0) return "down";
+
+        const connectedCount = currentRoots.filter((root) => {
+          try {
+            return !!(root && root.classList && root.classList.contains("phx-connected"));
+          } catch (_error) {
+            return false;
+          }
+        }).length;
+
+        return connectedCount > 0 ? "connected" : "disconnected";
+      };
+
+      const safePath = () => {
+        try {
+          return window.location.pathname + window.location.search;
+        } catch (_error) {
+          return "";
+        }
+      };
+
+      const currentState = liveState();
+      const lastSignal =
+        currentState === "down"
+          ? "liveview-down"
+          : currentState === "connected"
+            ? "dom-mutation"
+            : currentState === "disconnected"
+              ? "liveview-disconnected"
+              : "timeout";
+
+      return JSON.stringify({
+        ok: false,
+        reason: "timeout",
+        path: safePath(),
+        awaited,
+        lastSignal,
+        lastLiveState: currentState,
+        details: {}
+      });
     })()
     """
   end

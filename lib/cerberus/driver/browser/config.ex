@@ -140,7 +140,7 @@ defmodule Cerberus.Driver.Browser.Config do
   def visibility_mode(false), do: "hidden"
   def visibility_mode(:any), do: "any"
 
-  @spec ensure_popup_mode_supported!(:chrome | :firefox, :allow | :same_tab) :: :ok
+  @spec ensure_popup_mode_supported!(:chrome, :allow | :same_tab) :: :ok
   def ensure_popup_mode_supported!(_browser_name, _popup_mode), do: :ok
 
   defp default_screenshot_path(browser_opts) do

@@ -50,7 +50,6 @@ defmodule Cerberus.MixProject do
   defp aliases do
     [
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test --warnings-as-errors"],
-      "test.firefox": ["cmd env CERBERUS_BROWSER_NAME=firefox mix test"],
       precommit: [
         "format --check-formatted",
         "credo --strict",
@@ -64,7 +63,6 @@ defmodule Cerberus.MixProject do
     [
       preferred_envs: [
         "test.websocket": :test,
-        "test.firefox": :test,
         test: :test,
         dialyzer: :test,
         precommit: :test

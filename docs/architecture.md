@@ -11,7 +11,7 @@ flowchart LR
   B --> C["Driver Dispatch"]
   C --> D["Static Driver<br/>ConnTest"]
   C --> E["Live Driver<br/>LiveViewTest"]
-  C --> F["Browser Driver<br/>WebDriver BiDi"]
+  C --> F["Browser Driver<br/>Chrome CDP"]
   D --> G["HTML Semantics<br/>Cerberus.Html"]
   E --> G
   E --> H["LiveView Semantics<br/>Cerberus.Phoenix.LiveViewHTML"]
@@ -50,7 +50,7 @@ Driver-first organization is the primary code layout rule:
   - `lib/cerberus/driver/browser.ex` for orchestration.
   - `lib/cerberus/driver/browser/config.ex` for browser option normalization.
   - `lib/cerberus/driver/browser/expressions.ex` for browser-side JS expression builders.
-  - `lib/cerberus/driver/browser/runtime.ex`, `lib/cerberus/driver/browser/bidi.ex`, and browser socket/context supervisors for BiDi lifecycle.
+  - `lib/cerberus/driver/browser/runtime.ex` plus browser context/page processes for Chrome runtime lifecycle.
 
 Cross-driver concern modules remain separate:
 
@@ -66,7 +66,7 @@ Cross-driver concern modules remain separate:
 
 ## Browser Overrides and Isolation
 
-- Browser runtime process and BiDi socket are shared for efficiency.
+- Browser runtime process and shared Chrome transport are reused for efficiency.
 - Each browser session (`session(:browser, ...)`) creates a dedicated browser user context.
 - Per-session browser overrides (`browser: [viewport: ..., user_agent: ..., init_script: ...]`) apply only to that session's user context.
 - Result: test/module overrides do not require dedicated browser processes unless you need different runtime-level launch settings.

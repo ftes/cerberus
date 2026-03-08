@@ -59,8 +59,8 @@ defmodule Cerberus.BrowserMultiSessionBehaviorTest do
       |> visit("/live/counter")
       |> assert_has(text("Count: 0", exact: true))
 
-    user_context_a = :sys.get_state(session_a.user_context_pid).user_context_id
-    user_context_b = :sys.get_state(session_b.user_context_pid).user_context_id
+    user_context_a = :sys.get_state(session_a.user_context_pid).browser_context_id
+    user_context_b = :sys.get_state(session_b.user_context_pid).browser_context_id
     refute user_context_a == user_context_b
 
     barrier = make_ref()
