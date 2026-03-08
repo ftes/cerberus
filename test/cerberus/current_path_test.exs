@@ -22,10 +22,10 @@ defmodule Cerberus.CurrentPathTest do
         |> driver_session(context)
         |> visit("/live/redirects")
 
-      assert session.current_path == "/live/redirects"
+      assert_path(session, "/live/redirects")
 
       session = click(session, ~l"Patch link"e)
-      assert session.current_path == "/live/redirects?details=true&foo=bar"
+      assert_path(session, "/live/redirects", query: %{details: "true", foo: "bar"})
     end
 
     test "current_path is updated on push navigation in live and browser drivers (#{driver})", context do
@@ -34,10 +34,10 @@ defmodule Cerberus.CurrentPathTest do
         |> driver_session(context)
         |> visit("/live/redirects")
 
-      assert session.current_path == "/live/redirects"
+      assert_path(session, "/live/redirects")
 
       session = click(session, ~l"Button with push navigation"e)
-      assert session.current_path == "/live/counter?foo=bar"
+      assert_path(session, "/live/counter", query: %{foo: "bar"})
     end
 
     test "query strings are preserved in current_path tracking across drivers (#{driver})", context do
@@ -48,7 +48,7 @@ defmodule Cerberus.CurrentPathTest do
         |> fill_in(~l"Search term"l, "phoenix")
         |> submit(~l"Run Search"e)
 
-      assert session.current_path == "/search/results?q=phoenix"
+      assert_path(session, "/search/results", query: %{q: "phoenix"})
     end
 
     test "prefixed fixture paths keep prefix and query in current_path across drivers (#{driver})", context do
@@ -56,8 +56,6 @@ defmodule Cerberus.CurrentPathTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/phoenix_test/page/index?source=core")
-
-      assert session.current_path == "/phoenix_test/page/index?source=core"
 
       session
       |> assert_path("/phoenix_test/page/index", query: %{source: "core"})
@@ -72,10 +70,10 @@ defmodule Cerberus.CurrentPathTest do
         |> visit("/live/redirects")
         |> click(~l"Patch link"e)
 
-      assert session.current_path == "/live/redirects?details=true&foo=bar"
+      assert_path(session, "/live/redirects", query: %{details: "true", foo: "bar"})
 
       reloaded = reload_page(session)
-      assert reloaded.current_path == "/live/redirects?details=true&foo=bar"
+      assert_path(reloaded, "/live/redirects", query: %{details: "true", foo: "bar"})
     end
   end
 

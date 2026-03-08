@@ -28,7 +28,7 @@ defmodule Cerberus.Driver.Browser.Evaluate do
   end
 
   defp await_result(task, user_context_pid, tab_id, deadline, timeout_ms, bidi_opts) do
-    case Task.yield(task, 0) do
+    case Task.yield(task, poll_wait_ms(deadline)) do
       {:ok, result} ->
         result
 
@@ -46,12 +46,12 @@ defmodule Cerberus.Driver.Browser.Evaluate do
     if wait_ms == 0 do
       shutdown_or_timeout(task, timeout_ms)
     else
-      continue_after_dialog_wait(task, user_context_pid, tab_id, deadline, timeout_ms, bidi_opts, wait_ms)
+      continue_after_dialog_wait(task, user_context_pid, tab_id, deadline, timeout_ms, bidi_opts)
     end
   end
 
-  defp continue_after_dialog_wait(task, user_context_pid, tab_id, deadline, timeout_ms, bidi_opts, wait_ms) do
-    case maybe_unblock_dialog(user_context_pid, tab_id, wait_ms, bidi_opts) do
+  defp continue_after_dialog_wait(task, user_context_pid, tab_id, deadline, timeout_ms, bidi_opts) do
+    case maybe_unblock_dialog(user_context_pid, tab_id, bidi_opts) do
       :ok ->
         await_result(task, user_context_pid, tab_id, deadline, timeout_ms, bidi_opts)
 
@@ -75,7 +75,7 @@ defmodule Cerberus.Driver.Browser.Evaluate do
 
   defp evaluate_task_crash(reason), do: {:error, "evaluate task crashed", %{reason: Exception.format_exit(reason)}}
 
-  defp maybe_unblock_dialog(user_context_pid, tab_id, wait_ms, bidi_opts) when wait_ms > 0 do
+  defp maybe_unblock_dialog(user_context_pid, tab_id, bidi_opts) do
     case UserContextProcess.active_dialog(user_context_pid, tab_id) do
       %{} = dialog ->
         accept_dialog(dialog, tab_id, bidi_opts)

@@ -14,8 +14,7 @@ defmodule Cerberus.TestSupport.PhoenixTest.Legacy do
 
   def reload_page(session), do: Cerberus.reload_page(ensure_session(session))
 
-  def current_path(session),
-    do: session |> ensure_session() |> Cerberus.current_path(return_result: true) |> strip_prefix()
+  def current_path(session), do: session |> ensure_session() |> then(& &1.current_path) |> strip_prefix()
 
   def assert_has(session, "title") do
     session = ensure_session(session)

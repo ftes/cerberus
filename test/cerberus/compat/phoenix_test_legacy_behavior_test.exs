@@ -57,7 +57,7 @@ defmodule Cerberus.Compat.PhoenixTestLegacyBehaviorTest do
   test "legacy visit prefixes routes and current_path strips prefix", %{conn: conn} do
     session = visit(conn, "/page/index?source=compat")
 
-    assert current_path(session) == "/page/index?source=compat"
+    assert_path(session, "/page/index", query: %{source: "compat"})
 
     session
     |> assert_path("/page/index", query: %{source: "compat"})

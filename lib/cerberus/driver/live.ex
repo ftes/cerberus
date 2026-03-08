@@ -38,18 +38,7 @@ defmodule Cerberus.Driver.Live do
   alias Phoenix.LiveViewTest.TreeDOM
   alias Phoenix.LiveViewTest.View
 
-  @type t :: %__MODULE__{
-          endpoint: module(),
-          conn: Plug.Conn.t() | nil,
-          timeout_ms: non_neg_integer(),
-          timeout_overridden?: boolean(),
-          view: term() | nil,
-          document: LazyHTML.t() | nil,
-          form_data: map(),
-          scope: Session.scope_value(),
-          current_path: String.t() | nil,
-          last_result: Session.last_result()
-        }
+  @type t :: %__MODULE__{}
 
   defstruct endpoint: nil,
             conn: nil,
@@ -867,7 +856,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp build_path_observed(session, expected, opts) do
-    actual_path = Session.current_path(session)
+    actual_path = session.current_path
     exact = Keyword.fetch!(opts, :exact)
 
     %{
@@ -973,7 +962,7 @@ defmodule Cerberus.Driver.Live do
           observed = %{
             action: :button,
             clicked: button.text,
-            path: Session.current_path(changed_session),
+            path: changed_session.current_path,
             phx_change: change.triggered,
             target: change.target,
             texts: Html.texts(changed_session.document, :any, Session.scope(changed_session)),
@@ -1028,7 +1017,7 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :button,
           clicked: button.text,
-          path: Session.current_path(updated),
+          path: updated.current_path,
           texts: Html.texts(updated.document, :any, Session.scope(updated)),
           transition: transition
         }
@@ -1091,12 +1080,12 @@ defmodule Cerberus.Driver.Live do
         driver_kind(updated),
         reason,
         session.current_path,
-        Session.current_path(updated)
+        updated.current_path
       )
 
     observed = %{
       action: :link,
-      path: Session.current_path(updated),
+      path: updated.current_path,
       clicked: link.text,
       texts: Html.texts(updated.document, :any, Session.scope(updated)),
       transition: transition
@@ -1209,13 +1198,13 @@ defmodule Cerberus.Driver.Live do
         driver_kind(updated),
         reason,
         session.current_path,
-        Session.current_path(updated)
+        updated.current_path
       )
 
     observed = %{
       action: action,
       clicked: clicked.text,
-      path: Session.current_path(updated),
+      path: updated.current_path,
       texts: Html.texts(updated.document, :any, Session.scope(updated)),
       transition: transition
     }
@@ -1424,7 +1413,7 @@ defmodule Cerberus.Driver.Live do
   defp restore_live_child_scope!(%{__struct__: _} = callback_result, parent_session, previous_scope) do
     case callback_result do
       %__MODULE__{} = live_result ->
-        if Session.current_path(live_result) == Session.current_path(parent_session) do
+        if live_result.current_path == parent_session.current_path do
           live_result
           |> Map.put(:view, parent_session.view)
           |> Map.put(:document, Html.parse!(render(parent_session.view)))
@@ -1865,14 +1854,14 @@ defmodule Cerberus.Driver.Live do
             driver_kind(updated),
             :click,
             session.current_path,
-            Session.current_path(updated)
+            updated.current_path
           )
 
         observed = %{
           action: action,
           clicked: element[:text] || "",
           method: method,
-          path: Session.current_path(updated),
+          path: updated.current_path,
           texts: Html.texts(updated.document, :any, Session.scope(updated)),
           transition: transition
         }
@@ -2022,12 +2011,12 @@ defmodule Cerberus.Driver.Live do
         driver_kind(updated),
         reason,
         session.current_path,
-        Session.current_path(updated)
+        updated.current_path
       )
 
     observed = %{
       action: :upload,
-      path: Session.current_path(updated),
+      path: updated.current_path,
       field: field,
       file_name: file_name,
       texts: Html.texts(updated.document, :any, Session.scope(updated)),
@@ -2159,13 +2148,13 @@ defmodule Cerberus.Driver.Live do
           driver_kind(updated),
           :submit,
           session.current_path,
-          Session.current_path(updated)
+          updated.current_path
         )
 
       observed = %{
         action: :submit,
         clicked: button.text,
-        path: Session.current_path(updated),
+        path: updated.current_path,
         method: method,
         params: submitted_params,
         transition: transition
@@ -2241,7 +2230,7 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :submit,
           clicked: button.text,
-          path: Session.current_path(updated),
+          path: updated.current_path,
           method: method,
           params: params,
           transition: transition
@@ -2269,7 +2258,7 @@ defmodule Cerberus.Driver.Live do
         observed = %{
           action: :submit,
           clicked: button.text,
-          path: Session.current_path(updated),
+          path: updated.current_path,
           method: normalize_submit_method(button.method),
           params: submitted_params,
           transition: transition
@@ -2319,13 +2308,13 @@ defmodule Cerberus.Driver.Live do
         driver_kind(updated),
         reason,
         session.current_path,
-        Session.current_path(updated)
+        updated.current_path
       )
 
     observed = %{
       action: :submit,
       clicked: button.text,
-      path: Session.current_path(updated),
+      path: updated.current_path,
       method: normalize_submit_method(button.method),
       params: submitted_params,
       transition: transition
@@ -2579,7 +2568,7 @@ defmodule Cerberus.Driver.Live do
       {:ok, changed_session, change} ->
         observed = %{
           action: :select,
-          path: Session.current_path(changed_session),
+          path: changed_session.current_path,
           field: field,
           option: option,
           value: value,
@@ -2610,7 +2599,7 @@ defmodule Cerberus.Driver.Live do
       {:ok, changed_session, change} ->
         observed = %{
           action: :select,
-          path: Session.current_path(changed_session),
+          path: changed_session.current_path,
           field: field,
           option: option,
           value: value,
@@ -2641,7 +2630,7 @@ defmodule Cerberus.Driver.Live do
       {:ok, changed_session, change} ->
         observed = %{
           action: :choose,
-          path: Session.current_path(changed_session),
+          path: changed_session.current_path,
           field: field,
           value: value,
           phx_change: change.triggered,
@@ -2736,7 +2725,7 @@ defmodule Cerberus.Driver.Live do
       {:ok, changed_session, change} ->
         observed = %{
           action: :fill_in,
-          path: Session.current_path(changed_session),
+          path: changed_session.current_path,
           field: field,
           value: value,
           phx_change: change.triggered,
@@ -3040,7 +3029,7 @@ defmodule Cerberus.Driver.Live do
       {:ok, changed_session, change} ->
         observed = %{
           action: op,
-          path: Session.current_path(changed_session),
+          path: changed_session.current_path,
           field: field,
           checked: checked?,
           phx_change: change.triggered,
@@ -3230,7 +3219,7 @@ defmodule Cerberus.Driver.Live do
         driver_kind(redirected),
         :live_redirect,
         session.current_path,
-        Session.current_path(redirected)
+        redirected.current_path
       )
 
     {:ok, redirected, %{triggered: true, target: target, transition: transition}}
@@ -3245,7 +3234,7 @@ defmodule Cerberus.Driver.Live do
         driver_kind(redirected),
         :redirect,
         session.current_path,
-        Session.current_path(redirected)
+        redirected.current_path
       )
 
     {:ok, redirected, %{triggered: true, target: target, transition: transition}}
@@ -3270,7 +3259,7 @@ defmodule Cerberus.Driver.Live do
             driver_kind(updated),
             reason,
             session.current_path,
-            Session.current_path(updated)
+            updated.current_path
           )
 
         {:ok, updated, transition}
@@ -3332,7 +3321,7 @@ defmodule Cerberus.Driver.Live do
         driver_kind(updated),
         :submit,
         session.current_path,
-        Session.current_path(updated)
+        updated.current_path
       )
 
     {:ok, updated, transition}
@@ -3404,11 +3393,11 @@ defmodule Cerberus.Driver.Live do
             driver_kind(redirected_session),
             :unwrap,
             session.current_path,
-            Session.current_path(redirected_session)
+            redirected_session.current_path
           )
 
         update_last_result(redirected_session, :unwrap, %{
-          path: Session.current_path(redirected_session),
+          path: redirected_session.current_path,
           transition: unwrap_transition
         })
     end
@@ -3449,11 +3438,11 @@ defmodule Cerberus.Driver.Live do
         driver_kind(redirected),
         kind,
         session.current_path,
-        Session.current_path(redirected)
+        redirected.current_path
       )
 
     update_last_result(redirected, :unwrap, %{
-      path: Session.current_path(redirected),
+      path: redirected.current_path,
       transition: unwrap_transition
     })
   end

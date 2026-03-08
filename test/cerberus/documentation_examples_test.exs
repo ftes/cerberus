@@ -106,7 +106,7 @@ defmodule Cerberus.DocumentationExamplesTest do
       |> visit("/articles")
       |> evaluate_js("document.body.dataset.cerberus = 'ready'", fn _result -> :ok end)
 
-    assert session.current_path == "/articles"
+    assert_path(session, "/articles")
   end
 
   defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)

@@ -65,23 +65,7 @@ defmodule Cerberus.Driver.Browser do
           popup_mode: :allow | :same_tab
         }
 
-  @type t :: %__MODULE__{
-          user_context_pid: pid(),
-          tab_id: String.t(),
-          browser_name: :chrome | :firefox,
-          bidi_opts: keyword(),
-          endpoint: module() | nil,
-          base_url: String.t(),
-          timeout_ms: non_neg_integer(),
-          timeout_overridden?: boolean(),
-          ready_timeout_ms: pos_integer(),
-          ready_quiet_ms: pos_integer(),
-          browser_context_defaults: browser_context_defaults(),
-          active_form_selector: String.t() | nil,
-          scope: Session.scope_value(),
-          current_path: String.t() | nil,
-          last_result: Session.last_result()
-        }
+  @type t :: %__MODULE__{}
 
   defstruct user_context_pid: nil,
             tab_id: nil,
@@ -357,6 +341,21 @@ defmodule Cerberus.Driver.Browser do
 
       {:error, reason, details} ->
         handle_visit_navigation_error!(session, state, reason, details)
+    end
+  end
+
+  @doc false
+  @spec reload_page(t()) :: t()
+  def reload_page(%__MODULE__{} = session) do
+    state = state!(session)
+
+    case reload_browser(state) do
+      {:ok, _} ->
+        {ready_state, readiness} = await_ready_after_visit!(state)
+        snapshot_after_visit!(session, ready_state, readiness)
+
+      {:error, reason, details} ->
+        raise ArgumentError, "browser reload failed: #{reason} (#{inspect(details)})"
     end
   end
 
@@ -862,7 +861,7 @@ defmodule Cerberus.Driver.Browser do
       target: target
     }
 
-    maybe_await_ready_result(session, state, result, opts, await_failure_observed, fn {ready_state, readiness} ->
+    finalize_action_result(session, state, result, opts, await_failure_observed, fn {ready_state, readiness} ->
       path =
         result
         |> action_result_path(ready_state.current_path)
@@ -890,7 +889,7 @@ defmodule Cerberus.Driver.Browser do
       target: button
     }
 
-    maybe_await_ready_result(session, state, result, opts, await_failure_observed, fn {ready_state, readiness} ->
+    finalize_action_result(session, state, result, opts, await_failure_observed, fn {ready_state, readiness} ->
       path =
         result
         |> action_result_path(ready_state.current_path)
@@ -988,23 +987,23 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp maybe_await_ready_result(session, state, result, opts, fallback_observed, on_success)
+  defp finalize_action_result(session, state, result, opts, fallback_observed, on_success)
        when is_map(result) and is_list(opts) and is_map(fallback_observed) and is_function(on_success, 1) do
-    if await_ready_required?(result) do
-      maybe_await_ready(session, state, result, opts, fallback_observed, on_success)
+    if action_navigation_observed?(result) do
+      await_action_navigation(session, state, result, opts, fallback_observed, on_success)
     else
-      readiness = inline_settle_readiness(result)
+      readiness = skipped_action_readiness(result)
       on_success.({state, readiness})
     end
   end
 
-  defp maybe_await_ready(session, state, result, opts, fallback_observed, on_success) do
+  defp await_action_navigation(session, state, result, opts, fallback_observed, on_success) do
     case await_driver_ready(state, action_timeout_ms(state, opts)) do
       {:ok, ready_state, readiness} ->
         on_success.({ready_state, readiness})
 
       {:error, reason, readiness} ->
-        maybe_recover_action_readiness_error(
+        maybe_recover_navigated_action_error(
           session,
           state,
           result,
@@ -1016,7 +1015,7 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp maybe_recover_action_readiness_error(session, state, result, fallback_observed, on_success, reason, readiness) do
+  defp maybe_recover_navigated_action_error(session, state, result, fallback_observed, on_success, reason, readiness) do
     action = Map.get(fallback_observed, :action)
 
     if recoverable_action_readiness_error?(action, reason, readiness) do
@@ -1032,15 +1031,15 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp await_ready_required?(%{"needsAwaitReady" => value}) when is_boolean(value), do: value
-  defp await_ready_required?(_result), do: true
+  defp action_navigation_observed?(%{"needsAwaitReady" => value}) when is_boolean(value), do: value
+  defp action_navigation_observed?(_result), do: false
 
-  defp inline_settle_readiness(result) when is_map(result) do
+  defp skipped_action_readiness(result) when is_map(result) do
     %{
       "ok" => true,
-      "reason" => "in-action-settle",
+      "reason" => "no_post_action_wait",
       "skippedAwaitReady" => true,
-      "settle" => Map.get(result, "settle")
+      "navigationObserved" => Map.get(result, "needsAwaitReady") == true
     }
   end
 
@@ -1073,6 +1072,12 @@ defmodule Cerberus.Driver.Browser do
   defp navigate_browser(state, url) do
     Profiling.measure({:browser_wait, :navigate}, fn ->
       UserContextProcess.navigate(state.user_context_pid, url, state.tab_id)
+    end)
+  end
+
+  defp reload_browser(state) do
+    Profiling.measure({:browser_wait, :reload}, fn ->
+      UserContextProcess.reload(state.user_context_pid, state.tab_id)
     end)
   end
 

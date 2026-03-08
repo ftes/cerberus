@@ -21,17 +21,7 @@ defmodule Cerberus.Driver.Static do
   alias Cerberus.UploadFile
   alias ExUnit.AssertionError
 
-  @type t :: %__MODULE__{
-          endpoint: module(),
-          conn: Plug.Conn.t() | nil,
-          timeout_ms: non_neg_integer(),
-          timeout_overridden?: boolean(),
-          document: LazyHTML.t() | nil,
-          form_data: map(),
-          scope: Session.scope_value(),
-          current_path: String.t() | nil,
-          last_result: Session.last_result()
-        }
+  @type t :: %__MODULE__{}
 
   defstruct endpoint: nil,
             conn: nil,
@@ -588,7 +578,7 @@ defmodule Cerberus.Driver.Static do
   end
 
   defp build_path_observed(session, expected, opts) do
-    actual_path = Session.current_path(session)
+    actual_path = session.current_path
     exact = Keyword.fetch!(opts, :exact)
 
     %{
@@ -786,11 +776,11 @@ defmodule Cerberus.Driver.Static do
 
   defp click_static_link_via_href(session, %{href: href} = link) when is_binary(href) and href != "" do
     updated = visit(session, href, [])
-    transition = transition(:static, driver_kind(updated), :click, session.current_path, Session.current_path(updated))
+    transition = transition(:static, driver_kind(updated), :click, session.current_path, updated.current_path)
 
     observed = %{
       action: :link,
-      path: Session.current_path(updated),
+      path: updated.current_path,
       clicked: link.text,
       texts: Html.texts(updated.document, :any, Session.scope(updated)),
       transition: transition
@@ -856,13 +846,13 @@ defmodule Cerberus.Driver.Static do
     case follow_form_request(session, method, target, %{}) do
       {:ok, updated, _transition} ->
         transition =
-          transition(:static, driver_kind(updated), :click, session.current_path, Session.current_path(updated))
+          transition(:static, driver_kind(updated), :click, session.current_path, updated.current_path)
 
         observed = %{
           action: action,
           clicked: element[:text] || "",
           method: method,
-          path: Session.current_path(updated),
+          path: updated.current_path,
           transition: transition
         }
 
@@ -920,7 +910,7 @@ defmodule Cerberus.Driver.Static do
           action: :submit,
           clicked: button.text,
           method: method,
-          path: Session.current_path(updated),
+          path: updated.current_path,
           params: request_params,
           transition: transition
         }
@@ -957,7 +947,7 @@ defmodule Cerberus.Driver.Static do
     updated = session_from_conn(session, conn, request_path)
 
     transition =
-      transition(:static, driver_kind(updated), :submit, session.current_path, Session.current_path(updated))
+      transition(:static, driver_kind(updated), :submit, session.current_path, updated.current_path)
 
     {:ok, updated, transition}
   rescue
@@ -1022,11 +1012,11 @@ defmodule Cerberus.Driver.Static do
             driver_kind(redirected_session),
             :unwrap,
             session.current_path,
-            Session.current_path(redirected_session)
+            redirected_session.current_path
           )
 
         update_last_result(redirected_session, :unwrap, %{
-          path: Session.current_path(redirected_session),
+          path: redirected_session.current_path,
           transition: unwrap_transition
         })
     end

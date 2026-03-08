@@ -16,6 +16,102 @@ defmodule Cerberus.Driver.Browser.Extensions do
   @default_download_timeout_ms 1_500
   @default_evaluate_timeout_ms 10_000
   @popup_task_poll_ms 10
+  @webdriver_key_values %{
+    "Alt" => <<0xE00A::utf8>>,
+    "AltLeft" => <<0xE00A::utf8>>,
+    "AltRight" => <<0xE00A::utf8>>,
+    "ArrowDown" => <<0xE015::utf8>>,
+    "ArrowLeft" => <<0xE012::utf8>>,
+    "ArrowRight" => <<0xE014::utf8>>,
+    "ArrowUp" => <<0xE013::utf8>>,
+    "Backquote" => "`",
+    "Backslash" => "\\",
+    "Backspace" => <<0xE003::utf8>>,
+    "BracketLeft" => "[",
+    "BracketRight" => "]",
+    "Clear" => <<0xE005::utf8>>,
+    "Comma" => ",",
+    "Command" => <<0xE03D::utf8>>,
+    "ContextMenu" => <<0xE03D::utf8>>,
+    "Control" => <<0xE009::utf8>>,
+    "ControlLeft" => <<0xE009::utf8>>,
+    "ControlRight" => <<0xE009::utf8>>,
+    "Delete" => <<0xE017::utf8>>,
+    "Down" => <<0xE015::utf8>>,
+    "End" => <<0xE010::utf8>>,
+    "Enter" => <<0xE007::utf8>>,
+    "Equal" => "=",
+    "Escape" => <<0xE00C::utf8>>,
+    "Esc" => <<0xE00C::utf8>>,
+    "F1" => <<0xE031::utf8>>,
+    "F2" => <<0xE032::utf8>>,
+    "F3" => <<0xE033::utf8>>,
+    "F4" => <<0xE034::utf8>>,
+    "F5" => <<0xE035::utf8>>,
+    "F6" => <<0xE036::utf8>>,
+    "F7" => <<0xE037::utf8>>,
+    "F8" => <<0xE038::utf8>>,
+    "F9" => <<0xE039::utf8>>,
+    "F10" => <<0xE03A::utf8>>,
+    "F11" => <<0xE03B::utf8>>,
+    "F12" => <<0xE03C::utf8>>,
+    "Home" => <<0xE011::utf8>>,
+    "Insert" => <<0xE016::utf8>>,
+    "Left" => <<0xE012::utf8>>,
+    "Meta" => <<0xE03D::utf8>>,
+    "MetaLeft" => <<0xE03D::utf8>>,
+    "MetaRight" => <<0xE03D::utf8>>,
+    "Minus" => "-",
+    "Numpad0" => "0",
+    "Numpad1" => "1",
+    "Numpad2" => "2",
+    "Numpad3" => "3",
+    "Numpad4" => "4",
+    "Numpad5" => "5",
+    "Numpad6" => "6",
+    "Numpad7" => "7",
+    "Numpad8" => "8",
+    "Numpad9" => "9",
+    "NumpadAdd" => "+",
+    "NumpadDecimal" => ".",
+    "NumpadDivide" => "/",
+    "NumpadEnter" => <<0xE007::utf8>>,
+    "NumpadMultiply" => "*",
+    "NumpadSubtract" => "-",
+    "Option" => <<0xE00A::utf8>>,
+    "PageDown" => <<0xE00F::utf8>>,
+    "PageUp" => <<0xE00E::utf8>>,
+    "Period" => ".",
+    "Plus" => "+",
+    "Quote" => "'",
+    "Return" => <<0xE006::utf8>>,
+    "Right" => <<0xE014::utf8>>,
+    "Semicolon" => ";",
+    "Shift" => <<0xE008::utf8>>,
+    "ShiftLeft" => <<0xE008::utf8>>,
+    "ShiftRight" => <<0xE008::utf8>>,
+    "Slash" => "/",
+    "Space" => <<0xE00D::utf8>>,
+    "Tab" => <<0xE004::utf8>>,
+    "Up" => <<0xE013::utf8>>
+  }
+  @modifier_key_tokens MapSet.new([
+                         "Alt",
+                         "AltLeft",
+                         "AltRight",
+                         "Command",
+                         "Control",
+                         "ControlLeft",
+                         "ControlRight",
+                         "ControlOrMeta",
+                         "Meta",
+                         "MetaLeft",
+                         "MetaRight",
+                         "Option",
+                         "Shift",
+                         "ShiftLeft",
+                         "ShiftRight"
+                       ])
 
   @spec type(Browser.t(), String.t(), Options.browser_type_opts()) :: Browser.t()
   def type(%Browser{} = session, text, opts \\ []) when is_binary(text) and is_list(opts) do
@@ -23,10 +119,10 @@ defmodule Cerberus.Driver.Browser.Extensions do
     clear? = Keyword.get(opts, :clear, false)
     timeout_ms = extension_timeout_ms(session, opts)
 
-    case evaluate_json(session, type_expression(selector, text, clear?), timeout_ms) do
-      {:ok, %{"ok" => true}} ->
-        session
-
+    with {:ok, %{"ok" => true}} <- evaluate_json(session, prepare_type_expression(selector, clear?), timeout_ms),
+         :ok <- perform_keyboard_actions(session, type_actions(text), timeout_ms) do
+      session
+    else
       {:ok, payload} ->
         raise ArgumentError, "browser type failed: #{inspect(payload)}"
 
@@ -40,10 +136,10 @@ defmodule Cerberus.Driver.Browser.Extensions do
     selector = selector_opt!(opts)
     timeout_ms = extension_timeout_ms(session, opts)
 
-    case evaluate_json(session, press_expression(selector, key), timeout_ms) do
-      {:ok, %{"ok" => true}} ->
-        session
-
+    with {:ok, %{"ok" => true}} <- evaluate_json(session, focus_expression(selector), timeout_ms),
+         :ok <- perform_keyboard_actions(session, press_actions(key), timeout_ms) do
+      session
+    else
       {:ok, payload} ->
         raise ArgumentError, "browser press failed: #{inspect(payload)}"
 
@@ -801,16 +897,72 @@ defmodule Cerberus.Driver.Browser.Extensions do
   defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
   defp normalize_positive_integer(_value, default), do: default
 
-  defp type_expression(selector, text, clear?) do
+  defp prepare_type_expression(selector, clear?) do
     encoded_selector = JSON.encode!(selector)
-    encoded_text = JSON.encode!(text)
     encoded_clear = JSON.encode!(clear?)
 
     """
     (() => {
       const selector = #{encoded_selector};
-      const text = #{encoded_text};
       const clear = #{encoded_clear};
+      const target = selector ? document.querySelector(selector) : document.activeElement;
+
+      if (!target) {
+        return JSON.stringify({ ok: false, reason: "target_not_found", selector });
+      }
+
+      if (!("value" in target) && !target.isContentEditable) {
+        return JSON.stringify({ ok: false, reason: "target_not_typable", selector });
+      }
+
+      if (typeof target.focus === "function") {
+        target.focus();
+      }
+
+      if (document.activeElement !== target) {
+        return JSON.stringify({ ok: false, reason: "target_not_focusable", selector });
+      }
+
+      if (!clear) {
+        return JSON.stringify({ ok: true, selector });
+      }
+
+      if ("value" in target) {
+        target.value = "";
+
+        if (typeof target.setSelectionRange === "function") {
+          target.setSelectionRange(0, 0);
+        }
+
+        return JSON.stringify({ ok: true, selector });
+      }
+
+      if (target.isContentEditable) {
+        target.textContent = "";
+        const selection = window.getSelection();
+
+        if (selection) {
+          const range = document.createRange();
+          range.selectNodeContents(target);
+          range.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+
+        return JSON.stringify({ ok: true, selector });
+      }
+
+      return JSON.stringify({ ok: false, reason: "target_not_typable", selector });
+    })()
+    """
+  end
+
+  defp focus_expression(selector) do
+    encoded_selector = JSON.encode!(selector)
+
+    """
+    (() => {
+      const selector = #{encoded_selector};
       const target = selector ? document.querySelector(selector) : document.activeElement;
 
       if (!target) {
@@ -821,79 +973,137 @@ defmodule Cerberus.Driver.Browser.Extensions do
         target.focus();
       }
 
-      if (clear && "value" in target) {
-        target.value = "";
+      if (document.activeElement !== target) {
+        return JSON.stringify({ ok: false, reason: "target_not_focusable", selector });
       }
 
-      if ("value" in target) {
-        const current = String(target.value || "");
-        const start = Number.isInteger(target.selectionStart) ? target.selectionStart : current.length;
-        const end = Number.isInteger(target.selectionEnd) ? target.selectionEnd : current.length;
-
-        if (typeof target.setRangeText === "function") {
-          target.setRangeText(text, start, end, "end");
-        } else {
-          target.value = current.slice(0, start) + text + current.slice(end);
-        }
-      } else if (target.isContentEditable) {
-        const existing = clear ? "" : String(target.textContent || "");
-        target.textContent = existing + text;
-      } else {
-        return JSON.stringify({ ok: false, reason: "target_not_typable", selector });
-      }
-
-      try {
-        target.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
-      } catch (_error) {
-        target.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-
-      target.dispatchEvent(new Event("change", { bubbles: true }));
-
-      const value = "value" in target ? String(target.value || "") : String(target.textContent || "");
-      return JSON.stringify({ ok: true, selector, text, value });
+      return JSON.stringify({ ok: true, selector });
     })()
     """
   end
 
-  defp press_expression(selector, key) do
-    encoded_selector = JSON.encode!(selector)
-    encoded_key = JSON.encode!(key)
+  defp perform_keyboard_actions(_session, [], _timeout_ms), do: :ok
 
-    """
-    (() => {
-      const selector = #{encoded_selector};
-      const key = #{encoded_key};
-      const target = selector ? document.querySelector(selector) : document.activeElement;
+  defp perform_keyboard_actions(%Browser{} = session, actions, timeout_ms)
+       when is_list(actions) and is_integer(timeout_ms) do
+    params = %{
+      "context" => session.tab_id,
+      "actions" => [
+        %{
+          "id" => "cerberus-keyboard",
+          "type" => "key",
+          "actions" => actions
+        }
+      ]
+    }
 
-      if (!target) {
-        return JSON.stringify({ ok: false, reason: "target_not_found", selector, key });
-      }
+    case BiDi.command("input.performActions", params, Keyword.put(bidi_opts(session), :timeout, max(timeout_ms, 1))) do
+      {:ok, _payload} ->
+        :ok
 
-      if (typeof target.focus === "function") {
-        target.focus();
-      }
+      {:error, reason, details} ->
+        {:error, reason, details}
+    end
+  end
 
-      const keyboardEventInit = {
-        key,
-        bubbles: true,
-        cancelable: true
-      };
+  defp type_actions(text) when is_binary(text) do
+    text
+    |> String.codepoints()
+    |> Enum.flat_map(&press_actions/1)
+  end
 
-      target.dispatchEvent(new KeyboardEvent("keydown", keyboardEventInit));
+  defp press_actions(key) when is_binary(key) do
+    tokens = split_key_tokens(key)
 
-      let submitted = false;
+    case tokens do
+      [] ->
+        raise ArgumentError, "browser press failed: empty key chord"
 
-      if (key === "Enter" && target.form && typeof target.form.requestSubmit === "function") {
-        target.form.requestSubmit();
-        submitted = true;
-      }
+      [token] ->
+        [key_action("keyDown", token), key_action("keyUp", token)]
 
-      target.dispatchEvent(new KeyboardEvent("keyup", keyboardEventInit));
+      _tokens ->
+        {modifier_tokens, [key_token]} = Enum.split(tokens, length(tokens) - 1)
 
-      return JSON.stringify({ ok: true, selector, key, submitted });
-    })()
-    """
+        if Enum.any?(modifier_tokens, &(not modifier_key_token?(&1))) do
+          raise ArgumentError,
+                "browser press failed: only modifier keys may appear before the final chord key: #{inspect(key)}"
+        end
+
+        Enum.map(modifier_tokens, &key_action("keyDown", &1)) ++
+          [key_action("keyDown", key_token), key_action("keyUp", key_token)] ++
+          Enum.reverse(Enum.map(modifier_tokens, &key_action("keyUp", &1)))
+    end
+  end
+
+  defp split_key_tokens(key_string) when is_binary(key_string) do
+    {parts, current} =
+      key_string
+      |> String.graphemes()
+      |> Enum.reduce({[], ""}, fn
+        "+", {parts, current} when current != "" -> {[current | parts], ""}
+        char, {parts, current} -> {parts, current <> char}
+      end)
+
+    parts =
+      case current do
+        "" -> parts
+        value -> [value | parts]
+      end
+
+    parts
+    |> Enum.reverse()
+    |> Enum.map(&normalize_key_token/1)
+  end
+
+  defp normalize_key_token(""), do: ""
+
+  defp normalize_key_token("ControlOrMeta") do
+    case :os.type() do
+      {:unix, :darwin} -> "Meta"
+      _ -> "Control"
+    end
+  end
+
+  defp normalize_key_token(token), do: token
+
+  defp modifier_key_token?(token) when is_binary(token) do
+    MapSet.member?(@modifier_key_tokens, token)
+  end
+
+  defp key_action(action_type, token) when action_type in ["keyDown", "keyUp"] and is_binary(token) do
+    %{"type" => action_type, "value" => webdriver_key_value!(token)}
+  end
+
+  defp webdriver_key_value!(token) when is_binary(token) do
+    case resolve_webdriver_key_value(token) do
+      nil -> raise ArgumentError, "browser press failed: unknown key #{inspect(token)}"
+      value -> value
+    end
+  end
+
+  defp resolve_webdriver_key_value(""), do: raise(ArgumentError, "browser press failed: empty key token")
+  defp resolve_webdriver_key_value("\n"), do: Map.fetch!(@webdriver_key_values, "Enter")
+  defp resolve_webdriver_key_value("\r"), do: Map.fetch!(@webdriver_key_values, "Enter")
+  defp resolve_webdriver_key_value("\t"), do: Map.fetch!(@webdriver_key_values, "Tab")
+
+  defp resolve_webdriver_key_value(token) when is_binary(token) do
+    cond do
+      String.length(token) == 1 ->
+        token
+
+      value = Map.get(@webdriver_key_values, token) ->
+        value
+
+      Regex.match?(~r/^Key[A-Z]$/, token) ->
+        token |> String.replace_prefix("Key", "") |> String.downcase()
+
+      Regex.match?(~r/^Digit[0-9]$/, token) ->
+        String.replace_prefix(token, "Digit", "")
+
+      true ->
+        nil
+    end
   end
 
   defp drag_expression(source_selector, target_selector) do

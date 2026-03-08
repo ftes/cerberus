@@ -394,24 +394,7 @@ defmodule CerberusTest do
 
     reloaded = reload_page(session)
 
-    assert reloaded.current_path == "/articles"
-  end
-
-  test "current_path supports callback and return_result forms while preserving pipeline by default" do
-    session = visit(session(), "/articles")
-
-    assert current_path(session) == session
-
-    assert current_path(session, fn path ->
-             send(self(), {:current_path_value, path})
-           end) == session
-
-    assert_receive {:current_path_value, "/articles"}
-    assert current_path(session, return_result: true) == "/articles"
-
-    assert_raise ArgumentError, ~r/current_path\/2 invalid options/, fn ->
-      current_path(session, return_result: :yes)
-    end
+    assert_path(reloaded, "/articles")
   end
 
   test "open_browser creates an HTML snapshot for static sessions" do
@@ -742,7 +725,7 @@ defmodule CerberusTest do
       |> choose(~l"Email Choice"l)
       |> submit(text("Save Controls"))
 
-    assert String.starts_with?(browser_session.current_path, "/controls/result")
+    assert_path(browser_session, ~r|^/controls/result|, exact: false)
     assert_has(browser_session, text("race: dwarf", exact: true))
     assert_has(browser_session, text("contact: email", exact: true))
   end

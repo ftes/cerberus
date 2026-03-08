@@ -20,7 +20,7 @@ defmodule Cerberus.BrowserTest do
       |> visit("/articles")
       |> screenshot()
 
-    assert session.current_path == "/articles"
+    assert_path(session, "/articles")
   end
 
   @tag :tmp_dir
@@ -36,7 +36,7 @@ defmodule Cerberus.BrowserTest do
       |> visit("/articles")
       |> screenshot(path)
 
-    assert session.current_path == "/articles"
+    assert_path(session, "/articles")
     assert File.exists?(path)
 
     png = File.read!(path)

@@ -73,6 +73,10 @@ defmodule Cerberus.BrowserExtensionsTest do
              assert value == "hello browser"
            end)
 
+    assert evaluate_js(session, "document.querySelector('#keyboard-keydown-count').textContent", fn value ->
+             assert value == "Keyboard keydown count: 13"
+           end)
+
     session = drag(session, "#drag-source", "#drop-target")
 
     assert_has(session, text("Press result: submitted", exact: true))
@@ -82,6 +86,30 @@ defmodule Cerberus.BrowserExtensionsTest do
     png = File.read!(path)
     assert :binary.part(png, 0, 8) == <<137, 80, 78, 71, 13, 10, 26, 10>>
     File.rm(path)
+  end
+
+  test "press uses real keyboard semantics for printable keys, editing keys, and Tab focus traversal" do
+    session =
+      :browser
+      |> session()
+      |> visit("/browser/extensions")
+      |> press(css("#press-input"), "a")
+      |> press(css("#press-input"), "Space")
+      |> press(css("#press-input"), "KeyB")
+
+    evaluate_js(session, "document.querySelector('#press-input').value", &assert(&1 == "a b"))
+
+    session = press(session, css("#press-input"), "Backspace")
+    evaluate_js(session, "document.querySelector('#press-input').value", &assert(&1 == "a "))
+
+    session =
+      session
+      |> type(css("#tab-input"), "blur me")
+      |> press(css("#tab-input"), "Tab")
+
+    assert_has(session, text("Blur result: blurred", exact: true))
+    assert_has(session, text("Tab result: focused next", exact: true))
+    evaluate_js(session, "document.activeElement && document.activeElement.id", &assert(&1 == "tab-next"))
   end
 
   test "click rejects hidden targets via actionability visibility checks" do

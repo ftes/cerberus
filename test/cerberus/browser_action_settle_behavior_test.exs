@@ -45,7 +45,7 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> assert_has(text("Mixed Live Roots", exact: true), timeout: 0)
   end
 
-  test "browser navigation to mixed live roots still performs await_ready", context do
+  test "browser navigation to mixed live roots does not require post-click readiness", context do
     :browser
     |> SharedBrowserSession.driver_session(context)
     |> visit("/browser/readiness/source")
@@ -53,8 +53,7 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> then(fn updated ->
       readiness = updated.last_result.observed.readiness
       assert is_map(readiness)
-      assert readiness["reason"] == "settled"
-      assert readiness["lastLiveState"] == "connected"
+      assert readiness["reason"] in ["settled", "no_post_action_wait"]
       updated
     end)
     |> assert_path("/browser/readiness/mixed-live-roots")
@@ -87,7 +86,7 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
                  end
   end
 
-  test "browser click on live non-navigation actions still performs await_ready", context do
+  test "browser click on live non-navigation actions does not force post-action readiness", context do
     :browser
     |> SharedBrowserSession.driver_session(context)
     |> visit("/live/counter")
@@ -96,12 +95,28 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
       readiness = updated.last_result.observed.readiness
       assert is_map(readiness)
       assert updated.last_result.observed.driver == Browser
-      refute readiness["reason"] == "in-action-settle"
-      refute readiness["skippedAwaitReady"] == true
+      assert readiness["reason"] == "no_post_action_wait"
+      assert readiness["skippedAwaitReady"] == true
 
       updated
     end)
     |> assert_has(text("Count: 1", exact: true))
+  end
+
+  test "browser label clicks on live form controls do not force post-action readiness", context do
+    :browser
+    |> SharedBrowserSession.driver_session(context)
+    |> visit("/live/controls")
+    |> click(css("label[for='live_controls_contact_email']"))
+    |> then(fn updated ->
+      readiness = updated.last_result.observed.readiness
+      assert is_map(readiness)
+      assert updated.last_result.observed.driver == Browser
+      assert readiness["reason"] == "no_post_action_wait"
+      assert readiness["skippedAwaitReady"] == true
+      updated
+    end)
+    |> assert_has(text("contact: email", exact: true))
   end
 
   @tag :slow
@@ -113,7 +128,7 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> assert_has(text("selected", exact: true), timeout: 0)
   end
 
-  test "browser submit on live non-navigation forms still performs await_ready", context do
+  test "browser submit on live non-navigation forms does not force post-action readiness", context do
     :browser
     |> SharedBrowserSession.driver_session(context)
     |> visit("/live/form-sync")
@@ -123,15 +138,15 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
       readiness = updated.last_result.observed.readiness
       assert is_map(readiness)
       assert updated.last_result.observed.driver == Browser
-      refute readiness["reason"] == "in-action-settle"
-      refute readiness["skippedAwaitReady"] == true
+      assert readiness["reason"] == "no_post_action_wait"
+      assert readiness["skippedAwaitReady"] == true
 
       updated
     end)
     |> assert_has(text("no-change submitted: Aragorn", exact: true))
   end
 
-  test "browser click that navigates still performs await_ready", context do
+  test "browser click that navigates can still await when navigation is already observed", context do
     :browser
     |> SharedBrowserSession.driver_session(context)
     |> visit("/live/redirects")
@@ -140,8 +155,7 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
       readiness = updated.last_result.observed.readiness
       assert is_map(readiness)
       assert updated.last_result.observed.driver == Browser
-      refute readiness["reason"] == "in-action-settle"
-      refute readiness["skippedAwaitReady"] == true
+      assert readiness["reason"] in ["settled", "no_post_action_wait"]
       updated
     end)
     |> assert_path("/live/counter")

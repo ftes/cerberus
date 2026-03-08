@@ -5,7 +5,7 @@ defmodule Cerberus.TestSupport.PhoenixTest.Driver do
 
   def current_path(session) do
     session
-    |> Cerberus.current_path(return_result: true)
+    |> then(& &1.current_path)
     |> strip_prefix()
   end
 

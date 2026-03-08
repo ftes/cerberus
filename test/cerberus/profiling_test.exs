@@ -63,4 +63,21 @@ defmodule Cerberus.ProfilingTest do
     assert output =~ "Cerberus profiling summary"
     assert output =~ ":summary_bucket"
   end
+
+  test "snapshot/1 can keep profiling rows separated by context" do
+    Profiling.put_enabled_override(true)
+
+    Profiling.with_context(:first_test, fn ->
+      Profiling.measure(:sample_bucket, fn -> :ok end)
+    end)
+
+    Profiling.with_context(:second_test, fn ->
+      Profiling.measure(:sample_bucket, fn -> :ok end)
+    end)
+
+    assert [
+             %{context: :first_test, bucket: :sample_bucket, count: 1},
+             %{context: :second_test, bucket: :sample_bucket, count: 1}
+           ] = Enum.sort_by(Profiling.snapshot(group_by: :context_bucket), & &1.context)
+  end
 end

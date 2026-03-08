@@ -574,43 +574,19 @@ defmodule Cerberus do
   Reloads the current path, defaulting to `/` when the session has no current path.
   """
   @spec reload_page(arg, Options.reload_opts()) :: arg when arg: var
-  def reload_page(session, opts \\ []) do
-    visit(session, current_path(session, return_result: true) || "/", opts)
-  end
+  def reload_page(session, opts \\ [])
 
-  @doc """
-  Resolves the normalized current path tracked by the session.
+  def reload_page(%Browser{} = session, _opts) do
+    refreshed_session = Browser.refresh_path(session)
 
-  Use either:
-  - callback form (`current_path(session, fn path -> ... end)`) to keep piping
-  - `return_result: true` (`current_path(session, return_result: true)`) to return the path
-
-  ## Options
-
-  #{@return_result_options_doc}
-  """
-  @spec current_path(Session.t()) :: Session.t()
-  @spec current_path(Session.t(), Options.return_result_opts()) :: Session.t() | String.t() | nil
-  @spec current_path(Session.t(), (String.t() | nil -> term())) :: Session.t()
-  def current_path(session, callback_or_opts \\ [])
-
-  def current_path(session, callback) when is_function(callback, 1) do
-    callback.(current_path_result(session))
-    session
-  end
-
-  def current_path(session, opts) when is_list(opts) do
-    opts = Options.validate_return_result!(opts, "current_path/2")
-
-    if Keyword.get(opts, :return_result, false) do
-      current_path_result(session)
-    else
-      session
+    case refreshed_session.current_path do
+      nil -> visit(session, "/")
+      _path -> Browser.reload_page(refreshed_session)
     end
   end
 
-  def current_path(_session, _callback_or_opts) do
-    raise ArgumentError, "current_path/2 expects a callback with arity 1 or keyword options"
+  def reload_page(session, opts) do
+    visit(session, resolved_current_path(session) || "/", opts)
   end
 
   @doc """
@@ -1114,10 +1090,8 @@ defmodule Cerberus do
     end
   end
 
-  defp current_path_result(session) do
-    session
-    |> Session.current_path()
-    |> Path.normalize()
+  defp resolved_current_path(session) do
+    Path.normalize(session.current_path)
   end
 
   defp driver_module_for_session!(%Static{}), do: Static

@@ -107,7 +107,7 @@ png =
 ## Browser Tests
 
 Start in Phoenix mode (static/live) for fast feedback, then switch to browser mode when you add JS-dependent behavior (custom snippets, dialogs, drag/drop, popup flows). In many tests this is just changing `session()` to `session(:browser)`.
-Browser readiness auto-detects LiveView roots (`[data-phx-session]`) and only waits for `phx-connected` when a LiveView is present.
+`visit/2` waits for post-navigation browser readiness and auto-detects LiveView roots (`[data-phx-session]`), only waiting for `phx-connected` when a LiveView is present. Other browser actions rely on browser actionability and on the next action/assertion to wait for whatever state it needs.
 
 Install Chrome with:
 

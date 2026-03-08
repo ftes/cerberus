@@ -28,7 +28,7 @@ defmodule Cerberus.AutoModeTest do
     assert match?(%Live{}, session)
 
     session = click(session, role(:button, name: "Redirect to Articles", exact: true))
-    assert session.current_path == "/articles"
+    assert_path(session, "/articles")
     assert match?(%Static{}, session)
     assert session.last_result.transition.reason == :live_redirect
     assert session.last_result.transition.from_driver == :live
@@ -38,7 +38,7 @@ defmodule Cerberus.AutoModeTest do
     assert match?(%Live{}, session)
 
     session = click(session, role(:button, name: "Hard Redirect to Articles", exact: true))
-    assert session.current_path == "/articles"
+    assert_path(session, "/articles")
     assert match?(%Static{}, session)
     assert session.last_result.transition.reason == :redirect
     assert session.last_result.transition.from_driver == :live
@@ -51,11 +51,11 @@ defmodule Cerberus.AutoModeTest do
 
     session = click(session, ~l"Counter"e)
     assert match?(%Browser{}, session)
-    assert session.current_path == "/live/counter"
+    assert_path(session, "/live/counter")
 
     session = click(session, ~l"Articles"e)
     assert match?(%Browser{}, session)
-    assert session.current_path == "/articles"
+    assert_path(session, "/articles")
   end
 
   test "failure output includes transition diagnostics in a consistent shape" do

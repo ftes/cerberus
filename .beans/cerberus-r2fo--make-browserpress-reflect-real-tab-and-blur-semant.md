@@ -1,10 +1,11 @@
 ---
 # cerberus-r2fo
 title: Make Browser.press reflect real Tab and blur semantics
-status: todo
+status: completed
 type: bug
+priority: normal
 created_at: 2026-03-06T22:18:05Z
-updated_at: 2026-03-06T22:18:05Z
+updated_at: 2026-03-08T07:15:25Z
 ---
 
 ## Context
@@ -39,3 +40,12 @@ This is a browser parity gap, not just an EV2 quirk. Tests that depend on blur-t
 ## Notes
 
 The migration workaround proved that the app behavior itself is fine. The gap is in Cerberus Browser.press semantics.
+
+## Summary of Changes
+
+- Replaced Browser.press synthetic DOM KeyboardEvent dispatch with real BiDi keyboard actions scoped to the current browsing context.
+- Reworked Browser.type to focus the target, optionally clear it, and then send real keyboard input instead of mutating value/text directly.
+- Added key normalization for Playwright-style named keys, modifier chords, printable keys, and editing/navigation keys.
+- Added browser regression coverage for real keydown typing, printable press behavior, Backspace editing, and Tab-driven blur/focus traversal.
+- Updated the browser extensions fixture to expose keyboard event counts and blur/focus state needed for the regressions.
+- Verified with mix precommit, the full test suite, and the slow suite.

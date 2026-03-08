@@ -43,6 +43,16 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(pid, {:navigate_tab, tab_id, url}, 10_000)
   end
 
+  @spec reload(pid()) :: Types.bidi_response()
+  def reload(pid) when is_pid(pid) do
+    GenServer.call(pid, :reload, 10_000)
+  end
+
+  @spec reload(pid(), String.t() | nil) :: Types.bidi_response()
+  def reload(pid, tab_id) when is_pid(pid) do
+    GenServer.call(pid, {:reload_tab, tab_id}, 10_000)
+  end
+
   @spec evaluate(pid(), String.t()) :: Types.bidi_response()
   def evaluate(pid, expression) when is_pid(pid) and is_binary(expression) do
     evaluate_with_timeout(pid, expression, 10_000)
@@ -265,6 +275,20 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     case browsing_context_pid(state, tab_id) do
       {:ok, pid} ->
         {:reply, BrowsingContextProcess.navigate(pid, url), state}
+
+      {:error, reason, details} ->
+        {:reply, {:error, reason, details}, state}
+    end
+  end
+
+  def handle_call(:reload, _from, state) do
+    {:reply, BrowsingContextProcess.reload(active_browsing_context_pid!(state)), state}
+  end
+
+  def handle_call({:reload_tab, tab_id}, _from, state) do
+    case browsing_context_pid(state, tab_id) do
+      {:ok, pid} ->
+        {:reply, BrowsingContextProcess.reload(pid), state}
 
       {:error, reason, details} ->
         {:reply, {:error, reason, details}, state}

@@ -24,18 +24,11 @@ defprotocol Cerberus.Session do
           observed: observed() | nil,
           transition: transition() | nil
         }
-  @type last_result :: result() | nil
   @type t :: struct()
-
-  @spec current_path(t()) :: String.t() | nil
-  def current_path(session)
 
   @spec scope(t()) :: scope_value()
   def scope(session)
 
   @spec with_scope(t(), scope_value()) :: t()
   def with_scope(session, scope)
-
-  @spec last_result(t()) :: last_result()
-  def last_result(session)
 end

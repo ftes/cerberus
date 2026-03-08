@@ -437,7 +437,7 @@ defmodule Cerberus.Assertions do
   defp format_error(op, locator, opts, reason, observed, session) do
     transition = observed_transition(observed) || session_transition(session)
     scope = Session.scope(session)
-    current_path = session |> Session.current_path() |> Path.normalize()
+    current_path = Path.normalize(session.current_path)
 
     base_message = """
     #{op} failed: #{reason}

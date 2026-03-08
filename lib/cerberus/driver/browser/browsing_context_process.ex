@@ -50,6 +50,11 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     GenServer.call(pid, {:navigate, url}, 10_000)
   end
 
+  @spec reload(pid()) :: Types.bidi_response()
+  def reload(pid) when is_pid(pid) do
+    GenServer.call(pid, :reload, 10_000)
+  end
+
   @spec evaluate(pid(), String.t()) :: Types.bidi_response()
   def evaluate(pid, expression) when is_pid(pid) and is_binary(expression) do
     evaluate(pid, expression, 10_000)
@@ -199,6 +204,20 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
         %{
           "context" => state.id,
           "url" => url,
+          "wait" => "complete"
+        },
+        state.bidi_opts
+      )
+
+    {:reply, result, state}
+  end
+
+  def handle_call(:reload, _from, state) do
+    result =
+      BiDi.command(
+        "browsingContext.reload",
+        %{
+          "context" => state.id,
           "wait" => "complete"
         },
         state.bidi_opts
