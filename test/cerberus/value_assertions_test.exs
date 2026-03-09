@@ -29,10 +29,6 @@ defmodule Cerberus.ValueAssertionsTest do
       |> refute_value(~l"Search term"l, ~r/aragorn/)
     end
 
-    if driver == :browser do
-      @tag :slow
-    end
-
     test "value assertions fail with clear reasons when fields are missing (#{driver})", context do
       assert_raise ExUnit.AssertionError, ~r/assert_value failed: no form field matched locator/, fn ->
         unquote(driver)

@@ -17,7 +17,6 @@ defmodule Cerberus.LiveSelectRegressionTest do
     |> assert_has(and_(css("#form-data"), text("[elf, dwarf]", exact: false)))
   end
 
-  @tag :slow
   test "browser live multi-select preserves previous picks across repeated calls" do
     :browser
     |> session()
