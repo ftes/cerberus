@@ -1,6 +1,6 @@
 # Browser Tests Guide
 
-This guide covers browser-only configuration and runtime details for `session(:browser)` / `session(:chrome)` / `session(:firefox)`.
+This guide covers browser-only configuration and runtime details for `session(:browser)`.
 
 ## Per-Test Browser Overrides
 
@@ -16,7 +16,7 @@ session(:browser,
 ```
 
 Isolation strategy:
-- runtime process + BiDi transport stay shared,
+- runtime process + Bibbidi-backed BiDi transport stay shared,
 - each `session(:browser, ...)` creates an isolated browser user context,
 - context-level overrides (viewport/user-agent/popup mode/init scripts) are isolated per session and do not require a dedicated browser process.
 
@@ -71,7 +71,6 @@ config :cerberus, :browser,
   ready_timeout_ms: 2_200,
   ready_quiet_ms: 40,
   bidi_command_timeout_ms: 5_000,
-  runtime_http_timeout_ms: 9_000,
   dialog_timeout_ms: 1_500,
   screenshot_full_page: false,
   screenshot_artifact_dir: "tmp/cerberus-artifacts/screenshots",
@@ -93,8 +92,8 @@ Unified timeout defaults:
 
 Option scopes:
 - Per-session context options: `ready_timeout_ms`, `ready_quiet_ms`, `user_agent`, `browser: [viewport: ..., user_agent: ..., popup_mode: :allow | :same_tab, init_script: ... | init_scripts: [...]]`.
-- Global runtime launch options: `browser_name`, `webdriver_url`, `chrome_webdriver_url`, `firefox_webdriver_url`, `headless`, `slow_mo`, `chrome_args`, `firefox_args`, `chrome_binary`, `firefox_binary`, `chromedriver_binary`, `geckodriver_binary`.
-- Global browser defaults: `bidi_command_timeout_ms`, `runtime_http_timeout_ms`, `dialog_timeout_ms`, `screenshot_full_page`, `screenshot_artifact_dir`, `screenshot_path`.
+- Global runtime launch options: `headless`, `slow_mo`, `firefox_binary`.
+- Global browser defaults: `bidi_command_timeout_ms`, `dialog_timeout_ms`, `screenshot_full_page`, `screenshot_artifact_dir`, `screenshot_path`.
 
 Set `headless: false` to run headed mode.
 Use `slow_mo` (milliseconds) to pace browser commands for debugging.
@@ -103,67 +102,21 @@ Because browser runtime + BiDi transport are shared per browser lane, runtime la
 
 ## Browser Runtime Setup
 
-Cerberus browser tests use WebDriver BiDi.
-Chrome and Firefox are supported browser targets.
-Project CI currently runs Chrome lanes only; Firefox lanes remain available for explicit local/manual runs.
+Cerberus browser tests use Firefox over WebDriver BiDi.
+Cerberus launches Firefox directly and uses Bibbidi for the active BiDi transport layer.
 
-Local managed runtime (default) uses configured browser and WebDriver binaries:
+Local managed runtime (default) uses the configured Firefox binary:
 
 ```elixir
 config :cerberus, :browser,
-  chrome_binary: "/path/to/chrome-or-chromium",
-  chromedriver_binary: "/path/to/chromedriver",
-  firefox_binary: "/path/to/firefox",
-  geckodriver_binary: "/path/to/geckodriver"
+  firefox_binary: "/path/to/firefox"
 ```
-
-Only the selected browser lane needs to be configured for a given run.
-
-Managed Chrome sessions use a Playwright-style Chromium switch set by default, with any configured `chrome_args` appended after those defaults.
 
 Headed mode:
 
 ```elixir
 config :cerberus, :browser, headless: false
 ```
-
-Remote runtime mode:
-
-```elixir
-config :cerberus, :browser,
-  webdriver_url: "http://127.0.0.1:4444"
-```
-
-With `webdriver_url` set, Cerberus does not launch local browser/WebDriver processes.
-
-For explicit multi-browser remote lanes in one invocation:
-
-```elixir
-config :cerberus, :browser,
-  chrome_webdriver_url: "http://127.0.0.1:4444",
-  firefox_webdriver_url: "http://127.0.0.1:5555"
-```
-
-Remote `webdriver_url` integration smoke test (Docker required):
-
-```bash
-CERBERUS_REMOTE_WEBDRIVER=1 mix test test/cerberus/remote_webdriver_behavior_test.exs
-```
-
-This test starts a `selenium/standalone-chromium` container with `docker run`,
-connects Cerberus through `webdriver_url`, and force-removes the container on exit.
-
-Global remote-browser invocation (Docker required):
-
-```bash
-mix test.websocket
-mix test.websocket test/cerberus/explicit_browser_test.exs
-```
-
-`mix test.websocket` starts/stops Selenium container(s) and runs one `mix test`
-invocation with remote browser lane wiring. Use `--browsers` when needed to
-override lane provisioning (`chrome`, `firefox`, or `all`); prefer Chrome for
-regular local runs.
 
 Mixed-driver local browser run:
 
@@ -172,14 +125,6 @@ mix test test/cerberus
 ```
 
 Cerberus uses mixed-driver suites (no dedicated `:browser` tag lane), so browser coverage runs as part of normal `test/cerberus` execution.
-
-Full local Firefox lane:
-
-```bash
-mix test.firefox
-```
-
-This runs the regular `mix test` alias with `CERBERUS_BROWSER_NAME=firefox`.
 
 Explicit browser-lane override coverage:
 
@@ -190,28 +135,20 @@ mix test test/cerberus/explicit_browser_test.exs
 Install local browser runtimes with public Mix tasks:
 
 ```bash
-MIX_ENV=test mix cerberus.install.chrome --version 146.0.7680.31
 MIX_ENV=test mix cerberus.install.firefox --firefox-version 148.0 --geckodriver-version 0.36.0
 ```
 
-Both tasks install missing binaries and reuse existing per-version installations.
-Version precedence is flags first, then matching env vars (`CERBERUS_CHROME_VERSION`, `CERBERUS_FIREFOX_VERSION`, `CERBERUS_GECKODRIVER_VERSION`), then defaults (latest stable Chrome/Firefox and GeckoDriver 0.36.0).
+The install task reuses existing per-version installations.
 
 Stable output contracts:
 - `--format json` for machine-readable payloads (paths, versions, env handoff keys)
 - `--format env` for `KEY=VALUE` lines (for CI env files)
 - `--format shell` for `export KEY='VALUE'` lines
 
-After install, Cerberus automatically discovers local managed-runtime binaries via stable links:
-- `tmp/chrome-current`
-- `tmp/chromedriver-current`
+After install, Cerberus automatically discovers the local managed Firefox runtime via the stable link:
 - `tmp/firefox-current`
-- `tmp/geckodriver-current`
 
 No extra binary-path config is required for normal local runs after installation.
 
 Installed paths are stable per version, for example:
-- `tmp/chrome-<version>`
-- `tmp/chromedriver-<version>`
 - `tmp/firefox-<version>`
-- `tmp/geckodriver-<version>`

@@ -14,7 +14,7 @@ defmodule Cerberus.Driver.Browser.Supervisor do
   def init(_opts) do
     children = [
       {Cerberus.Driver.Browser.Runtime, []},
-      {Cerberus.Driver.Browser.BiDiSupervisor, []},
+      {Cerberus.Driver.Browser.BiDi, []},
       {DynamicSupervisor, strategy: :one_for_one, name: @user_context_supervisor}
     ]
 

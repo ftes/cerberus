@@ -80,22 +80,10 @@ defmodule Cerberus.Options do
           screenshot_artifact_dir: String.t() | nil,
           screenshot_path: String.t() | nil,
           bidi_command_timeout_ms: pos_integer() | nil,
-          runtime_http_timeout_ms: pos_integer() | nil,
           dialog_timeout_ms: pos_integer() | nil,
-          webdriver_url: String.t() | nil,
-          chrome_webdriver_url: String.t() | nil,
-          firefox_webdriver_url: String.t() | nil,
-          browser_name: :chrome | :firefox | nil,
           headless: boolean() | nil,
           slow_mo: non_neg_integer() | nil,
-          chrome_binary: String.t() | nil,
-          firefox_binary: String.t() | nil,
-          chromedriver_binary: String.t() | nil,
-          geckodriver_binary: String.t() | nil,
-          chrome_startup_retries: non_neg_integer() | nil,
-          chromedriver_log_path: String.t() | nil,
-          startup_log_tail_bytes: non_neg_integer() | nil,
-          startup_log_tail_lines: non_neg_integer() | nil
+          firefox_binary: String.t() | nil
         ]
   @type session_browser_opts :: [
           endpoint: module(),
@@ -104,23 +92,9 @@ defmodule Cerberus.Options do
           ready_quiet_ms: pos_integer(),
           user_agent: String.t() | nil,
           browser: browser_override_opts(),
-          browser_name: :chrome | :firefox,
-          webdriver_url: String.t() | nil,
-          chrome_webdriver_url: String.t() | nil,
-          firefox_webdriver_url: String.t() | nil,
-          chrome_binary: String.t() | nil,
           firefox_binary: String.t() | nil,
-          chromedriver_binary: String.t() | nil,
-          geckodriver_binary: String.t() | nil,
-          chrome_args: [String.t()] | nil,
-          firefox_args: [String.t()] | nil,
           headless: boolean() | nil,
           slow_mo: non_neg_integer() | nil,
-          chromedriver_port: pos_integer() | nil,
-          chrome_startup_retries: non_neg_integer() | nil,
-          chromedriver_log_path: String.t() | nil,
-          startup_log_tail_bytes: non_neg_integer() | nil,
-          startup_log_tail_lines: non_neg_integer() | nil,
           base_url: String.t() | nil
         ]
 
@@ -497,23 +471,9 @@ defmodule Cerberus.Options do
     ready_quiet_ms: [type: :pos_integer, doc: "Browser readiness quiet window in milliseconds."],
     user_agent: [type: :any, doc: "Top-level user-agent override for browser session context."],
     browser: [type: :keyword_list, doc: "Per-session browser overrides."],
-    browser_name: [type: {:in, [:chrome, :firefox]}, doc: "Browser lane selector."],
-    webdriver_url: [type: :any, doc: "Remote WebDriver URL."],
-    chrome_webdriver_url: [type: :any, doc: "Remote Chrome WebDriver URL."],
-    firefox_webdriver_url: [type: :any, doc: "Remote Firefox WebDriver URL."],
-    chrome_binary: [type: :any, doc: "Chrome binary path override."],
     firefox_binary: [type: :any, doc: "Firefox binary path override."],
-    chromedriver_binary: [type: :any, doc: "ChromeDriver binary path override."],
-    geckodriver_binary: [type: :any, doc: "GeckoDriver binary path override."],
-    chrome_args: [type: :any, doc: "Additional Chrome launch arguments."],
-    firefox_args: [type: :any, doc: "Additional Firefox launch arguments."],
     headless: [type: :boolean, doc: "Headless browser toggle."],
     slow_mo: [type: :non_neg_integer, doc: "Delay in milliseconds applied before each browser BiDi command."],
-    chromedriver_port: [type: :pos_integer, doc: "ChromeDriver port override."],
-    chrome_startup_retries: [type: :non_neg_integer, doc: "Chrome startup retry count."],
-    chromedriver_log_path: [type: :any, doc: "ChromeDriver log file path."],
-    startup_log_tail_bytes: [type: :non_neg_integer, doc: "Startup log tail byte limit."],
-    startup_log_tail_lines: [type: :non_neg_integer, doc: "Startup log tail line limit."],
     base_url: [type: :any, doc: "Base URL override for remote runtime."]
   ]
 
@@ -529,24 +489,10 @@ defmodule Cerberus.Options do
     screenshot_artifact_dir: [type: :any, doc: "Screenshot artifact directory."],
     screenshot_path: [type: :any, doc: "Default screenshot file path."],
     bidi_command_timeout_ms: [type: :pos_integer, doc: "BiDi command timeout in milliseconds."],
-    runtime_http_timeout_ms: [type: :pos_integer, doc: "Runtime HTTP timeout in milliseconds."],
     dialog_timeout_ms: [type: :pos_integer, doc: "Dialog lifecycle timeout in milliseconds."],
-    webdriver_url: [type: :any, doc: "Remote WebDriver URL."],
-    chrome_webdriver_url: [type: :any, doc: "Remote Chrome WebDriver URL."],
-    firefox_webdriver_url: [type: :any, doc: "Remote Firefox WebDriver URL."],
-    browser_name: [type: {:in, [:chrome, :firefox]}, doc: "Browser lane selector."],
     headless: [type: :boolean, doc: "Headless browser toggle."],
     slow_mo: [type: :non_neg_integer, doc: "Delay in milliseconds applied before each browser BiDi command."],
-    chrome_binary: [type: :any, doc: "Chrome binary path override."],
-    firefox_binary: [type: :any, doc: "Firefox binary path override."],
-    chromedriver_binary: [type: :any, doc: "ChromeDriver binary path override."],
-    geckodriver_binary: [type: :any, doc: "GeckoDriver binary path override."],
-    chrome_args: [type: :any, doc: "Additional Chrome launch arguments."],
-    firefox_args: [type: :any, doc: "Additional Firefox launch arguments."],
-    chrome_startup_retries: [type: :non_neg_integer, doc: "Chrome startup retry count."],
-    chromedriver_log_path: [type: :any, doc: "ChromeDriver log file path."],
-    startup_log_tail_bytes: [type: :non_neg_integer, doc: "Startup log tail byte limit."],
-    startup_log_tail_lines: [type: :non_neg_integer, doc: "Startup log tail line limit."]
+    firefox_binary: [type: :any, doc: "Firefox binary path override."]
   ]
 
   @browser_type_opts_schema [
@@ -898,17 +844,8 @@ defmodule Cerberus.Options do
     |> validate_known!(@session_browser_opts_schema, "session(:browser, opts)")
     |> validate_optional_module_atom!("session(:browser, opts)", :endpoint)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :user_agent)
-    |> validate_optional_non_empty_string!("session(:browser, opts)", :webdriver_url)
-    |> validate_optional_non_empty_string!("session(:browser, opts)", :chrome_webdriver_url)
-    |> validate_optional_non_empty_string!("session(:browser, opts)", :firefox_webdriver_url)
-    |> validate_optional_non_empty_string!("session(:browser, opts)", :chrome_binary)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :firefox_binary)
-    |> validate_optional_non_empty_string!("session(:browser, opts)", :chromedriver_binary)
-    |> validate_optional_non_empty_string!("session(:browser, opts)", :geckodriver_binary)
-    |> validate_optional_non_empty_string!("session(:browser, opts)", :chromedriver_log_path)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :base_url)
-    |> validate_optional_string_list!("session(:browser, opts)", :chrome_args)
-    |> validate_optional_string_list!("session(:browser, opts)", :firefox_args)
     |> validate_browser_override!("session(:browser, opts)")
   end
 
@@ -1041,17 +978,8 @@ defmodule Cerberus.Options do
         |> validate_optional_non_empty_string!(op_name, :init_script)
         |> validate_optional_non_empty_string!(op_name, :screenshot_artifact_dir)
         |> validate_optional_non_empty_string!(op_name, :screenshot_path)
-        |> validate_optional_non_empty_string!(op_name, :webdriver_url)
-        |> validate_optional_non_empty_string!(op_name, :chrome_webdriver_url)
-        |> validate_optional_non_empty_string!(op_name, :firefox_webdriver_url)
-        |> validate_optional_non_empty_string!(op_name, :chrome_binary)
         |> validate_optional_non_empty_string!(op_name, :firefox_binary)
-        |> validate_optional_non_empty_string!(op_name, :chromedriver_binary)
-        |> validate_optional_non_empty_string!(op_name, :geckodriver_binary)
-        |> validate_optional_non_empty_string!(op_name, :chromedriver_log_path)
         |> validate_optional_string_list!(op_name, :init_scripts)
-        |> validate_optional_string_list!(op_name, :chrome_args)
-        |> validate_optional_string_list!(op_name, :firefox_args)
 
         opts
 

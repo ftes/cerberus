@@ -166,8 +166,32 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       const op = options && options.op ? options.op : "click";
       const path = result && typeof result.path === "string" ? result.path : helper.currentPath();
       const pathChanged = typeof prePath === "string" && prePath !== path;
+      const target = result && result.target && typeof result.target === "object" ? result.target : null;
+      const submitsForm = !!(target && typeof target.formSelector === "string" && target.formSelector !== "");
+      const submitsLive = !!(result && result.submitsLive === true);
+      const linkNavigates =
+        !!(
+          op === "click" &&
+          target &&
+          target.kind === "link" &&
+          typeof target.href === "string" &&
+          target.href !== "" &&
+          !target.href.startsWith("#") &&
+          !target.href.toLowerCase().startsWith("javascript:")
+        );
+      const dataMethodNavigates =
+        !!(
+          op === "click" &&
+          target &&
+          ((target.kind === "link" && typeof target.dataMethod === "string" && target.dataMethod !== "") ||
+            (target.kind === "button" && typeof target.dataMethod === "string" && target.dataMethod !== ""))
+        );
 
-      return pathChanged && (op === "click" || op === "submit");
+      if (op === "submit") {
+        return !submitsLive && (submitsForm || pathChanged);
+      }
+
+      return op === "click" && (pathChanged || linkNavigates || dataMethodNavigates);
     };
 
     helper.dispatchInputChange = (field) => {
@@ -192,6 +216,39 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
       } catch (_error) {
         element.dispatchEvent(new Event("click", { bubbles: true, cancelable: true }));
+      }
+    };
+
+    helper.submitElementForm = (target, element) => {
+      if (!element) return { ok: false, reason: "submit_target_failed" };
+
+      const form =
+        element.form ||
+        (target && typeof target.formSelector === "string" && target.formSelector !== "" &&
+        typeof document.querySelector === "function"
+          ? document.querySelector(target.formSelector)
+          : null);
+
+      if (!form) return { ok: false, reason: "submit_target_failed" };
+
+      const submitsLive =
+        typeof form.hasAttribute === "function" &&
+        (form.hasAttribute("phx-submit") || form.hasAttribute("data-phx-submit"));
+
+      try {
+        if (typeof form.requestSubmit === "function") {
+          form.requestSubmit(element);
+        } else {
+          element.click();
+        }
+
+        return { ok: true, submitsLive };
+      } catch (error) {
+        return {
+          ok: false,
+          reason: "submit_target_failed",
+          message: String(error && error.message ? error.message : error)
+        };
       }
     };
 
@@ -1861,12 +1918,19 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         if (target.kind !== "button") return fail("submit_target_failed");
         if (target.disabled === true || element.disabled === true) return fail("field_disabled");
 
-        try {
-          element.click();
-          return { ok: true, target, matchCount, path: helper.currentPath() };
-        } catch (error) {
-          return fail("submit_target_failed", { message: String(error && error.message ? error.message : error) });
+        const submission = helper.submitElementForm(target, element);
+
+        if (submission && submission.ok === true) {
+          return {
+            ok: true,
+            target,
+            matchCount,
+            path: helper.currentPath(),
+            submitsLive: submission.submitsLive === true
+          };
         }
+
+        return fail("submit_target_failed", submission && submission.message ? { message: submission.message } : {});
       }
 
       if (target.kind !== "button" && target.kind !== "link" && target.kind !== "clickable" && target.kind !== "label") {

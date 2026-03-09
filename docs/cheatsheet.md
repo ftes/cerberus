@@ -6,15 +6,14 @@
 | --- | --- |
 | Phoenix mode (auto static/live switching) | `session()` or `session(:phoenix)` |
 | Real browser behavior | `session(:browser)` |
-| Explicit browser lane | `session(:chrome)` or `session(:firefox)` |
-| Default project lane policy | Chrome-first (CI and regular local runs) |
+| Browser runtime | Firefox over BiDi |
 | Unified default timeout | Static `0ms`, live/browser `500ms` |
 | Per-session timeout override | `session(timeout_ms: 300)` or `session(:browser, timeout_ms: 300)` |
 | Browser ready timeout default | `session(:browser, ready_timeout_ms: 2200)` |
 | Per-driver timeout config | `config :cerberus, :live, timeout_ms: 700` |
 | Global headed mode | `config :cerberus, :browser, headless: false` |
 | Global slow motion | `config :cerberus, :browser, slow_mo: 120` |
-| Global remote runtime | `config :cerberus, :browser, webdriver_url: "http://127.0.0.1:4444"` |
+| Global Firefox binary override | `config :cerberus, :browser, firefox_binary: "/path/to/firefox"` |
 | Global screenshot defaults | `config :cerberus, :browser, screenshot_full_page: false, screenshot_artifact_dir: "tmp/screenshots"` |
 
 ## Core Navigation and Assertions

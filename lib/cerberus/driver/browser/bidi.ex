@@ -3,27 +3,26 @@ defmodule Cerberus.Driver.Browser.BiDi do
 
   use GenServer
 
-  alias Cerberus.Driver.Browser.BiDiSocket
+  alias Bibbidi.Connection
+  alias Bibbidi.Session, as: BibbidiSession
   alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.Types
 
   @default_command_timeout_ms 10_000
-
-  @type browser_name :: Types.browser_name()
+  @event_methods [
+    "browsingContext.navigationStarted",
+    "browsingContext.domContentLoaded",
+    "browsingContext.load",
+    "browsingContext.downloadWillBegin",
+    "browsingContext.downloadEnd",
+    "browsingContext.userPromptOpened",
+    "browsingContext.userPromptClosed"
+  ]
 
   @type state :: %{
-          next_id: pos_integer(),
-          pending: %{
-            optional(pos_integer()) => %{
-              from: GenServer.from(),
-              timer: reference(),
-              browser_name: browser_name(),
-              method: String.t(),
-              sent_us: non_neg_integer()
-            }
-          },
-          sockets: %{optional(browser_name()) => pid()},
-          subscribers: %{optional(browser_name()) => %{optional(pid()) => reference()}}
+          connection: pid() | nil,
+          connection_ref: reference() | nil,
+          subscribers: %{optional(pid()) => reference()}
         }
 
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -38,6 +37,16 @@ defmodule Cerberus.Driver.Browser.BiDi do
 
   @spec command(GenServer.server(), String.t(), Types.bidi_params(), keyword()) ::
           Types.bidi_response()
+  def command(pid, method, params, opts) when pid != __MODULE__ and is_binary(method) and is_map(params) do
+    timeout =
+      case Keyword.fetch(opts, :timeout) do
+        {:ok, value} -> value
+        :error -> default_command_timeout_ms(opts)
+      end
+
+    GenServer.call(pid, {:command, method, params, timeout}, timeout + 1_000)
+  end
+
   def command(pid, method, params, opts) when is_binary(method) and is_map(params) do
     timeout =
       case Keyword.fetch(opts, :timeout) do
@@ -45,17 +54,9 @@ defmodule Cerberus.Driver.Browser.BiDi do
         :error -> default_command_timeout_ms(opts)
       end
 
-    slow_mo_ms = slow_mo_ms(opts)
-
-    message =
-      if pid == __MODULE__ do
-        started_us = System.monotonic_time(:microsecond)
-        {:command, method, params, timeout, slow_mo_ms, opts, started_us}
-      else
-        {:command, method, params, timeout}
-      end
-
-    GenServer.call(pid, message, timeout + 1_000 + slow_mo_ms)
+    slow_mo_ms = Runtime.slow_mo_ms(opts)
+    started_us = System.monotonic_time(:microsecond)
+    GenServer.call(pid, {:command, method, params, timeout, slow_mo_ms, opts, started_us}, timeout + 1_000 + slow_mo_ms)
   end
 
   @spec close(GenServer.server()) :: :ok
@@ -64,55 +65,40 @@ defmodule Cerberus.Driver.Browser.BiDi do
   end
 
   @spec subscribe(pid(), keyword()) :: :ok | {:error, term()}
-  def subscribe(subscriber, opts \\ []) when is_pid(subscriber) and is_list(opts) do
-    browser_name = Runtime.browser_name(opts)
-    GenServer.call(__MODULE__, {:subscribe, subscriber, browser_name})
+  def subscribe(subscriber, _opts \\ []) when is_pid(subscriber) do
+    GenServer.call(__MODULE__, {:subscribe, subscriber})
   end
 
   @spec unsubscribe(pid(), keyword()) :: :ok
-  def unsubscribe(subscriber, opts \\ []) when is_pid(subscriber) and is_list(opts) do
-    browser_name = Runtime.browser_name(opts)
-    GenServer.call(__MODULE__, {:unsubscribe, subscriber, browser_name})
+  def unsubscribe(subscriber, _opts \\ []) when is_pid(subscriber) do
+    GenServer.call(__MODULE__, {:unsubscribe, subscriber})
   end
 
   @impl true
   def init(_opts) do
-    {:ok, %{next_id: 1, pending: %{}, sockets: %{}, subscribers: %{}}}
+    {:ok, %{connection: nil, connection_ref: nil, subscribers: %{}}}
   end
 
   @impl true
-  def handle_call({:subscribe, subscriber, browser_name}, _from, state) do
-    state = put_subscriber(state, subscriber, browser_name)
-    {:reply, :ok, state}
+  def handle_call({:subscribe, subscriber}, _from, state) do
+    {:reply, :ok, put_subscriber(state, subscriber)}
   end
 
-  def handle_call({:unsubscribe, subscriber, browser_name}, _from, state) do
-    state = drop_subscriber(state, subscriber, browser_name)
-    {:reply, :ok, state}
+  def handle_call({:unsubscribe, subscriber}, _from, state) do
+    {:reply, :ok, drop_subscriber(state, subscriber)}
   end
 
-  def handle_call({:command, method, params, timeout, slow_mo_ms, opts, started_us}, from, state) do
+  def handle_call({:command, method, params, timeout, slow_mo_ms, opts, started_us}, _from, state) do
     record_transport_delay({:browser_bidi, :command_queue}, started_us)
-    browser_name = Runtime.browser_name(opts)
 
     maybe_sleep_for_slow_mo(slow_mo_ms)
 
-    with {:ok, web_socket_url} <- Runtime.web_socket_url(opts),
-         {:ok, socket} <-
-           Cerberus.Profiling.measure({:browser_bidi, :ensure_connected}, fn ->
-             BiDiSocket.ensure_connected(browser_name, web_socket_url)
-           end),
-         {:ok, next_state} <-
-           Cerberus.Profiling.measure({:browser_bidi, :send_command}, fn ->
-             send_command(state, browser_name, socket, method, params, timeout, from)
-           end) do
-      {:noreply, next_state}
-    else
-      {:error, reason} ->
-        {:reply, {:error, "failed to dispatch bidi command", %{"reason" => inspect(reason)}}, state}
+    case ensure_connected(state, opts) do
+      {:ok, connection, next_state} ->
+        {:reply, command_response(connection, method, params, timeout), next_state}
 
-      {:error, reason, details} ->
-        {:reply, {:error, reason, details}, state}
+      {:error, reason, next_state} ->
+        {:reply, {:error, reason, %{}}, next_state}
     end
   end
 
@@ -121,64 +107,23 @@ defmodule Cerberus.Driver.Browser.BiDi do
   end
 
   @impl true
-  def handle_info({:cerberus_bidi_frame, socket, payload}, state) when is_binary(payload) do
-    case browser_name_for_socket(state, socket) do
-      nil ->
-        {:noreply, state}
-
-      browser_name ->
-        case JSON.decode(payload) do
-          {:ok, %{"id" => id} = response} ->
-            {:noreply, resolve_pending(state, id, response)}
-
-          {:ok, %{"method" => _method} = event} ->
-            broadcast_event(state, browser_name, event)
-            {:noreply, state}
-
-          _ ->
-            {:noreply, state}
-        end
-    end
+  def handle_info({:bibbidi_event, method, params}, state) when is_binary(method) and is_map(params) do
+    event = %{"method" => method, "params" => params}
+    Enum.each(Map.keys(state.subscribers), &send(&1, {:cerberus_bidi_event, event}))
+    {:noreply, state}
   end
 
-  def handle_info({:cerberus_bidi_disconnected, socket, reason}, state) when is_pid(socket) do
-    case browser_name_for_socket(state, socket) do
-      nil ->
-        {:noreply, state}
-
-      browser_name ->
-        BiDiSocket.clear(browser_name, socket)
-        {state, failed_pending} = pop_pending_for_browser(state, browser_name)
-
-        Enum.each(
-          failed_pending,
-          &reply_and_cancel(&1, {:error, "bidi socket disconnected", %{"reason" => inspect(reason)}})
-        )
-
-        {:noreply, %{state | sockets: Map.delete(state.sockets, browser_name)}}
-    end
-  end
-
-  def handle_info({:command_timeout, id}, state) do
-    case Map.pop(state.pending, id) do
-      {nil, _pending} ->
-        {:noreply, state}
-
-      {entry, pending} ->
-        GenServer.reply(entry.from, {:error, "bidi command timeout", %{"id" => id}})
-        {:noreply, %{state | pending: pending}}
-    end
+  def handle_info({:DOWN, ref, :process, pid, reason}, %{connection_ref: ref, connection: pid} = state) do
+    {:stop, {:bidi_connection_down, reason}, %{state | connection: nil, connection_ref: nil}}
   end
 
   def handle_info({:DOWN, ref, :process, pid, _reason}, state) do
     subscribers =
-      Enum.reduce(state.subscribers, %{}, fn {browser_name, browser_subscribers}, acc ->
-        case Map.get(browser_subscribers, pid) do
-          ^ref ->
-            Map.put(acc, browser_name, Map.delete(browser_subscribers, pid))
-
-          _ ->
-            Map.put(acc, browser_name, browser_subscribers)
+      Enum.reduce(state.subscribers, %{}, fn {subscriber, subscriber_ref}, acc ->
+        if subscriber == pid and subscriber_ref == ref do
+          acc
+        else
+          Map.put(acc, subscriber, subscriber_ref)
         end
       end)
 
@@ -191,165 +136,123 @@ defmodule Cerberus.Driver.Browser.BiDi do
 
   @impl true
   def terminate(_reason, state) do
-    Enum.each(
-      Map.values(state.pending),
-      &reply_and_cancel(&1, {:error, "bidi connection terminating", %{}})
-    )
-
-    Enum.each(state.sockets, fn {browser_name, socket} ->
-      BiDiSocket.clear(browser_name, socket)
-    end)
-
+    maybe_close_connection(state.connection)
     :ok
   end
 
-  defp resolve_pending(state, id, response) do
-    case Map.pop(state.pending, id) do
-      {nil, pending} ->
-        %{state | pending: pending}
-
-      {%{method: method, sent_us: sent_us} = entry, pending} ->
-        Process.cancel_timer(entry.timer)
-        record_transport_delay({:browser_bidi, :roundtrip}, sent_us)
-        record_transport_delay({:browser_bidi, method, :roundtrip}, sent_us)
-
-        reply =
-          Cerberus.Profiling.measure({:browser_bidi, :decode_response}, fn ->
-            decode_response(response)
-          end)
-
-        GenServer.reply(entry.from, reply)
-        %{state | pending: pending}
+  defp ensure_connected(%{connection: pid} = state, _opts) when is_pid(pid) do
+    if Process.alive?(pid) do
+      {:ok, pid, state}
+    else
+      {:error, "bidi connection is not alive", %{state | connection: nil, connection_ref: nil}}
     end
   end
 
-  defp send_command(state, browser_name, socket, method, params, timeout, from) do
-    id = state.next_id
-
-    message =
-      Cerberus.Profiling.measure({:browser_bidi, :encode_message}, fn ->
-        JSON.encode!(%{"id" => id, "method" => method, "params" => params})
-      end)
-
-    case BiDiSocket.send_text(browser_name, message) do
-      :ok ->
-        timer = Process.send_after(self(), {:command_timeout, id}, timeout)
-        sent_us = System.monotonic_time(:microsecond)
-
-        pending =
-          Map.put(state.pending, id, %{
-            from: from,
-            timer: timer,
-            browser_name: browser_name,
-            method: method,
-            sent_us: sent_us
-          })
-
-        {:ok, %{state | next_id: id + 1, pending: pending, sockets: Map.put(state.sockets, browser_name, socket)}}
-
+  defp ensure_connected(state, opts) do
+    with {:ok, web_socket_url} <- Runtime.web_socket_url(opts),
+         {:ok, connection} <- Connection.start_link(url: web_socket_url),
+         {:ok, _capabilities} <- BibbidiSession.new(connection, %{}),
+         :ok <- subscribe_connection_events(connection) do
+      Process.unlink(connection)
+      connection_ref = Process.monitor(connection)
+      {:ok, connection, %{state | connection: connection, connection_ref: connection_ref}}
+    else
       {:error, reason} ->
-        {:error, "failed to send bidi message", %{"reason" => inspect(reason)}}
+        {:error, inspect(reason), state}
     end
   end
 
-  defp pop_pending_for_browser(state, browser_name) do
-    {failed, remaining} = Enum.split_with(state.pending, fn {_id, entry} -> entry.browser_name == browser_name end)
-    failed_entries = Enum.map(failed, fn {_id, entry} -> entry end)
-    remaining_pending = Map.new(remaining)
-    {%{state | pending: remaining_pending}, failed_entries}
-  end
-
-  defp browser_name_for_socket(state, socket) when is_pid(socket) do
-    Enum.find_value(state.sockets, fn {browser_name, candidate} ->
-      if candidate == socket, do: browser_name
+  defp subscribe_connection_events(connection) when is_pid(connection) do
+    Enum.reduce_while(@event_methods, :ok, fn method, :ok ->
+      :ok = Connection.subscribe(connection, method, self())
+      {:cont, :ok}
     end)
   end
 
-  defp decode_response(%{"type" => "error"} = response) do
-    reason =
-      response["message"] ||
-        response["error"] ||
-        "bidi command failed"
-
-    {:error, reason, response}
+  defp maybe_close_connection(pid) when is_pid(pid) do
+    _ = Connection.close(pid)
+    :ok
+  catch
+    :exit, _reason -> :ok
   end
 
-  defp decode_response(%{"error" => _} = response) do
-    reason = response["message"] || response["error"] || "bidi command failed"
-    {:error, reason, response}
+  defp maybe_close_connection(_pid), do: :ok
+
+  defp put_subscriber(state, subscriber) do
+    ref =
+      case Map.get(state.subscribers, subscriber) do
+        ref when is_reference(ref) -> ref
+        _ -> Process.monitor(subscriber)
+      end
+
+    %{state | subscribers: Map.put(state.subscribers, subscriber, ref)}
   end
 
-  defp decode_response(%{"result" => result}) when is_map(result), do: {:ok, result}
-  defp decode_response(response), do: {:ok, response}
-
-  defp reply_and_cancel(entry, reply) do
-    Process.cancel_timer(entry.timer)
-    GenServer.reply(entry.from, reply)
-  end
-
-  defp put_subscriber(state, subscriber, browser_name) do
-    browser_subscribers = Map.get(state.subscribers, browser_name, %{})
-
-    case Map.get(browser_subscribers, subscriber) do
-      nil ->
-        ref = Process.monitor(subscriber)
-        subscribers = Map.put(state.subscribers, browser_name, Map.put(browser_subscribers, subscriber, ref))
+  defp drop_subscriber(state, subscriber) do
+    case Map.pop(state.subscribers, subscriber) do
+      {ref, subscribers} when is_reference(ref) ->
+        Process.demonitor(ref, [:flush])
         %{state | subscribers: subscribers}
 
-      _ref ->
-        state
+      {_, subscribers} ->
+        %{state | subscribers: subscribers}
     end
   end
 
-  defp drop_subscriber(state, subscriber, browser_name) do
-    browser_subscribers = Map.get(state.subscribers, browser_name, %{})
+  defp normalize_response({:ok, result}) when is_map(result), do: {:ok, stringify_map_keys(result)}
 
-    case Map.pop(browser_subscribers, subscriber) do
-      {nil, _} ->
-        state
-
-      {ref, remaining} ->
-        Process.demonitor(ref, [:flush])
-        %{state | subscribers: Map.put(state.subscribers, browser_name, remaining)}
-    end
+  defp normalize_response({:error, error}) when is_map(error) do
+    details = stringify_map_keys(error)
+    reason = details["message"] || details["error"] || inspect(error)
+    {:error, reason, details}
   end
 
-  defp broadcast_event(state, browser_name, event) do
-    state.subscribers
-    |> Map.get(browser_name, %{})
-    |> Map.keys()
-    |> Enum.each(fn subscriber ->
-      send(subscriber, {:cerberus_bidi_event, event})
+  defp normalize_response({:error, reason}) do
+    {:error, inspect(reason), %{}}
+  end
+
+  defp command_response(connection, method, params, timeout)
+       when is_pid(connection) and is_binary(method) and is_map(params) and is_integer(timeout) do
+    connection
+    |> measure_command_roundtrip(method, params, timeout)
+    |> normalize_response()
+  end
+
+  defp measure_command_roundtrip(connection, method, params, timeout) do
+    Cerberus.Profiling.measure({:browser_bidi, method, :roundtrip}, fn ->
+      Cerberus.Profiling.measure({:browser_bidi, :roundtrip}, fn ->
+        Connection.send_command(connection, method, params, timeout: timeout)
+      end)
     end)
   end
 
-  defp default_command_timeout_ms(opts) when is_list(opts) do
-    opts
-    |> merged_browser_opts()
-    |> Keyword.get(:bidi_command_timeout_ms)
-    |> normalize_non_negative_integer(@default_command_timeout_ms)
+  defp stringify_map_keys(map) when is_map(map) do
+    Map.new(map, fn
+      {key, value} when is_atom(key) -> {Atom.to_string(key), stringify_value(value)}
+      {key, value} -> {key, stringify_value(value)}
+    end)
   end
 
-  defp slow_mo_ms(opts) when is_list(opts) do
-    Runtime.slow_mo_ms(opts)
+  defp stringify_value(value) when is_map(value), do: stringify_map_keys(value)
+  defp stringify_value(value) when is_list(value), do: Enum.map(value, &stringify_value/1)
+  defp stringify_value(value), do: value
+
+  defp maybe_sleep_for_slow_mo(ms) when is_integer(ms) and ms > 0 do
+    Process.sleep(ms)
   end
 
-  defp merged_browser_opts(opts) do
-    :cerberus
-    |> Application.get_env(:browser, [])
-    |> Keyword.merge(Keyword.get(opts, :browser, []))
-  end
-
-  defp normalize_non_negative_integer(value, _default) when is_integer(value) and value >= 0, do: value
-  defp normalize_non_negative_integer(_value, default), do: default
-
-  defp maybe_sleep_for_slow_mo(delay_ms) when is_integer(delay_ms) and delay_ms > 0 do
-    Process.sleep(delay_ms)
-  end
-
-  defp maybe_sleep_for_slow_mo(_delay_ms), do: :ok
+  defp maybe_sleep_for_slow_mo(_ms), do: :ok
 
   defp record_transport_delay(bucket, started_us) when is_integer(started_us) do
     Cerberus.Profiling.record_us(bucket, max(System.monotonic_time(:microsecond) - started_us, 0))
+  end
+
+  defp default_command_timeout_ms(opts) do
+    browser_opts =
+      :cerberus
+      |> Application.get_env(:browser, [])
+      |> Keyword.merge(Keyword.get(opts, :browser, []))
+
+    Keyword.get(opts, :bidi_command_timeout_ms, browser_opts[:bidi_command_timeout_ms] || @default_command_timeout_ms)
   end
 end

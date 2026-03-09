@@ -68,7 +68,7 @@ defmodule Cerberus.Driver.Browser do
 
   defstruct user_context_pid: nil,
             tab_id: nil,
-            browser_name: :chrome,
+            browser_name: :firefox,
             bidi_opts: [],
             endpoint: nil,
             base_url: nil,
@@ -984,6 +984,8 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp await_action_navigation(session, state, result, opts, fallback_observed, on_success) do
+    maybe_sleep_for_navigation_settle(state)
+
     case await_driver_ready(state, action_timeout_ms(state, opts)) do
       {:ok, ready_state, readiness} ->
         on_success.({ready_state, readiness})
@@ -1016,6 +1018,12 @@ defmodule Cerberus.Driver.Browser do
       {:error, session, observed, action_readiness_error(reason, readiness)}
     end
   end
+
+  defp maybe_sleep_for_navigation_settle(%{browser_name: :firefox}) do
+    Process.sleep(100)
+  end
+
+  defp maybe_sleep_for_navigation_settle(_state), do: :ok
 
   defp action_navigation_observed?(%{"needsAwaitReady" => value}) when is_boolean(value), do: value
   defp action_navigation_observed?(_result), do: false

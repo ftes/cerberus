@@ -31,6 +31,7 @@ defmodule Cerberus.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:bibbidi, "~> 0.1.0"},
       {:phoenix, "~> 1.7"},
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_view, "~> 1.0"},
@@ -50,7 +51,6 @@ defmodule Cerberus.MixProject do
   defp aliases do
     [
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test --warnings-as-errors"],
-      "test.firefox": ["cmd env CERBERUS_BROWSER_NAME=firefox mix test"],
       precommit: [
         "format --check-formatted",
         "credo --strict",
@@ -63,8 +63,6 @@ defmodule Cerberus.MixProject do
   defp cli do
     [
       preferred_envs: [
-        "test.websocket": :test,
-        "test.firefox": :test,
         test: :test,
         dialyzer: :test,
         precommit: :test

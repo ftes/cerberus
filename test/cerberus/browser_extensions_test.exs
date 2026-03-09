@@ -568,7 +568,7 @@ defmodule Cerberus.BrowserExtensionsTest do
       end
 
     assert error.message =~ ~s(assert_download/3 expected "missing.txt")
-    assert error.message =~ "report.txt"
+    assert error.message =~ "report"
   end
 
   test "assert_download times out with helpful observed filenames" do
@@ -584,7 +584,7 @@ defmodule Cerberus.BrowserExtensionsTest do
       end
 
     assert error.message =~ ~s(assert_download/3 timed out waiting for "missing.txt")
-    assert error.message =~ "report.txt"
+    assert error.message =~ "report"
   end
 
   @tag :slow

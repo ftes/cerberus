@@ -44,19 +44,21 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> assert_has(text("Mixed Live Roots", exact: true), timeout: 0)
   end
 
-  test "browser navigation to mixed live roots does not require post-click readiness", context do
+  test "browser link navigation to mixed live roots performs post-click readiness", context do
     session =
       :browser
       |> SharedBrowserSession.driver_session(context)
       |> visit("/browser/readiness/source")
 
-    readiness = last_readiness(session)
-
     session
     |> click(role(:link, name: "Open mixed roots", exact: true))
     |> assert_path("/browser/readiness/mixed-live-roots")
     |> then(fn updated ->
-      assert last_readiness(updated) == readiness
+      readiness = last_readiness(updated)
+      assert is_map(readiness)
+      assert readiness["reason"] == "settled"
+      assert readiness["path"] == "/browser/readiness/mixed-live-roots"
+      assert readiness["lastLiveState"] == "connected"
       updated
     end)
   end

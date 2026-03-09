@@ -527,10 +527,21 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
          expected_filename
        )
        when is_binary(filename) and is_binary(expected_filename) do
-    filename == expected_filename
+    filename == expected_filename or firefox_download_rename?(filename, expected_filename)
   end
 
   defp download_event_match?(_event, _expected_filename), do: false
+
+  defp firefox_download_rename?(filename, expected_filename) when is_binary(filename) and is_binary(expected_filename) do
+    case Path.extname(expected_filename) do
+      "" ->
+        Regex.match?(~r/^#{Regex.escape(expected_filename)}\(\d+\)$/, filename)
+
+      extension ->
+        basename = Path.rootname(expected_filename, extension)
+        Regex.match?(~r/^#{Regex.escape(basename)}\(\d+\)#{Regex.escape(extension)}$/, filename)
+    end
+  end
 
   defp resolve_download_waiters(%{download_waiters: waiters} = state, event)
        when map_size(waiters) == 0 or not is_map(event) do
