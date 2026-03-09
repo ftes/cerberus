@@ -91,20 +91,20 @@ jobs:
       #   run: mix cerberus.install.firefox --format env >> "$GITHUB_ENV"
 
       - name: Run tests with Chrome
-        run: mix test --warnings-as-errors --max-failures 1
+        run: mix test --warnings-as-errors
 
       - name: Run slow tests with Chrome
-        run: mix test --only slow --warnings-as-errors --max-failures 1
+        run: mix test --only slow --warnings-as-errors
 
       # - name: Run tests with Chrome via Websocket (remote)
-      #   run: mix test.websocket --warnings-as-errors --max-failures 1
+      #   run: mix test.websocket --warnings-as-errors
 
       # - name: Run tests with Firefox
-      #   run: CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors --max-failures 1
+      #   run: CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors
 
       # - name: Run tests with Firefox via Websocket (remote)
-      #   run: CERBERUS_BROWSER_NAME=firefox mix test.websocket --warnings-as-errors --max-failures 1
+      #   run: CERBERUS_BROWSER_NAME=firefox mix test.websocket --warnings-as-errors
 
       # - name: Run browser-driver tests in websocket Firefox lane
       #   run: |
-      #     mix test.websocket --warnings-as-errors --max-failures 1 --browsers firefox $BROWSER_DRIVER_FILES
+      #     mix test.websocket --warnings-as-errors --browsers firefox $BROWSER_DRIVER_FILES
