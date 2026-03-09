@@ -71,6 +71,7 @@ defmodule Cerberus.Options do
   @type browser_override_opts :: [
           viewport: {pos_integer(), pos_integer()} | %{width: pos_integer(), height: pos_integer()} | keyword() | nil,
           user_agent: String.t() | nil,
+          use_cdp_evaluate: boolean() | nil,
           popup_mode: :allow | :same_tab | nil,
           init_script: String.t() | nil,
           init_scripts: [String.t()] | nil,
@@ -103,6 +104,7 @@ defmodule Cerberus.Options do
           ready_timeout_ms: pos_integer(),
           ready_quiet_ms: pos_integer(),
           user_agent: String.t() | nil,
+          use_cdp_evaluate: boolean() | nil,
           browser: browser_override_opts(),
           browser_name: :chrome | :firefox,
           webdriver_url: String.t() | nil,
@@ -496,6 +498,7 @@ defmodule Cerberus.Options do
     ready_timeout_ms: [type: :pos_integer, doc: "Browser readiness timeout in milliseconds."],
     ready_quiet_ms: [type: :pos_integer, doc: "Browser readiness quiet window in milliseconds."],
     user_agent: [type: :any, doc: "Top-level user-agent override for browser session context."],
+    use_cdp_evaluate: [type: :boolean, doc: "Use Chrome CDP for browser evaluate hot paths."],
     browser: [type: :keyword_list, doc: "Per-session browser overrides."],
     browser_name: [type: {:in, [:chrome, :firefox]}, doc: "Browser lane selector."],
     webdriver_url: [type: :any, doc: "Remote WebDriver URL."],
@@ -520,6 +523,7 @@ defmodule Cerberus.Options do
   @browser_override_opts_schema [
     viewport: [type: :any, doc: "Viewport override."],
     user_agent: [type: :any, doc: "User agent override."],
+    use_cdp_evaluate: [type: :boolean, doc: "Use Chrome CDP for browser evaluate hot paths."],
     popup_mode: [type: {:in, [:allow, :same_tab]}, doc: "Popup behavior mode."],
     init_script: [type: :any, doc: "Single preload script."],
     init_scripts: [type: :any, doc: "Multiple preload scripts."],

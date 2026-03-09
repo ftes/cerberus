@@ -34,6 +34,14 @@ session(:browser, user_agent: metadata)
 config :cerberus, ecto_sandbox_stop_owner_delay: 100
 ```
 
+Optional Chrome eval fast path:
+
+```elixir
+session(:browser, use_cdp_evaluate: true)
+```
+
+Default browser execution stays on WebDriver BiDi. When `use_cdp_evaluate: true` is enabled, Cerberus keeps lifecycle/navigation/readiness on BiDi but routes browser `evaluate` hot paths through Chrome CDP when a debugger address is available.
+
 Popup behavior:
 - Preferred: use `Browser.with_popup/4` for deterministic popup capture and two-session assertions.
 - `popup_mode: :allow` keeps browser default popup/new-window behavior (default).
@@ -118,6 +126,8 @@ config :cerberus, :browser,
 ```
 
 Only the selected browser lane needs to be configured for a given run.
+
+Managed Chrome sessions use a Playwright-style Chromium switch set by default, with any configured `chrome_args` appended after those defaults.
 
 Headed mode:
 

@@ -236,6 +236,13 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_receive {:session_cookie_callback, %{name: "_cerberus_fixture_key"}}
   end
 
+  test "evaluate_js can opt into Chrome CDP evaluate hot path" do
+    :browser
+    |> session(use_cdp_evaluate: true)
+    |> visit("/articles")
+    |> evaluate_js("(() => 21 + 21)()", &assert(&1 == 42))
+  end
+
   test "browser keyword options are validated with NimbleOptions" do
     session =
       :browser

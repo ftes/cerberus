@@ -14,6 +14,53 @@ defmodule Cerberus.Driver.Browser.Runtime do
   @watchdog_script_name "cerberus-browser-runtime-watchdog.sh"
   @startup_attempts 120
   @startup_sleep_ms 50
+  @playwright_disabled_chromium_features [
+    "AcceptCHFrame",
+    "AvoidUnnecessaryBeforeUnloadCheckSync",
+    "DestroyProfileOnBrowserClose",
+    "DialMediaRouteProvider",
+    "GlobalMediaControls",
+    "HttpsUpgrades",
+    "LensOverlay",
+    "MediaRouter",
+    "PaintHolding",
+    "ThirdPartyStoragePartitioning",
+    "Translate",
+    "AutoDeElevate",
+    "RenderDocument"
+  ]
+  @playwright_chromium_switches [
+    "--disable-field-trial-config",
+    "--disable-background-networking",
+    "--disable-background-timer-throttling",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-back-forward-cache",
+    "--disable-breakpad",
+    "--disable-client-side-phishing-detection",
+    "--disable-component-extensions-with-background-pages",
+    "--disable-component-update",
+    "--no-default-browser-check",
+    "--disable-default-apps",
+    "--disable-dev-shm-usage",
+    "--disable-extensions",
+    "--allow-pre-commit-input",
+    "--disable-hang-monitor",
+    "--disable-ipc-flooding-protection",
+    "--disable-popup-blocking",
+    "--disable-prompt-on-repost",
+    "--disable-renderer-backgrounding",
+    "--force-color-profile=srgb",
+    "--metrics-recording-only",
+    "--no-first-run",
+    "--password-store=basic",
+    "--use-mock-keychain",
+    "--no-service-autorun",
+    "--export-tagged-pdf",
+    "--disable-search-engine-choice-screen",
+    "--unsafely-disable-devtools-self-xss-warnings",
+    "--edge-skip-compat-layer-relaunch",
+    "--enable-automation"
+  ]
 
   @type service :: %{
           url: String.t(),
@@ -29,7 +76,8 @@ defmodule Cerberus.Driver.Browser.Runtime do
           service: service(),
           browser_name: Types.browser_name(),
           session_id: String.t(),
-          web_socket_url: String.t()
+          web_socket_url: String.t(),
+          debugger_address: String.t() | nil
         }
 
   @type state :: %{
@@ -56,6 +104,11 @@ defmodule Cerberus.Driver.Browser.Runtime do
   @spec session_id(keyword()) :: {:ok, String.t()} | {:error, String.t()}
   def session_id(opts \\ []) when is_list(opts) do
     GenServer.call(__MODULE__, {:session_id, opts}, 20_000)
+  end
+
+  @spec debugger_address(keyword()) :: {:ok, String.t()} | {:error, String.t()}
+  def debugger_address(opts \\ []) when is_list(opts) do
+    GenServer.call(__MODULE__, {:debugger_address, opts}, 20_000)
   end
 
   @impl true
@@ -85,6 +138,19 @@ defmodule Cerberus.Driver.Browser.Runtime do
     case ensure_runtime_session(state, opts) do
       {:ok, runtime_session, state} ->
         {:reply, {:ok, runtime_session.session_id}, state}
+
+      {:error, reason, state} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:debugger_address, opts}, _from, state) do
+    case ensure_runtime_session(state, opts) do
+      {:ok, %{debugger_address: debugger_address}, state} when is_binary(debugger_address) ->
+        {:reply, {:ok, debugger_address}, state}
+
+      {:ok, _runtime_session, state} ->
+        {:reply, {:error, "webdriver session created without chrome debugger address"}, state}
 
       {:error, reason, state} ->
         {:reply, {:error, reason}, state}
@@ -139,7 +205,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
       retries = startup_retry_attempts(service, opts)
 
       case start_webdriver_session_with_retry(service, opts, retries) do
-        {:ok, service, session_id, web_socket_url} ->
+        {:ok, service, session_id, web_socket_url, debugger_address} ->
           maybe_cleanup_startup_log(service)
 
           {:ok,
@@ -147,7 +213,8 @@ defmodule Cerberus.Driver.Browser.Runtime do
              service: service,
              browser_name: service.browser_name,
              session_id: session_id,
-             web_socket_url: web_socket_url
+             web_socket_url: web_socket_url,
+             debugger_address: debugger_address
            }}
 
         {:error, service, reason} ->
@@ -245,8 +312,8 @@ defmodule Cerberus.Driver.Browser.Runtime do
   defp start_webdriver_session_with_retry(service, opts, retries_left)
        when is_integer(retries_left) and retries_left >= 0 do
     case start_webdriver_session(service, opts) do
-      {:ok, session_id, web_socket_url} ->
-        {:ok, service, session_id, web_socket_url}
+      {:ok, session_id, web_socket_url, debugger_address} ->
+        {:ok, service, session_id, web_socket_url, debugger_address}
 
       {:error, reason} ->
         handle_startup_session_failure(service, opts, retries_left, reason)
@@ -416,8 +483,8 @@ defmodule Cerberus.Driver.Browser.Runtime do
     payload = webdriver_session_payload(opts, service.managed?, service.browser_name)
 
     with {:ok, 200, body} <- http_json(:post, service.url <> "/session", payload, opts),
-         {:ok, session_id, web_socket_url} <- parse_session_response(body, service.url) do
-      {:ok, session_id, web_socket_url}
+         {:ok, session_id, web_socket_url, debugger_address} <- parse_session_response(body, service.url) do
+      {:ok, session_id, web_socket_url, debugger_address}
     else
       {:ok, status, body} ->
         {:error, "webdriver session request failed with status #{status}: #{inspect(body)}"}
@@ -435,9 +502,10 @@ defmodule Cerberus.Driver.Browser.Runtime do
   defp parse_session_response(%{"value" => %{"sessionId" => session_id, "capabilities" => caps}}, service_url)
        when is_binary(session_id) and is_map(caps) do
     web_socket_url = normalize_web_socket_url(caps["webSocketUrl"], service_url)
+    debugger_address = normalize_non_empty_string(get_in(caps, ["goog:chromeOptions", "debuggerAddress"]), nil)
 
     if is_binary(web_socket_url) and byte_size(web_socket_url) > 0 do
-      {:ok, session_id, web_socket_url}
+      {:ok, session_id, web_socket_url, debugger_address}
     else
       {:error, "webdriver session created without capabilities.webSocketUrl"}
     end
@@ -895,6 +963,13 @@ defmodule Cerberus.Driver.Browser.Runtime do
   end
 
   @doc false
+  @spec use_cdp_evaluate?(keyword()) :: boolean()
+  def use_cdp_evaluate?(opts) when is_list(opts) do
+    browser_opts = browser_opts(opts)
+    Keyword.get(opts, :use_cdp_evaluate, browser_opts[:use_cdp_evaluate]) == true
+  end
+
+  @doc false
   @spec remote_webdriver_url(keyword()) :: String.t() | nil
   def remote_webdriver_url(opts) when is_list(opts) do
     browser_name = browser_name(opts)
@@ -974,8 +1049,24 @@ defmodule Cerberus.Driver.Browser.Runtime do
   defp chrome_args(opts, merged, true) do
     headless? = headless?(opts, merged)
     custom_args = Keyword.get(opts, :chrome_args, Keyword.get(merged, :chrome_args, []))
-    defaults = if headless?, do: ["--headless=new"], else: []
-    defaults ++ ["--disable-gpu", "--no-sandbox", "--remote-debugging-port=0"] ++ custom_args
+
+    playwright_headless_args =
+      if headless? do
+        [
+          "--headless",
+          "--hide-scrollbars",
+          "--mute-audio",
+          "--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4"
+        ]
+      else
+        []
+      end
+
+    @playwright_chromium_switches ++
+      ["--disable-features=" <> Enum.join(@playwright_disabled_chromium_features, ",")] ++
+      ["--enable-features=CDPScreenshotNewSurface"] ++
+      playwright_headless_args ++
+      ["--no-sandbox", "--remote-debugging-port=0"] ++ custom_args
   end
 
   defp chrome_args(opts, merged, false) do

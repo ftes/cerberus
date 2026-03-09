@@ -44,6 +44,17 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
     end
   end
 
+  describe "use_cdp_evaluate?/1" do
+    test "defaults to false and supports session override precedence" do
+      Application.put_env(:cerberus, :browser, use_cdp_evaluate: true)
+
+      assert Runtime.use_cdp_evaluate?([]) == true
+      assert Runtime.use_cdp_evaluate?(use_cdp_evaluate: false) == false
+      assert Runtime.use_cdp_evaluate?(browser: [use_cdp_evaluate: false]) == false
+      assert Runtime.use_cdp_evaluate?(browser: [use_cdp_evaluate: false], use_cdp_evaluate: true) == true
+    end
+  end
+
   describe "remote_webdriver_url/1" do
     test "prefers explicit webdriver_url override then browser config" do
       Application.put_env(:cerberus, :browser, webdriver_url: "http://remote-from-config:4444")
@@ -125,6 +136,14 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
       assert chrome_opts["binary"] == chrome_path
       assert is_list(chrome_opts["args"])
       assert "--remote-debugging-port=0" in chrome_opts["args"]
+      assert "--disable-background-networking" in chrome_opts["args"]
+      assert "--disable-popup-blocking" in chrome_opts["args"]
+      assert "--enable-automation" in chrome_opts["args"]
+      assert "--headless" in chrome_opts["args"]
+      assert "--hide-scrollbars" in chrome_opts["args"]
+      assert "--mute-audio" in chrome_opts["args"]
+      assert Enum.any?(chrome_opts["args"], &String.starts_with?(&1, "--disable-features="))
+      assert Enum.any?(chrome_opts["args"], &String.starts_with?(&1, "--blink-settings="))
     end
 
     test "firefox payload uses moz:firefoxOptions and browserName firefox" do
