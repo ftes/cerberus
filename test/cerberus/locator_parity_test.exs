@@ -1,5 +1,6 @@
-defmodule Cerberus.LocatorParitySupport do
-  @moduledoc false
+defmodule Cerberus.LocatorParityTest do
+  use ExUnit.Case, async: true
+
   import Cerberus
   import ExUnit.Assertions
 
@@ -7,6 +8,8 @@ defmodule Cerberus.LocatorParitySupport do
   alias Cerberus.Driver.Static
   alias Cerberus.InvalidLocatorError
   alias ExUnit.AssertionError
+
+  @moduletag timeout: 60_000
 
   @html_prefix """
   <!doctype html>
@@ -280,7 +283,6 @@ defmodule Cerberus.LocatorParitySupport do
 
   @type browser_session :: Cerberus.Driver.Browser.t()
   @type support_context :: %{required(:browser_session) => browser_session(), required(:upload_path) => String.t()}
-  @type parity_group :: :assertions | :form_controls | :composition | :count_and_scope
   @type parity_case :: %{
           required(:name) => String.t(),
           required(:expect) => :ok | :error,
@@ -291,6 +293,13 @@ defmodule Cerberus.LocatorParitySupport do
           optional(:error_contains) => String.t(),
           optional(:mutates) => boolean()
         }
+  @type parity_range :: {String.t(), String.t()}
+
+  @assertions_range {"assert_has text inexact", "assert_has testid helper"}
+  @form_controls_range {"fill_in label locator", "choose state filter chooses unselected radio"}
+  @composition_range {"submit supports same-element and_ composition with testid",
+                      "invalid mixed locator sigil modifiers raise"}
+  @count_and_scope_range {"count filters on assertions support exact count", "selector-only snippet assertion exact text"}
 
   @spec setup_all_context() :: {:ok, support_context()}
   def setup_all_context do
@@ -319,9 +328,12 @@ defmodule Cerberus.LocatorParitySupport do
     :ok
   end
 
-  @spec run_parity_group!(support_context(), parity_group()) :: :ok
-  def run_parity_group!(context, group) do
-    cases = parity_cases(group, context.upload_path)
+  @spec run_case_range!(support_context(), parity_range()) :: :ok
+  def run_case_range!(context, {first_name, last_name}) do
+    cases =
+      context.upload_path
+      |> all_parity_cases()
+      |> slice_cases(first_name, last_name)
 
     _final_state =
       Enum.reduce(cases, %{html: nil, dirty: true, static_session: nil, browser_session: nil}, fn case_def, state ->
@@ -391,33 +403,6 @@ defmodule Cerberus.LocatorParitySupport do
 
       {static_session, browser_session,
        %{html: html, dirty: false, static_session: static_session, browser_session: browser_session}}
-    end
-  end
-
-  @spec parity_cases(parity_group(), String.t()) :: [parity_case()]
-  def parity_cases(group, upload_path) do
-    cases = all_parity_cases(upload_path)
-
-    case group do
-      :assertions ->
-        slice_cases(cases, "assert_has text inexact", "assert_has testid helper")
-
-      :form_controls ->
-        slice_cases(cases, "fill_in label locator", "choose state filter chooses unselected radio")
-
-      :composition ->
-        slice_cases(
-          cases,
-          "submit supports same-element and_ composition with testid",
-          "invalid mixed locator sigil modifiers raise"
-        )
-
-      :count_and_scope ->
-        slice_cases(
-          cases,
-          "count filters on assertions support exact count",
-          "selector-only snippet assertion exact text"
-        )
     end
   end
 
@@ -1137,60 +1122,38 @@ defmodule Cerberus.LocatorParitySupport do
     assert String.contains?(result.error, expected_error_contains),
            "expected #{lane} #{name} error message to contain #{inspect(expected_error_contains)}, got #{inspect(result.error)}"
   end
-end
-
-defmodule Cerberus.LocatorParityBasicTest do
-  use ExUnit.Case, async: true
-
-  alias Cerberus.LocatorParitySupport
-
-  @moduletag timeout: 60_000
 
   setup_all do
-    LocatorParitySupport.setup_all_context()
+    setup_all_context()
   end
 
-  test "chained snippet submit keeps form controls available for follow-up actions", context do
-    assert :ok = LocatorParitySupport.assert_chained_follow_up(context.browser_session)
+  describe "Chained Follow-Up" do
+    test "chained snippet submit keeps form controls available for follow-up actions", context do
+      assert :ok = assert_chained_follow_up(context.browser_session)
+    end
   end
 
-  test "rich snippet locator parity holds for assertions and helper mappings", context do
-    assert :ok = LocatorParitySupport.run_parity_group!(context, :assertions)
+  describe "Assertions and Helpers" do
+    test "rich snippet locator parity holds for assertions and helper mappings", context do
+      assert :ok = run_case_range!(context, @assertions_range)
+    end
   end
 
-  test "rich snippet locator parity holds for form controls and state filters", context do
-    assert :ok = LocatorParitySupport.run_parity_group!(context, :form_controls)
-  end
-end
-
-defmodule Cerberus.LocatorParityCompositionTest do
-  use ExUnit.Case, async: true
-
-  alias Cerberus.LocatorParitySupport
-
-  @moduletag timeout: 60_000
-
-  setup_all do
-    LocatorParitySupport.setup_all_context()
+  describe "Form Controls and State Filters" do
+    test "rich snippet locator parity holds for form controls and state filters", context do
+      assert :ok = run_case_range!(context, @form_controls_range)
+    end
   end
 
-  test "rich snippet locator parity holds for composition, upload, and sigil cases", context do
-    assert :ok = LocatorParitySupport.run_parity_group!(context, :composition)
-  end
-end
-
-defmodule Cerberus.LocatorParityCountScopeTest do
-  use ExUnit.Case, async: true
-
-  alias Cerberus.LocatorParitySupport
-
-  @moduletag timeout: 60_000
-
-  setup_all do
-    LocatorParitySupport.setup_all_context()
+  describe "Composition, Upload, and Sigils" do
+    test "rich snippet locator parity holds for composition, upload, and sigil cases", context do
+      assert :ok = run_case_range!(context, @composition_range)
+    end
   end
 
-  test "rich snippet locator parity holds for count filters and scope disambiguation", context do
-    assert :ok = LocatorParitySupport.run_parity_group!(context, :count_and_scope)
+  describe "Count Filters and Scope" do
+    test "rich snippet locator parity holds for count filters and scope disambiguation", context do
+      assert :ok = run_case_range!(context, @count_and_scope_range)
+    end
   end
 end
