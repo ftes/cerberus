@@ -4,7 +4,6 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   use GenServer
 
   alias Cerberus.Driver.Browser.BiDi
-  alias Cerberus.Driver.Browser.CdpPageProcess
   alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.Types
 
@@ -120,9 +119,6 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     bidi_opts = Keyword.get(opts, :bidi_opts, opts)
     browser_name = Runtime.browser_name(bidi_opts)
     bidi_opts = Keyword.put_new(bidi_opts, :browser_name, browser_name)
-    debugger_address = Keyword.get(opts, :debugger_address)
-    use_cdp_evaluate? = Keyword.get(opts, :use_cdp_evaluate, false)
-    slow_mo_ms = Keyword.get(opts, :slow_mo_ms, 0)
 
     with {:ok, browsing_context_id} <- resolve_browsing_context_id(user_context_id, context_id, bidi_opts),
          :ok <- maybe_set_viewport_for_context(context_id, browsing_context_id, viewport, bidi_opts),
@@ -135,10 +131,6 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
          user_context_id: user_context_id,
          browser_name: browser_name,
          bidi_opts: bidi_opts,
-         debugger_address: debugger_address,
-         use_cdp_evaluate?: use_cdp_evaluate?,
-         slow_mo_ms: slow_mo_ms,
-         cdp_page_pid: nil,
          last_bidi_event: nil,
          last_readiness: %{},
          download_events: [],
@@ -255,10 +247,11 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   def handle_call({:evaluate, expression, timeout_ms, started_us}, _from, state) do
     record_transport_delay(:browsing_context_queue, started_us)
+    bidi_opts = Keyword.put(state.bidi_opts, :timeout, timeout_ms)
 
-    {result, state} =
+    result =
       Cerberus.Profiling.measure({:browser_transport, :browsing_context_dispatch}, fn ->
-        evaluate_expression(state, expression, timeout_ms)
+        evaluate_script(state.id, expression, bidi_opts)
       end)
 
     {:reply, result, state}
@@ -343,56 +336,11 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   @impl true
   def terminate(_reason, state) do
-    maybe_stop_cdp_page(state.cdp_page_pid)
     _ = BiDi.command("session.unsubscribe", %{"events" => @bidi_events, "contexts" => [state.id]}, state.bidi_opts)
     _ = BiDi.unsubscribe(self(), state.bidi_opts)
     _ = BiDi.command("browsingContext.close", %{"context" => state.id}, state.bidi_opts)
     :ok
   end
-
-  defp evaluate_expression(%{use_cdp_evaluate?: true, browser_name: :chrome} = state, expression, timeout_ms) do
-    case ensure_cdp_page(state) do
-      {:ok, cdp_page_pid, state} ->
-        case CdpPageProcess.evaluate(cdp_page_pid, expression, timeout_ms) do
-          {:ok, result} -> {{:ok, result}, state}
-          {:error, _reason, _details} = error -> {error, state}
-        end
-
-      {:error, _reason, state} ->
-        {evaluate_script(state.id, expression, Keyword.put(state.bidi_opts, :timeout, timeout_ms)), state}
-    end
-  end
-
-  defp evaluate_expression(state, expression, timeout_ms) do
-    {evaluate_script(state.id, expression, Keyword.put(state.bidi_opts, :timeout, timeout_ms)), state}
-  end
-
-  defp ensure_cdp_page(%{cdp_page_pid: pid} = state) when is_pid(pid) do
-    if Process.alive?(pid) do
-      {:ok, pid, state}
-    else
-      start_cdp_page(%{state | cdp_page_pid: nil})
-    end
-  end
-
-  defp ensure_cdp_page(state), do: start_cdp_page(state)
-
-  defp start_cdp_page(%{debugger_address: debugger_address, id: target_id, slow_mo_ms: slow_mo_ms} = state)
-       when is_binary(debugger_address) do
-    case CdpPageProcess.start_link(target_id: target_id, debugger_address: debugger_address, slow_mo_ms: slow_mo_ms) do
-      {:ok, pid} -> {:ok, pid, %{state | cdp_page_pid: pid}}
-      {:error, reason} -> {:error, reason, state}
-    end
-  end
-
-  defp start_cdp_page(state), do: {:error, :cdp_page_unavailable, state}
-
-  defp maybe_stop_cdp_page(pid) when is_pid(pid) do
-    _ = GenServer.stop(pid, :normal, 1_000)
-    :ok
-  end
-
-  defp maybe_stop_cdp_page(_pid), do: :ok
 
   defp create_browsing_context(user_context_id, bidi_opts) do
     create_browsing_context(user_context_id, bidi_opts, 2)

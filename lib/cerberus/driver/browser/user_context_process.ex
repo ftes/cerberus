@@ -229,16 +229,6 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     owner = Keyword.fetch!(opts, :owner)
     owner_ref = Process.monitor(owner)
     bidi_opts = Keyword.get(opts, :bidi_opts, opts)
-    use_cdp_evaluate? = Runtime.use_cdp_evaluate?(bidi_opts)
-    slow_mo_ms = Runtime.slow_mo_ms(bidi_opts)
-
-    debugger_address =
-      if use_cdp_evaluate? and Runtime.browser_name(bidi_opts) == :chrome do
-        case Runtime.debugger_address(bidi_opts) do
-          {:ok, value} -> value
-          {:error, _reason} -> nil
-        end
-      end
 
     browser_context_defaults =
       Keyword.get(opts, :browser_context_defaults, %{viewport: nil, user_agent: nil, init_scripts: [], popup_mode: :allow})
@@ -251,10 +241,7 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
              browsing_context_supervisor,
              user_context_id,
              browser_context_defaults,
-             bidi_opts,
-             debugger_address: debugger_address,
-             use_cdp_evaluate: use_cdp_evaluate?,
-             slow_mo_ms: slow_mo_ms
+             bidi_opts
            ) do
       {:ok, first_tab_id, browsing_contexts} =
         add_browsing_context(%{}, browsing_context_pid)
@@ -268,9 +255,6 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
          browsing_context_supervisor: browsing_context_supervisor,
          browser_context_defaults: browser_context_defaults,
          bidi_opts: bidi_opts,
-         debugger_address: debugger_address,
-         use_cdp_evaluate?: use_cdp_evaluate?,
-         slow_mo_ms: slow_mo_ms,
          browsing_contexts: browsing_contexts,
          active_browsing_context_id: first_tab_id,
          known_context_ids: MapSet.new([first_tab_id]),
@@ -366,10 +350,7 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
              state.browsing_context_supervisor,
              state.user_context_id,
              state.browser_context_defaults,
-             state.bidi_opts,
-             debugger_address: state.debugger_address,
-             use_cdp_evaluate: state.use_cdp_evaluate?,
-             slow_mo_ms: state.slow_mo_ms
+             state.bidi_opts
            ),
          {:ok, tab_id, browsing_contexts} <- add_browsing_context(state.browsing_contexts, browsing_context_pid) do
       known_context_ids = MapSet.put(state.known_context_ids, tab_id)
@@ -397,10 +378,7 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
                state.user_context_id,
                state.browser_context_defaults,
                state.bidi_opts,
-               context_id: tab_id,
-               debugger_address: state.debugger_address,
-               use_cdp_evaluate: state.use_cdp_evaluate?,
-               slow_mo_ms: state.slow_mo_ms
+               context_id: tab_id
              ),
            {:ok, _attached_tab_id, browsing_contexts} <-
              add_browsing_context(state.browsing_contexts, browsing_context_pid) do

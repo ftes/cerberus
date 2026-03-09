@@ -44,17 +44,6 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
     end
   end
 
-  describe "use_cdp_evaluate?/1" do
-    test "defaults to false and supports session override precedence" do
-      Application.put_env(:cerberus, :browser, use_cdp_evaluate: true)
-
-      assert Runtime.use_cdp_evaluate?([]) == true
-      assert Runtime.use_cdp_evaluate?(use_cdp_evaluate: false) == false
-      assert Runtime.use_cdp_evaluate?(browser: [use_cdp_evaluate: false]) == false
-      assert Runtime.use_cdp_evaluate?(browser: [use_cdp_evaluate: false], use_cdp_evaluate: true) == true
-    end
-  end
-
   describe "remote_webdriver_url/1" do
     test "prefers explicit webdriver_url override then browser config" do
       Application.put_env(:cerberus, :browser, webdriver_url: "http://remote-from-config:4444")
