@@ -3,6 +3,18 @@ defmodule Cerberus.LiveSelectRegressionTest do
 
   import Cerberus
 
+  alias Cerberus.TestSupport.SharedBrowserSession
+
+  setup_all do
+    {owner_pid, browser_session} = SharedBrowserSession.start!()
+
+    on_exit(fn ->
+      SharedBrowserSession.stop(owner_pid)
+    end)
+
+    {:ok, shared_browser_session: browser_session}
+  end
+
   setup do
     %{conn: Phoenix.ConnTest.build_conn()}
   end
@@ -17,9 +29,9 @@ defmodule Cerberus.LiveSelectRegressionTest do
     |> assert_has(and_(css("#form-data"), text("[elf, dwarf]", exact: false)))
   end
 
-  test "browser live multi-select preserves previous picks across repeated calls" do
+  test "browser live multi-select preserves previous picks across repeated calls", context do
     :browser
-    |> session()
+    |> SharedBrowserSession.driver_session(context)
     |> visit("/phoenix_test/live/index")
     |> select(~l"Race 2"l, option: text("Elf"))
     |> select(~l"Race 2"l, option: text("Dwarf"))
@@ -37,9 +49,9 @@ defmodule Cerberus.LiveSelectRegressionTest do
     |> assert_has(and_(css("#form-data"), text("selected: [dog, cat]")))
   end
 
-  test "browser live select outside forms dispatches option phx-click events" do
+  test "browser live select outside forms dispatches option phx-click events", context do
     :browser
-    |> session()
+    |> SharedBrowserSession.driver_session(context)
     |> visit("/phoenix_test/live/index")
     |> within(css("#not-a-form"), fn scoped ->
       select(scoped, ~l"Choose a pet:"l, option: [text("Dog"), text("Cat")])
