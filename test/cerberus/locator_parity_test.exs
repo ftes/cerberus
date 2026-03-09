@@ -293,13 +293,6 @@ defmodule Cerberus.LocatorParityTest do
           optional(:error_contains) => String.t(),
           optional(:mutates) => boolean()
         }
-  @type parity_range :: {String.t(), String.t()}
-
-  @assertions_range {"assert_has text inexact", "assert_has testid helper"}
-  @form_controls_range {"fill_in label locator", "choose state filter chooses unselected radio"}
-  @composition_range {"submit supports same-element and_ composition with testid",
-                      "invalid mixed locator sigil modifiers raise"}
-  @count_and_scope_range {"count filters on assertions support exact count", "selector-only snippet assertion exact text"}
 
   @spec setup_all_context() :: {:ok, support_context()}
   def setup_all_context do
@@ -328,13 +321,8 @@ defmodule Cerberus.LocatorParityTest do
     :ok
   end
 
-  @spec run_case_range!(support_context(), parity_range()) :: :ok
-  def run_case_range!(context, {first_name, last_name}) do
-    cases =
-      context.upload_path
-      |> all_parity_cases()
-      |> slice_cases(first_name, last_name)
-
+  @spec run_cases!(support_context(), [parity_case()]) :: :ok
+  def run_cases!(context, cases) when is_list(cases) do
     _final_state =
       Enum.reduce(cases, %{html: nil, dirty: true, static_session: nil, browser_session: nil}, fn case_def, state ->
         name = case_def.name
@@ -406,10 +394,9 @@ defmodule Cerberus.LocatorParityTest do
     end
   end
 
-  @spec all_parity_cases(String.t()) :: [parity_case()]
-  defp all_parity_cases(upload_path) do
+  @spec assertion_cases() :: [parity_case()]
+  defp assertion_cases do
     [
-      # text matching
       %{
         name: "assert_has text inexact",
         expect: :ok,
@@ -457,13 +444,7 @@ defmodule Cerberus.LocatorParityTest do
         mutates: false,
         run: &assert_has(&1, filter(text("Hidden Attribute Copy"), visible: true))
       },
-      # helper mappings in assertions
-      %{
-        name: "assert_has label helper",
-        expect: :ok,
-        mutates: false,
-        run: &assert_has(&1, ~l"Email Address"le)
-      },
+      %{name: "assert_has label helper", expect: :ok, mutates: false, run: &assert_has(&1, ~l"Email Address"le)},
       %{
         name: "assert_has role button helper",
         expect: :ok,
@@ -515,8 +496,13 @@ defmodule Cerberus.LocatorParityTest do
         error_contains: "unknown options [:selector]",
         run: &assert_has(&1, text("Articles"), selector: "h1")
       },
-      %{name: "assert_has testid helper", expect: :ok, mutates: false, run: &assert_has(&1, testid("articles-title"))},
-      # fill_in
+      %{name: "assert_has testid helper", expect: :ok, mutates: false, run: &assert_has(&1, testid("articles-title"))}
+    ]
+  end
+
+  @spec form_control_cases() :: [parity_case()]
+  defp form_control_cases do
+    [
       %{name: "fill_in label locator", expect: :ok, run: &fill_in(&1, ~l"Email Address"l, "alice@example.com")},
       %{
         name: "fill_in role textbox locator",
@@ -535,11 +521,7 @@ defmodule Cerberus.LocatorParityTest do
         expect: :ok,
         run: &fill_in(&1, text(~r/Search term/), "regex value")
       },
-      %{
-        name: "fill_in explicit text locator",
-        expect: :ok,
-        run: &fill_in(&1, text("Email Address"), "invalid")
-      },
+      %{name: "fill_in explicit text locator", expect: :ok, run: &fill_in(&1, text("Email Address"), "invalid")},
       %{
         name: "fill_in role link locator errors when no field matches",
         expect: :error,
@@ -564,7 +546,6 @@ defmodule Cerberus.LocatorParityTest do
         expect: :ok,
         run: &fill_in(&1, ~l"Inline Email"l, "wrapped@example.com")
       },
-      # select
       %{name: "select label locator", expect: :ok, run: &select(&1, ~l"Language"l, option: ~l"Elixir"e)},
       %{
         name: "select role combobox locator",
@@ -594,7 +575,6 @@ defmodule Cerberus.LocatorParityTest do
         error_module: AssertionError,
         run: &select(&1, ~l"Language"l, option: ~l"Missing"e)
       },
-      # check/uncheck/choose
       %{name: "check checkbox by label", expect: :ok, run: &check(&1, ~l"Two"l)},
       %{name: "uncheck checkbox by label", expect: :ok, run: &uncheck(&1, ~l"One"l)},
       %{
@@ -615,7 +595,6 @@ defmodule Cerberus.LocatorParityTest do
         error_module: AssertionError,
         run: &choose(&1, ~l"Two"l)
       },
-      # state filters
       %{
         name: "fill_in state filter chooses enabled duplicate field",
         html: @state_filter_html,
@@ -645,8 +624,13 @@ defmodule Cerberus.LocatorParityTest do
         html: @state_filter_html,
         expect: :ok,
         run: &choose(&1, ~l"State Contact"l, selected: false)
-      },
-      # locator composition / chaining
+      }
+    ]
+  end
+
+  @spec composition_cases(String.t()) :: [parity_case()]
+  defp composition_cases(upload_path) do
+    [
       %{
         name: "submit supports same-element and_ composition with testid",
         html: @chained_locator_html,
@@ -790,7 +774,6 @@ defmodule Cerberus.LocatorParityTest do
         error_module: AssertionError,
         run: &fill_in(&1, or_(css("#email_input"), css("#secondary_email")), "ambiguous")
       },
-      # upload
       %{name: "upload file input by label", expect: :ok, run: &upload(&1, ~l"Avatar"l, upload_path)},
       %{
         name: "upload wrapped label input",
@@ -804,7 +787,6 @@ defmodule Cerberus.LocatorParityTest do
         error_module: AssertionError,
         run: &upload(&1, ~l"Nickname"l, upload_path)
       },
-      # click/submit with non-clickable locator kinds
       %{
         name: "click with label locator errors when no clickable matches",
         expect: :error,
@@ -817,7 +799,6 @@ defmodule Cerberus.LocatorParityTest do
         error_module: AssertionError,
         run: &submit(&1, ~l"Search term"l)
       },
-      # sigil-rich cases
       %{name: "sigil css locator for fill_in", expect: :ok, run: &fill_in(&1, ~l"#search_q"c, "sigil css")},
       %{name: "sigil testid locator for fill_in", expect: :ok, run: &fill_in(&1, ~l"search-input"t, "sigil testid")},
       %{
@@ -837,8 +818,13 @@ defmodule Cerberus.LocatorParityTest do
         error_module: InvalidLocatorError,
         host_only: true,
         run: &assert_has(&1, ~l"button:Increment"rc)
-      },
-      # count/position filters (assertions + form actions)
+      }
+    ]
+  end
+
+  @spec count_and_scope_cases() :: [parity_case()]
+  defp count_and_scope_cases do
+    [
       %{
         name: "count filters on assertions support exact count",
         html: @count_position_html,
@@ -1004,7 +990,6 @@ defmodule Cerberus.LocatorParityTest do
         error_module: AssertionError,
         run: &select(&1, ~l"Pet"l, option: ~l"Dog"e, count: 1)
       },
-      # scope chaining disambiguation snippet
       %{
         name: "scope-chain snippet fill_in with scoped locator",
         html: @selector_only_html,
@@ -1036,20 +1021,6 @@ defmodule Cerberus.LocatorParityTest do
         current_path: "/__locator_oracle__",
         form_data: %{active_form: nil, values: %{}}
     }
-  end
-
-  @spec slice_cases([parity_case()], String.t(), String.t()) :: [parity_case()]
-  defp slice_cases(cases, first_name, last_name) when is_binary(first_name) and is_binary(last_name) do
-    first_index = find_case_index!(cases, first_name)
-    last_index = find_case_index!(cases, last_name)
-
-    Enum.slice(cases, first_index, last_index - first_index + 1)
-  end
-
-  @spec find_case_index!([parity_case()], String.t()) :: non_neg_integer()
-  defp find_case_index!(cases, name) when is_binary(name) do
-    Enum.find_index(cases, &(&1.name == name)) ||
-      raise ArgumentError, "locator parity case #{inspect(name)} not found"
   end
 
   defp inject_snippet!(browser_session, html) when is_binary(html) do
@@ -1135,25 +1106,25 @@ defmodule Cerberus.LocatorParityTest do
 
   describe "Assertions and Helpers" do
     test "rich snippet locator parity holds for assertions and helper mappings", context do
-      assert :ok = run_case_range!(context, @assertions_range)
+      assert :ok = run_cases!(context, assertion_cases())
     end
   end
 
   describe "Form Controls and State Filters" do
     test "rich snippet locator parity holds for form controls and state filters", context do
-      assert :ok = run_case_range!(context, @form_controls_range)
+      assert :ok = run_cases!(context, form_control_cases())
     end
   end
 
   describe "Composition, Upload, and Sigils" do
     test "rich snippet locator parity holds for composition, upload, and sigil cases", context do
-      assert :ok = run_case_range!(context, @composition_range)
+      assert :ok = run_cases!(context, composition_cases(context.upload_path))
     end
   end
 
   describe "Count Filters and Scope" do
     test "rich snippet locator parity holds for count filters and scope disambiguation", context do
-      assert :ok = run_case_range!(context, @count_and_scope_range)
+      assert :ok = run_cases!(context, count_and_scope_cases())
     end
   end
 end
