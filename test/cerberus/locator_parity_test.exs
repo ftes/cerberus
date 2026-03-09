@@ -285,9 +285,11 @@ defmodule Cerberus.LocatorParitySupport do
           required(:name) => String.t(),
           required(:expect) => :ok | :error,
           required(:run) => (Cerberus.Session.t() -> Cerberus.Session.t() | any()),
+          optional(:host_only) => boolean(),
           optional(:html) => String.t(),
           optional(:error_module) => module(),
-          optional(:error_contains) => String.t()
+          optional(:error_contains) => String.t(),
+          optional(:mutates) => boolean()
         }
 
   @spec setup_all_context() :: {:ok, support_context()}
@@ -321,39 +323,75 @@ defmodule Cerberus.LocatorParitySupport do
   def run_parity_group!(context, group) do
     cases = parity_cases(group, context.upload_path)
 
-    Enum.each(cases, fn case_def ->
-      name = case_def.name
-      html = Map.get(case_def, :html, @default_html)
-      expect = case_def.expect
-      expected_error_module = Map.get(case_def, :error_module)
-      expected_error_contains = Map.get(case_def, :error_contains)
+    _final_state =
+      Enum.reduce(cases, %{html: nil, dirty: true, static_session: nil, browser_session: nil}, fn case_def, state ->
+        name = case_def.name
+        html = Map.get(case_def, :html, @default_html)
+        expect = case_def.expect
+        host_only = Map.get(case_def, :host_only, false)
+        mutates = Map.get(case_def, :mutates, true)
+        expected_error_module = Map.get(case_def, :error_module)
+        expected_error_contains = Map.get(case_def, :error_contains)
 
+        {static_result, browser_result, next_state} =
+          if host_only do
+            result = run_case(session(), case_def.run)
+            {result, result, state}
+          else
+            {static_session, browser_session, session_state} = parity_sessions_for_case(state, context, html)
+
+            static_result = run_case(static_session, case_def.run)
+            browser_result = run_case(browser_session, case_def.run)
+
+            {static_result, browser_result, %{session_state | dirty: mutates}}
+          end
+
+        assert static_result.status == expect,
+               "expected static #{name} to be #{inspect(expect)}, got #{inspect(static_result)}"
+
+        assert browser_result.status == expect,
+               "expected browser #{name} to be #{inspect(expect)}, got #{inspect(browser_result)}"
+
+        assert static_result.status == browser_result.status,
+               "expected parity for #{name}, static=#{inspect(static_result)} browser=#{inspect(browser_result)}"
+
+        assert_expected_error_case!(
+          expect,
+          name,
+          expected_error_module,
+          expected_error_contains,
+          static_result,
+          browser_result
+        )
+
+        next_state
+      end)
+
+    :ok
+  end
+
+  @spec parity_sessions_for_case(
+          %{
+            html: String.t() | nil,
+            dirty: boolean(),
+            static_session: Static.t() | nil,
+            browser_session: browser_session() | nil
+          },
+          support_context(),
+          String.t()
+        ) ::
+          {Static.t(), browser_session(),
+           %{html: String.t(), dirty: boolean(), static_session: Static.t(), browser_session: browser_session()}}
+  defp parity_sessions_for_case(state, context, html) when is_binary(html) do
+    if state.html == html and state.dirty == false and state.static_session != nil and state.browser_session != nil do
+      {state.static_session, state.browser_session, state}
+    else
       static_session = static_snippet_session(html)
       browser_session = inject_snippet!(context.browser_session, html)
 
-      static_result = run_case(static_session, case_def.run)
-      browser_result = run_case(browser_session, case_def.run)
-
-      assert static_result.status == expect,
-             "expected static #{name} to be #{inspect(expect)}, got #{inspect(static_result)}"
-
-      assert browser_result.status == expect,
-             "expected browser #{name} to be #{inspect(expect)}, got #{inspect(browser_result)}"
-
-      assert static_result.status == browser_result.status,
-             "expected parity for #{name}, static=#{inspect(static_result)} browser=#{inspect(browser_result)}"
-
-      assert_expected_error_case!(
-        expect,
-        name,
-        expected_error_module,
-        expected_error_contains,
-        static_result,
-        browser_result
-      )
-    end)
-
-    :ok
+      {static_session, browser_session,
+       %{html: html, dirty: false, static_session: static_session, browser_session: browser_session}}
+    end
   end
 
   @spec parity_cases(parity_group(), String.t()) :: [parity_case()]
@@ -387,76 +425,112 @@ defmodule Cerberus.LocatorParitySupport do
   defp all_parity_cases(upload_path) do
     [
       # text matching
-      %{name: "assert_has text inexact", expect: :ok, run: &assert_has(&1, text("Article", exact: false))},
-      %{name: "assert_has text exact", expect: :ok, run: &assert_has(&1, text("Articles", exact: true))},
-      %{name: "assert_has text regex", expect: :ok, run: &assert_has(&1, text(~r/Arti\wles?/))},
-      %{name: "assert_has multiline normalized text", expect: :ok, run: &assert_has(&1, text("Alpha Beta", exact: true))},
-      %{name: "refute_has text", expect: :ok, run: &refute_has(&1, text("Definitely Missing"))},
+      %{
+        name: "assert_has text inexact",
+        expect: :ok,
+        mutates: false,
+        run: &assert_has(&1, text("Article", exact: false))
+      },
+      %{name: "assert_has text exact", expect: :ok, mutates: false, run: &assert_has(&1, text("Articles", exact: true))},
+      %{name: "assert_has text regex", expect: :ok, mutates: false, run: &assert_has(&1, text(~r/Arti\wles?/))},
+      %{
+        name: "assert_has multiline normalized text",
+        expect: :ok,
+        mutates: false,
+        run: &assert_has(&1, text("Alpha Beta", exact: true))
+      },
+      %{name: "refute_has text", expect: :ok, mutates: false, run: &refute_has(&1, text("Definitely Missing"))},
       %{
         name: "assert_has hidden text fails by default",
         expect: :error,
         error_module: AssertionError,
+        mutates: false,
         run: &assert_has(&1, text("Secret Hidden Copy"))
       },
       %{
         name: "assert_has hidden text with visible false",
         expect: :ok,
+        mutates: false,
         run: &assert_has(&1, text("Secret Hidden Copy"), visible: false)
       },
       %{
         name: "assert_has hidden text with visible any",
         expect: :ok,
+        mutates: false,
         run: &assert_has(&1, text("Hidden Attribute Copy"), visible: :any)
       },
       %{
         name: "assert_has hidden text using locator visible filter false",
         expect: :ok,
+        mutates: false,
         run: &assert_has(&1, filter(text("Hidden Attribute Copy"), visible: false))
       },
       %{
         name: "assert_has hidden text using locator visible filter true",
         expect: :error,
         error_module: AssertionError,
+        mutates: false,
         run: &assert_has(&1, filter(text("Hidden Attribute Copy"), visible: true))
       },
       # helper mappings in assertions
       %{
         name: "assert_has label helper",
         expect: :ok,
+        mutates: false,
         run: &assert_has(&1, ~l"Email Address"le)
       },
       %{
         name: "assert_has role button helper",
         expect: :ok,
+        mutates: false,
         run: &assert_has(&1, role(:button, name: "Increment", exact: true))
       },
       %{
         name: "assert_has role tab helper",
         expect: :ok,
+        mutates: false,
         run: &assert_has(&1, role(:tab, name: "Increment", exact: true))
       },
       %{
         name: "assert_has role menuitem helper",
         expect: :ok,
+        mutates: false,
         run: &assert_has(&1, role(:menuitem, name: "Increment", exact: true))
       },
       %{
         name: "assert_has role link helper",
         expect: :ok,
+        mutates: false,
         run: &assert_has(&1, role(:link, name: "Counter Link", exact: true))
       },
-      %{name: "assert_has title helper", expect: :ok, run: &assert_has(&1, title("Articles heading", exact: true))},
-      %{name: "assert_has alt helper", expect: :ok, run: &assert_has(&1, alt("Hero banner", exact: true))},
-      %{name: "assert_has placeholder helper", expect: :ok, run: &assert_has(&1, placeholder("Search placeholder"))},
-      %{name: "assert_has css locator", expect: :ok, run: &assert_has(&1, css("#root"))},
+      %{
+        name: "assert_has title helper",
+        expect: :ok,
+        mutates: false,
+        run: &assert_has(&1, title("Articles heading", exact: true))
+      },
+      %{
+        name: "assert_has alt helper",
+        expect: :ok,
+        mutates: false,
+        run: &assert_has(&1, alt("Hero banner", exact: true))
+      },
+      %{
+        name: "assert_has placeholder helper",
+        expect: :ok,
+        mutates: false,
+        run: &assert_has(&1, placeholder("Search placeholder"))
+      },
+      %{name: "assert_has css locator", expect: :ok, mutates: false, run: &assert_has(&1, css("#root"))},
       %{
         name: "assert_has rejects removed selector option",
         expect: :error,
         error_module: ArgumentError,
+        host_only: true,
         error_contains: "unknown options [:selector]",
         run: &assert_has(&1, text("Articles"), selector: "h1")
       },
-      %{name: "assert_has testid helper", expect: :ok, run: &assert_has(&1, testid("articles-title"))},
+      %{name: "assert_has testid helper", expect: :ok, mutates: false, run: &assert_has(&1, testid("articles-title"))},
       # fill_in
       %{name: "fill_in label locator", expect: :ok, run: &fill_in(&1, ~l"Email Address"l, "alice@example.com")},
       %{
@@ -698,18 +772,21 @@ defmodule Cerberus.LocatorParitySupport do
         name: "assert_has supports has locator option",
         html: @chained_locator_html,
         expect: :ok,
+        mutates: false,
         run: &assert_has(&1, filter(role(:button, name: "Apply", exact: false), has: text("secondary", exact: true)))
       },
       %{
         name: "assert_has supports has_not locator option",
         html: @chained_locator_html,
         expect: :ok,
+        mutates: false,
         run: &assert_has(&1, filter(role(:button, name: "Apply", exact: false), has_not: text("secondary", exact: true)))
       },
       %{
         name: "assert_has supports composed css and text locator assertions",
         html: @chained_locator_html,
         expect: :ok,
+        mutates: false,
         run: &assert_has(&1, and_(css("#apply-secondary"), text("Apply", exact: false)))
       },
       %{
@@ -773,6 +850,7 @@ defmodule Cerberus.LocatorParitySupport do
         name: "invalid mixed locator sigil modifiers raise",
         expect: :error,
         error_module: InvalidLocatorError,
+        host_only: true,
         run: &assert_has(&1, ~l"button:Increment"rc)
       },
       # count/position filters (assertions + form actions)
@@ -780,24 +858,28 @@ defmodule Cerberus.LocatorParitySupport do
         name: "count filters on assertions support exact count",
         html: @count_position_html,
         expect: :ok,
+        mutates: false,
         run: &assert_has(&1, title("Alpha", exact: false), count: 2)
       },
       %{
         name: "count filters on assertions support min/max",
         html: @count_position_html,
         expect: :ok,
+        mutates: false,
         run: &assert_has(&1, title("Alpha", exact: false), min: 2, max: 2)
       },
       %{
         name: "count filters on assertions support between tuple",
         html: @count_position_html,
         expect: :ok,
+        mutates: false,
         run: &assert_has(&1, title("Alpha", exact: false), between: {1, 2})
       },
       %{
         name: "count filters on assertions support between range",
         html: @count_position_html,
         expect: :ok,
+        mutates: false,
         run: &assert_has(&1, title("Alpha", exact: false), between: 2..3)
       },
       %{
@@ -805,12 +887,14 @@ defmodule Cerberus.LocatorParitySupport do
         html: @count_position_html,
         expect: :error,
         error_module: AssertionError,
+        mutates: false,
         run: &assert_has(&1, title("Alpha", exact: false), count: 3)
       },
       %{
         name: "refute_has with count filter passes when constraints are not satisfied",
         html: @count_position_html,
         expect: :ok,
+        mutates: false,
         run: &refute_has(&1, title("Alpha", exact: false), count: 3)
       },
       %{
@@ -818,6 +902,7 @@ defmodule Cerberus.LocatorParitySupport do
         html: @count_position_html,
         expect: :error,
         error_module: AssertionError,
+        mutates: false,
         run: &refute_has(&1, title("Alpha", exact: false), count: 2)
       },
       %{
@@ -825,6 +910,7 @@ defmodule Cerberus.LocatorParitySupport do
         html: @count_position_html,
         expect: :error,
         error_module: ArgumentError,
+        host_only: true,
         run: &assert_has(&1, title("Alpha", exact: false), first: true)
       },
       %{
@@ -832,6 +918,7 @@ defmodule Cerberus.LocatorParitySupport do
         html: @count_position_html,
         expect: :error,
         error_module: ArgumentError,
+        host_only: true,
         run: &assert_has(&1, title("Alpha", exact: false), between: {2, 1})
       },
       %{
@@ -877,6 +964,7 @@ defmodule Cerberus.LocatorParitySupport do
         html: @count_position_html,
         expect: :error,
         error_module: ArgumentError,
+        host_only: true,
         run: &fill_in(&1, ~l"Code"l, "invalid", first: true, nth: 2)
       },
       %{
@@ -948,6 +1036,7 @@ defmodule Cerberus.LocatorParitySupport do
         name: "selector-only snippet assertion exact text",
         html: @selector_only_html,
         expect: :ok,
+        mutates: false,
         run: &assert_has(&1, text("Save", exact: true))
       }
     ]
@@ -1050,10 +1139,12 @@ defmodule Cerberus.LocatorParitySupport do
   end
 end
 
-defmodule Cerberus.LocatorParityFollowUpTest do
+defmodule Cerberus.LocatorParityBasicTest do
   use ExUnit.Case, async: true
 
   alias Cerberus.LocatorParitySupport
+
+  @moduletag timeout: 60_000
 
   setup_all do
     LocatorParitySupport.setup_all_context()
@@ -1062,37 +1153,13 @@ defmodule Cerberus.LocatorParityFollowUpTest do
   test "chained snippet submit keeps form controls available for follow-up actions", context do
     assert :ok = LocatorParitySupport.assert_chained_follow_up(context.browser_session)
   end
-end
 
-defmodule Cerberus.LocatorParityAssertionsTest do
-  use ExUnit.Case, async: true
-
-  alias Cerberus.LocatorParitySupport
-
-  @moduletag :slow
-  @moduletag timeout: 60_000
-
-  setup_all do
-    LocatorParitySupport.setup_all_context()
-  end
-
+  @tag :slow
   test "rich snippet locator parity holds for assertions and helper mappings", context do
     assert :ok = LocatorParitySupport.run_parity_group!(context, :assertions)
   end
-end
 
-defmodule Cerberus.LocatorParityFormControlsTest do
-  use ExUnit.Case, async: true
-
-  alias Cerberus.LocatorParitySupport
-
-  @moduletag :slow
-  @moduletag timeout: 60_000
-
-  setup_all do
-    LocatorParitySupport.setup_all_context()
-  end
-
+  @tag :slow
   test "rich snippet locator parity holds for form controls and state filters", context do
     assert :ok = LocatorParitySupport.run_parity_group!(context, :form_controls)
   end
