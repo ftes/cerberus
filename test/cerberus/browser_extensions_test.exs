@@ -4,9 +4,14 @@ defmodule Cerberus.BrowserExtensionsTest do
   import Cerberus
   import Cerberus.Browser
 
+  alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.Fixtures.Endpoint
   alias ExUnit.AssertionError
+
+  setup_all do
+    {:ok, browser_session: session(:browser)}
+  end
 
   test "browser-only APIs are explicit unsupported on static and live sessions" do
     static = visit(session(), "/articles")
@@ -51,16 +56,18 @@ defmodule Cerberus.BrowserExtensionsTest do
 
   @tag :tmp_dir
   @tag :slow
-  test "screenshot + keyboard + dialog + drag browser extensions work together", %{tmp_dir: tmp_dir} do
+  test "screenshot + keyboard + dialog + drag browser extensions work together", %{
+    tmp_dir: tmp_dir,
+    browser_session: browser_session
+  } do
     # NOTE: ExUnit :tmp_dir paths are deterministic for module+test. If multiple
     # mix test processes execute this same test in one checkout concurrently,
     # one process can remove this directory while another still reads artifacts.
     path = Path.join(tmp_dir, "cerberus-browser-extensions.png")
 
     session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
+      browser_session
+      |> browser_fixture_session("/browser/extensions")
       |> screenshot(path: path)
       |> type(css("#keyboard-input"), "hello browser")
       |> press(css("#press-input"), "Enter")
@@ -90,11 +97,12 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   @tag :slow
-  test "press uses real keyboard semantics for printable keys, editing keys, and Tab focus traversal" do
+  test "press uses real keyboard semantics for printable keys, editing keys, and Tab focus traversal", %{
+    browser_session: browser_session
+  } do
     session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
+      browser_session
+      |> browser_fixture_session("/browser/extensions")
       |> press(css("#press-input"), "a")
       |> press(css("#press-input"), "Space")
       |> press(css("#press-input"), "KeyB")
@@ -114,11 +122,8 @@ defmodule Cerberus.BrowserExtensionsTest do
     evaluate_js(session, "document.activeElement && document.activeElement.id", &assert(&1 == "tab-next"))
   end
 
-  test "click rejects hidden targets via actionability visibility checks" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
+  test "click rejects hidden targets via actionability visibility checks", %{browser_session: browser_session} do
+    session = browser_fixture_session(browser_session, "/browser/extensions")
 
     error =
       assert_raise AssertionError, fn ->
@@ -128,19 +133,15 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert error.message =~ "matched element is not visible"
   end
 
-  test "force bypasses browser actionability visibility checks" do
-    :browser
-    |> session()
-    |> visit("/browser/extensions")
+  test "force bypasses browser actionability visibility checks", %{browser_session: browser_session} do
+    browser_session
+    |> browser_fixture_session("/browser/extensions")
     |> click(:button |> role(name: "Hidden Action", exact: true) |> filter(visible: false), force: true)
     |> assert_has(text("Hidden action result: clicked", exact: true))
   end
 
-  test "click scrolls offscreen targets into view before acting" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
+  test "click scrolls offscreen targets into view before acting", %{browser_session: browser_session} do
+    session = browser_fixture_session(browser_session, "/browser/extensions")
 
     evaluate_js(session, "window.scrollY", &assert(&1 == 0))
 
@@ -152,19 +153,17 @@ defmodule Cerberus.BrowserExtensionsTest do
     evaluate_js(session, "window.scrollY", &assert(&1 > 0))
   end
 
-  test "click can target plain label elements in the browser" do
-    :browser
-    |> session()
-    |> visit("/browser/extensions")
+  test "click can target plain label elements in the browser", %{browser_session: browser_session} do
+    browser_session
+    |> browser_fixture_session("/browser/extensions")
     |> click(css("#checkbox-label"))
     |> assert_has(text("Label click result: checked", exact: true))
   end
 
-  test "evaluate_js and cookie helpers cover add_cookies, clear_cookies, and session cookie semantics" do
-    session =
-      :browser
-      |> session()
-      |> visit("/articles")
+  test "evaluate_js and cookie helpers cover add_cookies, clear_cookies, and session cookie semantics", %{
+    browser_session: browser_session
+  } do
+    session = browser_fixture_session(browser_session, "/articles")
 
     evaluate_js(session, "(() => 21 + 21)()", &assert(&1 == 42))
 
@@ -238,11 +237,8 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_receive {:session_cookie_callback, %{name: "_cerberus_fixture_key"}}
   end
 
-  test "browser keyword options are validated with NimbleOptions" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
+  test "browser keyword options are validated with NimbleOptions", %{browser_session: browser_session} do
+    session = browser_fixture_session(browser_session, "/browser/extensions")
 
     assert_raise ArgumentError, ~r/Browser.type\/4 invalid options/, fn ->
       type(session, css("#keyboard-input"), "hello", unknown: true)
@@ -285,11 +281,8 @@ defmodule Cerberus.BrowserExtensionsTest do
     end
   end
 
-  test "evaluate_js supports callback, ignore-result, and return_result forms" do
-    session =
-      :browser
-      |> session()
-      |> visit("/articles")
+  test "evaluate_js supports callback, ignore-result, and return_result forms", %{browser_session: browser_session} do
+    session = browser_fixture_session(browser_session, "/articles")
 
     assert evaluate_js(session, "(() => 21 + 21)()") == session
 
@@ -418,11 +411,8 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   @tag :slow
-  test "assert_dialog handles a dialog that is already open" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
+  test "assert_dialog handles a dialog that is already open", %{browser_session: browser_session} do
+    session = browser_fixture_session(browser_session, "/browser/extensions")
 
     trigger_confirm_dialog(session)
     Process.sleep(25)
@@ -432,11 +422,8 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   @tag :slow
-  test "assert_dialog waits for a dialog that opens after assertion starts" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
+  test "assert_dialog waits for a dialog that opens after assertion starts", %{browser_session: browser_session} do
+    session = browser_fixture_session(browser_session, "/browser/extensions")
 
     trigger_confirm_dialog(session, 30)
     assert_dialog(session, text("Delete item?", exact: true))
@@ -467,11 +454,8 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   @tag :slow
-  test "assertion operations complete when a blocking prompt dialog is already open" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
+  test "assertion operations complete when a blocking prompt dialog is already open", %{browser_session: browser_session} do
+    session = browser_fixture_session(browser_session, "/browser/extensions")
 
     trigger_prompt_dialog(session)
     Process.sleep(50)
@@ -481,11 +465,8 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   @tag :slow
-  test "assertion operations complete when a blocking alert dialog is already open" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
+  test "assertion operations complete when a blocking alert dialog is already open", %{browser_session: browser_session} do
+    session = browser_fixture_session(browser_session, "/browser/extensions")
 
     trigger_alert_dialog(session)
     Process.sleep(50)
@@ -494,11 +475,12 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_has(session, text("Alert result: acknowledged", exact: true))
   end
 
-  test "assert_download matches download emitted before assertion call and keeps events non-consuming" do
+  test "assert_download matches download emitted before assertion call and keeps events non-consuming", %{
+    browser_session: browser_session
+  } do
     session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
+      browser_session
+      |> browser_fixture_session("/browser/extensions")
       |> click(role(:link, name: "Download Report"))
 
     assert_download(session, "report.txt")
@@ -506,11 +488,8 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   @tag :slow
-  test "assert_download waits for download emitted after assertion starts" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
+  test "assert_download waits for download emitted after assertion starts", %{browser_session: browser_session} do
+    session = browser_fixture_session(browser_session, "/browser/extensions")
 
     evaluate_js(session, "setTimeout(() => document.getElementById('download-report')?.click(), 30)", fn _ -> :ok end)
     assert_download(session, "report.txt", timeout: 1_500)
@@ -573,11 +552,10 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert error.message =~ "report"
   end
 
-  test "assert_download times out with helpful observed filenames" do
+  test "assert_download times out with helpful observed filenames", %{browser_session: browser_session} do
     session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
+      browser_session
+      |> browser_fixture_session("/browser/extensions")
       |> click(role(:link, name: "Download Report"))
 
     error =
@@ -590,11 +568,10 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   @tag :slow
-  test "assert_dialog raises when observed dialog message does not match expected text" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
+  test "assert_dialog raises when observed dialog message does not match expected text", %{
+    browser_session: browser_session
+  } do
+    session = browser_fixture_session(browser_session, "/browser/extensions")
 
     trigger_confirm_dialog(session)
     Process.sleep(25)
@@ -609,11 +586,8 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_has(session, text("Dialog result: confirmed", exact: true))
   end
 
-  test "assert_dialog times out when no dialog opens" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
+  test "assert_dialog times out when no dialog opens", %{browser_session: browser_session} do
+    session = browser_fixture_session(browser_session, "/browser/extensions")
 
     error =
       assert_raise AssertionError, fn ->
@@ -624,11 +598,8 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   @tag :slow
-  test "assert_dialog supports prompt dialogs with auto-accepted empty input" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
+  test "assert_dialog supports prompt dialogs with auto-accepted empty input", %{browser_session: browser_session} do
+    session = browser_fixture_session(browser_session, "/browser/extensions")
 
     trigger_prompt_dialog(session, 30)
     assert_dialog(session, text("Type value", exact: true))
@@ -636,22 +607,16 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   @tag :slow
-  test "assert_dialog supports alert dialogs" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
+  test "assert_dialog supports alert dialogs", %{browser_session: browser_session} do
+    session = browser_fixture_session(browser_session, "/browser/extensions")
 
     trigger_alert_dialog(session, 30)
     assert_dialog(session, text("Heads up!", exact: true))
     assert_has(session, text("Alert result: acknowledged", exact: true))
   end
 
-  test "assert_dialog rejects explicit dialog control options" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
+  test "assert_dialog rejects explicit dialog control options", %{browser_session: browser_session} do
+    session = browser_fixture_session(browser_session, "/browser/extensions")
 
     assert_raise ArgumentError, ~r/Browser.assert_dialog\/3 invalid options/, fn ->
       assert_dialog(session, text("Delete item?"), accept: true)
@@ -684,5 +649,48 @@ defmodule Cerberus.BrowserExtensionsTest do
     evaluate_js(session, "document.getElementById('prompt-result')?.textContent", fn value ->
       assert value == expected
     end)
+  end
+
+  defp browser_fixture_session(%Browser{} = session, path) when is_binary(path) do
+    session
+    |> reset_browser_tabs!()
+    |> clear_cookies()
+    |> visit(path)
+  end
+
+  defp reset_browser_tabs!(%Browser{} = session) do
+    tab_ids = UserContextProcess.tabs(session.user_context_pid)
+
+    root_tab_id =
+      cond do
+        session.tab_id in tab_ids ->
+          session.tab_id
+
+        active_tab_id = UserContextProcess.active_tab(session.user_context_pid) ->
+          active_tab_id
+
+        first_tab_id = List.first(tab_ids) ->
+          first_tab_id
+
+        true ->
+          raise "browser extensions test session lost all tabs"
+      end
+
+    :ok = UserContextProcess.switch_tab(session.user_context_pid, root_tab_id)
+
+    tab_ids
+    |> Enum.reject(&(&1 == root_tab_id))
+    |> Enum.each(fn tab_id ->
+      :ok = UserContextProcess.close_tab(session.user_context_pid, tab_id)
+    end)
+
+    :ok = UserContextProcess.switch_tab(session.user_context_pid, root_tab_id)
+
+    %{
+      session
+      | tab_id: root_tab_id,
+        active_form_selector: nil,
+        scope: nil
+    }
   end
 end
