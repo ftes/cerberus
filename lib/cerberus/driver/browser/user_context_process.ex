@@ -258,7 +258,8 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
          browsing_contexts: browsing_contexts,
          active_browsing_context_id: first_tab_id,
          known_context_ids: MapSet.new([first_tab_id]),
-         popup_waiters: %{}
+         popup_waiters: %{},
+         pending_evaluations: %{}
        }}
     else
       {:error, reason} ->
@@ -302,28 +303,18 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     end
   end
 
-  def handle_call({:evaluate, expression, timeout_ms, started_us}, _from, state) do
+  def handle_call({:evaluate, expression, timeout_ms, started_us}, from, state) do
     record_transport_delay(:user_context_queue, started_us)
-
-    reply =
-      Cerberus.Profiling.measure({:browser_transport, :user_context_dispatch}, fn ->
-        BrowsingContextProcess.evaluate(active_browsing_context_pid!(state), expression, timeout_ms)
-      end)
-
-    {:reply, reply, state}
+    pid = active_browsing_context_pid!(state)
+    {:noreply, start_pending_evaluation(state, pid, expression, timeout_ms, from)}
   end
 
-  def handle_call({:evaluate_tab, tab_id, expression, timeout_ms, started_us}, _from, state) do
+  def handle_call({:evaluate_tab, tab_id, expression, timeout_ms, started_us}, from, state) do
     record_transport_delay(:user_context_queue, started_us)
 
     case browsing_context_pid(state, tab_id) do
       {:ok, pid} ->
-        reply =
-          Cerberus.Profiling.measure({:browser_transport, :user_context_dispatch}, fn ->
-            BrowsingContextProcess.evaluate(pid, expression, timeout_ms)
-          end)
-
-        {:reply, reply, state}
+        {:noreply, start_pending_evaluation(state, pid, expression, timeout_ms, from)}
 
       {:error, reason, details} ->
         {:reply, {:error, reason, details}, state}
@@ -540,27 +531,32 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     {:stop, :normal, state}
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
-    case pop_browsing_context_by_ref(state.browsing_contexts, ref) do
-      {:ok, down_tab_id, browsing_contexts} ->
-        active_tab_id = choose_next_active_tab_id(state.active_browsing_context_id, down_tab_id, browsing_contexts)
-
-        if is_nil(active_tab_id) do
-          {:stop, {:browsing_context_down, reason}, state}
-        else
-          known_context_ids = MapSet.delete(state.known_context_ids, down_tab_id)
-
-          {:noreply,
-           %{
-             state
-             | browsing_contexts: browsing_contexts,
-               active_browsing_context_id: active_tab_id,
-               known_context_ids: known_context_ids
-           }}
-        end
-
-      :error ->
+  def handle_info({ref, result}, state) when is_reference(ref) do
+    case Map.pop(state.pending_evaluations, ref) do
+      {nil, _pending_evaluations} ->
         {:noreply, state}
+
+      {from, pending_evaluations} ->
+        Process.demonitor(ref, [:flush])
+        GenServer.reply(from, result)
+        {:noreply, %{state | pending_evaluations: pending_evaluations}}
+    end
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
+    case Map.pop(state.pending_evaluations, ref) do
+      {from, pending_evaluations} when not is_nil(from) ->
+        GenServer.reply(from, {:error, "evaluate task crashed", %{reason: Exception.format_exit(reason)}})
+        {:noreply, %{state | pending_evaluations: pending_evaluations}}
+
+      {nil, _pending_evaluations} ->
+        case pop_browsing_context_by_ref(state.browsing_contexts, ref) do
+          {:ok, down_tab_id, browsing_contexts} ->
+            handle_browsing_context_down(state, browsing_contexts, down_tab_id, reason)
+
+          :error ->
+            {:noreply, state}
+        end
     end
   end
 
@@ -691,6 +687,24 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     end
   end
 
+  defp handle_browsing_context_down(state, browsing_contexts, down_tab_id, reason) do
+    active_tab_id = choose_next_active_tab_id(state.active_browsing_context_id, down_tab_id, browsing_contexts)
+
+    if is_nil(active_tab_id) do
+      {:stop, {:browsing_context_down, reason}, state}
+    else
+      known_context_ids = MapSet.delete(state.known_context_ids, down_tab_id)
+
+      {:noreply,
+       %{
+         state
+         | browsing_contexts: browsing_contexts,
+           active_browsing_context_id: active_tab_id,
+           known_context_ids: known_context_ids
+       }}
+    end
+  end
+
   defp active_browsing_context_pid!(state) do
     case Map.fetch(state.browsing_contexts, state.active_browsing_context_id) do
       {:ok, entry} ->
@@ -715,6 +729,24 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
       {:browser_transport, bucket},
       max(System.monotonic_time(:microsecond) - started_us, 0)
     )
+  end
+
+  defp start_pending_evaluation(state, pid, expression, timeout_ms, from)
+       when is_map(state) and is_pid(pid) and is_binary(expression) and is_integer(timeout_ms) do
+    task =
+      Task.async(fn ->
+        try do
+          Cerberus.Profiling.measure({:browser_transport, :user_context_dispatch}, fn ->
+            BrowsingContextProcess.evaluate(pid, expression, timeout_ms)
+          end)
+        catch
+          :exit, reason ->
+            {:error, "evaluate task crashed", %{reason: Exception.format_exit(reason)}}
+        end
+      end)
+
+    Process.unlink(task.pid)
+    %{state | pending_evaluations: Map.put(state.pending_evaluations, task.ref, from)}
   end
 
   defp set_user_agent_override(user_context_id, user_agent, bidi_opts) do

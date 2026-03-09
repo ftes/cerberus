@@ -465,7 +465,6 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   @tag :slow
-  @tag skip: "browser read assertions do not auto-unblock open dialogs"
   test "assertion operations complete when a blocking prompt dialog is already open" do
     session =
       :browser
@@ -480,7 +479,6 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   @tag :slow
-  @tag skip: "browser read assertions do not auto-unblock open dialogs"
   test "assertion operations complete when a blocking alert dialog is already open" do
     session =
       :browser
@@ -606,6 +604,7 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     assert error.message =~ ~s(expected dialog text "Different message")
     assert error.message =~ ~s(observed "Delete item?")
+    assert_has(session, text("Dialog result: confirmed", exact: true))
   end
 
   test "assert_dialog times out when no dialog opens" do

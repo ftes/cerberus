@@ -133,7 +133,8 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
          dialog_events: [],
          active_dialog: nil,
          download_waiters: %{},
-         dialog_waiters: %{}
+         dialog_waiters: %{},
+         pending_evaluations: %{}
        }}
     else
       {:error, reason, details} ->
@@ -241,19 +242,24 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     end
   end
 
-  def handle_call({:evaluate, expression, timeout_ms, started_us}, _from, state) do
+  def handle_call({:evaluate, expression, timeout_ms, started_us}, from, state) do
     record_transport_delay(:browsing_context_queue, started_us)
-    bidi_opts = Keyword.put(state.bidi_opts, :timeout, timeout_ms)
-
-    result =
-      Cerberus.Profiling.measure({:browser_transport, :browsing_context_dispatch}, fn ->
-        evaluate_script(state.id, expression, bidi_opts)
-      end)
-
-    {:reply, result, state}
+    {:noreply, start_pending_evaluation(state, expression, timeout_ms, from)}
   end
 
   @impl true
+  def handle_info({ref, result}, state) when is_reference(ref) do
+    case Map.pop(state.pending_evaluations, ref) do
+      {nil, _pending_evaluations} ->
+        {:noreply, state}
+
+      {from, pending_evaluations} ->
+        Process.demonitor(ref, [:flush])
+        GenServer.reply(from, result)
+        {:noreply, %{state | pending_evaluations: pending_evaluations}}
+    end
+  end
+
   def handle_info({:cerberus_bidi_event, %{"method" => method, "params" => params}}, state)
       when is_binary(method) and is_map(params) do
     event =
@@ -323,6 +329,17 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
       {waiter, dialog_waiters} ->
         GenServer.reply(waiter.from, {:error, :timeout, state.dialog_events})
         {:noreply, %{state | dialog_waiters: dialog_waiters}}
+    end
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
+    case Map.pop(state.pending_evaluations, ref) do
+      {nil, _pending_evaluations} ->
+        {:noreply, state}
+
+      {from, pending_evaluations} ->
+        GenServer.reply(from, {:error, "evaluate task crashed", %{reason: Exception.format_exit(reason)}})
+        {:noreply, %{state | pending_evaluations: pending_evaluations}}
     end
   end
 
@@ -492,6 +509,26 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
       {:browser_transport, bucket},
       max(System.monotonic_time(:microsecond) - started_us, 0)
     )
+  end
+
+  defp start_pending_evaluation(state, expression, timeout_ms, from)
+       when is_map(state) and is_binary(expression) and is_integer(timeout_ms) do
+    task =
+      Task.async(fn ->
+        try do
+          bidi_opts = Keyword.put(state.bidi_opts, :timeout, timeout_ms)
+
+          Cerberus.Profiling.measure({:browser_transport, :browsing_context_dispatch}, fn ->
+            evaluate_script(state.id, expression, bidi_opts)
+          end)
+        catch
+          :exit, reason ->
+            {:error, "evaluate task crashed", %{reason: Exception.format_exit(reason)}}
+        end
+      end)
+
+    Process.unlink(task.pid)
+    %{state | pending_evaluations: Map.put(state.pending_evaluations, task.ref, from)}
   end
 
   defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
