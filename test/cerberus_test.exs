@@ -71,7 +71,7 @@ defmodule CerberusTest do
     end
   end
 
-  test "chrome alias constructs browser sessions" do
+  test "browser driver constructs browser sessions" do
     assert %Browser{} = session(:browser)
   end
 

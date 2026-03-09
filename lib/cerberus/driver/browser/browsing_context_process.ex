@@ -4,7 +4,6 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   use GenServer
 
   alias Cerberus.Driver.Browser.BiDi
-  alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.Types
 
   @default_ready_timeout_ms 1_500
@@ -117,8 +116,6 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     viewport = Keyword.get(opts, :viewport)
     context_id = Keyword.get(opts, :context_id)
     bidi_opts = Keyword.get(opts, :bidi_opts, opts)
-    browser_name = Runtime.browser_name(bidi_opts)
-    bidi_opts = Keyword.put_new(bidi_opts, :browser_name, browser_name)
 
     with {:ok, browsing_context_id} <- resolve_browsing_context_id(user_context_id, context_id, bidi_opts),
          :ok <- maybe_set_viewport_for_context(context_id, browsing_context_id, viewport, bidi_opts),
@@ -129,7 +126,6 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
        %{
          id: browsing_context_id,
          user_context_id: user_context_id,
-         browser_name: browser_name,
          bidi_opts: bidi_opts,
          last_bidi_event: nil,
          last_readiness: %{},
@@ -527,21 +523,10 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
          expected_filename
        )
        when is_binary(filename) and is_binary(expected_filename) do
-    filename == expected_filename or firefox_download_rename?(filename, expected_filename)
+    filename == expected_filename
   end
 
   defp download_event_match?(_event, _expected_filename), do: false
-
-  defp firefox_download_rename?(filename, expected_filename) when is_binary(filename) and is_binary(expected_filename) do
-    case Path.extname(expected_filename) do
-      "" ->
-        Regex.match?(~r/^#{Regex.escape(expected_filename)}\(\d+\)$/, filename)
-
-      extension ->
-        basename = Path.rootname(expected_filename, extension)
-        Regex.match?(~r/^#{Regex.escape(basename)}\(\d+\)#{Regex.escape(extension)}$/, filename)
-    end
-  end
 
   defp resolve_download_waiters(%{download_waiters: waiters} = state, event)
        when map_size(waiters) == 0 or not is_map(event) do

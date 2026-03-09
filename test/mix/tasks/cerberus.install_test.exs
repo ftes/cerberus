@@ -58,15 +58,15 @@ defmodule Mix.Tasks.Cerberus.InstallTest do
 
   test "browser_config returns runtime config keyword pairs from install payload" do
     payload = %{
-      browser: :firefox,
-      binaries: %{firefox_binary: "/tmp/firefox-bin", geckodriver_binary: "/tmp/gecko-bin"},
-      versions: %{firefox_version: "148.0", geckodriver_version: "0.36.0"},
+      browser: :chrome,
+      binaries: %{chrome_binary: "/tmp/chrome-bin", chromedriver_binary: "/tmp/chromedriver-bin"},
+      versions: %{chrome_version: "146.0.7680.31", chromedriver_version: "146.0.7680.31"},
       raw: %{}
     }
 
     assert Install.browser_config(payload) == [
-             firefox_binary: "/tmp/firefox-bin",
-             geckodriver_binary: "/tmp/gecko-bin"
+             chrome_binary: "/tmp/chrome-bin",
+             chromedriver_binary: "/tmp/chromedriver-bin"
            ]
   end
 end

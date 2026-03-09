@@ -31,7 +31,7 @@ defmodule Cerberus.Driver.Browser.BiDi do
 
   @spec command(String.t(), Types.bidi_params(), keyword()) :: Types.bidi_response()
   def command(method, params \\ %{}, opts \\ []) when is_binary(method) and is_map(params) and is_list(opts) do
-    command(__MODULE__, method, params, opts)
+    command_via_manager(__MODULE__, method, params, opts)
   end
 
   @spec command(GenServer.server(), String.t(), Types.bidi_params(), keyword()) ::
@@ -47,6 +47,10 @@ defmodule Cerberus.Driver.Browser.BiDi do
   end
 
   def command(pid, method, params, opts) when is_binary(method) and is_map(params) do
+    command_via_manager(pid, method, params, opts)
+  end
+
+  defp command_via_manager(pid, method, params, opts) when is_binary(method) and is_map(params) and is_list(opts) do
     timeout =
       case Keyword.fetch(opts, :timeout) do
         {:ok, value} -> value
@@ -55,7 +59,16 @@ defmodule Cerberus.Driver.Browser.BiDi do
 
     slow_mo_ms = Runtime.slow_mo_ms(opts)
     started_us = System.monotonic_time(:microsecond)
-    GenServer.call(pid, {:command, method, params, timeout, slow_mo_ms, opts, started_us}, timeout + 1_000 + slow_mo_ms)
+    record_transport_delay({:browser_bidi, :command_queue}, started_us)
+    maybe_sleep_for_slow_mo(slow_mo_ms)
+
+    case GenServer.call(pid, {:connection, opts}, timeout + 1_000 + slow_mo_ms) do
+      {:ok, connection} ->
+        command_response(connection, method, params, timeout)
+
+      {:error, reason} ->
+        {:error, reason, %{}}
+    end
   end
 
   @spec close(GenServer.server()) :: :ok
@@ -87,17 +100,13 @@ defmodule Cerberus.Driver.Browser.BiDi do
     {:reply, :ok, drop_subscriber(state, subscriber)}
   end
 
-  def handle_call({:command, method, params, timeout, slow_mo_ms, opts, started_us}, _from, state) do
-    record_transport_delay({:browser_bidi, :command_queue}, started_us)
-
-    maybe_sleep_for_slow_mo(slow_mo_ms)
-
+  def handle_call({:connection, opts}, _from, state) do
     case ensure_connected(state, opts) do
       {:ok, connection, next_state} ->
-        {:reply, command_response(connection, method, params, timeout), next_state}
+        {:reply, {:ok, connection}, next_state}
 
       {:error, reason, next_state} ->
-        {:reply, {:error, reason, %{}}, next_state}
+        {:reply, {:error, reason}, next_state}
     end
   end
 

@@ -939,11 +939,9 @@ defmodule Cerberus.Driver.Browser.Extensions do
         "assert_download/3 timed out waiting for #{inspect(expected_filename)}; observed downloads: #{inspect(observed_filenames)}"
   end
 
-  defp bidi_opts(%Browser{bidi_opts: bidi_opts, browser_name: browser_name}) when is_list(bidi_opts) do
-    Keyword.put_new(bidi_opts, :browser_name, browser_name)
-  end
+  defp bidi_opts(%Browser{bidi_opts: bidi_opts}) when is_list(bidi_opts), do: bidi_opts
 
-  defp bidi_opts(%Browser{browser_name: browser_name}), do: [browser_name: browser_name]
+  defp bidi_opts(_browser), do: []
 
   defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
   defp normalize_positive_integer(_value, default), do: default

@@ -1,6 +1,6 @@
 # Browser Tests Guide
 
-This guide covers browser-only configuration and runtime details for `session(:browser)` / `session(:chrome)` / `session(:firefox)`.
+This guide covers browser-only configuration and runtime details for `session(:browser)`.
 
 ## Per-Test Browser Overrides
 
@@ -93,7 +93,7 @@ Unified timeout defaults:
 
 Option scopes:
 - Per-session context options: `ready_timeout_ms`, `ready_quiet_ms`, `user_agent`, `browser: [viewport: ..., user_agent: ..., popup_mode: :allow | :same_tab, init_script: ... | init_scripts: [...]]`.
-- Global runtime launch options: `browser_name`, `webdriver_url`, `chrome_webdriver_url`, `firefox_webdriver_url`, `headless`, `slow_mo`, `chrome_args`, `firefox_args`, `chrome_binary`, `firefox_binary`, `chromedriver_binary`, `geckodriver_binary`.
+- Global runtime launch options: `webdriver_url`, `chrome_webdriver_url`, `headless`, `slow_mo`, `chrome_args`, `chrome_binary`, `chromedriver_binary`.
 - Global browser defaults: `bidi_command_timeout_ms`, `runtime_http_timeout_ms`, `dialog_timeout_ms`, `screenshot_full_page`, `screenshot_artifact_dir`, `screenshot_path`.
 
 Set `headless: false` to run headed mode.
@@ -103,21 +103,16 @@ Because browser runtime + BiDi transport are shared per browser lane, runtime la
 
 ## Browser Runtime Setup
 
-Cerberus browser tests use WebDriver BiDi.
-Chrome and Firefox are supported browser targets.
-Project CI currently runs Chrome lanes only; Firefox lanes remain available for explicit local/manual runs.
+Cerberus browser tests use WebDriver BiDi over ChromeDriver.
+Chrome is the active browser target.
 
 Local managed runtime (default) uses configured browser and WebDriver binaries:
 
 ```elixir
 config :cerberus, :browser,
   chrome_binary: "/path/to/chrome-or-chromium",
-  chromedriver_binary: "/path/to/chromedriver",
-  firefox_binary: "/path/to/firefox",
-  geckodriver_binary: "/path/to/geckodriver"
+  chromedriver_binary: "/path/to/chromedriver"
 ```
-
-Only the selected browser lane needs to be configured for a given run.
 
 Managed Chrome sessions use a Playwright-style Chromium switch set by default, with any configured `chrome_args` appended after those defaults.
 
@@ -136,12 +131,11 @@ config :cerberus, :browser,
 
 With `webdriver_url` set, Cerberus does not launch local browser/WebDriver processes.
 
-For explicit multi-browser remote lanes in one invocation:
+To keep the Chrome endpoint explicit:
 
 ```elixir
 config :cerberus, :browser,
-  chrome_webdriver_url: "http://127.0.0.1:4444",
-  firefox_webdriver_url: "http://127.0.0.1:5555"
+  chrome_webdriver_url: "http://127.0.0.1:4444"
 ```
 
 Remote `webdriver_url` integration smoke test (Docker required):
@@ -167,15 +161,14 @@ Explicit browser-lane override coverage:
 mix test test/cerberus/explicit_browser_test.exs
 ```
 
-Install local browser runtimes with public Mix tasks:
+Install the local browser runtime with the public Mix task:
 
 ```bash
 MIX_ENV=test mix cerberus.install.chrome --version 146.0.7680.31
-MIX_ENV=test mix cerberus.install.firefox --firefox-version 148.0 --geckodriver-version 0.36.0
 ```
 
-Both tasks install missing binaries and reuse existing per-version installations.
-Version precedence is flags first, then matching env vars (`CERBERUS_CHROME_VERSION`, `CERBERUS_FIREFOX_VERSION`, `CERBERUS_GECKODRIVER_VERSION`), then defaults (latest stable Chrome/Firefox and GeckoDriver 0.36.0).
+The task installs missing binaries and reuses existing per-version installations.
+Version precedence is flags first, then matching env vars (`CERBERUS_CHROME_VERSION`), then the latest stable Chrome for Testing release.
 
 Stable output contracts:
 - `--format json` for machine-readable payloads (paths, versions, env handoff keys)
@@ -185,13 +178,9 @@ Stable output contracts:
 After install, Cerberus automatically discovers local managed-runtime binaries via stable links:
 - `tmp/chrome-current`
 - `tmp/chromedriver-current`
-- `tmp/firefox-current`
-- `tmp/geckodriver-current`
 
 No extra binary-path config is required for normal local runs after installation.
 
 Installed paths are stable per version, for example:
 - `tmp/chrome-<version>`
 - `tmp/chromedriver-<version>`
-- `tmp/firefox-<version>`
-- `tmp/geckodriver-<version>`

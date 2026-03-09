@@ -1,26 +1,27 @@
 defmodule Cerberus.Browser.Install do
   @moduledoc """
-  Shared browser-runtime installer for Cerberus Mix tasks.
+  Shared Chrome runtime installer for Cerberus Mix tasks.
 
-  This module executes Cerberus installer scripts and returns a parsed result
-  that can be rendered as JSON, key/value env lines, or shell exports.
+  This module executes the Cerberus Chrome installer script and returns a parsed
+  payload that can be rendered as JSON, key/value env lines, or shell exports.
   """
-
-  @typedoc "Supported browser runtime lanes"
-  @type browser :: :chrome | :firefox
 
   @typedoc "Parsed install payload from installer output"
   @type install_payload :: %{
-          required(:browser) => browser(),
-          required(:binaries) => map(),
-          required(:versions) => map(),
-          required(:raw) => map()
+          required(:browser) => :chrome,
+          required(:binaries) => %{
+            required(:chrome_binary) => String.t(),
+            required(:chromedriver_binary) => String.t()
+          },
+          required(:versions) => %{
+            required(:chrome_version) => String.t(),
+            required(:chromedriver_version) => String.t()
+          },
+          required(:raw) => %{required(String.t()) => String.t()}
         }
 
   @type install_opt ::
           {:version, String.t()}
-          | {:firefox_version, String.t()}
-          | {:geckodriver_version, String.t()}
           | {:stable_link_dir, String.t()}
           | {:command_runner, (String.t(), [String.t()], keyword() -> {String.t(), non_neg_integer()})}
 
@@ -28,17 +29,17 @@ defmodule Cerberus.Browser.Install do
   @command_runner_override_key {__MODULE__, :command_runner_override}
   @stable_link_dir_override_key {__MODULE__, :stable_link_dir_override}
 
-  @spec install(browser(), [install_opt()]) :: {:ok, install_payload()} | {:error, String.t()}
-  def install(browser, opts \\ []) when browser in [:chrome, :firefox] and is_list(opts) do
-    with {:ok, script_path} <- installer_script_path(browser),
-         {:ok, key_values} <- run_script(script_path, script_args(browser, opts), command_runner(opts)),
-         {:ok, payload} <- parse_payload(browser, key_values),
+  @spec install([install_opt()]) :: {:ok, install_payload()} | {:error, String.t()}
+  def install(opts \\ []) when is_list(opts) do
+    with {:ok, script_path} <- installer_script_path(),
+         {:ok, key_values} <- run_script(script_path, script_args(opts), command_runner(opts)),
+         {:ok, payload} <- parse_payload(key_values),
          :ok <- ensure_stable_symlinks(payload, opts) do
       {:ok, payload}
     end
   end
 
-  @spec browser_config(install_payload()) :: keyword()
+  @spec browser_config(install_payload()) :: keyword(chrome_binary: String.t(), chromedriver_binary: String.t())
   def browser_config(%{binaries: binaries}) when is_map(binaries) do
     binaries
     |> Enum.map(fn {key, value} -> {key, value} end)
@@ -46,20 +47,11 @@ defmodule Cerberus.Browser.Install do
   end
 
   @spec env_vars(install_payload()) :: env_map()
-  def env_vars(%{browser: :chrome, binaries: binaries, versions: versions}) do
+  def env_vars(%{binaries: binaries, versions: versions}) do
     %{
       "CHROME" => binaries.chrome_binary,
       "CHROMEDRIVER" => binaries.chromedriver_binary,
       "CERBERUS_CHROME_VERSION" => versions.chrome_version
-    }
-  end
-
-  def env_vars(%{browser: :firefox, binaries: binaries, versions: versions}) do
-    %{
-      "FIREFOX" => binaries.firefox_binary,
-      "GECKODRIVER" => binaries.geckodriver_binary,
-      "CERBERUS_FIREFOX_VERSION" => versions.firefox_version,
-      "CERBERUS_GECKODRIVER_VERSION" => versions.geckodriver_version
     }
   end
 
@@ -112,12 +104,11 @@ defmodule Cerberus.Browser.Install do
       Application.get_env(:cerberus, :install_stable_link_dir, "tmp")
   end
 
-  defp ensure_stable_symlinks(%{browser: browser, binaries: binaries}, opts)
-       when browser in [:chrome, :firefox] and is_map(binaries) do
+  defp ensure_stable_symlinks(%{binaries: binaries}, opts) when is_map(binaries) do
     stable_link_dir = stable_link_dir(opts)
 
     with :ok <- ensure_stable_link_dir(stable_link_dir) do
-      ensure_stable_link_targets(browser, binaries, stable_link_dir)
+      ensure_stable_link_targets(binaries, stable_link_dir)
     end
   end
 
@@ -131,32 +122,23 @@ defmodule Cerberus.Browser.Install do
     end
   end
 
-  defp ensure_stable_link_targets(browser, binaries, stable_link_dir) when is_map(binaries) do
-    browser
-    |> stable_link_targets(binaries, stable_link_dir)
-    |> Enum.reduce_while(:ok, fn {link_path, target_path}, :ok ->
-      link_path
-      |> replace_stable_symlink(target_path)
-      |> stable_link_replace_result()
-    end)
+  defp ensure_stable_link_targets(binaries, stable_link_dir) when is_map(binaries) do
+    Enum.reduce_while(
+      [
+        {Path.join(stable_link_dir, "chrome-current"), binaries.chrome_binary},
+        {Path.join(stable_link_dir, "chromedriver-current"), binaries.chromedriver_binary}
+      ],
+      :ok,
+      fn {link_path, target_path}, :ok ->
+        link_path
+        |> replace_stable_symlink(target_path)
+        |> stable_link_replace_result()
+      end
+    )
   end
 
   defp stable_link_replace_result(:ok), do: {:cont, :ok}
   defp stable_link_replace_result({:error, reason}), do: {:halt, {:error, reason}}
-
-  defp stable_link_targets(:chrome, binaries, stable_link_dir) do
-    [
-      {Path.join(stable_link_dir, "chrome-current"), binaries.chrome_binary},
-      {Path.join(stable_link_dir, "chromedriver-current"), binaries.chromedriver_binary}
-    ]
-  end
-
-  defp stable_link_targets(:firefox, binaries, stable_link_dir) do
-    [
-      {Path.join(stable_link_dir, "firefox-current"), binaries.firefox_binary},
-      {Path.join(stable_link_dir, "geckodriver-current"), binaries.geckodriver_binary}
-    ]
-  end
 
   defp replace_stable_symlink(link_path, target_path) when is_binary(link_path) and is_binary(target_path) do
     expanded_link = Path.expand(link_path)
@@ -198,29 +180,26 @@ defmodule Cerberus.Browser.Install do
     end)
   end
 
-  defp parse_payload(:chrome, values) when is_map(values) do
+  defp parse_payload(values) when is_map(values) do
     required_keys = ["chrome_binary", "chrome_version", "chromedriver_binary", "chromedriver_version"]
-    parse_required(values, required_keys, :chrome)
-  end
-
-  defp parse_payload(:firefox, values) when is_map(values) do
-    required_keys = ["firefox_binary", "firefox_version", "geckodriver_binary", "geckodriver_version"]
-    parse_required(values, required_keys, :firefox)
-  end
-
-  defp parse_required(values, required_keys, browser) do
     missing = Enum.reject(required_keys, &valid_key_value?(values, &1))
 
     if missing == [] do
       {:ok,
        %{
-         browser: browser,
-         binaries: binaries_map(browser, values),
-         versions: versions_map(browser, values),
+         browser: :chrome,
+         binaries: %{
+           chrome_binary: values["chrome_binary"],
+           chromedriver_binary: values["chromedriver_binary"]
+         },
+         versions: %{
+           chrome_version: values["chrome_version"],
+           chromedriver_version: values["chromedriver_version"]
+         },
          raw: Map.take(values, required_keys)
        }}
     else
-      {:error, "installer output missing keys #{inspect(missing)} for #{browser}; received #{inspect(Map.keys(values))}"}
+      {:error, "installer output missing keys #{inspect(missing)}; received #{inspect(Map.keys(values))}"}
     end
   end
 
@@ -231,61 +210,16 @@ defmodule Cerberus.Browser.Install do
     end
   end
 
-  defp binaries_map(:chrome, values) do
-    %{
-      chrome_binary: values["chrome_binary"],
-      chromedriver_binary: values["chromedriver_binary"]
-    }
-  end
-
-  defp binaries_map(:firefox, values) do
-    %{
-      firefox_binary: values["firefox_binary"],
-      geckodriver_binary: values["geckodriver_binary"]
-    }
-  end
-
-  defp versions_map(:chrome, values) do
-    %{
-      chrome_version: values["chrome_version"],
-      chromedriver_version: values["chromedriver_version"]
-    }
-  end
-
-  defp versions_map(:firefox, values) do
-    %{
-      firefox_version: values["firefox_version"],
-      geckodriver_version: values["geckodriver_version"]
-    }
-  end
-
-  defp script_args(:chrome, opts) do
+  defp script_args(opts) do
     case Keyword.get(opts, :version) do
       value when is_binary(value) and value != "" -> ["--version", value]
       _ -> []
     end
   end
 
-  defp script_args(:firefox, opts) do
-    []
-    |> maybe_put_flag("--firefox-version", Keyword.get(opts, :firefox_version))
-    |> maybe_put_flag("--geckodriver-version", Keyword.get(opts, :geckodriver_version))
-  end
-
-  defp maybe_put_flag(args, _flag, nil), do: args
-
-  defp maybe_put_flag(args, flag, value) when is_binary(value) and value != "" do
-    args ++ [flag, value]
-  end
-
-  defp maybe_put_flag(args, _flag, _value), do: args
-
-  defp installer_script_path(:chrome), do: script_path("chrome.sh")
-  defp installer_script_path(:firefox), do: script_path("firefox.sh")
-
-  defp script_path(script_name) do
+  defp installer_script_path do
     root = Mix.Project.deps_paths()[:cerberus] || local_project_root()
-    candidate = Path.expand("bin/#{script_name}", root)
+    candidate = Path.expand("bin/chrome.sh", root)
 
     if File.exists?(candidate) do
       {:ok, candidate}

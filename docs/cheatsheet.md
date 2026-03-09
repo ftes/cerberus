@@ -6,7 +6,7 @@
 | --- | --- |
 | Phoenix mode (auto static/live switching) | `session()` or `session(:phoenix)` |
 | Real browser behavior | `session(:browser)` |
-| Explicit browser lane | `session(:chrome)` or `session(:firefox)` |
+| Public browser entrypoint | `session(:browser)` |
 | Default project lane policy | Chrome-first (CI and regular local runs) |
 | Unified default timeout | Static `0ms`, live/browser `500ms` |
 | Per-session timeout override | `session(timeout_ms: 300)` or `session(:browser, timeout_ms: 300)` |

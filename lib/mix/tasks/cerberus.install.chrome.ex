@@ -28,7 +28,7 @@ defmodule Mix.Tasks.Cerberus.Install.Chrome do
         _ -> []
       end
 
-    case Install.install(:chrome, install_opts) do
+    case Install.install(install_opts) do
       {:ok, payload} ->
         payload
         |> Install.render()

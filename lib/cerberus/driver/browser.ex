@@ -8,7 +8,6 @@ defmodule Cerberus.Driver.Browser do
   alias Cerberus.Driver.Browser.Evaluate
   alias Cerberus.Driver.Browser.Expressions
   alias Cerberus.Driver.Browser.Extensions
-  alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.Driver.LocatorOps
   alias Cerberus.Html
@@ -68,7 +67,6 @@ defmodule Cerberus.Driver.Browser do
 
   defstruct user_context_pid: nil,
             tab_id: nil,
-            browser_name: :chrome,
             bidi_opts: [],
             endpoint: nil,
             base_url: nil,
@@ -84,15 +82,13 @@ defmodule Cerberus.Driver.Browser do
   def new_session(opts \\ []) do
     owner = self()
     context_defaults = browser_context_defaults(opts)
-    browser_name = Runtime.browser_name(opts)
     {timeout_ms, timeout_overridden?} = SessionConfig.timeout_from_opts!(opts, :browser)
-    session_bidi_opts = session_bidi_opts(opts, browser_name)
-    ensure_popup_mode_supported!(browser_name, context_defaults.popup_mode)
+    session_bidi_opts = session_bidi_opts(opts)
+    ensure_popup_mode_supported!(:chrome, context_defaults.popup_mode)
 
     start_opts =
       opts
       |> Keyword.put(:owner, owner)
-      |> Keyword.put(:browser_name, browser_name)
       |> Keyword.put(:browser_context_defaults, context_defaults)
 
     {user_context_pid, base_url} =
@@ -113,7 +109,6 @@ defmodule Cerberus.Driver.Browser do
     %__MODULE__{
       user_context_pid: user_context_pid,
       tab_id: tab_id,
-      browser_name: browser_name,
       bidi_opts: session_bidi_opts,
       endpoint: Keyword.get(opts, :endpoint) || Application.get_env(:cerberus, :endpoint),
       base_url: base_url,
@@ -1972,7 +1967,6 @@ defmodule Cerberus.Driver.Browser do
       session
       | user_context_pid: state.user_context_pid,
         tab_id: state.tab_id,
-        browser_name: state.browser_name,
         base_url: state.base_url,
         timeout_ms: state.timeout_ms,
         timeout_overridden?: session.timeout_overridden?,
@@ -2116,11 +2110,9 @@ defmodule Cerberus.Driver.Browser do
     """
   end
 
-  defp bidi_opts(%{bidi_opts: bidi_opts, browser_name: browser_name}) when is_list(bidi_opts) do
-    Keyword.put_new(bidi_opts, :browser_name, browser_name)
-  end
+  defp bidi_opts(%{bidi_opts: bidi_opts}) when is_list(bidi_opts), do: bidi_opts
 
-  defp bidi_opts(%{browser_name: browser_name}), do: [browser_name: browser_name]
+  defp bidi_opts(_state), do: []
 
   defp maybe_full_page_origin(params, true), do: Map.put(params, "origin", "document")
   defp maybe_full_page_origin(params, _full_page), do: params
@@ -2155,12 +2147,10 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp session_bidi_opts(opts, browser_name) when is_list(opts) and is_atom(browser_name) do
+  defp session_bidi_opts(opts) when is_list(opts) do
     opts
     |> Keyword.delete(:owner)
     |> Keyword.delete(:browser_context_defaults)
-    |> Keyword.delete(:browser_name)
-    |> Keyword.put(:browser_name, browser_name)
   end
 
   @doc false
@@ -2226,6 +2216,5 @@ defmodule Cerberus.Driver.Browser do
     raise ArgumentError, "within/3 callback must return a Cerberus session"
   end
 
-  defp ensure_popup_mode_supported!(browser_name, popup_mode),
-    do: Config.ensure_popup_mode_supported!(browser_name, popup_mode)
+  defp ensure_popup_mode_supported!(:chrome, popup_mode), do: Config.ensure_popup_mode_supported!(:chrome, popup_mode)
 end

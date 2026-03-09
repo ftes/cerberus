@@ -52,23 +52,13 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
       assert Runtime.remote_webdriver_url(webdriver_url: "http://session-override:5555") == "http://session-override:5555"
     end
 
-    test "supports top-level per-browser webdriver url keys" do
-      Application.put_env(:cerberus, :browser,
-        chrome_webdriver_url: "http://config-chrome:4444",
-        firefox_webdriver_url: "http://config-firefox:4444"
-      )
+    test "supports chrome webdriver url override keys" do
+      Application.put_env(:cerberus, :browser, chrome_webdriver_url: "http://config-chrome:4444")
 
-      assert Runtime.remote_webdriver_url(browser_name: :chrome) == "http://config-chrome:4444"
-      assert Runtime.remote_webdriver_url(browser_name: :firefox) == "http://config-firefox:4444"
+      assert Runtime.remote_webdriver_url([]) == "http://config-chrome:4444"
 
-      assert Runtime.remote_webdriver_url(browser_name: :chrome, chrome_webdriver_url: "http://override-chrome:4444") ==
+      assert Runtime.remote_webdriver_url(chrome_webdriver_url: "http://override-chrome:4444") ==
                "http://override-chrome:4444"
-
-      assert Runtime.remote_webdriver_url(
-               browser_name: :firefox,
-               firefox_webdriver_url: "http://override-firefox:4444"
-             ) ==
-               "http://override-firefox:4444"
     end
   end
 
@@ -102,9 +92,9 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
     end
   end
 
-  describe "webdriver_session_payload/3" do
+  describe "webdriver_session_payload/2" do
     test "remote payload does not require local browser binary" do
-      payload = Runtime.webdriver_session_payload([chrome_args: ["--remote-flag"]], false, :chrome)
+      payload = Runtime.webdriver_session_payload([chrome_args: ["--remote-flag"]], false)
       always_match = payload["capabilities"]["alwaysMatch"]
       chrome_opts = always_match["goog:chromeOptions"]
 
@@ -119,7 +109,7 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
       chrome_path = Path.join(tmp_dir, "cerberus-fake-chrome")
       File.write!(chrome_path, "")
 
-      payload = Runtime.webdriver_session_payload([chrome_binary: chrome_path], true, :chrome)
+      payload = Runtime.webdriver_session_payload([chrome_binary: chrome_path], true)
       chrome_opts = payload["capabilities"]["alwaysMatch"]["goog:chromeOptions"]
 
       assert chrome_opts["binary"] == chrome_path
@@ -133,16 +123,6 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
       assert "--mute-audio" in chrome_opts["args"]
       assert Enum.any?(chrome_opts["args"], &String.starts_with?(&1, "--disable-features="))
       assert Enum.any?(chrome_opts["args"], &String.starts_with?(&1, "--blink-settings="))
-    end
-
-    test "firefox payload uses moz:firefoxOptions and browserName firefox" do
-      payload = Runtime.webdriver_session_payload([firefox_args: ["-private"]], false, :firefox)
-      always_match = payload["capabilities"]["alwaysMatch"]
-
-      assert always_match["browserName"] == "firefox"
-      assert always_match["webSocketUrl"] == true
-      assert always_match["moz:firefoxOptions"]["args"] == ["-private"]
-      refute Map.has_key?(always_match, "goog:chromeOptions")
     end
   end
 

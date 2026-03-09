@@ -50,7 +50,7 @@ defmodule Cerberus do
 
   - `session(conn)` seeds the new session from an existing conn.
   - `session(:phoenix)` starts non-browser mode.
-  - `session(:browser | :chrome | :firefox)` starts browser mode with defaults.
+  - `session(:browser)` starts browser mode with defaults.
 
   ## Options
 
@@ -72,15 +72,9 @@ defmodule Cerberus do
   @spec session(:browser) :: Session.t()
   def session(:browser), do: session(:browser, [])
 
-  @spec session(:chrome) :: Session.t()
-  def session(:chrome), do: session(:chrome, [])
-
-  @spec session(:firefox) :: Session.t()
-  def session(:firefox), do: session(:firefox, [])
-
   def session(driver) when is_atom(driver) do
     raise ArgumentError,
-          "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser|:chrome|:firefox) for browser"
+          "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser) for browser"
   end
 
   @spec session(:phoenix, Options.session_common_opts()) :: Session.t()
@@ -96,7 +90,6 @@ defmodule Cerberus do
   - `browser: [viewport: [width: ..., height: ...] | {w, h}]`
   - `browser: [user_agent: "..."]`
   - `browser: [popup_mode: :allow | :same_tab]` to control `window.open` behavior
-    (`:same_tab` is currently unsupported on Firefox)
   - `browser: [init_script: "..."]` or `browser: [init_scripts: ["...", ...]]`
   - `webdriver_url: "http://remote-webdriver:4444"` to use a remote WebDriver endpoint
     without local browser/chromedriver launch.
@@ -110,36 +103,18 @@ defmodule Cerberus do
     new_browser_session(opts)
   end
 
-  @spec session(:chrome, Options.session_browser_opts()) :: Session.t()
-  def session(:chrome, opts) when is_list(opts) do
-    new_browser_session(opts, :chrome)
-  end
-
-  @spec session(:firefox, Options.session_browser_opts()) :: Session.t()
-  def session(:firefox, opts) when is_list(opts) do
-    new_browser_session(opts, :firefox)
-  end
-
   def session(driver, opts) when is_atom(driver) and is_list(opts) do
     raise ArgumentError,
-          "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser|:chrome|:firefox) for browser"
+          "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser) for browser"
   end
 
-  defp new_browser_session(opts, browser_name \\ nil) when is_list(opts) do
-    opts =
-      opts
-      |> Options.validate_session_browser!()
-      |> maybe_put_browser_name(browser_name)
+  defp new_browser_session(opts) when is_list(opts) do
+    opts = Options.validate_session_browser!(opts)
 
     Profiling.measure({:driver_session, :browser, :new_session}, fn ->
       Browser.new_session(opts)
     end)
   end
-
-  defp maybe_put_browser_name(opts, nil), do: opts
-
-  defp maybe_put_browser_name(opts, browser_name) when is_atom(browser_name),
-    do: Keyword.put(opts, :browser_name, browser_name)
 
   @doc """
   Opens a new tab for browser sessions and returns the updated session.
