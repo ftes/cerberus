@@ -4,7 +4,6 @@ defmodule Cerberus.Driver.Browser.BiDi do
   use GenServer
 
   alias Bibbidi.Connection
-  alias Bibbidi.Session, as: BibbidiSession
   alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.Types
 
@@ -151,7 +150,6 @@ defmodule Cerberus.Driver.Browser.BiDi do
   defp ensure_connected(state, opts) do
     with {:ok, web_socket_url} <- Runtime.web_socket_url(opts),
          {:ok, connection} <- Connection.start_link(url: web_socket_url),
-         {:ok, _capabilities} <- BibbidiSession.new(connection, %{}),
          :ok <- subscribe_connection_events(connection) do
       Process.unlink(connection)
       connection_ref = Process.monitor(connection)

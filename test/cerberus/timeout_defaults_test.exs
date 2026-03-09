@@ -6,6 +6,7 @@ defmodule Cerberus.TimeoutDefaultsTest do
   alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Browser.BiDi
   alias Cerberus.Driver.Browser.Extensions
+  alias Cerberus.Driver.Browser.Runtime
   alias ExUnit.AssertionError
 
   defmodule TimeoutProbe do
@@ -119,6 +120,10 @@ defmodule Cerberus.TimeoutDefaultsTest do
       session(:browser, browser: [popup_mode: :new_tab])
     end
 
+    assert_raise ArgumentError, ~r/session\(:browser, opts\) invalid options:.*chrome_args/, fn ->
+      session(:browser, chrome_args: [123])
+    end
+
     assert_raise ArgumentError, ~r/session\(:browser, opts\) invalid options:.*user_agent/, fn ->
       session(:browser, user_agent: "   ")
     end
@@ -156,6 +161,16 @@ defmodule Cerberus.TimeoutDefaultsTest do
 
     assert {:ok, %{"timeout" => 150}} ==
              BiDi.command(probe, "session.status", %{}, timeout: 150, browser: [bidi_command_timeout_ms: 2_400])
+  end
+
+  test "runtime http timeout falls back to global browser config and supports overrides" do
+    Application.put_env(:cerberus, :browser, runtime_http_timeout_ms: 9_000)
+
+    assert Runtime.runtime_http_timeout_ms([]) == 9_000
+    assert Runtime.runtime_http_timeout_ms(browser: [runtime_http_timeout_ms: 4_400]) == 4_400
+
+    assert Runtime.runtime_http_timeout_ms(runtime_http_timeout_ms: 3_300, browser: [runtime_http_timeout_ms: 4_400]) ==
+             3_300
   end
 
   test "dialog timeout falls back to global browser config and supports overrides" do

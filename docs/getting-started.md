@@ -16,8 +16,8 @@ session()
 >
 > `session()` (or explicit `session(:phoenix)`) gives a PhoenixTest-style flow: static and live routes are handled automatically behind one API.
 > `session(conn)` reuses an existing `Plug.Conn` (including carried session/cookie state) instead of starting from a fresh conn.
-> Browser mode is `session(:browser)`.
-> Cerberus launches Firefox directly over BiDi and uses the installed `tmp/firefox-current` binary by default.
+> For browser mode, `session(:browser)` defaults to Chrome; use `session(:chrome)` or `session(:firefox)` for explicit targets.
+> Project CI currently runs Chrome lanes only. Firefox runs are supported, but opt-in.
 
 Set the endpoint once globally (same style as PhoenixTest), then use plain `session()` in tests:
 
@@ -313,21 +313,42 @@ config :cerberus, ecto_sandbox_stop_owner_delay: 100
 
 ## Step 9: Install Local Browser Runtimes
 
-Install browser binaries with the Firefox task:
+Install browser binaries with Cerberus Mix tasks:
 
 ```bash
+MIX_ENV=test mix cerberus.install.chrome
 MIX_ENV=test mix cerberus.install.firefox
 ```
 
-For an explicit Firefox version:
+For explicit versions:
 
 ```bash
+MIX_ENV=test mix cerberus.install.chrome --version 146.0.7680.31
 MIX_ENV=test mix cerberus.install.firefox --firefox-version 148.0 --geckodriver-version 0.36.0
 ```
 
-Cerberus writes a stable Firefox link on install at `tmp/firefox-current`, so local browser runs work without extra binary-path config.
+Cerberus writes stable local links on install (`tmp/chrome-current`, `tmp/chromedriver-current`, `tmp/firefox-current`, `tmp/geckodriver-current`), so local managed browser runs work without extra binary-path config.
 
-## Step 10: Headed Browser and Runtime Launch Options
+## Step 10: Remote WebDriver Mode
+
+```elixir
+config :cerberus, :browser,
+  webdriver_url: "http://127.0.0.1:4444"
+```
+
+Remote mode connects to an already-running WebDriver endpoint and skips local browser/WebDriver launch.
+
+To point specific browser lanes at different remote endpoints:
+
+```elixir
+config :cerberus, :browser,
+  chrome_webdriver_url: "http://127.0.0.1:4444",
+  firefox_webdriver_url: "http://127.0.0.1:5555"
+```
+
+For regular project runs, use Chrome-first invocations unless you are explicitly validating Firefox behavior.
+
+## Step 11: Headed Browser and Runtime Launch Options
 
 ```elixir
 config :cerberus, :browser,
@@ -343,4 +364,4 @@ config :cerberus, :browser,
   slow_mo: 120
 ```
 
-Runtime launch settings (for example `headless`, `slow_mo`, and `firefox_binary`) are runtime-level and should be configured globally per test invocation, not per test.
+Runtime launch settings (for example `headless`, `slow_mo`, browser binaries, driver binaries, `webdriver_url`, `chrome_webdriver_url`, and `firefox_webdriver_url`) are runtime-level and should be configured globally per test invocation, not per test.

@@ -68,7 +68,7 @@ defmodule Cerberus.Driver.Browser do
 
   defstruct user_context_pid: nil,
             tab_id: nil,
-            browser_name: :firefox,
+            browser_name: :chrome,
             bidi_opts: [],
             endpoint: nil,
             base_url: nil,
@@ -1017,10 +1017,6 @@ defmodule Cerberus.Driver.Browser do
       observed = Map.merge(fallback_observed, %{readiness: readiness, result: result})
       {:error, session, observed, action_readiness_error(reason, readiness)}
     end
-  end
-
-  defp maybe_sleep_for_navigation_settle(%{browser_name: :firefox}) do
-    Process.sleep(100)
   end
 
   defp maybe_sleep_for_navigation_settle(_state), do: :ok

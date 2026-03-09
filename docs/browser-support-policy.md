@@ -1,21 +1,24 @@
 # Browser Support Policy
 
 This document defines current browser support for Cerberus WebDriver BiDi execution.
-Status last reviewed: March 9, 2026.
+Status last reviewed: March 3, 2026.
 
 ## Supported Browsers
 
 Cerberus currently supports:
 
-- Firefox via direct browser BiDi
+- Chrome/Chromium via ChromeDriver BiDi (primary target)
+- Firefox via geckodriver BiDi (supported, opt-in)
 
-Cerberus launches Firefox directly and uses Bibbidi for the active BiDi transport layer.
+Both targets have shared API coverage.
+Current project policy is Chrome-first execution for regular local and CI runs.
+Firefox lanes are available for explicit manual/targeted runs.
 
 ## Runtime Model
 
-- Cerberus uses one shared Firefox runtime process and one shared BiDi connection per test invocation.
+- Cerberus uses one shared browser runtime process and one shared BiDi connection per test invocation.
 - Browser isolation is done through per-session `userContext` and per-tab `browsingContext`.
-- Runtime launch settings are invocation-level, including headless mode, slow-motion pacing, Firefox binary path, and Firefox args.
+- Runtime launch settings are invocation-level, including browser selection, headless mode, slow-motion pacing, WebDriver endpoint, binary paths, and driver args.
 - If you need different runtime launch settings, run separate test invocations.
 
 ## Popup Lifecycle Support
@@ -45,14 +48,26 @@ Recommended alternatives:
 
 ## Local Managed Runtime
 
-Install Firefox:
+Install runtimes:
 
 ```bash
+MIX_ENV=test mix cerberus.install.chrome --format shell
 MIX_ENV=test mix cerberus.install.firefox --format shell
 ```
 
-Cerberus auto-detects the stable Firefox link at `tmp/firefox-current` for local managed runtime startup.
+Install tasks maintain stable links (`tmp/chrome-current`, `tmp/chromedriver-current`, `tmp/firefox-current`, `tmp/geckodriver-current`) that Cerberus auto-detects for local managed runtime startup.
+
+## Remote Runtime
+
+Use a pre-running WebDriver endpoint:
+
+```elixir
+config :cerberus, :browser,
+  webdriver_url: "http://127.0.0.1:4444"
+```
+
+With `webdriver_url` set, Cerberus skips local browser/WebDriver process launch.
 
 ## Not Current Targets
 
-Chrome/Chromium, Edge, and Safari/WebKit are not current Cerberus runtime targets.
+Edge and Safari/WebKit are not currently first-class Cerberus runtime targets.

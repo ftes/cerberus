@@ -5,21 +5,21 @@ defmodule Cerberus.ExplicitBrowserTest do
 
   @moduletag :slow
 
-  test "browser sessions run as expected" do
+  test "browser session runs as expected on chrome" do
     session =
       :browser
       |> session()
       |> visit("/articles")
       |> assert_has(text("Articles", exact: true))
 
-    assert session.browser_name == :firefox
+    assert session.browser_name == :chrome
   end
 
-  test "browser runtime maps to firefox" do
+  test "browser session maps to the chrome runtime" do
     :browser
     |> session()
     |> Cerberus.Browser.evaluate_js("navigator.userAgent", fn user_agent ->
-      assert user_agent =~ "Firefox"
+      assert user_agent =~ "Chrome"
     end)
   end
 
