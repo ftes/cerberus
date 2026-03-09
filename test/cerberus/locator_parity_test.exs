@@ -9,8 +9,6 @@ defmodule Cerberus.LocatorParityTest do
   alias Cerberus.InvalidLocatorError
   alias ExUnit.AssertionError
 
-  @moduletag timeout: 60_000
-
   @html_prefix """
   <!doctype html>
   <html>
@@ -281,34 +279,6 @@ defmodule Cerberus.LocatorParityTest do
                           """ <>
                           @html_suffix
 
-  @type browser_session :: Cerberus.Driver.Browser.t()
-  @type support_context :: %{required(:browser_session) => browser_session(), required(:upload_path) => String.t()}
-  @type parity_case :: %{
-          required(:name) => String.t(),
-          required(:expect) => :ok | :error,
-          required(:run) => (Cerberus.Session.t() -> Cerberus.Session.t() | any()),
-          optional(:host_only) => boolean(),
-          optional(:html) => String.t(),
-          optional(:error_module) => module(),
-          optional(:error_contains) => String.t(),
-          optional(:mutates) => boolean()
-        }
-
-  @spec setup_all_context() :: {:ok, support_context()}
-  def setup_all_context do
-    upload_path =
-      Path.join(System.tmp_dir!(), "cerberus-locator-oracle-#{System.unique_integer([:positive])}.txt")
-
-    File.write!(upload_path, "locator oracle upload payload")
-
-    ExUnit.Callbacks.on_exit(fn ->
-      _ = File.rm(upload_path)
-    end)
-
-    {:ok, browser_session: session(:browser), upload_path: upload_path}
-  end
-
-  @spec assert_chained_follow_up(browser_session()) :: :ok
   def assert_chained_follow_up(browser_session) do
     browser_session = inject_snippet!(browser_session, @chained_locator_html)
 
@@ -321,82 +291,152 @@ defmodule Cerberus.LocatorParityTest do
     :ok
   end
 
-  @spec run_cases!(support_context(), [parity_case()]) :: :ok
   def run_cases!(context, cases) when is_list(cases) do
-    _final_state =
-      Enum.reduce(cases, %{html: nil, dirty: true, static_session: nil, browser_session: nil}, fn case_def, state ->
-        name = case_def.name
-        html = Map.get(case_def, :html, @default_html)
-        expect = case_def.expect
-        host_only = Map.get(case_def, :host_only, false)
-        mutates = Map.get(case_def, :mutates, true)
-        expected_error_module = Map.get(case_def, :error_module)
-        expected_error_contains = Map.get(case_def, :error_contains)
+    Enum.each(cases, fn case_def ->
+      name = case_def.name
+      html = Map.get(case_def, :html, @default_html)
+      expect = case_def.expect
+      host_only = Map.get(case_def, :host_only, false)
+      expected_error_module = Map.get(case_def, :error_module)
+      expected_error_contains = Map.get(case_def, :error_contains)
 
-        {static_result, browser_result, next_state} =
-          if host_only do
-            result = run_case(session(), case_def.run)
-            {result, result, state}
-          else
-            {static_session, browser_session, session_state} = parity_sessions_for_case(state, context, html)
+      {static_result, browser_result} =
+        if host_only do
+          result = run_case(session(), case_def.run)
+          {result, result}
+        else
+          static_session = static_snippet_session(html)
+          browser_session = inject_snippet!(context.browser_session, html)
 
-            static_result = run_case(static_session, case_def.run)
-            browser_result = run_case(browser_session, case_def.run)
+          static_result = run_case(static_session, case_def.run)
+          browser_result = run_case(browser_session, case_def.run)
 
-            {static_result, browser_result, %{session_state | dirty: mutates}}
-          end
+          {static_result, browser_result}
+        end
 
-        assert static_result.status == expect,
-               "expected static #{name} to be #{inspect(expect)}, got #{inspect(static_result)}"
+      assert static_result.status == expect,
+             "expected static #{name} to be #{inspect(expect)}, got #{inspect(static_result)}"
 
-        assert browser_result.status == expect,
-               "expected browser #{name} to be #{inspect(expect)}, got #{inspect(browser_result)}"
+      assert browser_result.status == expect,
+             "expected browser #{name} to be #{inspect(expect)}, got #{inspect(browser_result)}"
 
-        assert static_result.status == browser_result.status,
-               "expected parity for #{name}, static=#{inspect(static_result)} browser=#{inspect(browser_result)}"
+      assert static_result.status == browser_result.status,
+             "expected parity for #{name}, static=#{inspect(static_result)} browser=#{inspect(browser_result)}"
 
-        assert_expected_error_case!(
-          expect,
-          name,
-          expected_error_module,
-          expected_error_contains,
-          static_result,
-          browser_result
-        )
-
-        next_state
-      end)
+      assert_expected_error_case!(
+        expect,
+        name,
+        expected_error_module,
+        expected_error_contains,
+        static_result,
+        browser_result
+      )
+    end)
 
     :ok
   end
 
-  @spec parity_sessions_for_case(
-          %{
-            html: String.t() | nil,
-            dirty: boolean(),
-            static_session: Static.t() | nil,
-            browser_session: browser_session() | nil
-          },
-          support_context(),
-          String.t()
-        ) ::
-          {Static.t(), browser_session(),
-           %{html: String.t(), dirty: boolean(), static_session: Static.t(), browser_session: browser_session()}}
-  defp parity_sessions_for_case(state, context, html) when is_binary(html) do
-    if state.html == html and state.dirty == false and state.static_session != nil and state.browser_session != nil do
-      {state.static_session, state.browser_session, state}
-    else
-      static_session = static_snippet_session(html)
-      browser_session = inject_snippet!(context.browser_session, html)
+  defp static_snippet_session(html) when is_binary(html) do
+    %Static{} = static_session = session()
 
-      {static_session, browser_session,
-       %{html: html, dirty: false, static_session: static_session, browser_session: browser_session}}
-    end
+    %{
+      static_session
+      | document: Cerberus.Html.parse!(html),
+        current_path: "/__locator_oracle__",
+        form_data: %{active_form: nil, values: %{}}
+    }
   end
 
-  @spec assertion_cases() :: [parity_case()]
-  defp assertion_cases do
-    [
+  defp inject_snippet!(browser_session, html) when is_binary(html) do
+    encoded_html = JSON.encode!(html)
+
+    expression = """
+    (() => {
+      const html = #{encoded_html};
+      document.open();
+      document.write(html);
+      document.close();
+      return document.documentElement != null;
+    })()
+    """
+
+    Browser.evaluate_js(browser_session, expression, &assert(&1 == true))
+    browser_session
+  end
+
+  defp run_case(session, run_fun) when is_function(run_fun, 1) do
+    _ = run_fun.(session)
+    %{status: :ok}
+  rescue
+    error in [AssertionError, ArgumentError, InvalidLocatorError] ->
+      %{status: :error, error: Exception.message(error), error_module: error.__struct__}
+  end
+
+  defp assert_expected_error_case!(
+         :ok,
+         name,
+         expected_error_module,
+         expected_error_contains,
+         _static_result,
+         _browser_result
+       ) do
+    assert is_nil(expected_error_module),
+           "expected #{name} to omit :error_module when expect is :ok, got #{inspect(expected_error_module)}"
+
+    assert is_nil(expected_error_contains),
+           "expected #{name} to omit :error_contains when expect is :ok, got #{inspect(expected_error_contains)}"
+  end
+
+  defp assert_expected_error_case!(
+         :error,
+         name,
+         expected_error_module,
+         expected_error_contains,
+         static_result,
+         browser_result
+       ) do
+    assert is_atom(expected_error_module),
+           "expected #{name} to set :error_module when expect is :error"
+
+    assert static_result.error_module == expected_error_module,
+           "expected static #{name} error module #{inspect(expected_error_module)}, got #{inspect(static_result)}"
+
+    assert browser_result.error_module == expected_error_module,
+           "expected browser #{name} error module #{inspect(expected_error_module)}, got #{inspect(browser_result)}"
+
+    assert_error_contains!(name, :static, static_result, expected_error_contains)
+    assert_error_contains!(name, :browser, browser_result, expected_error_contains)
+  end
+
+  defp assert_error_contains!(_name, _lane, _result, nil), do: :ok
+
+  defp assert_error_contains!(name, lane, result, expected_error_contains) when is_binary(expected_error_contains) do
+    assert is_binary(result.error),
+           "expected #{lane} #{name} error message to be present, got #{inspect(result)}"
+
+    assert String.contains?(result.error, expected_error_contains),
+           "expected #{lane} #{name} error message to contain #{inspect(expected_error_contains)}, got #{inspect(result.error)}"
+  end
+
+  setup_all do
+    upload_path =
+      Path.join(System.tmp_dir!(), "cerberus-locator-oracle-#{System.unique_integer([:positive])}.txt")
+
+    File.write!(upload_path, "locator oracle upload payload")
+
+    ExUnit.Callbacks.on_exit(fn ->
+      _ = File.rm(upload_path)
+    end)
+
+    {:ok, browser_session: session(:browser), upload_path: upload_path}
+  end
+
+  test "chained snippet submit keeps form controls available for follow-up actions", context do
+    assert :ok = assert_chained_follow_up(context.browser_session)
+  end
+
+  test "rich snippet locator parity holds for assertions and helper mappings", context do
+    cases = [
       %{
         name: "assert_has text inexact",
         expect: :ok,
@@ -498,11 +538,12 @@ defmodule Cerberus.LocatorParityTest do
       },
       %{name: "assert_has testid helper", expect: :ok, mutates: false, run: &assert_has(&1, testid("articles-title"))}
     ]
+
+    assert :ok = run_cases!(context, cases)
   end
 
-  @spec form_control_cases() :: [parity_case()]
-  defp form_control_cases do
-    [
+  test "rich snippet locator parity holds for form controls and state filters", context do
+    cases = [
       %{name: "fill_in label locator", expect: :ok, run: &fill_in(&1, ~l"Email Address"l, "alice@example.com")},
       %{
         name: "fill_in role textbox locator",
@@ -626,11 +667,12 @@ defmodule Cerberus.LocatorParityTest do
         run: &choose(&1, ~l"State Contact"l, selected: false)
       }
     ]
+
+    assert :ok = run_cases!(context, cases)
   end
 
-  @spec composition_cases(String.t()) :: [parity_case()]
-  defp composition_cases(upload_path) do
-    [
+  test "rich snippet locator parity holds for composition, upload, and sigil cases", context do
+    cases = [
       %{
         name: "submit supports same-element and_ composition with testid",
         html: @chained_locator_html,
@@ -774,18 +816,18 @@ defmodule Cerberus.LocatorParityTest do
         error_module: AssertionError,
         run: &fill_in(&1, or_(css("#email_input"), css("#secondary_email")), "ambiguous")
       },
-      %{name: "upload file input by label", expect: :ok, run: &upload(&1, ~l"Avatar"l, upload_path)},
+      %{name: "upload file input by label", expect: :ok, run: &upload(&1, ~l"Avatar"l, context.upload_path)},
       %{
         name: "upload wrapped label input",
         html: @inline_upload_label_html,
         expect: :ok,
-        run: &upload(&1, ~l"Inline Avatar"l, upload_path)
+        run: &upload(&1, ~l"Inline Avatar"l, context.upload_path)
       },
       %{
         name: "upload on non-file field errors",
         expect: :error,
         error_module: AssertionError,
-        run: &upload(&1, ~l"Nickname"l, upload_path)
+        run: &upload(&1, ~l"Nickname"l, context.upload_path)
       },
       %{
         name: "click with label locator errors when no clickable matches",
@@ -820,11 +862,12 @@ defmodule Cerberus.LocatorParityTest do
         run: &assert_has(&1, ~l"button:Increment"rc)
       }
     ]
+
+    assert :ok = run_cases!(context, cases)
   end
 
-  @spec count_and_scope_cases() :: [parity_case()]
-  defp count_and_scope_cases do
-    [
+  test "rich snippet locator parity holds for count filters and scope disambiguation", context do
+    cases = [
       %{
         name: "count filters on assertions support exact count",
         html: @count_position_html,
@@ -1010,121 +1053,7 @@ defmodule Cerberus.LocatorParityTest do
         run: &assert_has(&1, text("Save", exact: true))
       }
     ]
-  end
 
-  defp static_snippet_session(html) when is_binary(html) do
-    %Static{} = static_session = session()
-
-    %{
-      static_session
-      | document: Cerberus.Html.parse!(html),
-        current_path: "/__locator_oracle__",
-        form_data: %{active_form: nil, values: %{}}
-    }
-  end
-
-  defp inject_snippet!(browser_session, html) when is_binary(html) do
-    encoded_html = JSON.encode!(html)
-
-    expression = """
-    (() => {
-      const html = #{encoded_html};
-      document.open();
-      document.write(html);
-      document.close();
-      return document.documentElement != null;
-    })()
-    """
-
-    Browser.evaluate_js(browser_session, expression, &assert(&1 == true))
-    browser_session
-  end
-
-  defp run_case(session, run_fun) when is_function(run_fun, 1) do
-    _ = run_fun.(session)
-    %{status: :ok}
-  rescue
-    error in [AssertionError, ArgumentError, InvalidLocatorError] ->
-      %{status: :error, error: Exception.message(error), error_module: error.__struct__}
-  end
-
-  defp assert_expected_error_case!(
-         :ok,
-         name,
-         expected_error_module,
-         expected_error_contains,
-         _static_result,
-         _browser_result
-       ) do
-    assert is_nil(expected_error_module),
-           "expected #{name} to omit :error_module when expect is :ok, got #{inspect(expected_error_module)}"
-
-    assert is_nil(expected_error_contains),
-           "expected #{name} to omit :error_contains when expect is :ok, got #{inspect(expected_error_contains)}"
-  end
-
-  defp assert_expected_error_case!(
-         :error,
-         name,
-         expected_error_module,
-         expected_error_contains,
-         static_result,
-         browser_result
-       ) do
-    assert is_atom(expected_error_module),
-           "expected #{name} to set :error_module when expect is :error"
-
-    assert static_result.error_module == expected_error_module,
-           "expected static #{name} error module #{inspect(expected_error_module)}, got #{inspect(static_result)}"
-
-    assert browser_result.error_module == expected_error_module,
-           "expected browser #{name} error module #{inspect(expected_error_module)}, got #{inspect(browser_result)}"
-
-    assert_error_contains!(name, :static, static_result, expected_error_contains)
-    assert_error_contains!(name, :browser, browser_result, expected_error_contains)
-  end
-
-  defp assert_error_contains!(_name, _lane, _result, nil), do: :ok
-
-  defp assert_error_contains!(name, lane, result, expected_error_contains) when is_binary(expected_error_contains) do
-    assert is_binary(result.error),
-           "expected #{lane} #{name} error message to be present, got #{inspect(result)}"
-
-    assert String.contains?(result.error, expected_error_contains),
-           "expected #{lane} #{name} error message to contain #{inspect(expected_error_contains)}, got #{inspect(result.error)}"
-  end
-
-  setup_all do
-    setup_all_context()
-  end
-
-  describe "Chained Follow-Up" do
-    test "chained snippet submit keeps form controls available for follow-up actions", context do
-      assert :ok = assert_chained_follow_up(context.browser_session)
-    end
-  end
-
-  describe "Assertions and Helpers" do
-    test "rich snippet locator parity holds for assertions and helper mappings", context do
-      assert :ok = run_cases!(context, assertion_cases())
-    end
-  end
-
-  describe "Form Controls and State Filters" do
-    test "rich snippet locator parity holds for form controls and state filters", context do
-      assert :ok = run_cases!(context, form_control_cases())
-    end
-  end
-
-  describe "Composition, Upload, and Sigils" do
-    test "rich snippet locator parity holds for composition, upload, and sigil cases", context do
-      assert :ok = run_cases!(context, composition_cases(context.upload_path))
-    end
-  end
-
-  describe "Count Filters and Scope" do
-    test "rich snippet locator parity holds for count filters and scope disambiguation", context do
-      assert :ok = run_cases!(context, count_and_scope_cases())
-    end
+    assert :ok = run_cases!(context, cases)
   end
 end
