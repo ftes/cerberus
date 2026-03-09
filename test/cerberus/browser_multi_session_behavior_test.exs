@@ -5,10 +5,13 @@ defmodule Cerberus.BrowserMultiSessionBehaviorTest do
 
   alias Cerberus.Driver.Browser.UserContextProcess
 
-  test "browser open_tab/switch_tab/close_tab workflows are deterministic" do
+  setup_all do
+    {:ok, primary: session(:browser), isolated: session(:browser)}
+  end
+
+  test "browser open_tab/switch_tab/close_tab workflows are deterministic", context do
     primary =
-      :browser
-      |> session()
+      context.primary
       |> visit("/articles")
       |> assert_has(text("Articles", exact: true))
 
@@ -44,16 +47,14 @@ defmodule Cerberus.BrowserMultiSessionBehaviorTest do
     assert_path(primary, "/articles")
   end
 
-  test "parallel browser sessions remain isolated under concurrent actions" do
+  test "parallel browser sessions remain isolated under concurrent actions", context do
     session_a =
-      :browser
-      |> session()
+      context.primary
       |> visit("/live/counter")
       |> assert_has(text("Count: 0", exact: true))
 
     session_b =
-      :browser
-      |> session()
+      context.isolated
       |> visit("/live/counter")
       |> assert_has(text("Count: 0", exact: true))
 

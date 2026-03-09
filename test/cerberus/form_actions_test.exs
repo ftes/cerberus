@@ -78,12 +78,14 @@ defmodule Cerberus.FormActionsTest do
     end
 
     test "action failures include possible candidate hints (#{driver})", context do
+      session =
+        unquote(driver)
+        |> driver_session(context)
+        |> visit("/search")
+
       click_error =
         assert_raise ExUnit.AssertionError, fn ->
-          unquote(driver)
-          |> driver_session(context)
-          |> visit("/search")
-          |> click(~l"Definitely Missing Link"e, timeout: 50)
+          click(session, ~l"Definitely Missing Link"e, timeout: 50)
         end
 
       assert click_error.message =~ "possible candidates:"
@@ -91,10 +93,7 @@ defmodule Cerberus.FormActionsTest do
 
       fill_error =
         assert_raise ExUnit.AssertionError, fn ->
-          unquote(driver)
-          |> driver_session(context)
-          |> visit("/search")
-          |> fill_in(~l"Definitely Missing Field"l, "x")
+          fill_in(session, ~l"Definitely Missing Field"l, "x", timeout: 50)
         end
 
       assert fill_error.message =~ "possible candidates:"
@@ -102,10 +101,7 @@ defmodule Cerberus.FormActionsTest do
 
       submit_error =
         assert_raise ExUnit.AssertionError, fn ->
-          unquote(driver)
-          |> driver_session(context)
-          |> visit("/search")
-          |> submit(~l"Definitely Missing Submit"e)
+          submit(session, ~l"Definitely Missing Submit"e, timeout: 50)
         end
 
       assert submit_error.message =~ "possible candidates:"
@@ -113,12 +109,14 @@ defmodule Cerberus.FormActionsTest do
     end
 
     test "role locator failures include possible candidate hints (#{driver})", context do
+      session =
+        unquote(driver)
+        |> driver_session(context)
+        |> visit("/search")
+
       role_click_error =
         assert_raise ExUnit.AssertionError, fn ->
-          unquote(driver)
-          |> driver_session(context)
-          |> visit("/search")
-          |> click(role(:link, name: "Definitely Missing Link"))
+          click(session, role(:link, name: "Definitely Missing Link"), timeout: 50)
         end
 
       assert role_click_error.message =~ "possible candidates:"
