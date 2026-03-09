@@ -33,6 +33,7 @@ defmodule Cerberus.Driver.Browser do
     "argument is not a global object",
     "Inspected target navigated or closed",
     "Cannot find context with specified id",
+    "Execution context was destroyed",
     "execution contexts cleared",
     "DiscardedBrowsingContextError",
     "no such frame",
@@ -1137,24 +1138,7 @@ defmodule Cerberus.Driver.Browser do
   defp eval_json_read(state, expression, timeout_ms)
 
   defp eval_json_read(state, expression, timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
-    evaluate_result =
-      Profiling.measure({:browser_wait, :evaluate_direct}, fn ->
-        UserContextProcess.evaluate_with_timeout(
-          state.user_context_pid,
-          expression,
-          timeout_ms,
-          state.tab_id
-        )
-      end)
-
-    evaluate_result =
-      case evaluate_result do
-        {:error, _reason, _details} = error ->
-          maybe_retry_eval_json_read_with_dialog_unblock(state, expression, timeout_ms, error)
-
-        other ->
-          other
-      end
+    evaluate_result = evaluate_json_read_with_dialog_awareness(state, expression, timeout_ms)
 
     with {:ok, result} <- evaluate_result,
          {:ok, json} <-
@@ -1169,17 +1153,46 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
+  defp evaluate_json_read_with_dialog_awareness(state, expression, timeout_ms) do
+    if blocking_dialog_open?(state) do
+      evaluate_json_read_with_dialog_unblock(state, expression, timeout_ms)
+    else
+      case evaluate_json_read_direct(state, expression, timeout_ms) do
+        {:error, _reason, _details} = error ->
+          maybe_retry_eval_json_read_with_dialog_unblock(state, expression, timeout_ms, error)
+
+        other ->
+          other
+      end
+    end
+  end
+
+  defp evaluate_json_read_direct(state, expression, timeout_ms) do
+    Profiling.measure({:browser_wait, :evaluate_direct}, fn ->
+      UserContextProcess.evaluate_with_timeout(
+        state.user_context_pid,
+        expression,
+        timeout_ms,
+        state.tab_id
+      )
+    end)
+  end
+
+  defp evaluate_json_read_with_dialog_unblock(state, expression, timeout_ms) do
+    Profiling.measure({:browser_wait, :evaluate_direct_dialog_fallback}, fn ->
+      Evaluate.with_dialog_unblock(
+        state.user_context_pid,
+        state.tab_id,
+        expression,
+        timeout_ms,
+        bidi_opts(state)
+      )
+    end)
+  end
+
   defp maybe_retry_eval_json_read_with_dialog_unblock(state, expression, timeout_ms, {:error, _reason, _details} = error) do
     if blocking_dialog_open?(state) do
-      Profiling.measure({:browser_wait, :evaluate_direct_dialog_fallback}, fn ->
-        Evaluate.with_dialog_unblock(
-          state.user_context_pid,
-          state.tab_id,
-          expression,
-          timeout_ms,
-          bidi_opts(state)
-        )
-      end)
+      evaluate_json_read_with_dialog_unblock(state, expression, timeout_ms)
     else
       error
     end
