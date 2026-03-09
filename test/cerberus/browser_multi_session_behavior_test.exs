@@ -5,8 +5,6 @@ defmodule Cerberus.BrowserMultiSessionBehaviorTest do
 
   alias Cerberus.Driver.Browser.UserContextProcess
 
-  @moduletag :slow
-
   test "browser open_tab/switch_tab/close_tab workflows are deterministic" do
     primary =
       :browser

@@ -3,8 +3,6 @@ defmodule Cerberus.BrowserPopupModeTest do
 
   import Cerberus
 
-  @moduletag :slow
-
   test "popup_mode :allow keeps autonomous window.open on source tab" do
     session =
       :browser

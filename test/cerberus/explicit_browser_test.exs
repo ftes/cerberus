@@ -3,8 +3,6 @@ defmodule Cerberus.ExplicitBrowserTest do
 
   import Cerberus
 
-  @moduletag :slow
-
   test "browser session runs as expected" do
     session =
       :browser
