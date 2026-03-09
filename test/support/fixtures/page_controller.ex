@@ -610,16 +610,6 @@ defmodule Cerberus.Fixtures.PageController do
           </section>
 
           <section>
-            <h2>Dialog</h2>
-            <button id="confirm-dialog" type="button">Open Confirm Dialog</button>
-            <p id="dialog-result">Dialog result: pending</p>
-            <button id="prompt-dialog" type="button">Open Prompt Dialog</button>
-            <p id="prompt-result">Prompt result: pending</p>
-            <button id="alert-dialog" type="button">Open Alert Dialog</button>
-            <p id="alert-result">Alert result: pending</p>
-          </section>
-
-          <section>
             <h2>Download</h2>
             <a id="download-report" href="/browser/download/report">Download Report</a>
           </section>
@@ -662,12 +652,6 @@ defmodule Cerberus.Fixtures.PageController do
             const tabNext = document.getElementById("tab-next");
             const tabResult = document.getElementById("tab-result");
             const blurResult = document.getElementById("blur-result");
-            const dialogButton = document.getElementById("confirm-dialog");
-            const dialogResult = document.getElementById("dialog-result");
-            const promptButton = document.getElementById("prompt-dialog");
-            const promptResult = document.getElementById("prompt-result");
-            const alertButton = document.getElementById("alert-dialog");
-            const alertResult = document.getElementById("alert-result");
             const dragSource = document.getElementById("drag-source");
             const dropTarget = document.getElementById("drop-target");
             const dragResult = document.getElementById("drag-result");
@@ -703,25 +687,6 @@ defmodule Cerberus.Fixtures.PageController do
 
             tabNext.addEventListener("focus", () => {
               tabResult.textContent = "Tab result: focused next";
-            });
-
-            dialogButton.addEventListener("click", () => {
-              const accepted = window.confirm("Delete item?");
-              dialogResult.textContent = accepted
-                ? "Dialog result: confirmed"
-                : "Dialog result: cancelled";
-            });
-
-            promptButton.addEventListener("click", () => {
-              const value = window.prompt("Type value");
-              promptResult.textContent = value === null
-                ? "Prompt result: cancelled"
-                : "Prompt result: " + value;
-            });
-
-            alertButton.addEventListener("click", () => {
-              window.alert("Heads up!");
-              alertResult.textContent = "Alert result: acknowledged";
             });
 
             dragSource.addEventListener("dragstart", (event) => {

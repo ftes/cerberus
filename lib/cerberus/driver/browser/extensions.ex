@@ -5,13 +5,10 @@ defmodule Cerberus.Driver.Browser.Extensions do
   alias Cerberus.Driver.Browser.BiDi
   alias Cerberus.Driver.Browser.Types
   alias Cerberus.Driver.Browser.UserContextProcess
-  alias Cerberus.Locator
   alias Cerberus.Options
   alias Cerberus.Profiling
-  alias Cerberus.Query
   alias ExUnit.AssertionError
 
-  @default_dialog_timeout_ms 1_500
   @default_popup_timeout_ms 1_500
   @default_download_timeout_ms 1_500
   @default_evaluate_timeout_ms 10_000
@@ -176,15 +173,6 @@ defmodule Cerberus.Driver.Browser.Extensions do
       {:error, reason, details} ->
         raise ArgumentError, "browser drag failed: #{reason} (#{inspect(details)})"
     end
-  end
-
-  @spec assert_dialog(Browser.t(), Locator.t(), Options.browser_assert_dialog_opts()) :: Browser.t()
-  def assert_dialog(%Browser{} = session, %Locator{} = locator, opts \\ []) when is_list(opts) do
-    timeout_ms = dialog_timeout_ms(opts)
-    dialog = await_open_dialog!(session, locator, timeout_ms)
-    assert_dialog_text_match!(locator, dialog)
-    ensure_dialog_auto_accepted!(session, timeout_ms, dialog)
-    session
   end
 
   @spec with_popup(
@@ -488,24 +476,6 @@ defmodule Cerberus.Driver.Browser.Extensions do
   end
 
   @doc false
-  @spec dialog_timeout_ms(Options.browser_assert_dialog_opts()) :: pos_integer()
-  def dialog_timeout_ms(opts) when is_list(opts) do
-    case Keyword.fetch(opts, :timeout) do
-      {:ok, timeout} when is_integer(timeout) and timeout > 0 ->
-        timeout
-
-      {:ok, timeout} ->
-        raise ArgumentError, "assert_dialog/3 :timeout must be a positive integer, got: #{inspect(timeout)}"
-
-      :error ->
-        opts
-        |> merged_browser_opts()
-        |> Keyword.get(:dialog_timeout_ms)
-        |> normalize_positive_integer(@default_dialog_timeout_ms)
-    end
-  end
-
-  @doc false
   @spec popup_timeout_ms(Options.browser_with_popup_opts()) :: pos_integer()
   def popup_timeout_ms(opts) when is_list(opts) do
     case Keyword.get(opts, :timeout, @default_popup_timeout_ms) do
@@ -526,137 +496,6 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
       timeout ->
         raise ArgumentError, "assert_download/3 :timeout must be a positive integer, got: #{inspect(timeout)}"
-    end
-  end
-
-  defp merged_browser_opts(opts) do
-    :cerberus
-    |> Application.get_env(:browser, [])
-    |> Keyword.merge(Keyword.get(opts, :browser, []))
-  end
-
-  defp await_open_dialog!(session, locator, timeout_ms) do
-    case UserContextProcess.await_dialog_open(session.user_context_pid, timeout_ms, session.tab_id) do
-      {:ok, %{} = dialog} ->
-        dialog
-
-      {:error, :timeout, events} ->
-        handle_dialog_timeout!(locator, events)
-
-      {:error, reason, details} ->
-        raise AssertionError,
-          message: "assert_dialog/3 failed while waiting for dialog: #{reason} (#{inspect(details)})"
-    end
-  end
-
-  defp handle_dialog_timeout!(locator, events) do
-    case matching_observed_dialog(events, locator) do
-      {:ok, %{} = dialog} ->
-        dialog
-
-      :error ->
-        case latest_observed_dialog(events) do
-          {:ok, %{} = dialog} ->
-            observed_message = Map.get(dialog, "message", "")
-
-            raise AssertionError,
-              message:
-                "assert_dialog/3 expected #{expected_dialog_text(locator)} but observed #{inspect(observed_message)}"
-
-          :error ->
-            raise_dialog_timeout!(locator, events)
-        end
-    end
-  end
-
-  defp matching_observed_dialog(events, locator) when is_list(events) do
-    events
-    |> Enum.filter(&match?(%{"method" => "browsingContext.userPromptOpened"}, &1))
-    |> Enum.reverse()
-    |> Enum.find(&dialog_matches_locator?(&1, locator))
-    |> case do
-      %{} = dialog -> {:ok, dialog}
-      _ -> :error
-    end
-  end
-
-  defp matching_observed_dialog(_events, _locator), do: :error
-
-  defp latest_observed_dialog(events) when is_list(events) do
-    events
-    |> Enum.filter(&match?(%{"method" => "browsingContext.userPromptOpened"}, &1))
-    |> List.last()
-    |> case do
-      %{} = dialog -> {:ok, dialog}
-      _ -> :error
-    end
-  end
-
-  defp latest_observed_dialog(_events), do: :error
-
-  defp dialog_matches_locator?(dialog, %Locator{value: expected, opts: locator_opts}) when is_map(dialog) do
-    actual = dialog["message"] || ""
-    match_opts = Keyword.take(locator_opts, [:exact, :normalize_ws])
-    Query.match_text?(actual, expected, match_opts)
-  end
-
-  defp raise_dialog_timeout!(locator, events) when is_list(events) do
-    observed_messages =
-      events
-      |> Enum.filter(&match?(%{"method" => "browsingContext.userPromptOpened"}, &1))
-      |> Enum.map(&Map.get(&1, "message"))
-      |> Enum.filter(&is_binary/1)
-      |> Enum.uniq()
-      |> Enum.sort()
-
-    raise AssertionError,
-      message:
-        "assert_dialog/3 timed out waiting for #{expected_dialog_text(locator)}; observed dialogs: #{inspect(observed_messages)}"
-  end
-
-  defp raise_dialog_timeout!(locator, _events) do
-    raise AssertionError,
-      message: "assert_dialog/3 timed out waiting for #{expected_dialog_text(locator)}; observed dialogs: []"
-  end
-
-  defp assert_dialog_text_match!(%Locator{value: expected, opts: locator_opts} = locator, %{} = dialog) do
-    actual = dialog["message"] || ""
-    match_opts = Keyword.take(locator_opts, [:exact, :normalize_ws])
-
-    if Query.match_text?(actual, expected, match_opts) do
-      :ok
-    else
-      raise AssertionError,
-        message: "assert_dialog/3 expected #{expected_dialog_text(locator)} but observed #{inspect(actual)}"
-    end
-  end
-
-  defp expected_dialog_text(%Locator{value: %Regex{} = expected}) do
-    "dialog text matching #{inspect(expected)}"
-  end
-
-  defp expected_dialog_text(%Locator{value: expected, opts: opts}) when is_binary(expected) do
-    if Keyword.get(opts, :exact, false) do
-      "dialog text #{inspect(expected)}"
-    else
-      "dialog text containing #{inspect(expected)}"
-    end
-  end
-
-  defp ensure_dialog_auto_accepted!(session, timeout_ms, dialog) do
-    params = dialog_prompt_params(session.tab_id, dialog["type"])
-    opts = Keyword.put(bidi_opts(session), :timeout, timeout_ms)
-
-    case BiDi.command("browsingContext.handleUserPrompt", params, opts) do
-      {:ok, _payload} ->
-        :ok
-
-      {:error, _reason, %{"error" => "no such alert"}} ->
-        :ok
-
-      {:error, reason, details} ->
-        raise ArgumentError,
-              "assert_dialog/3 failed to auto-accept observed dialog: #{reason} (#{inspect(details)})"
     end
   end
 
@@ -909,9 +748,6 @@ defmodule Cerberus.Driver.Browser.Extensions do
           "add_cookie/4 :same_site must be :lax, :strict, :none (or equivalent strings), got: #{inspect(value)}"
   end
 
-  defp dialog_prompt_params(context_id, "prompt"), do: %{"context" => context_id, "accept" => true, "userText" => ""}
-  defp dialog_prompt_params(context_id, _type), do: %{"context" => context_id, "accept" => true}
-
   defp await_download_match!(session, expected_filename, timeout_ms) do
     case UserContextProcess.await_download(session.user_context_pid, expected_filename, timeout_ms, session.tab_id) do
       {:ok, event} when is_map(event) ->
@@ -942,9 +778,6 @@ defmodule Cerberus.Driver.Browser.Extensions do
   defp bidi_opts(%Browser{bidi_opts: bidi_opts}) when is_list(bidi_opts), do: bidi_opts
 
   defp bidi_opts(_browser), do: []
-
-  defp normalize_positive_integer(value, _default) when is_integer(value) and value > 0, do: value
-  defp normalize_positive_integer(_value, default), do: default
 
   defp prepare_type_expression(selector, clear?) do
     encoded_selector = JSON.encode!(selector)

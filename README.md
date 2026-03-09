@@ -80,7 +80,7 @@ Use `~l` sigil shorthand for common one-liners:
 - text-like matches normalize whitespace by default (`normalize_ws: true`), including NBSP characters
 - set `normalize_ws: false` when you need exact raw whitespace matching
 
-Use `testid(...)` when text/role is ambiguous, and CSS for structural targeting only.
+Use `~l"..."t` when text/role is ambiguous, and `~l"..."c` only for structural targeting.
 
 For locator forms and advanced composition (`~l` modifiers, `and_`, `or_`, `not_`, `filter`, `closest`), see:
 - [Cheat Sheet](docs/cheatsheet.md)

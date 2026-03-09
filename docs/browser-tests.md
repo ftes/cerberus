@@ -72,7 +72,6 @@ config :cerberus, :browser,
   ready_quiet_ms: 40,
   bidi_command_timeout_ms: 5_000,
   runtime_http_timeout_ms: 9_000,
-  dialog_timeout_ms: 1_500,
   screenshot_full_page: false,
   screenshot_artifact_dir: "tmp/cerberus-artifacts/screenshots",
   headless: true,
@@ -94,7 +93,7 @@ Unified timeout defaults:
 Option scopes:
 - Per-session context options: `ready_timeout_ms`, `ready_quiet_ms`, `user_agent`, `browser: [viewport: ..., user_agent: ..., popup_mode: :allow | :same_tab, init_script: ... | init_scripts: [...]]`.
 - Global runtime launch options: `webdriver_url`, `chrome_webdriver_url`, `headless`, `slow_mo`, `chrome_args`, `chrome_binary`, `chromedriver_binary`.
-- Global browser defaults: `bidi_command_timeout_ms`, `runtime_http_timeout_ms`, `dialog_timeout_ms`, `screenshot_full_page`, `screenshot_artifact_dir`, `screenshot_path`.
+- Global browser defaults: `bidi_command_timeout_ms`, `runtime_http_timeout_ms`, `screenshot_full_page`, `screenshot_artifact_dir`, `screenshot_path`.
 
 Set `headless: false` to run headed mode.
 Use `slow_mo` (milliseconds) to pace browser commands for debugging.

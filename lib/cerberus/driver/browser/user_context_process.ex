@@ -156,31 +156,6 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(pid, {:download_events_tab, tab_id})
   end
 
-  @spec dialog_events(pid()) :: [Types.payload()]
-  def dialog_events(pid) when is_pid(pid) do
-    GenServer.call(pid, {:dialog_events_tab, nil})
-  end
-
-  @spec dialog_events(pid(), String.t() | nil) :: [Types.payload()]
-  def dialog_events(pid, tab_id) when is_pid(pid) do
-    GenServer.call(pid, {:dialog_events_tab, tab_id})
-  end
-
-  @spec active_dialog(pid()) :: Types.payload() | nil
-  def active_dialog(pid) when is_pid(pid) do
-    GenServer.call(pid, {:active_dialog_tab, nil})
-  end
-
-  @spec active_dialog(pid(), String.t() | nil) :: Types.payload() | nil
-  def active_dialog(pid, tab_id) when is_pid(pid) do
-    GenServer.call(pid, {:active_dialog_tab, tab_id})
-  end
-
-  @spec clear_dialog_state(pid(), String.t() | nil) :: :ok | {:error, String.t(), map()}
-  def clear_dialog_state(pid, tab_id \\ nil) when is_pid(pid) do
-    GenServer.call(pid, {:clear_dialog_state_tab, tab_id})
-  end
-
   @spec await_download(pid(), String.t(), pos_integer()) ::
           {:ok, Types.payload()} | {:error, :timeout, [Types.payload()]} | {:error, String.t(), map()}
   def await_download(pid, expected_filename, timeout_ms)
@@ -199,22 +174,6 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(
       pid,
       {:await_download_tab, tab_id, expected_filename, timeout_ms},
-      timeout_ms + @call_timeout_padding_ms
-    )
-  end
-
-  @spec await_dialog_open(pid(), pos_integer()) ::
-          {:ok, Types.payload()} | {:error, :timeout, [Types.payload()]} | {:error, String.t(), map()}
-  def await_dialog_open(pid, timeout_ms) when is_pid(pid) and is_integer(timeout_ms) and timeout_ms > 0 do
-    GenServer.call(pid, {:await_dialog_open_tab, nil, timeout_ms}, timeout_ms + @call_timeout_padding_ms)
-  end
-
-  @spec await_dialog_open(pid(), pos_integer(), String.t() | nil) ::
-          {:ok, Types.payload()} | {:error, :timeout, [Types.payload()]} | {:error, String.t(), map()}
-  def await_dialog_open(pid, timeout_ms, tab_id) when is_pid(pid) and is_integer(timeout_ms) and timeout_ms > 0 do
-    GenServer.call(
-      pid,
-      {:await_dialog_open_tab, tab_id, timeout_ms},
       timeout_ms + @call_timeout_padding_ms
     )
   end
@@ -467,50 +426,10 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     end
   end
 
-  def handle_call({:dialog_events_tab, tab_id}, _from, state) do
-    case browsing_context_pid(state, tab_id) do
-      {:ok, pid} ->
-        {:reply, BrowsingContextProcess.dialog_events(pid), state}
-
-      {:error, _reason, _details} ->
-        {:reply, [], state}
-    end
-  end
-
-  def handle_call({:active_dialog_tab, tab_id}, _from, state) do
-    case browsing_context_pid(state, tab_id) do
-      {:ok, pid} ->
-        {:reply, BrowsingContextProcess.active_dialog(pid), state}
-
-      {:error, _reason, _details} ->
-        {:reply, nil, state}
-    end
-  end
-
-  def handle_call({:clear_dialog_state_tab, tab_id}, _from, state) do
-    case browsing_context_pid(state, tab_id) do
-      {:ok, pid} ->
-        {:reply, BrowsingContextProcess.clear_dialog_state(pid), state}
-
-      {:error, reason, details} ->
-        {:reply, {:error, reason, details}, state}
-    end
-  end
-
   def handle_call({:await_download_tab, tab_id, expected_filename, timeout_ms}, _from, state) do
     case browsing_context_pid(state, tab_id) do
       {:ok, pid} ->
         {:reply, BrowsingContextProcess.await_download(pid, expected_filename, timeout_ms), state}
-
-      {:error, reason, details} ->
-        {:reply, {:error, reason, details}, state}
-    end
-  end
-
-  def handle_call({:await_dialog_open_tab, tab_id, timeout_ms}, _from, state) do
-    case browsing_context_pid(state, tab_id) do
-      {:ok, pid} ->
-        {:reply, BrowsingContextProcess.await_dialog_open(pid, timeout_ms), state}
 
       {:error, reason, details} ->
         {:reply, {:error, reason, details}, state}

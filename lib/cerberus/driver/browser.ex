@@ -5,7 +5,6 @@ defmodule Cerberus.Driver.Browser do
 
   alias Cerberus.Browser.Native, as: BrowserNative
   alias Cerberus.Driver.Browser.Config
-  alias Cerberus.Driver.Browser.Evaluate
   alias Cerberus.Driver.Browser.Expressions
   alias Cerberus.Driver.Browser.Extensions
   alias Cerberus.Driver.Browser.UserContextProcess
@@ -1176,7 +1175,7 @@ defmodule Cerberus.Driver.Browser do
   defp eval_json_read(state, expression, timeout_ms)
 
   defp eval_json_read(state, expression, timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
-    evaluate_result = evaluate_json_read_with_dialog_awareness(state, expression, timeout_ms)
+    evaluate_result = evaluate_json_read_direct(state, expression, timeout_ms)
 
     with {:ok, result} <- evaluate_result,
          {:ok, json} <-
@@ -1191,20 +1190,6 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp evaluate_json_read_with_dialog_awareness(state, expression, timeout_ms) do
-    if blocking_dialog_open?(state) do
-      evaluate_json_read_with_dialog_unblock(state, expression, timeout_ms)
-    else
-      case evaluate_json_read_direct(state, expression, timeout_ms) do
-        {:error, _reason, _details} = error ->
-          maybe_retry_eval_json_read_with_dialog_unblock(state, expression, timeout_ms, error)
-
-        other ->
-          other
-      end
-    end
-  end
-
   defp evaluate_json_read_direct(state, expression, timeout_ms) do
     Profiling.measure({:browser_wait, :evaluate_direct}, fn ->
       UserContextProcess.evaluate_with_timeout(
@@ -1214,30 +1199,6 @@ defmodule Cerberus.Driver.Browser do
         state.tab_id
       )
     end)
-  end
-
-  defp evaluate_json_read_with_dialog_unblock(state, expression, timeout_ms) do
-    Profiling.measure({:browser_wait, :evaluate_direct_dialog_fallback}, fn ->
-      Evaluate.with_dialog_unblock(
-        state.user_context_pid,
-        state.tab_id,
-        expression,
-        timeout_ms,
-        bidi_opts(state)
-      )
-    end)
-  end
-
-  defp maybe_retry_eval_json_read_with_dialog_unblock(state, expression, timeout_ms, {:error, _reason, _details} = error) do
-    if blocking_dialog_open?(state) do
-      evaluate_json_read_with_dialog_unblock(state, expression, timeout_ms)
-    else
-      error
-    end
-  end
-
-  defp blocking_dialog_open?(state) do
-    match?(%{}, UserContextProcess.active_dialog(state.user_context_pid, state.tab_id))
   end
 
   defp decode_remote_json(%{"result" => %{"type" => "string", "value" => payload}}) when is_binary(payload) do

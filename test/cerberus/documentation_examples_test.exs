@@ -21,9 +21,9 @@ defmodule Cerberus.DocumentationExamplesTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/articles")
-      |> assert_has(text("Articles", exact: true))
-      |> click(role(:link, name: "Counter"))
-      |> assert_has(text("Count: 0", exact: true))
+      |> assert_has(~l"Articles"e)
+      |> click(~l"link:Counter"r)
+      |> assert_has(~l"Count: 0"e)
     end
 
     test "form plus path flow from docs works across auto and browser (#{driver})", context do
@@ -31,19 +31,19 @@ defmodule Cerberus.DocumentationExamplesTest do
       |> driver_session(context)
       |> visit("/search")
       |> fill_in(~l"Search term"l, "Aragorn")
-      |> submit(role(:button, name: "Run Search"))
+      |> submit(~l"button:Run Search"r)
       |> assert_path("/search/results", query: %{q: "Aragorn"})
-      |> assert_has(text("Search query: Aragorn", exact: true))
+      |> assert_has(~l"Search query: Aragorn"e)
     end
 
     test "scoped navigation flow from docs works across auto and browser (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/scoped")
-      |> within(css("#secondary-panel"), fn scoped ->
+      |> within(~l"#secondary-panel"c, fn scoped ->
         scoped
-        |> assert_has(text("Status: secondary", exact: true))
-        |> click(role(:link, name: "Open"))
+        |> assert_has(~l"Status: secondary"e)
+        |> click(~l"link:Open"r)
       end)
       |> assert_path("/search")
     end
@@ -53,19 +53,19 @@ defmodule Cerberus.DocumentationExamplesTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/session/user/alice")
-        |> assert_has(text("Session user: alice", exact: true))
+        |> assert_has(~l"Session user: alice"e)
 
       _tab2 =
         primary
         |> open_tab()
         |> visit("/session/user")
-        |> assert_has(text("Session user: alice", exact: true))
+        |> assert_has(~l"Session user: alice"e)
 
       unquote(driver)
       |> isolated_driver_session(context)
       |> visit("/session/user")
-      |> assert_has(text("Session user: unset", exact: true))
-      |> refute_has(text("Session user: alice", exact: true))
+      |> assert_has(~l"Session user: unset"e)
+      |> refute_has(~l"Session user: alice"e)
     end
   end
 
@@ -73,7 +73,7 @@ defmodule Cerberus.DocumentationExamplesTest do
     :phoenix
     |> session()
     |> visit("/live/async_page")
-    |> assert_has(text("Title loaded async"), timeout: 500)
+    |> assert_has(~l"Title loaded async"e, timeout: 500)
   end
 
   test "browser extension snippet from docs works", context do
@@ -81,18 +81,10 @@ defmodule Cerberus.DocumentationExamplesTest do
       :browser
       |> driver_session(context)
       |> visit("/browser/extensions")
-      |> type(css("#keyboard-input"), "hello")
-      |> press(css("#press-input"), "Enter")
+      |> type(~l"#keyboard-input"c, "hello")
+      |> press(~l"#press-input"c, "Enter")
 
-    evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), 10)", fn _ ->
-      :ok
-    end)
-
-    session = assert_dialog(session, text("Delete item?", exact: true))
-
-    session
-    |> assert_has(text("Press result: submitted", exact: true))
-    |> assert_has(text("Dialog result: confirmed", exact: true))
+    assert_has(session, ~l"Press result: submitted"e)
   end
 
   test "browser evaluate_js callback snippet from docs works", context do

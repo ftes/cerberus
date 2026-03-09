@@ -55,7 +55,7 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   @tag :tmp_dir
-  test "screenshot + keyboard + dialog + drag browser extensions work together", %{
+  test "screenshot + keyboard + drag browser extensions work together", %{
     tmp_dir: tmp_dir,
     browser_session: browser_session
   } do
@@ -71,9 +71,6 @@ defmodule Cerberus.BrowserExtensionsTest do
       |> type(css("#keyboard-input"), "hello browser")
       |> press(css("#press-input"), "Enter")
 
-    evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), 10)", fn _ -> :ok end)
-    session = assert_dialog(session, text("Delete item?", exact: true))
-
     assert File.exists?(path)
 
     assert evaluate_js(session, "document.querySelector('#keyboard-input').value", fn value ->
@@ -87,7 +84,6 @@ defmodule Cerberus.BrowserExtensionsTest do
     session = drag(session, "#drag-source", "#drop-target")
 
     assert_has(session, text("Press result: submitted", exact: true))
-    assert_has(session, text("Dialog result: confirmed", exact: true))
     assert_has(session, text("Drag result: dropped", exact: true))
 
     png = File.read!(path)
@@ -250,10 +246,6 @@ defmodule Cerberus.BrowserExtensionsTest do
       drag(session, "#drag-source", "#drop-target", timeout: -1)
     end
 
-    assert_raise ArgumentError, ~r/Browser.assert_dialog\/3 invalid options/, fn ->
-      assert_dialog(session, text("Delete item?"), accept: :yes)
-    end
-
     assert_raise ArgumentError, ~r/Browser.with_popup\/4 invalid options/, fn ->
       with_popup(session, fn scoped -> scoped end, fn _main, _popup -> :ok end, timeout: 0)
     end
@@ -407,49 +399,12 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert UserContextProcess.active_tab(session.user_context_pid) == session.tab_id
   end
 
-  test "assert_dialog handles a dialog that is already open", %{browser_session: browser_session} do
-    session = browser_fixture_session(browser_session, "/browser/extensions")
-
-    trigger_confirm_dialog(session)
-    Process.sleep(25)
-
-    assert_dialog(session, text("Delete item?", exact: true))
-    assert_has(session, text("Dialog result: confirmed", exact: true))
-  end
-
-  test "assert_dialog waits for a dialog that opens after assertion starts", %{browser_session: browser_session} do
-    session = browser_fixture_session(browser_session, "/browser/extensions")
-
-    trigger_confirm_dialog(session, 30)
-    assert_dialog(session, text("Delete item?", exact: true))
-    assert_has(session, text("Dialog result: confirmed", exact: true))
-  end
-
-  test "assertion operations complete when a blocking prompt dialog is already open", %{browser_session: browser_session} do
-    session = browser_fixture_session(browser_session, "/browser/extensions")
-
-    trigger_prompt_dialog(session)
-    Process.sleep(50)
-
-    session = assert_has(session, text("Browser Extensions", exact: true), timeout: 500)
-    assert_prompt_result(session, "Prompt result: ")
-  end
-
-  test "assertion operations complete when a blocking alert dialog is already open", %{browser_session: browser_session} do
-    session = browser_fixture_session(browser_session, "/browser/extensions")
-
-    trigger_alert_dialog(session)
-    Process.sleep(50)
-
-    session = assert_has(session, text("Browser Extensions", exact: true), timeout: 500)
-    assert_has(session, text("Alert result: acknowledged", exact: true))
-  end
-
   test "assert_download matches download emitted before assertion call and keeps events non-consuming", %{
-    browser_session: browser_session
+    browser_session: _browser_session
   } do
     session =
-      browser_session
+      :browser
+      |> session()
       |> browser_fixture_session("/browser/extensions")
       |> click(role(:link, name: "Download Report"))
 
@@ -457,8 +412,8 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_download(session, "report.txt")
   end
 
-  test "assert_download waits for download emitted after assertion starts", %{browser_session: browser_session} do
-    session = browser_fixture_session(browser_session, "/browser/extensions")
+  test "assert_download waits for download emitted after assertion starts", %{browser_session: _browser_session} do
+    session = browser_fixture_session(session(:browser), "/browser/extensions")
 
     evaluate_js(session, "setTimeout(() => document.getElementById('download-report')?.click(), 30)", fn _ -> :ok end)
     assert_download(session, "report.txt", timeout: 1_500)
@@ -535,91 +490,9 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert error.message =~ "report"
   end
 
-  test "assert_dialog raises when observed dialog message does not match expected text", %{
-    browser_session: browser_session
-  } do
-    session = browser_fixture_session(browser_session, "/browser/extensions")
-
-    trigger_confirm_dialog(session)
-    Process.sleep(25)
-
-    error =
-      assert_raise AssertionError, fn ->
-        assert_dialog(session, text("Different message", exact: true))
-      end
-
-    assert error.message =~ ~s(expected dialog text "Different message")
-    assert error.message =~ ~s(observed "Delete item?")
-    assert_has(session, text("Dialog result: confirmed", exact: true))
-  end
-
-  test "assert_dialog times out when no dialog opens", %{browser_session: browser_session} do
-    session = browser_fixture_session(browser_session, "/browser/extensions")
-
-    error =
-      assert_raise AssertionError, fn ->
-        assert_dialog(session, text("Delete item?", exact: true), timeout: 25)
-      end
-
-    assert error.message =~ "assert_dialog/3 timed out waiting for dialog text \"Delete item?\""
-  end
-
-  test "assert_dialog supports prompt dialogs with auto-accepted empty input", %{browser_session: browser_session} do
-    session = browser_fixture_session(browser_session, "/browser/extensions")
-
-    trigger_prompt_dialog(session, 30)
-    assert_dialog(session, text("Type value", exact: true))
-    assert_prompt_result(session, "Prompt result: ")
-  end
-
-  test "assert_dialog supports alert dialogs", %{browser_session: browser_session} do
-    session = browser_fixture_session(browser_session, "/browser/extensions")
-
-    trigger_alert_dialog(session, 30)
-    assert_dialog(session, text("Heads up!", exact: true))
-    assert_has(session, text("Alert result: acknowledged", exact: true))
-  end
-
-  test "assert_dialog rejects explicit dialog control options", %{browser_session: browser_session} do
-    session = browser_fixture_session(browser_session, "/browser/extensions")
-
-    assert_raise ArgumentError, ~r/Browser.assert_dialog\/3 invalid options/, fn ->
-      assert_dialog(session, text("Delete item?"), accept: true)
-    end
-
-    assert_raise ArgumentError, ~r/Browser.assert_dialog\/3 invalid options/, fn ->
-      assert_dialog(session, text("Delete item?"), prompt_text: "42")
-    end
-  end
-
-  defp trigger_confirm_dialog(session, delay_ms \\ 0) when is_integer(delay_ms) and delay_ms >= 0 do
-    evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), #{delay_ms})", fn _ ->
-      :ok
-    end)
-  end
-
-  defp trigger_prompt_dialog(session, delay_ms \\ 0) when is_integer(delay_ms) and delay_ms >= 0 do
-    evaluate_js(session, "setTimeout(() => document.getElementById('prompt-dialog')?.click(), #{delay_ms})", fn _ ->
-      :ok
-    end)
-  end
-
-  defp trigger_alert_dialog(session, delay_ms \\ 0) when is_integer(delay_ms) and delay_ms >= 0 do
-    evaluate_js(session, "setTimeout(() => document.getElementById('alert-dialog')?.click(), #{delay_ms})", fn _ ->
-      :ok
-    end)
-  end
-
-  defp assert_prompt_result(session, expected) when is_binary(expected) do
-    evaluate_js(session, "document.getElementById('prompt-result')?.textContent", fn value ->
-      assert value == expected
-    end)
-  end
-
   defp browser_fixture_session(%Browser{} = session, path) when is_binary(path) do
     session
     |> reset_browser_tabs!()
-    |> clear_dialog_state!()
     |> clear_cookies()
     |> visit(path)
   end
@@ -658,10 +531,5 @@ defmodule Cerberus.BrowserExtensionsTest do
         active_form_selector: nil,
         scope: nil
     }
-  end
-
-  defp clear_dialog_state!(%Browser{} = session) do
-    :ok = UserContextProcess.clear_dialog_state(session.user_context_pid, session.tab_id)
-    session
   end
 end

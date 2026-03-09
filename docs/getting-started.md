@@ -131,7 +131,7 @@ Use `testid` when text/role cannot disambiguate reliably:
 ```elixir
 session()
 |> visit("/live/selector-edge")
-|> click(testid("apply-secondary-button"))
+|> click(~l"apply-secondary-button"t)
 |> assert_has(~l"Selected: secondary"e)
 ```
 
@@ -186,19 +186,19 @@ session() # or session(conn)
 You can compose locators when simple label/role/testid matching is not enough.
 
 Common advanced patterns:
-- scope chaining (descendant query): `css("#search-form") |> role(:button, name: "Run Search")`
-- same-element intersection: `and_(role(:button, name: "Run Search"), testid("submit-secondary-button"))`
-- descendant requirement: `role(:button, name: "Run Search") |> filter(has: testid("submit-secondary-marker"))`
-- descendant exclusion: `role(:button, name: "Run Search") |> filter(has_not: testid("submit-secondary-marker"))`
-- visibility constraint: `role(:button, name: "Run Search") |> filter(visible: true)`
-- OR alternatives: `or_(css("#primary"), css("#secondary"))`
-- boolean algebra: `and_(role(:button, name: "Run Search"), not_(testid("submit-secondary-button")))`
-- negated conjunction: `not_(and_(role(:button, name: "Run Search"), testid("submit-secondary-button")))`
+- scope chaining (descendant query): `~l"#search-form"c |> scope(~l"button:Run Search"r)`
+- same-element intersection: `and_(~l"button:Run Search"r, ~l"submit-secondary-button"t)`
+- descendant requirement: `~l"button:Run Search"r |> filter(has: ~l"submit-secondary-marker"t)`
+- descendant exclusion: `~l"button:Run Search"r |> filter(has_not: ~l"submit-secondary-marker"t)`
+- visibility constraint: `~l"button:Run Search"r |> filter(visible: true)`
+- OR alternatives: `or_(~l"#primary"c, ~l"#secondary"c)`
+- boolean algebra: `and_(~l"button:Run Search"r, not_(~l"submit-secondary-button"t))`
+- negated conjunction: `not_(and_(~l"button:Run Search"r, ~l"submit-secondary-button"t))`
 
 ```elixir
 session()
 |> visit("/live/selector-edge")
-|> click(and_(role(:button, name: "Apply"), testid("apply-secondary-button")))
+|> click(and_(~l"button:Apply"r, ~l"apply-secondary-button"t))
 |> assert_has(~l"Selected: secondary"e)
 ```
 
@@ -255,19 +255,12 @@ import Cerberus.Browser
 session =
   session(:browser)
   |> visit("/browser/extensions")
-  |> type(css("#keyboard-input"), "hello")
-  |> press(css("#press-input"), "Enter")
-
-evaluate_js(session, "setTimeout(() => document.getElementById('confirm-dialog')?.click(), 10)", fn _ -> :ok end)
+  |> type(~l"#keyboard-input"c, "hello")
+  |> press(~l"#press-input"c, "Enter")
 evaluate_js(session, "window.__cerberusMarker = 'ready'")
-
-session =
-  session
-  |> assert_dialog(~l"Delete item?"e)
 
 session
 |> assert_has(~l"Press result: submitted"e)
-|> assert_has(~l"Dialog result: cancelled"e)
 
 png =
   screenshot(session, path: "tmp/extensions.png", return_result: true)

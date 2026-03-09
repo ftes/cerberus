@@ -78,29 +78,29 @@ Default strategy:
 | Click a link | role + name | `click(session, ~l"link:Billing"r)` |
 | Assert rendered content | visible text | `assert_has(session, ~l"Settings saved"e)` |
 | Operate inside repeated UI | scope + same locators | `within(session, ~l"#shipping-address"c, fn s -> fill_in(s, ~l"City"l, "Berlin") end)` |
-| Disambiguate duplicate controls | `testid` | `click(session, testid("apply-secondary-button"))` |
+| Disambiguate duplicate controls | `testid` | `click(session, ~l"apply-secondary-button"t)` |
 
 ### Supported role aliases
 - Click/assert roles: `button`, `menuitem`, `tab`, `link`, `heading`, `img`
 - Form-control roles: `textbox`, `searchbox`, `combobox`, `listbox`, `spinbutton`, `checkbox`, `radio`, `switch`
 
 ### Helper constructors
-- `text("...")`
+- `~l"..."e`
 - `~l"..."l`
-- `testid("...")`
-- `css("...")`
-- `role(:button | :link | :textbox | ..., name: "...")`
+- `~l"..."t`
+- `~l"..."c`
+- `~l"button:..."r`
 
 ### Composition (advanced)
-- scope chaining (descendant query): `css("#actions") |> role(:button, name: "Apply")`
-- same-element AND intersection: `and_(role(:button, name: "Apply"), testid("apply-secondary-button"))`
-- descendant requirement: `role(:button, name: "Apply") |> filter(has: testid("apply-secondary-marker"))`
-- descendant exclusion: `role(:button, name: "Apply") |> filter(has_not: testid("apply-secondary-marker"))`
-- visibility constraint: `role(:button, name: "Apply") |> filter(visible: true)`
-- alternatives (OR): `or_(css("#primary"), css("#secondary"))`
-- boolean algebra: `and_(role(:button, name: "Apply"), not_(testid("apply-secondary-button")))`
-- negated conjunction: `not_(and_(role(:button, name: "Apply"), testid("apply-secondary-button")))`
-- nearest ancestor scope: `closest(css(".fieldset"), from: ~l"Email"le)`
+- scope chaining (descendant query): `~l"#actions"c |> scope(~l"button:Apply"r)`
+- same-element AND intersection: `and_(~l"button:Apply"r, ~l"apply-secondary-button"t)`
+- descendant requirement: `~l"button:Apply"r |> filter(has: ~l"apply-secondary-marker"t)`
+- descendant exclusion: `~l"button:Apply"r |> filter(has_not: ~l"apply-secondary-marker"t)`
+- visibility constraint: `~l"button:Apply"r |> filter(visible: true)`
+- alternatives (OR): `or_(~l"#primary"c, ~l"#secondary"c)`
+- boolean algebra: `and_(~l"button:Apply"r, not_(~l"apply-secondary-button"t))`
+- negated conjunction: `not_(and_(~l"button:Apply"r, ~l"apply-secondary-button"t))`
+- nearest ancestor scope: `closest(~l".fieldset"c, from: ~l"Email"le)`
 
 ### Sigil `~l`
 
@@ -123,7 +123,7 @@ Rules:
 - text-like matching normalizes whitespace by default (`normalize_ws: true`), including NBSP characters
 - use `normalize_ws: false` to require exact raw whitespace matching
 
-Use `role(..., name: ...)` for supported accessible-name matching on buttons, links, headings, and similar non-form elements.
+Use `~l"ROLE:NAME"r` for supported accessible-name matching on buttons, links, headings, and similar non-form elements.
 
 ## Browser-Only Extensions
 
@@ -134,11 +134,9 @@ Use `Cerberus.Browser` only with `session(:browser)`.
 | Screenshot | `Browser.screenshot(session, path: "tmp/page.png")` |
 | Screenshot binary result | `png = Browser.screenshot(session, path: "tmp/page.png", return_result: true)` |
 | Screenshot + open viewer | `Browser.screenshot(session, path: "tmp/page.png", open: true)` |
-| Type keys | `Browser.type(session, css("#input"), "hello")` |
-| Press key | `Browser.press(session, css("#input"), "Enter")` |
+| Type keys | `Browser.type(session, ~l"#input"c, "hello")` |
+| Press key | `Browser.press(session, ~l"#input"c, "Enter")` |
 | Drag and drop | `Browser.drag(session, "#drag-source", "#drop-target")` |
-| Dialog assert + dismiss | `Browser.assert_dialog(session, ~l"Delete item?"e)` |
-| Dialog assert + confirm | `Browser.assert_dialog(session, ~l"Delete item?"e, accept: true)` |
 | Popup capture | `session` \|> `Browser.with_popup(fn main -> click(main, ~l"button:Open Popup"r) end, fn _main, popup -> assert_path(popup, "/browser/popup/destination") end)` |
 | Popup same-tab fallback | `session(:browser, browser: [popup_mode: :same_tab])` \|> `visit("/browser/popup/auto")` \|> `assert_path("/browser/popup/destination", timeout: 1500)` |
 | Assert download (browser/static/live) | `session` \|> `click(~l"link:Download Report"r)` \|> `assert_download("report.txt")` |

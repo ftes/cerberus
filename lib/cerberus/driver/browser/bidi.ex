@@ -13,9 +13,7 @@ defmodule Cerberus.Driver.Browser.BiDi do
     "browsingContext.domContentLoaded",
     "browsingContext.load",
     "browsingContext.downloadWillBegin",
-    "browsingContext.downloadEnd",
-    "browsingContext.userPromptOpened",
-    "browsingContext.userPromptClosed"
+    "browsingContext.downloadEnd"
   ]
 
   @type state :: %{

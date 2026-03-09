@@ -28,7 +28,6 @@ defmodule Cerberus.Browser do
   @type_args_error "Browser.type/4 expects locator, text as a string, and options as a keyword list"
   @press_args_error "Browser.press/4 expects locator, key as a string, and options as a keyword list"
   @drag_args_error "Browser.drag/4 expects source and target selectors as strings and options as a keyword list"
-  @assert_dialog_args_error "Browser.assert_dialog/3 expects a text locator and options as a keyword list"
   @with_popup_args_error "Browser.with_popup/4 expects trigger callback arity 1, callback arity 2, and options as a keyword list"
   @add_cookie_args_error "Browser.add_cookie/4 expects cookie name and value strings and options as a keyword list"
   @add_cookies_args_error "Browser.add_cookies/2 expects a list of cookie keyword lists"
@@ -38,7 +37,6 @@ defmodule Cerberus.Browser do
   @type_options_doc NimbleOptions.docs(Options.browser_type_schema())
   @press_options_doc NimbleOptions.docs(Options.browser_press_schema())
   @drag_options_doc NimbleOptions.docs(Options.browser_drag_schema())
-  @assert_dialog_options_doc NimbleOptions.docs(Options.browser_assert_dialog_schema())
   @with_popup_options_doc NimbleOptions.docs(Options.browser_with_popup_schema())
   @add_cookie_options_doc NimbleOptions.docs(Options.browser_add_cookie_schema())
   @clear_cookies_options_doc NimbleOptions.docs(Options.browser_clear_cookies_schema())
@@ -197,37 +195,6 @@ defmodule Cerberus.Browser do
         :invalid_args
       end
     end)
-  end
-
-  @doc """
-  Asserts that a dialog matching the text locator was observed.
-
-  `assert_dialog/3` matches dialog text from the active dialog or recently observed
-  dialog events, then auto-accepts the observed dialog. Prompt dialogs are
-  auto-accepted with an empty string input.
-
-  ## Options
-
-  #{@assert_dialog_options_doc}
-  """
-  @spec assert_dialog(session, Locator.t(), Options.browser_assert_dialog_opts()) :: session when session: var
-  def assert_dialog(session, locator, opts \\ [])
-
-  def assert_dialog(session, locator, opts) do
-    browser_only(
-      session,
-      :assert_dialog,
-      opts,
-      @assert_dialog_args_error,
-      &Options.validate_browser_assert_dialog!/1,
-      fn browser_session, validated_opts ->
-        if locator.kind == :text do
-          {:ok, Extensions.assert_dialog(browser_session, locator, validated_opts)}
-        else
-          :invalid_args
-        end
-      end
-    )
   end
 
   @doc """
