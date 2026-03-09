@@ -102,7 +102,7 @@ defmodule Cerberus.DocumentationExamplesTest do
   test "browser evaluate_js callback snippet from docs works", context do
     session =
       :browser
-      |> isolated_driver_session(context)
+      |> driver_session(context)
       |> visit("/articles")
       |> evaluate_js("document.body.dataset.cerberus = 'ready'", fn _result -> :ok end)
 
