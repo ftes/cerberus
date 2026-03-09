@@ -156,9 +156,9 @@ defmodule Cerberus.FormActionsTest do
     |> refute_has(and_(css("#form-data"), text("this input will now be removed", exact: false)))
   end
 
-  test "submit/1 parity for no-button live forms in browser driver" do
+  test "submit/1 parity for no-button live forms in browser driver", context do
     :browser
-    |> session()
+    |> driver_session(context)
     |> visit("/live/form-change")
     |> fill_in(~l"No button name"l, "Arnor")
     |> submit()
