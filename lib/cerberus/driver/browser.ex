@@ -401,7 +401,7 @@ defmodule Cerberus.Driver.Browser do
       selector when is_binary(selector) and selector != "" ->
         case do_resolved_submit(session, state, "", match_by: :button, scope_selector: selector) do
           {:error, failed_session, observed, "no submit button matched locator"} ->
-            {:error, failed_session, observed, "submit/1 could not find a submit button in the active form"}
+            submit_active_form_without_button(session, failed_session, state, observed, selector)
 
           other ->
             other
@@ -547,6 +547,44 @@ defmodule Cerberus.Driver.Browser do
 
       {:error, _failed_session, _observed, _reason} = error ->
         error
+    end
+  end
+
+  defp submit_active_form_without_button(session, _failed_session, state, _observed, selector) do
+    timeout_ms = action_timeout_ms(session, [])
+
+    case eval_json_action_with_transient_retry(state, timeout_ms, fn _remaining_timeout_ms ->
+           Expressions.active_form_submit(selector)
+         end) do
+      {:ok, %{"ok" => true} = result} ->
+        submit_result(session, state, Map.get(result, "target", %{"kind" => "form", "text" => ""}), result, [])
+
+      {:ok, %{"reason" => "submit target form must have a `phx-submit` or `action` defined"}} ->
+        observed = %{
+          action: :submit,
+          path: current_path_or_nil(state),
+          target: %{"kind" => "form", "formSelector" => selector}
+        }
+
+        {:error, session, observed, "submit target form must have a `phx-submit` or `action` defined"}
+
+      {:ok, _result} ->
+        observed = %{
+          action: :submit,
+          path: current_path_or_nil(state),
+          target: %{"kind" => "form", "formSelector" => selector}
+        }
+
+        {:error, session, observed, "submit/1 could not find a submit button in the active form"}
+
+      {:error, _reason, _details} ->
+        observed = %{
+          action: :submit,
+          path: current_path_or_nil(state),
+          target: %{"kind" => "form", "formSelector" => selector}
+        }
+
+        {:error, session, observed, "submit/1 could not find a submit button in the active form"}
     end
   end
 

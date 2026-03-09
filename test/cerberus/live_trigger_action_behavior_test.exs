@@ -121,7 +121,6 @@ defmodule Cerberus.LiveTriggerActionBehaviorTest do
     |> assert_has(text("method: POST", exact: true))
   end
 
-  @tag skip: "browser data-method button parity bug"
   test "data-method buttons on live pages submit to static endpoints (browser)", context do
     context.shared_browser_session
     |> visit("/live/trigger-action")

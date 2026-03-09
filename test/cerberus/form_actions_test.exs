@@ -156,7 +156,6 @@ defmodule Cerberus.FormActionsTest do
     |> refute_has(and_(css("#form-data"), text("this input will now be removed", exact: false)))
   end
 
-  @tag skip: "browser submit-active-form-no-button parity bug"
   test "submit/1 parity for no-button live forms in browser driver" do
     :browser
     |> session()

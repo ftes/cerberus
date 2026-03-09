@@ -425,29 +425,6 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_has(session, text("Dialog result: confirmed", exact: true))
   end
 
-  @tag skip: "browser actions no longer auto-unblock dialogs"
-  test "click action completes when clicked target opens a blocking prompt dialog" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
-      |> click(role(:button, name: "Open Prompt Dialog", exact: true))
-
-    assert_prompt_result(session, "Prompt result: ")
-  end
-
-  @tag skip: "browser actions no longer auto-unblock dialogs"
-  test "click action completes when clicked target opens a blocking confirm dialog" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/extensions")
-      |> click(role(:button, name: "Open Confirm Dialog", exact: true))
-
-    assert_dialog(session, text("Delete item?", exact: true))
-    assert_has(session, text("Dialog result: confirmed", exact: true))
-  end
-
   test "assertion operations complete when a blocking prompt dialog is already open", %{browser_session: browser_session} do
     session = browser_fixture_session(browser_session, "/browser/extensions")
 

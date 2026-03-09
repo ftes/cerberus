@@ -127,6 +127,76 @@ defmodule Cerberus.Driver.Browser.Expressions do
     """
   end
 
+  @spec active_form_submit(String.t()) :: String.t()
+  def active_form_submit(form_selector) when is_binary(form_selector) do
+    encoded_selector = JSON.encode!(form_selector)
+
+    """
+    (() => {
+      const selector = #{encoded_selector};
+      const form =
+        typeof document.querySelector === "function" && selector !== ""
+          ? document.querySelector(selector)
+          : null;
+
+      if (!form || (form.tagName || "").toLowerCase() !== "form") {
+        return JSON.stringify({
+          ok: false,
+          reason: "submit_target_failed",
+          path: #{current_path_expression()}
+        });
+      }
+
+      const submitsLive =
+        typeof form.hasAttribute === "function" &&
+          (form.hasAttribute("phx-submit") || form.hasAttribute("data-phx-submit"));
+      const action =
+        typeof form.getAttribute === "function"
+          ? String(form.getAttribute("action") || "").trim()
+          : "";
+
+      if (!submitsLive && action === "") {
+        return JSON.stringify({
+          ok: false,
+          reason: "submit target form must have a `phx-submit` or `action` defined",
+          path: #{current_path_expression()}
+        });
+      }
+
+      try {
+        if (typeof form.requestSubmit === "function") {
+          form.requestSubmit();
+        } else if (submitsLive) {
+          const event = new Event("submit", { bubbles: true, cancelable: true });
+          form.dispatchEvent(event);
+        } else if (typeof form.submit === "function") {
+          form.submit();
+        } else {
+          throw new Error("form could not be submitted");
+        }
+
+        return JSON.stringify({
+          ok: true,
+          path: #{current_path_expression()},
+          submitsLive,
+          target: {
+            kind: "form",
+            text: "",
+            formSelector: selector
+          }
+        });
+      } catch (error) {
+        return JSON.stringify({
+          ok: false,
+          reason: "submit_target_failed",
+          message: String(error && error.message ? error.message : error),
+          path: #{current_path_expression()}
+        });
+      }
+    })()
+    """
+  end
+
   @spec text_assertion(map()) :: String.t()
   def text_assertion(payload) when is_map(payload) do
     encoded_payload = JSON.encode!(payload)
