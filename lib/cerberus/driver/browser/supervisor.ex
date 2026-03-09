@@ -14,11 +14,12 @@ defmodule Cerberus.Driver.Browser.Supervisor do
   def init(_opts) do
     children = [
       {Cerberus.Driver.Browser.Runtime, []},
+      {Cerberus.Driver.Browser.BiDiSupervisor, []},
       {DynamicSupervisor, strategy: :one_for_one, name: @user_context_supervisor}
     ]
 
-    # Runtime restart invalidates shared browser state, so downstream children are
-    # restarted in declaration order.
+    # Runtime restart invalidates shared transport/userContext state, so downstream
+    # children are restarted in declaration order.
     Supervisor.init(children, strategy: :rest_for_one)
   end
 end

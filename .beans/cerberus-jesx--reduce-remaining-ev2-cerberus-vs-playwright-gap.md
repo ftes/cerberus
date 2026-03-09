@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-08T09:18:04Z
-updated_at: 2026-03-08T21:53:21Z
+updated_at: 2026-03-08T19:40:37Z
 ---
 
 ## Scope
@@ -79,9 +79,3 @@ updated_at: 2026-03-08T21:53:21Z
   - browser_elixir decode_remote_json: 50 calls / 2.109ms total in the hot test
   - browser_js expressionLocatorTotalMs and expressionActionTotalMs stay tiny (sub-millisecond avg for assertions; roughly 1-2ms avg for actions)
 - Conclusion: the missing time is mostly browser/protocol roundtrip latency for many script.evaluate calls. It is not GenServer queueing, not helper JS execution, and not JSON encode/decode on the Elixir side.
-
-## March 8 CDP migration follow-up
-
-- After the Chrome-only CDP migration, the stable EV2 project_form_feature row was still far from Playwright: 5.9s for the original Playwright file vs 21.6s for the Cerberus copy.
-- Profiling on that row no longer points mainly at protocol roundtrip cost. The dominant buckets are browser assert_has calls and browser_js expressionLocatorAssertionMs inside the in-page locator assertion loop, roughly four seconds per test.
-- Session startup is still visible but secondary. The next useful work is in the browser assertion engine, especially the retry/matching path for structured label/text assertions on large forms.

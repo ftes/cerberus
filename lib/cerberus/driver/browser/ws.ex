@@ -36,7 +36,6 @@ defmodule Cerberus.Driver.Browser.WS do
         owner: owner,
         socket: connection.socket,
         transport: connection.transport,
-        slow_mo_ms: Keyword.get(opts, :slow_mo_ms, 0),
         buffer: "",
         fragmented_text: nil,
         disconnected?: false
@@ -57,7 +56,6 @@ defmodule Cerberus.Driver.Browser.WS do
 
   @impl true
   def handle_cast({:send_text, payload}, state) do
-    maybe_slow_mo(state)
     frame = encode_frame(0x1, payload)
 
     case socket_send(state.transport, state.socket, frame) do
@@ -128,13 +126,6 @@ defmodule Cerberus.Driver.Browser.WS do
   def handle_info(_message, state) do
     {:noreply, state}
   end
-
-  defp maybe_slow_mo(%{slow_mo_ms: slow_mo_ms}) when is_integer(slow_mo_ms) and slow_mo_ms > 0 do
-    Process.sleep(slow_mo_ms)
-    :ok
-  end
-
-  defp maybe_slow_mo(_state), do: :ok
 
   @impl true
   def terminate(reason, state) do

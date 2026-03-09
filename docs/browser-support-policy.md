@@ -1,19 +1,22 @@
 # Browser Support Policy
 
-This document defines current browser support for Cerberus browser execution.
+This document defines current browser support for Cerberus WebDriver BiDi execution.
 Status last reviewed: March 3, 2026.
 
 ## Supported Browsers
 
 Cerberus currently supports:
 
-- Chrome/Chromium via ChromeDriver + CDP
+- Chrome/Chromium via ChromeDriver BiDi (primary target)
+- Firefox via geckodriver BiDi (supported, opt-in)
 
 Both targets have shared API coverage.
 Current project policy is Chrome-first execution for regular local and CI runs.
+Firefox lanes are available for explicit manual/targeted runs.
+
 ## Runtime Model
 
-- Cerberus uses one shared browser runtime process and one shared Chrome DevTools transport per test invocation.
+- Cerberus uses one shared browser runtime process and one shared BiDi connection per test invocation.
 - Browser isolation is done through per-session `userContext` and per-tab `browsingContext`.
 - Runtime launch settings are invocation-level, including browser selection, headless mode, slow-motion pacing, WebDriver endpoint, binary paths, and driver args.
 - If you need different runtime launch settings, run separate test invocations.
@@ -52,7 +55,7 @@ MIX_ENV=test mix cerberus.install.chrome --format shell
 MIX_ENV=test mix cerberus.install.firefox --format shell
 ```
 
-Install tasks maintain stable links (`tmp/chrome-current`, `tmp/chromedriver-current`) that Cerberus auto-detects for local managed runtime startup.
+Install tasks maintain stable links (`tmp/chrome-current`, `tmp/chromedriver-current`, `tmp/firefox-current`, `tmp/geckodriver-current`) that Cerberus auto-detects for local managed runtime startup.
 
 ## Remote Runtime
 

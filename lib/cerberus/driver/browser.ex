@@ -69,6 +69,7 @@ defmodule Cerberus.Driver.Browser do
   defstruct user_context_pid: nil,
             tab_id: nil,
             browser_name: :chrome,
+            bidi_opts: [],
             endpoint: nil,
             base_url: nil,
             timeout_ms: 0,
@@ -85,6 +86,7 @@ defmodule Cerberus.Driver.Browser do
     context_defaults = browser_context_defaults(opts)
     browser_name = Runtime.browser_name(opts)
     {timeout_ms, timeout_overridden?} = SessionConfig.timeout_from_opts!(opts, :browser)
+    session_bidi_opts = session_bidi_opts(opts, browser_name)
     ensure_popup_mode_supported!(browser_name, context_defaults.popup_mode)
 
     start_opts =
@@ -112,6 +114,7 @@ defmodule Cerberus.Driver.Browser do
       user_context_pid: user_context_pid,
       tab_id: tab_id,
       browser_name: browser_name,
+      bidi_opts: session_bidi_opts,
       endpoint: Keyword.get(opts, :endpoint) || Application.get_env(:cerberus, :endpoint),
       base_url: base_url,
       timeout_ms: timeout_ms,
@@ -1174,7 +1177,8 @@ defmodule Cerberus.Driver.Browser do
           state.user_context_pid,
           state.tab_id,
           expression,
-          timeout_ms
+          timeout_ms,
+          bidi_opts(state)
         )
       end)
     else
@@ -1370,8 +1374,8 @@ defmodule Cerberus.Driver.Browser do
   defp recoverable_visit_readiness_error?(reason, readiness)
        when reason in ["bidi command timeout", "browser readiness timeout"] and is_map(readiness) do
     readiness["reason"] == "timeout" and
-      readiness["lastLiveState"] in ["disconnected", "down"] and
-      readiness["lastSignal"] in ["liveview-disconnected", "liveview-down"] and
+      readiness["lastLiveState"] == "disconnected" and
+      readiness["lastSignal"] == "liveview-disconnected" and
       is_binary(readiness["path"])
   end
 
@@ -2049,7 +2053,11 @@ defmodule Cerberus.Driver.Browser do
   defp snapshot_base_url(default_base_url, _url), do: default_base_url
 
   defp capture_screenshot(state, full_page, timeout_ms) when is_map(state) and is_integer(timeout_ms) do
-    _ = maybe_full_page_origin(%{"context" => state.tab_id}, full_page)
+    params = maybe_full_page_origin(%{"context" => state.tab_id}, full_page)
+    bidi_opts = Keyword.put(bidi_opts(state), :timeout, timeout_ms)
+
+    _ = params
+    _ = bidi_opts
     capture_screenshot_via_webdriver(state, timeout_ms)
   end
 
@@ -2104,6 +2112,12 @@ defmodule Cerberus.Driver.Browser do
     """
   end
 
+  defp bidi_opts(%{bidi_opts: bidi_opts, browser_name: browser_name}) when is_list(bidi_opts) do
+    Keyword.put_new(bidi_opts, :browser_name, browser_name)
+  end
+
+  defp bidi_opts(%{browser_name: browser_name}), do: [browser_name: browser_name]
+
   defp maybe_full_page_origin(params, true), do: Map.put(params, "origin", "document")
   defp maybe_full_page_origin(params, _full_page), do: params
 
@@ -2135,6 +2149,14 @@ defmodule Cerberus.Driver.Browser do
       supervisor_pid ->
         DynamicSupervisor.start_child(supervisor_pid, {UserContextProcess, opts})
     end
+  end
+
+  defp session_bidi_opts(opts, browser_name) when is_list(opts) and is_atom(browser_name) do
+    opts
+    |> Keyword.delete(:owner)
+    |> Keyword.delete(:browser_context_defaults)
+    |> Keyword.delete(:browser_name)
+    |> Keyword.put(:browser_name, browser_name)
   end
 
   @doc false

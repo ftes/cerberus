@@ -50,7 +50,7 @@ defmodule Cerberus do
 
   - `session(conn)` seeds the new session from an existing conn.
   - `session(:phoenix)` starts non-browser mode.
-  - `session(:browser | :chrome)` starts browser mode with defaults.
+  - `session(:browser | :chrome | :firefox)` starts browser mode with defaults.
 
   ## Options
 
@@ -75,9 +75,12 @@ defmodule Cerberus do
   @spec session(:chrome) :: Session.t()
   def session(:chrome), do: session(:chrome, [])
 
+  @spec session(:firefox) :: Session.t()
+  def session(:firefox), do: session(:firefox, [])
+
   def session(driver) when is_atom(driver) do
     raise ArgumentError,
-          "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser|:chrome) for browser"
+          "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser|:chrome|:firefox) for browser"
   end
 
   @spec session(:phoenix, Options.session_common_opts()) :: Session.t()
@@ -93,6 +96,7 @@ defmodule Cerberus do
   - `browser: [viewport: [width: ..., height: ...] | {w, h}]`
   - `browser: [user_agent: "..."]`
   - `browser: [popup_mode: :allow | :same_tab]` to control `window.open` behavior
+    (`:same_tab` is currently unsupported on Firefox)
   - `browser: [init_script: "..."]` or `browser: [init_scripts: ["...", ...]]`
   - `webdriver_url: "http://remote-webdriver:4444"` to use a remote WebDriver endpoint
     without local browser/chromedriver launch.
@@ -111,9 +115,14 @@ defmodule Cerberus do
     new_browser_session(opts, :chrome)
   end
 
+  @spec session(:firefox, Options.session_browser_opts()) :: Session.t()
+  def session(:firefox, opts) when is_list(opts) do
+    new_browser_session(opts, :firefox)
+  end
+
   def session(driver, opts) when is_atom(driver) and is_list(opts) do
     raise ArgumentError,
-          "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser|:chrome) for browser"
+          "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser|:chrome|:firefox) for browser"
   end
 
   defp new_browser_session(opts, browser_name \\ nil) when is_list(opts) do
@@ -633,7 +642,7 @@ defmodule Cerberus do
       |> click(role(:link, name: "Download Report"))
       |> assert_download("report.txt")
 
-  Browser driver waits on browser download events. Static/live drivers assert on
+  Browser driver waits on BiDi download events. Static/live drivers assert on
   the current response `content-disposition` headers.
 
   ## Options

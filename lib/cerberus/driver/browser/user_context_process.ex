@@ -3,9 +3,9 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
   use GenServer
 
+  alias Cerberus.Driver.Browser.BiDi
   alias Cerberus.Driver.Browser.BrowsingContextProcess
   alias Cerberus.Driver.Browser.BrowsingContextSupervisor
-  alias Cerberus.Driver.Browser.CdpBrowserProcess
   alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.Types
 
@@ -125,11 +125,6 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(pid, :active_tab)
   end
 
-  @spec cdp_page_pid(pid(), String.t() | nil) :: pid() | nil
-  def cdp_page_pid(pid, tab_id) when is_pid(pid) do
-    GenServer.call(pid, {:cdp_page_pid_tab, tab_id})
-  end
-
   @spec recover_active_tab(pid(), String.t() | nil) ::
           {:ok, String.t()} | {:error, String.t(), Types.bidi_error_details()}
   def recover_active_tab(pid, tab_id) when is_pid(pid) do
@@ -139,45 +134,6 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   @spec set_user_agent(pid(), String.t()) :: :ok | {:error, String.t(), Types.bidi_error_details()}
   def set_user_agent(pid, user_agent) when is_pid(pid) and is_binary(user_agent) do
     GenServer.call(pid, {:set_user_agent, user_agent}, 10_000)
-  end
-
-  @spec cookies(pid()) :: Types.bidi_response()
-  def cookies(pid) when is_pid(pid) do
-    GenServer.call(pid, :cookies, 10_000)
-  end
-
-  @spec set_cookies(pid(), [map()]) :: Types.bidi_response()
-  def set_cookies(pid, cookies) when is_pid(pid) and is_list(cookies) do
-    GenServer.call(pid, {:set_cookies, cookies}, 10_000)
-  end
-
-  @spec clear_cookies(pid()) :: Types.bidi_response()
-  def clear_cookies(pid) when is_pid(pid) do
-    GenServer.call(pid, :clear_cookies, 10_000)
-  end
-
-  @spec handle_dialog(pid(), String.t() | nil, boolean(), String.t() | nil, pos_integer()) ::
-          Types.bidi_response()
-  def handle_dialog(pid, tab_id, accept, user_text, timeout_ms)
-      when is_pid(pid) and (is_binary(tab_id) or is_nil(tab_id)) and is_boolean(accept) and
-             (is_binary(user_text) or is_nil(user_text)) and is_integer(timeout_ms) and timeout_ms > 0 do
-    GenServer.call(
-      pid,
-      {:handle_dialog_tab, tab_id, accept, user_text, timeout_ms},
-      timeout_ms + @call_timeout_padding_ms
-    )
-  end
-
-  @spec perform_keyboard_actions(pid(), String.t() | nil, [map()], pos_integer()) ::
-          Types.bidi_response()
-  def perform_keyboard_actions(pid, tab_id, actions, timeout_ms)
-      when is_pid(pid) and (is_binary(tab_id) or is_nil(tab_id)) and is_list(actions) and is_integer(timeout_ms) and
-             timeout_ms > 0 do
-    GenServer.call(
-      pid,
-      {:perform_keyboard_actions_tab, tab_id, actions, timeout_ms},
-      timeout_ms + @call_timeout_padding_ms
-    )
   end
 
   @spec last_readiness(pid()) :: Types.readiness_payload()
@@ -272,28 +228,16 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   def init(opts) do
     owner = Keyword.fetch!(opts, :owner)
     owner_ref = Process.monitor(owner)
-    runtime_opts = Keyword.get(opts, :bidi_opts, opts)
+    bidi_opts = Keyword.get(opts, :bidi_opts, opts)
 
     browser_context_defaults =
       Keyword.get(opts, :browser_context_defaults, %{viewport: nil, user_agent: nil, init_scripts: [], popup_mode: :allow})
 
-    slow_mo_ms = Runtime.slow_mo_ms(runtime_opts)
-
-    with {:ok, debugger_address} <- Runtime.debugger_address(runtime_opts),
-         {:ok, browsing_context_supervisor} <- BrowsingContextSupervisor.start_link(),
-         {:ok, cdp_browser_pid} <-
-           CdpBrowserProcess.start_link(debugger_address: debugger_address, owner: self(), slow_mo_ms: slow_mo_ms),
-         {:ok, browser_context_id} <- create_browser_context(cdp_browser_pid),
-         {:ok, download_dir} <- configure_download_behavior(cdp_browser_pid, browser_context_id),
+    with {:ok, browsing_context_supervisor} <- BrowsingContextSupervisor.start_link(),
+         {:ok, user_context_id} <- create_user_context(bidi_opts),
+         :ok <- configure_user_context_defaults(user_context_id, browser_context_defaults, bidi_opts),
          {:ok, browsing_context_pid} <-
-           start_browsing_context(
-             browsing_context_supervisor,
-             browser_context_id,
-             browser_context_defaults,
-             cdp_browser_pid,
-             debugger_address,
-             slow_mo_ms
-           ) do
+           start_browsing_context(browsing_context_supervisor, user_context_id, browser_context_defaults, bidi_opts) do
       {:ok, first_tab_id, browsing_contexts} =
         add_browsing_context(%{}, browsing_context_pid)
 
@@ -302,13 +246,10 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
          owner: owner,
          owner_ref: owner_ref,
          base_url: Runtime.base_url(),
-         browser_context_id: browser_context_id,
-         cdp_browser_pid: cdp_browser_pid,
-         debugger_address: debugger_address,
-         download_dir: download_dir,
+         user_context_id: user_context_id,
          browsing_context_supervisor: browsing_context_supervisor,
          browser_context_defaults: browser_context_defaults,
-         runtime_opts: runtime_opts,
+         bidi_opts: bidi_opts,
          browsing_contexts: browsing_contexts,
          active_browsing_context_id: first_tab_id,
          known_context_ids: MapSet.new([first_tab_id]),
@@ -402,11 +343,9 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     with {:ok, browsing_context_pid} <-
            start_browsing_context(
              state.browsing_context_supervisor,
-             state.browser_context_id,
+             state.user_context_id,
              state.browser_context_defaults,
-             state.cdp_browser_pid,
-             state.debugger_address,
-             Runtime.slow_mo_ms(state.runtime_opts)
+             state.bidi_opts
            ),
          {:ok, tab_id, browsing_contexts} <- add_browsing_context(state.browsing_contexts, browsing_context_pid) do
       known_context_ids = MapSet.put(state.known_context_ids, tab_id)
@@ -431,11 +370,9 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
       with {:ok, browsing_context_pid} <-
              start_browsing_context(
                state.browsing_context_supervisor,
-               state.browser_context_id,
+               state.user_context_id,
                state.browser_context_defaults,
-               state.cdp_browser_pid,
-               state.debugger_address,
-               Runtime.slow_mo_ms(state.runtime_opts),
+               state.bidi_opts,
                context_id: tab_id
              ),
            {:ok, _attached_tab_id, browsing_contexts} <-
@@ -502,28 +439,7 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   end
 
   def handle_call({:set_user_agent, user_agent}, _from, state) do
-    result =
-      Enum.reduce_while(state.browsing_contexts, :ok, fn {_tab_id, entry}, :ok ->
-        case BrowsingContextProcess.set_user_agent(entry.pid, user_agent) do
-          :ok -> {:cont, :ok}
-          {:error, reason, details} -> {:halt, {:error, reason, details}}
-        end
-      end)
-
-    browser_context_defaults = %{state.browser_context_defaults | user_agent: user_agent}
-    {:reply, result, %{state | browser_context_defaults: browser_context_defaults}}
-  end
-
-  def handle_call(:cookies, _from, state) do
-    {:reply, CdpBrowserProcess.get_cookies(state.cdp_browser_pid, state.browser_context_id), state}
-  end
-
-  def handle_call({:set_cookies, cookies}, _from, state) do
-    {:reply, CdpBrowserProcess.set_cookies(state.cdp_browser_pid, state.browser_context_id, cookies), state}
-  end
-
-  def handle_call(:clear_cookies, _from, state) do
-    {:reply, CdpBrowserProcess.clear_cookies(state.cdp_browser_pid, state.browser_context_id), state}
+    {:reply, set_user_agent_override(state.user_context_id, user_agent, state.bidi_opts), state}
   end
 
   def handle_call(:last_readiness, _from, state) do
@@ -570,16 +486,6 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     end
   end
 
-  def handle_call({:cdp_page_pid_tab, tab_id}, _from, state) do
-    case browsing_context_pid(state, tab_id) do
-      {:ok, pid} ->
-        {:reply, BrowsingContextProcess.cdp_page_pid(pid), state}
-
-      {:error, _reason, _details} ->
-        {:reply, nil, state}
-    end
-  end
-
   def handle_call({:await_download_tab, tab_id, expected_filename, timeout_ms}, _from, state) do
     case browsing_context_pid(state, tab_id) do
       {:ok, pid} ->
@@ -594,26 +500,6 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     case browsing_context_pid(state, tab_id) do
       {:ok, pid} ->
         {:reply, BrowsingContextProcess.await_dialog_open(pid, timeout_ms), state}
-
-      {:error, reason, details} ->
-        {:reply, {:error, reason, details}, state}
-    end
-  end
-
-  def handle_call({:handle_dialog_tab, tab_id, accept, user_text, timeout_ms}, _from, state) do
-    case browsing_context_pid(state, tab_id) do
-      {:ok, pid} ->
-        {:reply, BrowsingContextProcess.handle_dialog(pid, accept, user_text, timeout_ms), state}
-
-      {:error, reason, details} ->
-        {:reply, {:error, reason, details}, state}
-    end
-  end
-
-  def handle_call({:perform_keyboard_actions_tab, tab_id, actions, timeout_ms}, _from, state) do
-    case browsing_context_pid(state, tab_id) do
-      {:ok, pid} ->
-        {:reply, BrowsingContextProcess.perform_keyboard_actions(pid, actions, timeout_ms), state}
 
       {:error, reason, details} ->
         {:reply, {:error, reason, details}, state}
@@ -716,7 +602,7 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
   @impl true
   def terminate(_reason, state) do
-    _ = maybe_remove_browser_context(state)
+    _ = maybe_remove_user_context(state)
 
     if is_pid(state.browsing_context_supervisor) and
          Process.alive?(state.browsing_context_supervisor) do
@@ -726,41 +612,30 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     :ok
   end
 
-  defp create_browser_context(cdp_browser_pid) when is_pid(cdp_browser_pid) do
-    case CdpBrowserProcess.create_browser_context(cdp_browser_pid, 10_000) do
-      {:ok, %{"browserContextId" => browser_context_id}} when is_binary(browser_context_id) ->
-        {:ok, browser_context_id}
-
-      {:ok, _other} ->
-        {:error, "unexpected Target.createBrowserContext response", %{}}
-
+  defp create_user_context(bidi_opts) do
+    with {:ok, result} <- BiDi.command("browser.createUserContext", %{}, bidi_opts),
+         user_context_id when is_binary(user_context_id) <- result["userContext"] do
+      {:ok, user_context_id}
+    else
       {:error, reason, details} ->
         {:error, reason, details}
+
+      _ ->
+        {:error, "unexpected browser.createUserContext response", %{}}
     end
   end
 
-  defp configure_download_behavior(cdp_browser_pid, browser_context_id)
-       when is_pid(cdp_browser_pid) and is_binary(browser_context_id) do
-    download_dir =
-      Path.join(System.tmp_dir!(), "cerberus-downloads-#{System.unique_integer([:positive])}")
-
-    File.mkdir_p!(download_dir)
-
-    case CdpBrowserProcess.set_download_behavior(cdp_browser_pid, browser_context_id, download_dir, 10_000) do
-      {:ok, _result} -> {:ok, download_dir}
-      {:error, reason, details} -> {:error, reason, details}
-    end
+  defp remove_user_context(user_context_id, bidi_opts) when is_binary(user_context_id) do
+    BiDi.command("browser.removeUserContext", %{"userContext" => user_context_id}, bidi_opts)
   end
 
-  defp maybe_remove_browser_context(%{
-         owner: owner,
-         cdp_browser_pid: cdp_browser_pid,
-         browser_context_id: browser_context_id
-       })
+  defp remove_user_context(_, _), do: :ok
+
+  defp maybe_remove_user_context(%{owner: owner, user_context_id: user_context_id, bidi_opts: bidi_opts})
        when is_pid(owner) do
     if Process.alive?(owner) do
       try do
-        CdpBrowserProcess.dispose_browser_context(cdp_browser_pid, browser_context_id, 10_000)
+        remove_user_context(user_context_id, bidi_opts)
       catch
         :exit, _reason -> :ok
       end
@@ -769,29 +644,13 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     end
   end
 
-  defp maybe_remove_browser_context(_state), do: :ok
+  defp maybe_remove_user_context(_state), do: :ok
 
-  defp start_browsing_context(
-         browsing_context_supervisor,
-         browser_context_id,
-         defaults,
-         cdp_browser_pid,
-         debugger_address,
-         slow_mo_ms,
-         extra_opts \\ []
-       ) do
+  defp start_browsing_context(browsing_context_supervisor, user_context_id, defaults, bidi_opts, extra_opts \\ []) do
     DynamicSupervisor.start_child(
       browsing_context_supervisor,
       {BrowsingContextProcess,
-       [
-         browser_context_id: browser_context_id,
-         cdp_browser_pid: cdp_browser_pid,
-         debugger_address: debugger_address,
-         slow_mo_ms: slow_mo_ms,
-         viewport: defaults.viewport,
-         user_agent: defaults.user_agent,
-         init_scripts: defaults.init_scripts
-       ] ++ extra_opts}
+       [user_context_id: user_context_id, viewport: defaults.viewport, bidi_opts: bidi_opts] ++ extra_opts}
     )
   end
 
@@ -853,8 +712,86 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     )
   end
 
+  defp set_user_agent_override(user_context_id, user_agent, bidi_opts) do
+    params = %{
+      "userAgent" => user_agent,
+      "userContexts" => [user_context_id]
+    }
+
+    case BiDi.command("emulation.setUserAgentOverride", params, bidi_opts) do
+      {:ok, _result} ->
+        :ok
+
+      {:error, emulation_reason, emulation_details} ->
+        # Chrome BiDi coverage varies by channel; fallback keeps sandbox metadata working.
+        headers = [
+          %{
+            "name" => "user-agent",
+            "value" => %{"type" => "string", "value" => user_agent}
+          }
+        ]
+
+        fallback_params = %{"headers" => headers, "userContexts" => [user_context_id]}
+
+        case BiDi.command("network.setExtraHeaders", fallback_params, bidi_opts) do
+          {:ok, _result} ->
+            :ok
+
+          {:error, network_reason, network_details} ->
+            {:error, network_reason,
+             %{
+               emulation_reason: emulation_reason,
+               emulation_details: emulation_details,
+               network_details: network_details
+             }}
+        end
+    end
+  end
+
+  defp configure_user_context_defaults(user_context_id, defaults, bidi_opts) do
+    with :ok <- maybe_set_user_agent(user_context_id, defaults.user_agent, bidi_opts) do
+      maybe_add_init_scripts(user_context_id, defaults.init_scripts, bidi_opts)
+    end
+  end
+
+  defp maybe_set_user_agent(_user_context_id, nil, _bidi_opts), do: :ok
+
+  defp maybe_set_user_agent(user_context_id, user_agent, bidi_opts),
+    do: set_user_agent_override(user_context_id, user_agent, bidi_opts)
+
+  defp maybe_add_init_scripts(_user_context_id, [], _bidi_opts), do: :ok
+
+  defp maybe_add_init_scripts(user_context_id, scripts, bidi_opts) when is_list(scripts) do
+    Enum.reduce_while(scripts, :ok, fn script, :ok ->
+      case add_preload_script(user_context_id, script, bidi_opts) do
+        :ok -> {:cont, :ok}
+        {:error, reason, details} -> {:halt, {:error, reason, details}}
+      end
+    end)
+  end
+
+  defp add_preload_script(user_context_id, script, bidi_opts) when is_binary(script) do
+    params = %{
+      "functionDeclaration" => preload_function_declaration(script),
+      "userContexts" => [user_context_id]
+    }
+
+    case BiDi.command("script.addPreloadScript", params, bidi_opts) do
+      {:ok, _result} -> :ok
+      {:error, reason, details} -> {:error, reason, details}
+    end
+  end
+
+  defp preload_function_declaration(script) do
+    """
+    () => {
+      #{script}
+    }
+    """
+  end
+
   defp refresh_known_context_ids(state) do
-    case fetch_browser_context_tabs(state.browser_context_id, state.cdp_browser_pid) do
+    case fetch_user_context_tabs(state.user_context_id, state.bidi_opts) do
       {:ok, context_ids} ->
         %{state | known_context_ids: MapSet.new(context_ids)}
 
@@ -867,11 +804,9 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     with {:ok, browsing_context_pid} <-
            start_browsing_context(
              state.browsing_context_supervisor,
-             state.browser_context_id,
+             state.user_context_id,
              state.browser_context_defaults,
-             state.cdp_browser_pid,
-             state.debugger_address,
-             Runtime.slow_mo_ms(state.runtime_opts)
+             state.bidi_opts
            ),
          {:ok, tab_id, browsing_contexts} <- add_browsing_context(state.browsing_contexts, browsing_context_pid) do
       known_context_ids = MapSet.put(state.known_context_ids, tab_id)
@@ -897,11 +832,9 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
       with {:ok, browsing_context_pid} <-
              start_browsing_context(
                state.browsing_context_supervisor,
-               state.browser_context_id,
+               state.user_context_id,
                state.browser_context_defaults,
-               state.cdp_browser_pid,
-               state.debugger_address,
-               Runtime.slow_mo_ms(state.runtime_opts),
+               state.bidi_opts,
                context_id: context_id
              ),
            {:ok, tab_id, browsing_contexts} <- add_browsing_context(state.browsing_contexts, browsing_context_pid) do
@@ -989,21 +922,15 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
   defp rebind_requested_tab_alias(state, _requested_tab_id, recovered_tab_id), do: {state, recovered_tab_id}
 
-  defp fetch_browser_context_tabs(browser_context_id, cdp_browser_pid)
-       when is_binary(browser_context_id) and is_pid(cdp_browser_pid) do
-    case CdpBrowserProcess.get_targets(cdp_browser_pid, 10_000) do
-      {:ok, %{"targetInfos" => target_infos}} when is_list(target_infos) ->
-        tabs =
-          target_infos
-          |> Enum.filter(fn
-            %{"browserContextId" => ^browser_context_id, "type" => "page", "targetId" => target_id}
-            when is_binary(target_id) ->
-              true
+  defp fetch_user_context_tabs(user_context_id, bidi_opts) when is_binary(user_context_id) and is_list(bidi_opts) do
+    case BiDi.command("browsingContext.getTree", %{"maxDepth" => 0}, bidi_opts) do
+      {:ok, %{"contexts" => contexts}} when is_list(contexts) ->
+        entries = flatten_tree_context_entries(contexts)
 
-            _ ->
-              false
-          end)
-          |> Enum.map(& &1["targetId"])
+        tabs =
+          entries
+          |> Enum.filter(&(&1.user_context == user_context_id))
+          |> Enum.map(& &1.context_id)
           |> Enum.uniq()
 
         {:ok, tabs}
@@ -1012,9 +939,22 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
         {:error, reason, details}
 
       _ ->
-        {:error, "unexpected Target.getTargets response", %{}}
+        {:error, "unexpected browsingContext.getTree response", %{}}
     end
   end
+
+  defp flatten_tree_context_entries(contexts) when is_list(contexts) do
+    Enum.flat_map(contexts, &flatten_tree_context_entry/1)
+  end
+
+  defp flatten_tree_context_entries(nil), do: []
+
+  defp flatten_tree_context_entry(%{"context" => context_id} = entry) when is_binary(context_id) do
+    children = flatten_tree_context_entries(Map.get(entry, "children", []))
+    [%{context_id: context_id, user_context: entry["userContext"]} | children]
+  end
+
+  defp flatten_tree_context_entry(_entry), do: []
 
   defp normalize_context_set(%MapSet{} = tabs), do: tabs
   defp normalize_context_set(tabs) when is_list(tabs), do: MapSet.new(Enum.filter(tabs, &is_binary/1))
