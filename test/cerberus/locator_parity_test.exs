@@ -1154,12 +1154,10 @@ defmodule Cerberus.LocatorParityBasicTest do
     assert :ok = LocatorParitySupport.assert_chained_follow_up(context.browser_session)
   end
 
-  @tag :slow
   test "rich snippet locator parity holds for assertions and helper mappings", context do
     assert :ok = LocatorParitySupport.run_parity_group!(context, :assertions)
   end
 
-  @tag :slow
   test "rich snippet locator parity holds for form controls and state filters", context do
     assert :ok = LocatorParitySupport.run_parity_group!(context, :form_controls)
   end
@@ -1170,7 +1168,6 @@ defmodule Cerberus.LocatorParityCompositionTest do
 
   alias Cerberus.LocatorParitySupport
 
-  @moduletag :slow
   @moduletag timeout: 60_000
 
   setup_all do
@@ -1187,7 +1184,6 @@ defmodule Cerberus.LocatorParityCountScopeTest do
 
   alias Cerberus.LocatorParitySupport
 
-  @moduletag :slow
   @moduletag timeout: 60_000
 
   setup_all do

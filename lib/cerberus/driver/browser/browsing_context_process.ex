@@ -93,6 +93,11 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     GenServer.call(pid, :active_dialog)
   end
 
+  @spec clear_dialog_state(pid()) :: :ok
+  def clear_dialog_state(pid) when is_pid(pid) do
+    GenServer.call(pid, :clear_dialog_state)
+  end
+
   @spec await_download(pid(), String.t(), pos_integer()) ::
           {:ok, Types.payload()} | {:error, :timeout, [Types.payload()]}
   def await_download(pid, expected_filename, timeout_ms)
@@ -164,6 +169,10 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   def handle_call(:active_dialog, _from, state) do
     {:reply, state.active_dialog, state}
+  end
+
+  def handle_call(:clear_dialog_state, _from, state) do
+    {:reply, :ok, %{state | dialog_events: [], active_dialog: nil}}
   end
 
   def handle_call({:await_download, expected_filename, timeout_ms}, from, state) do

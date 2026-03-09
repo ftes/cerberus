@@ -93,9 +93,6 @@ jobs:
       - name: Run tests with Chrome
         run: mix test --warnings-as-errors
 
-      - name: Run slow tests with Chrome
-        run: mix test --only slow --warnings-as-errors
-
       # - name: Run tests with Chrome via Websocket (remote)
       #   run: mix test.websocket --warnings-as-errors
 

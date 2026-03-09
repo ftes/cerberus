@@ -34,14 +34,14 @@ defmodule Cerberus.ValueAssertionsTest do
         unquote(driver)
         |> SharedBrowserSession.driver_session(context)
         |> visit("/search")
-        |> assert_value(~l"Missing field"l, "value")
+        |> assert_value(~l"Missing field"l, "value", timeout: 50)
       end
 
       assert_raise ExUnit.AssertionError, ~r/refute_value failed: no form field matched locator/, fn ->
         unquote(driver)
         |> SharedBrowserSession.driver_session(context)
         |> visit("/search")
-        |> refute_value(~l"Missing field"l, "value")
+        |> refute_value(~l"Missing field"l, "value", timeout: 50)
       end
     end
   end

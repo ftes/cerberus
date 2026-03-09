@@ -63,7 +63,6 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     end)
   end
 
-  @tag :slow
   test "browser visit recovers from disconnected live-root timeout when snapshot is available", context do
     :browser
     |> SharedBrowserSession.driver_session(context)
@@ -78,7 +77,6 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> assert_has(text("Disconnected Live Root", exact: true), timeout: 0)
   end
 
-  @tag :slow
   test "browser visit reports post-navigation readiness failure with reached path", context do
     assert_raise ArgumentError,
                  ~r/browser visit reached \/browser\/readiness\/busy-live-root but post-navigation readiness failed: browser readiness timeout/,
@@ -123,7 +121,6 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     end)
   end
 
-  @tag :slow
   test "browser actions budget enough time for pre-action resolve and leave settle to the next assertion", context do
     :browser
     |> SharedBrowserSession.driver_session(context)

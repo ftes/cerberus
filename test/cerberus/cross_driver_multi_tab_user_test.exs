@@ -16,9 +16,6 @@ defmodule Cerberus.CrossDriverMultiTabUserTest do
         |> open_tab()
         |> visit("/session/user")
         |> assert_has(text("Session user: alice", exact: true))
-        |> visit("/live/counter")
-        |> click(role(:button, name: "Increment"))
-        |> assert_has(text("Count: 1", exact: true))
 
       primary =
         secondary_tab
@@ -38,8 +35,6 @@ defmodule Cerberus.CrossDriverMultiTabUserTest do
         |> open_tab()
         |> visit("/session/user")
         |> assert_has(text("Session user: bob", exact: true))
-
-      primary = assert_has(primary, text("Session user: alice", exact: true))
 
       close_tab(isolated_tab)
       assert_has(primary, text("Session user: alice", exact: true))

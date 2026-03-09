@@ -19,7 +19,6 @@ defmodule Cerberus.LiveCheckboxBehaviorTest do
     |> refute_has(and_(css("#form-data"), text("value: second-breakfast")))
   end
 
-  @tag :slow
   test "label-based nameless checkbox phx-click toggles the checked payload", %{conn: conn} do
     conn
     |> session()

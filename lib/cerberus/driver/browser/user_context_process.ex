@@ -176,6 +176,11 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(pid, {:active_dialog_tab, tab_id})
   end
 
+  @spec clear_dialog_state(pid(), String.t() | nil) :: :ok | {:error, String.t(), map()}
+  def clear_dialog_state(pid, tab_id \\ nil) when is_pid(pid) do
+    GenServer.call(pid, {:clear_dialog_state_tab, tab_id})
+  end
+
   @spec await_download(pid(), String.t(), pos_integer()) ::
           {:ok, Types.payload()} | {:error, :timeout, [Types.payload()]} | {:error, String.t(), map()}
   def await_download(pid, expected_filename, timeout_ms)
@@ -479,6 +484,16 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
       {:error, _reason, _details} ->
         {:reply, nil, state}
+    end
+  end
+
+  def handle_call({:clear_dialog_state_tab, tab_id}, _from, state) do
+    case browsing_context_pid(state, tab_id) do
+      {:ok, pid} ->
+        {:reply, BrowsingContextProcess.clear_dialog_state(pid), state}
+
+      {:error, reason, details} ->
+        {:reply, {:error, reason, details}, state}
     end
   end
 

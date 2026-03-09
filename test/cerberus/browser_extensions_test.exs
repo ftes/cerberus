@@ -55,7 +55,6 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   @tag :tmp_dir
-  @tag :slow
   test "screenshot + keyboard + dialog + drag browser extensions work together", %{
     tmp_dir: tmp_dir,
     browser_session: browser_session
@@ -96,7 +95,6 @@ defmodule Cerberus.BrowserExtensionsTest do
     File.rm(path)
   end
 
-  @tag :slow
   test "press uses real keyboard semantics for printable keys, editing keys, and Tab focus traversal", %{
     browser_session: browser_session
   } do
@@ -336,7 +334,6 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_has(returned_main, text("Popup opened", exact: true))
   end
 
-  @tag :slow
   test "with_popup waits for popup opened after waiter registration" do
     main =
       :browser
@@ -410,7 +407,6 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert UserContextProcess.active_tab(session.user_context_pid) == session.tab_id
   end
 
-  @tag :slow
   test "assert_dialog handles a dialog that is already open", %{browser_session: browser_session} do
     session = browser_fixture_session(browser_session, "/browser/extensions")
 
@@ -421,7 +417,6 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_has(session, text("Dialog result: confirmed", exact: true))
   end
 
-  @tag :slow
   test "assert_dialog waits for a dialog that opens after assertion starts", %{browser_session: browser_session} do
     session = browser_fixture_session(browser_session, "/browser/extensions")
 
@@ -453,7 +448,6 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_has(session, text("Dialog result: confirmed", exact: true))
   end
 
-  @tag :slow
   test "assertion operations complete when a blocking prompt dialog is already open", %{browser_session: browser_session} do
     session = browser_fixture_session(browser_session, "/browser/extensions")
 
@@ -464,7 +458,6 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_prompt_result(session, "Prompt result: ")
   end
 
-  @tag :slow
   test "assertion operations complete when a blocking alert dialog is already open", %{browser_session: browser_session} do
     session = browser_fixture_session(browser_session, "/browser/extensions")
 
@@ -487,7 +480,6 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_download(session, "report.txt")
   end
 
-  @tag :slow
   test "assert_download waits for download emitted after assertion starts", %{browser_session: browser_session} do
     session = browser_fixture_session(browser_session, "/browser/extensions")
 
@@ -514,7 +506,6 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   for driver <- [:phoenix, :browser] do
-    @tag :slow
     test "assert_download waits for delayed live redirect to static download response (#{driver})" do
       session =
         unquote(driver)
@@ -567,7 +558,6 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert error.message =~ "report"
   end
 
-  @tag :slow
   test "assert_dialog raises when observed dialog message does not match expected text", %{
     browser_session: browser_session
   } do
@@ -597,7 +587,6 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert error.message =~ "assert_dialog/3 timed out waiting for dialog text \"Delete item?\""
   end
 
-  @tag :slow
   test "assert_dialog supports prompt dialogs with auto-accepted empty input", %{browser_session: browser_session} do
     session = browser_fixture_session(browser_session, "/browser/extensions")
 
@@ -606,7 +595,6 @@ defmodule Cerberus.BrowserExtensionsTest do
     assert_prompt_result(session, "Prompt result: ")
   end
 
-  @tag :slow
   test "assert_dialog supports alert dialogs", %{browser_session: browser_session} do
     session = browser_fixture_session(browser_session, "/browser/extensions")
 
@@ -654,6 +642,7 @@ defmodule Cerberus.BrowserExtensionsTest do
   defp browser_fixture_session(%Browser{} = session, path) when is_binary(path) do
     session
     |> reset_browser_tabs!()
+    |> clear_dialog_state!()
     |> clear_cookies()
     |> visit(path)
   end
@@ -692,5 +681,10 @@ defmodule Cerberus.BrowserExtensionsTest do
         active_form_selector: nil,
         scope: nil
     }
+  end
+
+  defp clear_dialog_state!(%Browser{} = session) do
+    :ok = UserContextProcess.clear_dialog_state(session.user_context_pid, session.tab_id)
+    session
   end
 end

@@ -2,7 +2,6 @@ alias Cerberus.Fixtures.AuthStore
 alias Cerberus.Fixtures.Endpoint
 alias Cerberus.Fixtures.Repo
 
-ExUnit.configure(exclude: [slow: true])
 ExUnit.start(max_cases: 28)
 
 {:ok, _} =
