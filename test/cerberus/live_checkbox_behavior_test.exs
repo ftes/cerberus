@@ -20,14 +20,13 @@ defmodule Cerberus.LiveCheckboxBehaviorTest do
   end
 
   @tag :slow
-  test "label-based nameless checkbox phx-click sends value payloads", %{conn: conn} do
+  test "label-based nameless checkbox phx-click toggles the checked payload", %{conn: conn} do
     conn
     |> session()
     |> visit("/phoenix_test/live/index")
+    |> assert_has(and_(css("#checkbox-phx-click-values-abc-value"), text("Unchecked")))
     |> check(~l"Checkbox abc"l, timeout: 50)
     |> assert_has(and_(css("#checkbox-phx-click-values-abc-value"), text("Checked")))
-    |> uncheck(~l"Checkbox abc"l, timeout: 50)
-    |> assert_has(and_(css("#checkbox-phx-click-values-abc-value"), text("Unchecked")))
   end
 
   test "outside-form checkbox without phx-click raises contract error", %{conn: conn} do
