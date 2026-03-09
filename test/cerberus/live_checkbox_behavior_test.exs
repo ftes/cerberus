@@ -19,13 +19,14 @@ defmodule Cerberus.LiveCheckboxBehaviorTest do
     |> refute_has(and_(css("#form-data"), text("value: second-breakfast")))
   end
 
+  @tag :slow
   test "label-based nameless checkbox phx-click sends value payloads", %{conn: conn} do
     conn
     |> session()
     |> visit("/phoenix_test/live/index")
-    |> check(~l"Checkbox abc"l)
+    |> check(~l"Checkbox abc"l, timeout: 50)
     |> assert_has(and_(css("#checkbox-phx-click-values-abc-value"), text("Checked")))
-    |> uncheck(~l"Checkbox abc"l)
+    |> uncheck(~l"Checkbox abc"l, timeout: 50)
     |> assert_has(and_(css("#checkbox-phx-click-values-abc-value"), text("Unchecked")))
   end
 
@@ -36,7 +37,7 @@ defmodule Cerberus.LiveCheckboxBehaviorTest do
       |> visit("/phoenix_test/live/index")
 
     assert_raise ArgumentError, ~r/have a valid `phx-click` attribute or belong to a `form`/, fn ->
-      check(live_session, ~l"Invalid Checkbox"l)
+      check(live_session, css("#no-form-no-phx-click-checkbox"), timeout: 10)
     end
   end
 end

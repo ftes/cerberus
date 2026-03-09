@@ -50,6 +50,7 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   @tag :tmp_dir
+  @tag :slow
   test "screenshot + keyboard + dialog + drag browser extensions work together", %{tmp_dir: tmp_dir} do
     # NOTE: ExUnit :tmp_dir paths are deterministic for module+test. If multiple
     # mix test processes execute this same test in one checkout concurrently,
@@ -88,6 +89,7 @@ defmodule Cerberus.BrowserExtensionsTest do
     File.rm(path)
   end
 
+  @tag :slow
   test "press uses real keyboard semantics for printable keys, editing keys, and Tab focus traversal" do
     session =
       :browser

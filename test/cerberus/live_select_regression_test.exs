@@ -57,7 +57,7 @@ defmodule Cerberus.LiveSelectRegressionTest do
     assert_raise ArgumentError,
                  ~r/to have a valid `phx-click` attribute on options or to belong to a `form`/,
                  fn ->
-                   select(live_session, ~l"Invalid Select Option"l, option: text("Dog"))
+                   select(live_session, css("#no-form-no-phx-click-select"), option: text("Dog"), timeout: 10)
                  end
   end
 

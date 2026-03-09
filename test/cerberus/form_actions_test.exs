@@ -87,7 +87,7 @@ defmodule Cerberus.FormActionsTest do
           unquote(driver)
           |> driver_session(context)
           |> visit("/search")
-          |> click(~l"Definitely Missing Link"e)
+          |> click(~l"Definitely Missing Link"e, timeout: 50)
         end
 
       assert click_error.message =~ "possible candidates:"
@@ -153,10 +153,10 @@ defmodule Cerberus.FormActionsTest do
     :phoenix
     |> session()
     |> visit("/phoenix_test/live/index")
-    |> fill_in(~l"To keep"l, "this input should stay")
-    |> fill_in(~l"To remove"l, "this input will now be removed")
+    |> fill_in(css("input[name='to_keep']"), "this input should stay")
+    |> fill_in(css("input[name='to_remove']"), "this input will now be removed")
     |> submit()
-    |> check(~l"Hide to remove"l)
+    |> check(css("input[name='hide_to_remove']"))
     |> submit()
     |> assert_has(and_(css("#form-data"), text("this input should stay", exact: false)))
     |> refute_has(and_(css("#form-data"), text("this input will now be removed", exact: false)))

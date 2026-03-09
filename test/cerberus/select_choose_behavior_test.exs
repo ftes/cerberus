@@ -195,7 +195,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
     assert_raise ArgumentError,
                  ~r/have a valid `phx-click` attribute or belong to a `form` element/,
                  fn ->
-                   choose(live_session, ~l"Invalid Radio Button"l)
+                   choose(live_session, css("#no-form-no-phx-click"), timeout: 10)
                  end
   end
 

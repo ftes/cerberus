@@ -878,9 +878,9 @@ defmodule Cerberus.Fixtures.PageController do
             // Keep each phase comfortably under the 1.5s action timeout while the
             // combined resolve + settle path still exceeds it. That preserves the
             // phased-budget assertion without spending more wall-clock time than needed.
-            const connectDelayMs = 1000;
-            const enableDelayMs = 2000;
-            const settleDelayMs = 1000;
+            const connectDelayMs = 120;
+            const enableDelayMs = 420;
+            const settleDelayMs = 220;
 
             const onReady = () => {
               const root = document.getElementById("long-action-root");

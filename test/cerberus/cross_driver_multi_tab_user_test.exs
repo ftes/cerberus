@@ -4,6 +4,10 @@ defmodule Cerberus.CrossDriverMultiTabUserTest do
   import Cerberus
 
   for driver <- [:phoenix, :browser] do
+    if driver == :browser do
+      @tag :slow
+    end
+
     test "multi-tab sharing and multi-user isolation work with one API across drivers (#{driver})" do
       primary =
         unquote(driver)
