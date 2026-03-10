@@ -1795,6 +1795,15 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           return fail("option_not_found", { option: requested });
         }
 
+        const belongsToForm = typeof target.formSelector === "string" && target.formSelector !== "";
+        const hasOptionPhxClick = matched.some(
+          (option) => typeof option.hasAttribute === "function" && option.hasAttribute("phx-click")
+        );
+
+        if (!belongsToForm && !hasOptionPhxClick) {
+          return fail("field_select_contract");
+        }
+
         if (element.multiple) {
           const selectedValues = new Set();
           const replaceExistingSelections = options && options.optionListInput === true;
@@ -1878,8 +1887,37 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         if (target.kind !== "field" || target.type !== "checkbox") return fail("field_not_checkbox");
         if (target.disabled === true || element.disabled === true) return fail("field_disabled");
 
-        element.checked = op === "check";
-        helper.dispatchInputChange(element);
+        const hasPhxClick =
+          typeof element.hasAttribute === "function" && element.hasAttribute("phx-click");
+        const belongsToForm = typeof target.formSelector === "string" && target.formSelector !== "";
+
+        if (!hasPhxClick && !belongsToForm) return fail("field_checkbox_contract");
+
+        if (hasPhxClick) {
+          const shouldBeChecked = op === "check";
+
+          if (shouldBeChecked) {
+            if (element.checked !== true) {
+              if (typeof element.click === "function") {
+                element.click();
+              } else {
+                helper.dispatchElementClick(element);
+              }
+            }
+          } else {
+            if (typeof element.click === "function") {
+              element.checked = true;
+              element.click();
+            } else {
+              element.checked = false;
+              helper.dispatchElementClick(element);
+            }
+          }
+        } else {
+          element.checked = op === "check";
+          helper.dispatchInputChange(element);
+        }
+
         return { ok: true, target, value: element.checked, matchCount, path: helper.currentPath() };
       }
 

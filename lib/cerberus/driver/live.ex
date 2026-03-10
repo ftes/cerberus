@@ -3357,7 +3357,12 @@ defmodule Cerberus.Driver.Live do
     selector = field[:selector]
 
     if is_binary(selector) and selector != "" do
-      payload = if(checked?, do: %{}, else: %{"value" => ""})
+      payload =
+        if checked? do
+          %{"value" => checkbox_click_value(field)}
+        else
+          %{"value" => ""}
+        end
 
       result =
         session.view
@@ -3367,6 +3372,13 @@ defmodule Cerberus.Driver.Live do
       resolve_live_change_result(session, result, nil)
     else
       {:error, session, "live field click requires a resolvable field selector", %{field: field}}
+    end
+  end
+
+  defp checkbox_click_value(field) do
+    case field[:input_value] do
+      value when is_binary(value) and value != "" -> value
+      _ -> "on"
     end
   end
 

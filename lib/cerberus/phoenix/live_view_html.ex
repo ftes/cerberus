@@ -290,30 +290,45 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   end
 
   defp find_nameless_matches_in_root(root_node, expected, opts) do
-    selector = selector_opt(opts)
+    locator = locator_opt(opts)
+    selector = nameless_field_selector(opts, locator)
 
     root_node
     |> safe_query("input[type='checkbox'][phx-click],input[type='radio'][phx-click]")
-    |> Enum.flat_map(&build_nameless_match_list(root_node, &1, expected, opts, selector))
+    |> Enum.flat_map(&build_nameless_match_list(root_node, &1, expected, opts, selector, locator))
   end
 
-  defp build_nameless_match_list(root_node, field_node, expected, opts, selector) do
+  defp nameless_field_selector(_opts, %Locator{kind: :css, value: selector}) when is_binary(selector) and selector != "",
+    do: selector
+
+  defp nameless_field_selector(opts, _locator), do: selector_opt(opts)
+
+  defp build_nameless_match_list(root_node, field_node, expected, opts, selector, locator) do
     label_text = field_label_text(root_node, field_node)
 
-    if nameless_field_match?(root_node, field_node, label_text, expected, opts, selector) do
+    if nameless_field_match?(root_node, field_node, label_text, expected, opts, selector, locator) do
       [build_nameless_field_match(root_node, field_node, label_text)]
     else
       []
     end
   end
 
-  defp nameless_field_match?(root_node, field_node, label_text, expected, opts, selector) do
+  defp nameless_field_match?(root_node, field_node, label_text, expected, opts, selector, locator) do
     nameless_field?(field_node) and
-      is_binary(label_text) and
-      label_text != "" and
-      Query.match_text?(label_text, expected, opts) and
       node_matches_selector?(root_node, field_node, selector) and
-      Html.node_matches_locator_filters?(field_node, opts)
+      Html.node_matches_locator_filters?(field_node, opts) and
+      nameless_field_expected_match?(label_text, expected, opts, locator)
+  end
+
+  defp nameless_field_expected_match?(label_text, expected, opts, %Locator{kind: :css}) do
+    (is_binary(expected) and expected == "") or
+      (is_binary(label_text) and label_text != "" and Query.match_text?(label_text, expected, opts))
+  end
+
+  defp nameless_field_expected_match?(label_text, expected, opts, _locator) do
+    is_binary(label_text) and
+      label_text != "" and
+      Query.match_text?(label_text, expected, opts)
   end
 
   defp nameless_field?(field_node) do

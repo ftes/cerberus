@@ -25,5 +25,6 @@ Keep a log of what you did to present when you're done.
 - Current browser policy: run Chrome only. Ignore Firefox and websocket lanes locally and in CI unless explicitly requested.
 - If in doubt about static/live driver behavior, check PhoenixTest static and live driver implementations for reference patterns.
 - If in doubt about browser driver behavior, use Cuprite as the primary implementation reference; use Playwright JS as the secondary reference.
+- Tests should default to parity coverage across applicable drivers. Only keep a test driver-specific when it is explicitly asserting driver-specific behavior.
 - There is NO `@tag :browser`. Don't try to filter tests with `--only browser` or `--exclude browser`. Running browser tests is cheap and fine.
 - All public functions need good typespecs. Avoid generic types (`map()`, `Keyword.t()`). Prefer specific types (structs, NimbleOptions).

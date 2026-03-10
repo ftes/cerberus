@@ -608,6 +608,17 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.IndexLive do
         {if(@checked_keys["def"], do: "Checked", else: "Unchecked")}
       </span>
     </div>
+
+    <div>
+      <label for="checkbox-phx-click-default-on">Checkbox default on</label>
+      <input
+        type="checkbox"
+        id="checkbox-phx-click-default-on"
+        phx-click="record-checkbox-default-on"
+        checked={@checked_keys["default-on"]}
+      />
+      <span id="checkbox-phx-click-default-on-value">{@checkbox_default_on_value}</span>
+    </div>
     """
   end
 
@@ -632,6 +643,7 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.IndexLive do
       |> assign(:cities, [])
       |> assign(:hidden_input_race, "human")
       |> assign(:checked_keys, %{"abc" => false, "def" => false})
+      |> assign(:checkbox_default_on_value, "unset")
       |> assign(:trigger_submit, false)
       |> assign(:trigger_multiple_submit, false)
       |> assign(:redirect_and_trigger_submit, false)
@@ -865,6 +877,16 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.IndexLive do
     checked_keys = Map.update(socket.assigns.checked_keys, id, true, &(not &1))
 
     {:noreply, assign(socket, :checked_keys, checked_keys)}
+  end
+
+  def handle_event("record-checkbox-default-on", params, socket) do
+    checked_keys = Map.update(socket.assigns.checked_keys, "default-on", true, &(not &1))
+    value = Map.get(params, "value", "missing")
+
+    {:noreply,
+     socket
+     |> assign(:checked_keys, checked_keys)
+     |> assign(:checkbox_default_on_value, value)}
   end
 
   def handle_event("do-it", _, socket) do
