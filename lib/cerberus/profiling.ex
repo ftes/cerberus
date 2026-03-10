@@ -1,5 +1,13 @@
 defmodule Cerberus.Profiling do
   @moduledoc false
+  @profiling_compile_env Application.compile_env(:cerberus, :profiling, false)
+  @profiling_env_values ["1", "true", "yes", "on"]
+  @profiling_compiled? @profiling_compile_env or
+                         "CERBERUS_PROFILE_COMPILE"
+                         |> System.get_env("")
+                         |> String.trim()
+                         |> String.downcase()
+                         |> Kernel.in(@profiling_env_values)
 
   @table :cerberus_profiling
   @owner_name __MODULE__.Owner
@@ -17,6 +25,17 @@ defmodule Cerberus.Profiling do
           total_us: non_neg_integer(),
           avg_us: float()
         }
+
+  @doc false
+  defmacro profile(bucket, do: block) do
+    if @profiling_compiled? do
+      quote do
+        Cerberus.Profiling.measure(unquote(bucket), fn -> unquote(block) end)
+      end
+    else
+      block
+    end
+  end
 
   @spec enabled?() :: boolean()
   def enabled? do

@@ -4,7 +4,10 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   alias Cerberus.Html
   alias Cerberus.Locator
   alias Cerberus.Phoenix.LiveViewBindings
+  alias Cerberus.Profiling
   alias Cerberus.Query
+
+  require Profiling
 
   @spec find_live_clickable_button(LazyHTML.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
           {:ok, map()} | :error
@@ -22,7 +25,12 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   def find_form_field(%LazyHTML{} = lazy_html, expected, opts, scope, requirements) do
     case find_form_field_with_fallback(lazy_html, expected, opts, scope) do
       {:ok, field} ->
-        {:ok, Map.merge(field, form_field_live_flags(lazy_html, field, scope, requirements))}
+        flags =
+          Profiling.profile {:live_enrich, :form_field_flags} do
+            form_field_live_flags(lazy_html, field, scope, requirements)
+          end
+
+        {:ok, Map.merge(field, flags)}
 
       _ ->
         :error
@@ -30,37 +38,43 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   end
 
   defp find_form_field_with_fallback(lazy_html, expected, opts, scope) do
-    case Html.find_form_field(lazy_html, expected, opts, scope) do
-      {:ok, field} -> {:ok, field}
-      :error -> find_form_field_without_name(lazy_html, expected, opts, scope)
+    Profiling.profile {:live_enrich, :form_field_lookup} do
+      case Html.find_form_field(lazy_html, expected, opts, scope) do
+        {:ok, field} -> {:ok, field}
+        :error -> find_form_field_without_name(lazy_html, expected, opts, scope)
+      end
     end
   end
 
   @spec find_submit_button(LazyHTML.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
           {:ok, map()} | :error
   def find_submit_button(%LazyHTML{} = lazy_html, expected, opts, scope \\ nil) do
-    case Html.find_submit_button(lazy_html, expected, opts, scope) do
-      {:ok, button} ->
-        {:ok, Map.put(button, :form_phx_submit, form_phx_submit?(lazy_html, button, scope))}
+    Profiling.profile {:live_enrich, :submit_button} do
+      case Html.find_submit_button(lazy_html, expected, opts, scope) do
+        {:ok, button} ->
+          {:ok, Map.put(button, :form_phx_submit, form_phx_submit?(lazy_html, button, scope))}
 
-      :error ->
-        :error
+        :error ->
+          :error
+      end
     end
   end
 
   @spec enrich_button(LazyHTML.t(), map(), String.t() | nil) :: map()
   def enrich_button(%LazyHTML{} = lazy_html, %{} = button, scope \\ nil) do
-    lazy_html
-    |> scoped_nodes(scope)
-    |> Enum.find_value(button, fn root_node ->
-      case resolve_button_node(root_node, button) do
-        nil ->
-          false
+    Profiling.profile {:live_enrich, :button} do
+      lazy_html
+      |> scoped_nodes(scope)
+      |> Enum.find_value(button, fn root_node ->
+        case resolve_button_node(root_node, button) do
+          nil ->
+            false
 
-        button_node ->
-          enrich_resolved_button(button, root_node, button_node)
-      end
-    end)
+          button_node ->
+            enrich_resolved_button(button, root_node, button_node)
+        end
+      end)
+    end
   end
 
   defp enrich_resolved_button(button, root_node, button_node) do
@@ -229,7 +243,15 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   defp live_clickable_common_opts_match?(root_node, node, opts) when is_list(opts) do
     node_matches_selector?(root_node, node, selector_opt(opts)) and
       Html.node_matches_locator_filters?(node, opts) and
+      matches_live_clickable_state_filters?(root_node, node, opts)
+  end
+
+  defp matches_live_clickable_state_filters?(root_node, node, opts) do
+    if Query.has_state_filters?(opts) do
       Query.matches_state_filters?(live_clickable_state(root_node, node), opts)
+    else
+      true
+    end
   end
 
   defp live_clickable_state(root_node, node) do
@@ -477,7 +499,63 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     |> Enum.find(&button_node?/1)
   end
 
-  defp resolve_button_node(_root_node, _button), do: nil
+  defp resolve_button_node(root_node, %{} = button) do
+    root_node
+    |> safe_query(resolve_button_selector(button))
+    |> Enum.find(&button_node_match?(&1, button))
+  end
+
+  defp resolve_button_selector(%{tag: tag, form: form})
+       when is_binary(tag) and tag != "" and is_binary(form) and form != "" do
+    attr_selector(tag, "form", form) || tag
+  end
+
+  defp resolve_button_selector(%{tag: tag, testid: testid})
+       when is_binary(tag) and tag != "" and is_binary(testid) and testid != "" do
+    attr_selector(tag, "data-testid", testid) || tag
+  end
+
+  defp resolve_button_selector(%{tag: tag, title: title})
+       when is_binary(tag) and tag != "" and is_binary(title) and title != "" do
+    attr_selector(tag, "title", title) || tag
+  end
+
+  defp resolve_button_selector(%{tag: tag, aria_label: aria_label})
+       when is_binary(tag) and tag != "" and is_binary(aria_label) and aria_label != "" do
+    attr_selector(tag, "aria-label", aria_label) || tag
+  end
+
+  defp resolve_button_selector(%{tag: tag, button_name: button_name})
+       when is_binary(tag) and tag != "" and is_binary(button_name) and button_name != "" do
+    attr_selector(tag, "name", button_name) || tag
+  end
+
+  defp resolve_button_selector(%{tag: tag, button_value: button_value})
+       when is_binary(tag) and tag != "" and is_binary(button_value) and button_value != "" do
+    attr_selector(tag, "value", button_value) || tag
+  end
+
+  defp resolve_button_selector(%{tag: tag}) when is_binary(tag) and tag != "", do: tag
+  defp resolve_button_selector(_button), do: "button,input"
+
+  defp button_node_match?(node, button) do
+    button_node?(node) and
+      button_attr_matches?(node, button, :tag, &node_tag/1) and
+      button_attr_matches?(node, button, :text, &node_text/1) and
+      button_attr_matches?(node, button, :title, &attr(&1, "title")) and
+      button_attr_matches?(node, button, :aria_label, &attr(&1, "aria-label")) and
+      button_attr_matches?(node, button, :testid, &attr(&1, "data-testid")) and
+      button_attr_matches?(node, button, :button_name, &attr(&1, "name")) and
+      button_attr_matches?(node, button, :button_value, &attr(&1, "value")) and
+      button_attr_matches?(node, button, :form, &attr(&1, "form"))
+  end
+
+  defp button_attr_matches?(node, button, key, actual_fun) when is_function(actual_fun, 1) do
+    case Map.get(button, key) do
+      value when is_binary(value) and value != "" -> actual_fun.(node) == value
+      _ -> true
+    end
+  end
 
   defp maybe_put_form_phx_submit(button, form_node, button_node) do
     if submit_capable_button_node?(button_node) do
@@ -599,15 +677,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     root_node |> safe_query(selector) |> Enum.at(0)
   end
 
-  defp resolve_form_node(root_node, _field, field_node) do
-    root_node
-    |> safe_query("form")
-    |> Enum.find(fn form_node ->
-      form_node
-      |> safe_query("*")
-      |> Enum.any?(&same_node?(&1, field_node))
-    end)
-  end
+  defp resolve_form_node(_root_node, _field, field_node), do: ancestor_form(field_node)
 
   defp form_phx_submit?(lazy_html, button, scope) do
     lazy_html
@@ -705,14 +775,28 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
         form_by_id(root_node, form_id)
 
       _ ->
-        root_node
-        |> safe_query("form")
-        |> Enum.find(fn form_node ->
-          form_node
-          |> safe_query("*")
-          |> Enum.any?(&same_node?(&1, button_node))
-        end)
+        ancestor_form(button_node)
     end
+  end
+
+  defp ancestor_form(node), do: ancestor_node(node, &(node_tag(&1) == "form"))
+
+  defp ancestor_node(node, predicate) when is_function(predicate, 1) do
+    if predicate.(node) do
+      node
+    else
+      parent = LazyHTML.parent_node(node)
+
+      if empty_node?(parent) do
+        nil
+      else
+        ancestor_node(parent, predicate)
+      end
+    end
+  end
+
+  defp empty_node?(node) do
+    LazyHTML.nth_child(node) == [] and List.first(LazyHTML.tag(node)) in [nil, ""]
   end
 
   defp button_alt_text(node, root_node) do

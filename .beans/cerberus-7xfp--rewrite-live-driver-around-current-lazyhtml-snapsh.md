@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-10T07:40:50Z
-updated_at: 2026-03-10T09:53:00Z
+updated_at: 2026-03-10T11:22:27Z
 ---
 
 Rework the Cerberus live driver toward a PhoenixTest-style path: resolve against the current LazyHTML snapshot, use LiveViewClient tree/html_document refresh instead of render plus parse, avoid bespoke actionability machinery unless actual Phoenix or HTML truth requires it, and broaden test coverage incrementally while keeping the implementation minimal.
@@ -25,3 +25,9 @@ Rework the Cerberus live driver toward a PhoenixTest-style path: resolve against
 - live button lookup now uses the shared HTML button resolver first and enriches the matched node with LiveView-specific metadata, falling back to live-only lookup only for non-button phx-click targets
 - live field enrichment is now op-aware so fill-like actions skip checkbox, radio, and option phx-click metadata they do not use
 - preserved EV2 notifications Cerberus row improved to 9.8s warm, down from roughly 14s before the live-driver rewrite work
+
+## Notes
+- profiling macro exposed that shared action/common-opts matching was still computing full state for every live/button candidate even when no state filters were present
+- added Query.has_state_filters/1 and short-circuited shared and live clickable state computation unless checked/disabled/selected/readonly/visible were actually requested
+- fixed live button actuation to use selector plus resolved text when both are available, so repeated title-based buttons still map to a unique LiveViewTest element target
+- preserved EV2 notifications pair now runs at 4.2s for Cerberus versus 3.0s for restored PhoenixTest, down from roughly 9.8s versus 2.4s before this slice

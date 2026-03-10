@@ -27,6 +27,7 @@ config :cerberus,
     chrome_args: ["--disable-setuid-sandbox", "--disable-dev-shm-usage"]
   ],
   endpoint: Endpoint,
+  profiling: String.downcase(System.get_env("CERBERUS_PROFILE_COMPILE", "false")) in ["1", "true", "yes", "on"],
   sql_sandbox: true,
   ecto_repos: [Repo]
 

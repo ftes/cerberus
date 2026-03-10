@@ -204,6 +204,13 @@ defmodule Cerberus.Query do
 
   def matches_state_filters?(_candidate, _opts), do: true
 
+  @spec has_state_filters?(keyword()) :: boolean()
+  def has_state_filters?(opts) when is_list(opts) do
+    Enum.any?(@state_keys, &Keyword.has_key?(opts, &1))
+  end
+
+  def has_state_filters?(_opts), do: false
+
   defp resolve_state_value(candidate, :checked) do
     bool_value(candidate, [:input_checked, :checked])
   end

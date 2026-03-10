@@ -3,7 +3,10 @@ defmodule Cerberus.Html do
 
   alias Cerberus.Locator
   alias Cerberus.Options
+  alias Cerberus.Profiling
   alias Cerberus.Query
+
+  require Profiling
 
   @assertion_deadline_key :cerberus_assertion_deadline_ms
   @assertion_deadline_throw :cerberus_assertion_deadline_exceeded
@@ -123,7 +126,11 @@ defmodule Cerberus.Html do
 
   @spec find_button(document(), String.t() | Regex.t(), Options.locator_filter_opts(), String.t() | nil) ::
           {:ok, map()} | :error
-  def find_button(%LazyHTML{} = html, expected, opts, scope \\ nil), do: find_button_in_doc(html, expected, opts, scope)
+  def find_button(%LazyHTML{} = html, expected, opts, scope \\ nil) do
+    Profiling.profile {:html_resolve, :button} do
+      find_button_in_doc(html, expected, opts, scope)
+    end
+  end
 
   @spec find_form_field(
           document(),
@@ -133,7 +140,9 @@ defmodule Cerberus.Html do
         ) ::
           {:ok, map()} | :error
   def find_form_field(%LazyHTML{} = lazy_html, expected, opts, scope \\ nil) do
-    find_form_field_in_doc(lazy_html, expected, opts, scope)
+    Profiling.profile {:html_resolve, :form_field} do
+      find_form_field_in_doc(lazy_html, expected, opts, scope)
+    end
   end
 
   @spec select_values(document(), map(), String.t() | [String.t()], Options.locator_filter_opts(), String.t() | nil) ::
@@ -172,7 +181,9 @@ defmodule Cerberus.Html do
           String.t() | nil
         ) :: {:ok, map()} | :error
   def find_submit_button(%LazyHTML{} = lazy_html, expected, opts, scope \\ nil) do
-    find_submit_button_in_doc(lazy_html, expected, opts, scope)
+    Profiling.profile {:html_resolve, :submit_button} do
+      find_submit_button_in_doc(lazy_html, expected, opts, scope)
+    end
   end
 
   @spec find_scope_target(document(), Locator.t(), String.t() | nil) ::
@@ -327,7 +338,7 @@ defmodule Cerberus.Html do
 
     node_matches_within_locator?(root_node, node, locator) and
       node_matches_locator_filters?(node, opts) and
-      Query.matches_state_filters?(scope_target_state(node, root_node, hidden_nodes), opts)
+      matches_scope_target_state_filters?(root_node, node, hidden_nodes, opts)
   end
 
   defp maybe_filter_scope_target_closest_candidates(candidates, _root_node, nil, _hidden_nodes), do: candidates
@@ -377,7 +388,7 @@ defmodule Cerberus.Html do
     |> maybe_put_unique_selector(lazy_html, node)
   end
 
-  defp scope_target_state(node, root_node, hidden_nodes \\ nil) do
+  defp scope_target_state(node, root_node, hidden_nodes) do
     state_node = state_source_node(root_node, node)
 
     %{
@@ -684,7 +695,7 @@ defmodule Cerberus.Html do
          value when is_binary(value) <- button_match_value(root_node, node, match_by),
          true <- Query.match_text?(value, expected, opts),
          true <- node_matches_locator_filters?(node, opts),
-         {:ok, button} <- build_submit_button_match(root_node, node) do
+         {:ok, button} <- build_submit_button_match(root_node, node, opts) do
       [button]
     else
       _ -> []
@@ -696,14 +707,14 @@ defmodule Cerberus.Html do
 
     root_node
     |> safe_query(button_query_selector(locator))
-    |> Enum.flat_map(&maybe_submit_button_locator_match(&1, root_node, locator, selector_signatures))
+    |> Enum.flat_map(&maybe_submit_button_locator_match(&1, root_node, locator, selector_signatures, opts))
   end
 
-  defp maybe_submit_button_locator_match(node, root_node, locator, selector_signatures) do
+  defp maybe_submit_button_locator_match(node, root_node, locator, selector_signatures, opts) do
     with true <- submit_button_node?(node),
          true <- allowed_candidate_node?(node, selector_signatures),
          true <- locator_matches_action_node?(root_node, node, locator, :submit_button),
-         {:ok, button} <- build_submit_button_match(root_node, node) do
+         {:ok, button} <- build_submit_button_match(root_node, node, opts) do
       [button]
     else
       _ -> []
@@ -739,7 +750,7 @@ defmodule Cerberus.Html do
          value when is_binary(value) <- link_match_value(root_node, node, match_by),
          true <- Query.match_text?(value, expected, opts),
          true <- node_matches_locator_filters?(node, opts) do
-      [build_link_match(root_node, node, lazy_html)]
+      [build_link_match(root_node, node, lazy_html, opts)]
     else
       _ -> []
     end
@@ -750,14 +761,14 @@ defmodule Cerberus.Html do
 
     root_node
     |> safe_query(link_query_selector(locator))
-    |> Enum.flat_map(&maybe_link_locator_match(&1, root_node, lazy_html, locator, selector_signatures))
+    |> Enum.flat_map(&maybe_link_locator_match(&1, root_node, lazy_html, locator, selector_signatures, opts))
   end
 
-  defp maybe_link_locator_match(node, root_node, lazy_html, locator, selector_signatures) do
+  defp maybe_link_locator_match(node, root_node, lazy_html, locator, selector_signatures, opts) do
     with true <- link_node?(node),
          true <- allowed_candidate_node?(node, selector_signatures),
          true <- locator_matches_action_node?(root_node, node, locator, :link) do
-      [build_link_match(root_node, node, lazy_html)]
+      [build_link_match(root_node, node, lazy_html, opts)]
     else
       _ -> []
     end
@@ -767,17 +778,28 @@ defmodule Cerberus.Html do
     selector = selector_opt(opts) || button_selector()
     match_by = match_by_opt(opts)
 
-    root_node
-    |> safe_query(selector)
-    |> Enum.flat_map(&maybe_button_match(&1, root_node, lazy_html, expected, opts, match_by))
+    button_nodes =
+      Profiling.profile {:html_resolve, :button_query} do
+        safe_query(root_node, selector)
+      end
+
+    Enum.flat_map(button_nodes, &maybe_button_match(&1, root_node, lazy_html, expected, opts, match_by))
   end
 
   defp maybe_button_match(node, root_node, lazy_html, expected, opts, match_by) do
     with true <- button_node?(node),
-         value when is_binary(value) <- button_match_value(root_node, node, match_by),
+         value when is_binary(value) <-
+           Profiling.profile(
+             {:html_resolve, :button_match_value},
+             do: button_match_value(root_node, node, match_by)
+           ),
          true <- Query.match_text?(value, expected, opts),
-         true <- node_matches_locator_filters?(node, opts) do
-      [build_button_match(root_node, node, lazy_html)]
+         true <-
+           Profiling.profile(
+             {:html_resolve, :button_match_filters},
+             do: node_matches_locator_filters?(node, opts)
+           ) do
+      [Profiling.profile({:html_resolve, :button_build}, do: build_button_match(root_node, node, lazy_html, opts))]
     else
       _ -> []
     end
@@ -786,16 +808,25 @@ defmodule Cerberus.Html do
   defp find_button_in_root_by_locator(root_node, lazy_html, locator, opts) do
     selector_signatures = allowed_node_signatures(root_node, selector_opt(opts))
 
-    root_node
-    |> safe_query(button_query_selector(locator))
-    |> Enum.flat_map(&maybe_button_locator_match(&1, root_node, lazy_html, locator, selector_signatures))
+    button_nodes =
+      Profiling.profile {:html_resolve, :button_query} do
+        safe_query(root_node, button_query_selector(locator))
+      end
+
+    Enum.flat_map(
+      button_nodes,
+      &maybe_button_locator_match(&1, root_node, lazy_html, locator, selector_signatures, opts)
+    )
   end
 
-  defp maybe_button_locator_match(node, root_node, lazy_html, locator, selector_signatures) do
+  defp maybe_button_locator_match(node, root_node, lazy_html, locator, selector_signatures, opts) do
     with true <- button_node?(node),
          true <- allowed_candidate_node?(node, selector_signatures),
-         true <- locator_matches_action_node?(root_node, node, locator, :button) do
-      [build_button_match(root_node, node, lazy_html)]
+         true <-
+           Profiling.profile({:html_resolve, :button_locator_match},
+             do: locator_matches_action_node?(root_node, node, locator, :button)
+           ) do
+      [Profiling.profile({:html_resolve, :button_build}, do: build_button_match(root_node, node, lazy_html, opts))]
     else
       _ -> []
     end
@@ -806,8 +837,10 @@ defmodule Cerberus.Html do
 
     case Locator.resolved_kind(locator) do
       :label ->
+        effective_opts = Keyword.merge(locator.opts, opts)
+
         root_node
-        |> find_form_field_by_label(locator.value, locator.opts, selector_signatures)
+        |> find_form_field_by_label(locator.value, effective_opts, selector_signatures)
         |> Enum.filter(fn %{__node: field_node} = _match ->
           locator_matches_action_node?(root_node, field_node, locator, :form_field)
         end)
@@ -815,15 +848,15 @@ defmodule Cerberus.Html do
       _other ->
         root_node
         |> safe_query(form_field_query_selector(locator))
-        |> Enum.flat_map(&maybe_form_field_locator_match(&1, root_node, locator, selector_signatures))
+        |> Enum.flat_map(&maybe_form_field_locator_match(&1, root_node, locator, selector_signatures, opts))
     end
   end
 
-  defp maybe_form_field_locator_match(field_node, root_node, locator, selector_signatures) do
+  defp maybe_form_field_locator_match(field_node, root_node, locator, selector_signatures, opts) do
     with true <- form_field_candidate_node?(field_node),
          true <- allowed_candidate_node?(field_node, selector_signatures),
          true <- locator_matches_action_node?(root_node, field_node, locator, :form_field),
-         {:ok, match} <- build_form_field_match_for_node(root_node, field_node) do
+         {:ok, match} <- build_form_field_match_for_node(root_node, field_node, opts) do
       [match]
     else
       _ -> []
@@ -835,7 +868,7 @@ defmodule Cerberus.Html do
     input_type not in ["hidden", "submit", "button"]
   end
 
-  defp submit_button_map(button_node, form_meta, root_node) do
+  defp submit_button_map(button_node, form_meta, root_node, opts) do
     action = attr(button_node, "formaction") || form_meta.action
     method = attr(button_node, "formmethod") || form_meta.method
 
@@ -846,10 +879,10 @@ defmodule Cerberus.Html do
       alt: button_alt_text(button_node, root_node),
       testid: attr(button_node, "data-testid") || "",
       disabled: disabled?(button_node),
-      readonly: readonly?(button_node),
-      selected: false,
-      checked: false,
-      visible: node_visible_in_root?(root_node, button_node),
+      readonly: maybe_state_value(opts, :readonly, fn -> readonly?(button_node) end),
+      selected: maybe_state_value(opts, :selected, fn -> false end),
+      checked: maybe_state_value(opts, :checked, fn -> false end),
+      visible: maybe_state_value(opts, :visible, fn -> node_visible_in_root?(root_node, button_node) end),
       action: action,
       method: method,
       form: form_meta.form,
@@ -859,9 +892,9 @@ defmodule Cerberus.Html do
     }
   end
 
-  defp build_submit_button_match(root_node, button_node) do
+  defp build_submit_button_match(root_node, button_node, opts) do
     case submit_button_form_meta(root_node, button_node) do
-      {:ok, form_meta} -> {:ok, submit_button_map(button_node, form_meta, root_node)}
+      {:ok, form_meta} -> {:ok, submit_button_map(button_node, form_meta, root_node, opts)}
       :error -> :error
     end
   end
@@ -874,7 +907,7 @@ defmodule Cerberus.Html do
           _ -> :error
         end
 
-      form_node = ancestor_form(root_node, button_node) ->
+      form_node = ancestor_form(button_node) ->
         {:ok, form_meta_from_form_node(root_node, form_node)}
 
       true ->
@@ -882,18 +915,14 @@ defmodule Cerberus.Html do
     end
   end
 
-  defp ancestor_form(root_node, button_node) do
-    root_node
-    |> safe_query("form")
-    |> Enum.find(&contains_node_or_same?(&1, button_node))
-  end
+  defp ancestor_form(button_node), do: ancestor_node(button_node, &(node_tag(&1) == "form"))
 
   defp submit_button_node?(node) do
     type = button_type(node)
     node_tag(node) in ["button", "input"] and type in ["submit", "", "image"]
   end
 
-  defp build_link_match(root_node, node, lazy_html) do
+  defp build_link_match(root_node, node, lazy_html, opts) do
     maybe_put_unique_selector(
       %{
         text: node_text(node),
@@ -901,10 +930,10 @@ defmodule Cerberus.Html do
         data_method: attr(node, "data-method"),
         data_to: attr(node, "data-to"),
         disabled: false,
-        readonly: false,
-        selected: false,
-        checked: false,
-        visible: node_visible_in_root?(root_node, node),
+        readonly: maybe_state_value(opts, :readonly, fn -> false end),
+        selected: maybe_state_value(opts, :selected, fn -> false end),
+        checked: maybe_state_value(opts, :checked, fn -> false end),
+        visible: maybe_state_value(opts, :visible, fn -> node_visible_in_root?(root_node, node) end),
         title: attr(node, "title") || "",
         aria_label: attr(node, "aria-label") || "",
         alt: node_alt_text(root_node, node),
@@ -915,23 +944,25 @@ defmodule Cerberus.Html do
     )
   end
 
-  defp build_button_match(root_node, node, lazy_html) do
+  defp build_button_match(root_node, node, lazy_html, opts) do
     maybe_put_unique_selector(
       %{
+        tag: node_tag(node),
         text: button_text(node),
         data_method: attr(node, "data-method"),
         data_to: attr(node, "data-to"),
         disabled: disabled?(node),
-        readonly: readonly?(node),
-        selected: false,
-        checked: false,
-        visible: node_visible_in_root?(root_node, node),
+        readonly: maybe_state_value(opts, :readonly, fn -> readonly?(node) end),
+        selected: maybe_state_value(opts, :selected, fn -> false end),
+        checked: maybe_state_value(opts, :checked, fn -> false end),
+        visible: maybe_state_value(opts, :visible, fn -> node_visible_in_root?(root_node, node) end),
         title: attr(node, "title") || "",
         aria_label: attr(node, "aria-label") || "",
         alt: button_alt_text(node, root_node),
         testid: attr(node, "data-testid") || "",
         button_name: attr(node, "name"),
-        button_value: attr(node, "value")
+        button_value: attr(node, "value"),
+        form: attr(node, "form")
       },
       lazy_html,
       node
@@ -955,41 +986,49 @@ defmodule Cerberus.Html do
   end
 
   defp find_form_field_by_label(root_node, expected, opts, selector_signatures) do
-    Enum.uniq_by(
-      (root_node
-       |> matching_form_labels(expected, opts)
-       |> Enum.flat_map(&associated_form_fields_for_label(root_node, &1, selector_signatures, opts))) ++
+    Profiling.profile {:html_resolve, :form_field_label_path} do
+      Enum.uniq_by(
         (root_node
-         |> labelled_form_fields()
-         |> Enum.flat_map(&maybe_form_field_label_attr_match(&1, root_node, expected, opts, selector_signatures))),
-      &form_field_identity/1
-    )
+         |> matching_form_labels(expected, opts)
+         |> Enum.flat_map(&associated_form_fields_for_label(root_node, &1, selector_signatures, opts))) ++
+          (root_node
+           |> labelled_form_fields()
+           |> Enum.flat_map(&maybe_form_field_label_attr_match(&1, root_node, expected, opts, selector_signatures))),
+        &form_field_identity/1
+      )
+    end
   end
 
   defp matching_form_labels(root_node, expected, opts) do
-    root_node
-    |> safe_query("label")
-    |> Enum.filter(fn label_node ->
-      Query.match_text?(label_text_for_matching(label_node), expected, opts)
-    end)
+    Profiling.profile {:html_resolve, :matching_form_labels} do
+      root_node
+      |> safe_query("label")
+      |> Enum.filter(fn label_node ->
+        Query.match_text?(label_text_for_matching(label_node), expected, opts)
+      end)
+    end
   end
 
   defp associated_form_fields_for_label(root_node, label_node, selector_signatures, opts) do
-    explicit =
-      label_node
-      |> attr("for")
-      |> explicit_label_field(root_node, selector_signatures, opts)
-      |> List.wrap()
+    Profiling.profile {:html_resolve, :associated_form_fields_for_label} do
+      label_text = label_text_for_matching(label_node)
 
-    implicit =
-      label_node
-      |> safe_query("input,textarea,select")
-      |> Enum.flat_map(&maybe_build_named_form_field_match(&1, root_node, selector_signatures, opts))
+      explicit =
+        label_node
+        |> attr("for")
+        |> explicit_label_field(root_node, selector_signatures, opts, label_text)
+        |> List.wrap()
 
-    Enum.uniq_by(explicit ++ implicit, &form_field_identity/1)
+      implicit =
+        label_node
+        |> safe_query("input,textarea,select")
+        |> Enum.flat_map(&maybe_build_named_form_field_match(&1, root_node, selector_signatures, opts, label_text))
+
+      Enum.uniq_by(explicit ++ implicit, &form_field_identity/1)
+    end
   end
 
-  defp explicit_label_field(label_for, root_node, selector_signatures, opts)
+  defp explicit_label_field(label_for, root_node, selector_signatures, opts, label_text)
        when is_binary(label_for) and label_for != "" do
     root_node
     |> safe_query_by_id(label_for)
@@ -1000,12 +1039,12 @@ defmodule Cerberus.Html do
 
       field_node ->
         field_node
-        |> maybe_build_named_form_field_match(root_node, selector_signatures, opts)
+        |> maybe_build_named_form_field_match(root_node, selector_signatures, opts, label_text)
         |> List.first()
     end
   end
 
-  defp explicit_label_field(_label_for, _root_node, _selector_signatures, _opts), do: nil
+  defp explicit_label_field(_label_for, _root_node, _selector_signatures, _opts, _label_text), do: nil
 
   defp labelled_form_fields(root_node) do
     root_node
@@ -1016,12 +1055,14 @@ defmodule Cerberus.Html do
   end
 
   defp maybe_form_field_label_attr_match(field_node, root_node, expected, opts, selector_signatures) do
-    if field_node
-       |> then(&field_label_sources(root_node, &1))
-       |> Enum.any?(&Query.match_text?(&1, expected, opts)) do
-      maybe_build_named_form_field_match(field_node, root_node, selector_signatures, opts)
-    else
-      []
+    Profiling.profile {:html_resolve, :label_attr_match} do
+      if field_node
+         |> then(&field_label_sources(root_node, &1))
+         |> Enum.any?(&Query.match_text?(&1, expected, opts)) do
+        maybe_build_named_form_field_match(field_node, root_node, selector_signatures, opts)
+      else
+        []
+      end
     end
   end
 
@@ -1035,7 +1076,7 @@ defmodule Cerberus.Html do
            true <- value != "",
            true <- Query.match_text?(value, expected, opts),
            true <- node_matches_locator_filters?(field_node, opts),
-           {:ok, match} <- build_form_field_match_for_node(root_node, field_node) do
+           {:ok, match} <- build_form_field_match_for_node(root_node, field_node, opts) do
         [match]
       else
         _ -> []
@@ -1043,31 +1084,34 @@ defmodule Cerberus.Html do
     end)
   end
 
-  defp maybe_build_named_form_field_match(field_node, root_node, selector_signatures, opts) do
+  defp maybe_build_named_form_field_match(field_node, root_node, selector_signatures, opts, label_text_override \\ nil) do
     with true <- form_field_candidate_node?(field_node),
          true <- allowed_candidate_node?(field_node, selector_signatures),
          true <- node_matches_locator_filters?(field_node, opts),
-         {:ok, match} <- build_form_field_match_for_node(root_node, field_node) do
+         {:ok, match} <- build_form_field_match_for_node(root_node, field_node, opts, label_text_override) do
       [match]
     else
       _ -> []
     end
   end
 
-  defp build_form_field_match_for_node(root_node, field_node) do
-    with {:ok, %{name: name} = field} <- field_node_to_map(root_node, field_node),
-         true <- is_binary(name) and name != "" do
-      {:ok,
-       root_node
-       |> build_form_field_match(
-         field_label_for_node(root_node, field_node),
-         name,
-         field,
-         field_node
-       )
-       |> Map.put(:__node, field_node)}
-    else
-      _ -> :error
+  defp build_form_field_match_for_node(root_node, field_node, opts, label_text_override \\ nil) do
+    Profiling.profile {:html_resolve, :build_form_field_match} do
+      with {:ok, %{name: name} = field} <- field_node_to_map(root_node, field_node),
+           true <- is_binary(name) and name != "" do
+        {:ok,
+         root_node
+         |> build_form_field_match(
+           label_text_override || field_label_for_node(root_node, field_node),
+           name,
+           field,
+           field_node,
+           opts
+         )
+         |> Map.put(:__node, field_node)}
+      else
+        _ -> :error
+      end
     end
   end
 
@@ -1124,29 +1168,50 @@ defmodule Cerberus.Html do
     Map.delete(match, :__node)
   end
 
-  defp build_form_field_match(root_node, label_text, name, field, field_node) do
-    form_node = field_form_node(root_node, field)
+  defp build_form_field_match(root_node, label_text, name, field, field_node, opts) do
+    form_node =
+      Profiling.profile {:html_resolve, :field_form_node} do
+        field_form_node(root_node, field)
+      end
+
     form_id = field_form_id(field, form_node)
     input_type = input_type(field_node)
+
+    selector =
+      Profiling.profile {:html_resolve, :field_selector} do
+        field_selector(root_node, field)
+      end
+
+    form_selector =
+      Profiling.profile {:html_resolve, :field_form_selector} do
+        form_selector(root_node, form_node, form_id)
+      end
+
+    visible =
+      maybe_state_value(opts, :visible, fn ->
+        Profiling.profile {:html_resolve, :field_visible} do
+          node_visible_in_root?(root_node, field_node)
+        end
+      end)
 
     %{
       label: label_text,
       name: name,
       id: field.id,
       form: form_id,
-      selector: field_selector(root_node, field),
-      form_selector: form_selector(root_node, form_node, form_id),
+      selector: selector,
+      form_selector: form_selector,
       input_type: input_type,
       placeholder: attr(field_node, "placeholder") || "",
       title: attr(field_node, "title") || "",
       aria_label: attr(field_node, "aria-label") || "",
       testid: attr(field_node, "data-testid") || "",
       input_value: input_value(field_node, input_type),
-      input_checked: checked?(field_node),
+      input_checked: maybe_state_value(opts, :checked, fn -> checked?(field_node) end),
       input_disabled: disabled?(field_node),
-      input_readonly: readonly?(field_node),
-      input_selected: selected?(field_node, input_type),
-      visible: node_visible_in_root?(root_node, field_node)
+      input_readonly: maybe_state_value(opts, :readonly, fn -> readonly?(field_node) end),
+      input_selected: maybe_state_value(opts, :selected, fn -> selected?(field_node, input_type) end),
+      visible: visible
     }
   end
 
@@ -1190,8 +1255,14 @@ defmodule Cerberus.Html do
   end
 
   defp locator_matches_action_node?(root_node, node, %Locator{kind: :role} = locator, context) do
-    with true <- action_node_matches_common_opts?(root_node, node, locator.opts),
-         true <- role_action_locator_matches?(root_node, node, locator, context) do
+    with true <-
+           Profiling.profile({:html_resolve, :action_common_opts},
+             do: action_node_matches_common_opts?(root_node, node, locator.opts)
+           ),
+         true <-
+           Profiling.profile({:html_resolve, :role_action_locator},
+             do: role_action_locator_matches?(root_node, node, locator, context)
+           ) do
       true
     else
       _ -> false
@@ -1273,7 +1344,15 @@ defmodule Cerberus.Html do
   defp action_node_matches_common_opts?(root_node, node, opts) when is_list(opts) do
     node_matches_selector?(root_node, node, selector_opt(opts)) and
       node_matches_locator_filters?(node, opts) and
-      Query.matches_state_filters?(scope_target_state(node, root_node), opts)
+      matches_scope_target_state_filters?(root_node, node, nil, opts)
+  end
+
+  defp matches_scope_target_state_filters?(root_node, node, hidden_nodes, opts) do
+    if Query.has_state_filters?(opts) do
+      Query.matches_state_filters?(scope_target_state(node, root_node, hidden_nodes), opts)
+    else
+      true
+    end
   end
 
   defp pick_match_result(matches, opts) do
@@ -1448,6 +1527,13 @@ defmodule Cerberus.Html do
     |> String.replace("\u00A0", " ")
     |> String.replace(~r/\s+/, " ")
     |> String.trim()
+  end
+
+  defp maybe_state_value(opts, key, fun) when is_list(opts) and is_atom(key) and is_function(fun, 0) do
+    case Keyword.get(opts, key) do
+      value when is_boolean(value) -> fun.()
+      _ -> nil
+    end
   end
 
   defp node_tree_tag({tag, _attrs, _children}), do: to_string(tag)
@@ -1683,9 +1769,12 @@ defmodule Cerberus.Html do
   defp referenced_text(_value, _root_node), do: ""
 
   defp role_action_locator_matches?(root_node, node, %Locator{} = locator, context) do
-    root_node
-    |> role_locator_match_values(node, locator, context)
-    |> Enum.any?(&Query.match_text?(&1, locator.value, locator.opts))
+    values =
+      Profiling.profile {:html_resolve, :role_locator_values} do
+        role_locator_match_values(root_node, node, locator, context)
+      end
+
+    Enum.any?(values, &Query.match_text?(&1, locator.value, locator.opts))
   end
 
   defp role_locator_match_values(root_node, node, %Locator{} = locator, context \\ nil) do
@@ -1716,9 +1805,9 @@ defmodule Cerberus.Html do
        when is_function(predicate, 1) and is_function(text_fun, 1) do
     if predicate.(node) do
       [
-        labelledby_text(root_node, node),
+        Profiling.profile({:html_resolve, :aria_labelledby_text}, do: labelledby_text(root_node, node)),
         attr(node, "aria-label"),
-        text_fun.(node)
+        Profiling.profile({:html_resolve, :accessible_text}, do: text_fun.(node))
       ]
       |> Enum.filter(&(is_binary(&1) and &1 != ""))
       |> Enum.uniq()
@@ -1795,7 +1884,7 @@ defmodule Cerberus.Html do
     |> Enum.any?(fn candidate_node ->
       node_matches_within_locator?(node, candidate_node, has_locator) and
         node_matches_locator_filters?(candidate_node, has_locator.opts) and
-        Query.matches_state_filters?(scope_target_state(candidate_node, node, hidden_nodes), has_locator.opts)
+        matches_scope_target_state_filters?(node, candidate_node, hidden_nodes, has_locator.opts)
     end)
   end
 
@@ -1890,15 +1979,7 @@ defmodule Cerberus.Html do
     form_by_id(root_node, form_id)
   end
 
-  defp field_form_node(root_node, %{node: node}) do
-    root_node
-    |> safe_query("form")
-    |> Enum.find(fn form_node ->
-      form_node
-      |> safe_query("*")
-      |> Enum.any?(&same_node?(&1, node))
-    end)
-  end
+  defp field_form_node(_root_node, %{node: node}), do: ancestor_form(node)
 
   defp field_selector(_root_node, %{selector: selector}) when is_binary(selector), do: selector
 
@@ -2313,6 +2394,24 @@ defmodule Cerberus.Html do
   defp same_node?(left, right) do
     assert_deadline!()
     node_signature(left) == node_signature(right)
+  end
+
+  defp ancestor_node(node, predicate) when is_function(predicate, 1) do
+    if predicate.(node) do
+      node
+    else
+      parent = LazyHTML.parent_node(node)
+
+      if empty_node?(parent) do
+        nil
+      else
+        ancestor_node(parent, predicate)
+      end
+    end
+  end
+
+  defp empty_node?(node) do
+    LazyHTML.nth_child(node) == [] and List.first(LazyHTML.tag(node)) in [nil, ""]
   end
 
   defp node_signature(node), do: node_signature(node, [], 0)

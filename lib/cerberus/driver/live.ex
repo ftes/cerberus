@@ -37,6 +37,8 @@ defmodule Cerberus.Driver.Live do
   alias Phoenix.LiveViewTest.TreeDOM
   alias Phoenix.LiveViewTest.View
 
+  require Cerberus.Profiling
+
   @type t :: %__MODULE__{}
 
   defstruct endpoint: nil,
@@ -238,41 +240,43 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def click(%__MODULE__{} = session, %Locator{} = locator, opts) do
-    {expected, match_opts} = LocatorOps.click(locator, opts)
-    kind = Keyword.get(match_opts, :kind, :any)
-    maybe_raise_live_link_ambiguity!(session, expected, match_opts, kind)
+    Cerberus.Profiling.profile {:live_action, :click} do
+      {expected, match_opts} = LocatorOps.click(locator, opts)
+      kind = Keyword.get(match_opts, :kind, :any)
+      maybe_raise_live_link_ambiguity!(session, expected, match_opts, kind)
 
-    case find_clickable_link(session, expected, match_opts, kind) do
-      {:ok, link} when is_binary(link.href) ->
-        click_resolved_link(session, link)
+      case find_clickable_link(session, expected, match_opts, kind) do
+        {:ok, link} when is_binary(link.href) ->
+          click_resolved_link(session, link)
 
-      :error ->
-        case wait_for_live_clickable_button(session, expected, match_opts, kind) do
-          {:ok, action_session, button} ->
-            click_or_error_for_button(action_session, button, kind)
+        :error ->
+          case wait_for_live_clickable_button(session, expected, match_opts, kind) do
+            {:ok, action_session, button} ->
+              click_or_error_for_button(action_session, button, kind)
 
-          {:error, action_session, "no button matched locator"} ->
-            observed = %{
-              action: :click,
-              path: action_session.current_path,
-              candidate_values: click_candidate_values(action_session, match_opts, kind),
-              texts: Html.texts(action_session.document, :any, Session.scope(action_session)),
-              transition: session_transition(action_session)
-            }
+            {:error, action_session, "no button matched locator"} ->
+              observed = %{
+                action: :click,
+                path: action_session.current_path,
+                candidate_values: click_candidate_values(action_session, match_opts, kind),
+                texts: Html.texts(action_session.document, :any, Session.scope(action_session)),
+                transition: session_transition(action_session)
+              }
 
-            {:error, action_session, observed, no_clickable_error(kind)}
+              {:error, action_session, observed, no_clickable_error(kind)}
 
-          {:error, action_session, reason} ->
-            observed = %{
-              action: :click,
-              path: action_session.current_path,
-              candidate_values: click_candidate_values(action_session, match_opts, kind),
-              texts: Html.texts(action_session.document, :any, Session.scope(action_session)),
-              transition: session_transition(action_session)
-            }
+            {:error, action_session, reason} ->
+              observed = %{
+                action: :click,
+                path: action_session.current_path,
+                candidate_values: click_candidate_values(action_session, match_opts, kind),
+                texts: Html.texts(action_session.document, :any, Session.scope(action_session)),
+                transition: session_transition(action_session)
+              }
 
-            {:error, action_session, observed, reason}
-        end
+              {:error, action_session, observed, reason}
+          end
+      end
     end
   end
 
@@ -289,62 +293,64 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def fill_in(%__MODULE__{} = session, %Locator{} = locator, value, opts) do
-    {expected, match_opts} = LocatorOps.form(locator, opts)
+    Cerberus.Profiling.profile {:live_action, :fill_in} do
+      {expected, match_opts} = LocatorOps.form(locator, opts)
 
-    case route_kind(session) do
-      :live ->
-        case wait_for_live_form_field(session, expected, match_opts, :fill_in) do
-          {:ok, action_session, field} ->
-            do_live_fill_in(action_session, field, value)
+      case route_kind(session) do
+        :live ->
+          case wait_for_live_form_field(session, expected, match_opts, :fill_in) do
+            {:ok, action_session, field} ->
+              do_live_fill_in(action_session, field, value)
 
-          {:error, failed_session, reason} ->
-            observed = %{
-              action: :fill_in,
-              path: failed_session.current_path,
-              candidate_values: field_candidate_values(failed_session, match_opts),
-              transition: session_transition(failed_session)
-            }
+            {:error, failed_session, reason} ->
+              observed = %{
+                action: :fill_in,
+                path: failed_session.current_path,
+                candidate_values: field_candidate_values(failed_session, match_opts),
+                transition: session_transition(failed_session)
+              }
 
-            {:error, failed_session, observed, reason}
-        end
+              {:error, failed_session, observed, reason}
+          end
 
-      :static ->
-        case Html.find_form_field(session.document, expected, match_opts, Session.scope(session)) do
-          {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
-            updated = %{
-              session
-              | form_data: FormData.put_form_value(session.form_data, field.form, field.form_selector, name, value)
-            }
+        :static ->
+          case Html.find_form_field(session.document, expected, match_opts, Session.scope(session)) do
+            {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
+              updated = %{
+                session
+                | form_data: FormData.put_form_value(session.form_data, field.form, field.form_selector, name, value)
+              }
 
-            observed = %{
-              action: :fill_in,
-              path: session.current_path,
-              field: field,
-              value: value,
-              transition: session_transition(session)
-            }
+              observed = %{
+                action: :fill_in,
+                path: session.current_path,
+                field: field,
+                value: value,
+                transition: session_transition(session)
+              }
 
-            {:ok, update_session(updated, :fill_in, observed), observed}
+              {:ok, update_session(updated, :fill_in, observed), observed}
 
-          {:ok, _field} ->
-            observed = %{
-              action: :fill_in,
-              path: session.current_path,
-              transition: session_transition(session)
-            }
+            {:ok, _field} ->
+              observed = %{
+                action: :fill_in,
+                path: session.current_path,
+                transition: session_transition(session)
+              }
 
-            {:error, session, observed, "matched field does not include a name attribute"}
+              {:error, session, observed, "matched field does not include a name attribute"}
 
-          :error ->
-            observed = %{
-              action: :fill_in,
-              path: session.current_path,
-              candidate_values: field_candidate_values(session, match_opts),
-              transition: session_transition(session)
-            }
+            :error ->
+              observed = %{
+                action: :fill_in,
+                path: session.current_path,
+                candidate_values: field_candidate_values(session, match_opts),
+                transition: session_transition(session)
+              }
 
-            {:error, session, observed, "no form field matched locator"}
-        end
+              {:error, session, observed, "no form field matched locator"}
+          end
+      end
     end
   end
 
@@ -398,21 +404,23 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp toggle_checkbox(%__MODULE__{} = session, %Locator{} = locator, opts, checked?, op) do
-    {expected, match_opts} = LocatorOps.form(locator, opts)
+    Cerberus.Profiling.profile {:live_action, op} do
+      {expected, match_opts} = LocatorOps.form(locator, opts)
 
-    case route_kind(session) do
-      :live ->
-        case wait_for_live_form_field(session, expected, match_opts, op) do
-          {:ok, action_session, field} ->
-            do_live_toggle_checkbox(action_session, field, checked?, op)
+      case route_kind(session) do
+        :live ->
+          case wait_for_live_form_field(session, expected, match_opts, op) do
+            {:ok, action_session, field} ->
+              do_live_toggle_checkbox(action_session, field, checked?, op)
 
-          {:error, failed_session, reason} ->
-            observed = checkbox_error_observed(failed_session, op)
-            {:error, failed_session, observed, reason}
-        end
+            {:error, failed_session, reason} ->
+              observed = checkbox_error_observed(failed_session, op)
+              {:error, failed_session, observed, reason}
+          end
 
-      :static ->
-        toggle_checkbox_in_static_mode(session, expected, match_opts, checked?, op)
+        :static ->
+          toggle_checkbox_in_static_mode(session, expected, match_opts, checked?, op)
+      end
     end
   end
 
@@ -444,40 +452,42 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def submit(%__MODULE__{} = session, %Locator{} = locator, opts) do
-    {expected, match_opts} = LocatorOps.submit(locator, opts)
+    Cerberus.Profiling.profile {:live_action, :submit} do
+      {expected, match_opts} = LocatorOps.submit(locator, opts)
 
-    case route_kind(session) do
-      :live ->
-        case wait_for_live_submit_button(session, expected, match_opts) do
-          {:ok, action_session, button} ->
-            do_live_submit(action_session, button)
+      case route_kind(session) do
+        :live ->
+          case wait_for_live_submit_button(session, expected, match_opts) do
+            {:ok, action_session, button} ->
+              do_live_submit(action_session, button)
 
-          {:error, failed_session, reason} ->
-            observed = %{
-              action: :submit,
-              path: failed_session.current_path,
-              candidate_values: submit_candidate_values(failed_session, match_opts),
-              transition: session_transition(failed_session)
-            }
+            {:error, failed_session, reason} ->
+              observed = %{
+                action: :submit,
+                path: failed_session.current_path,
+                candidate_values: submit_candidate_values(failed_session, match_opts),
+                transition: session_transition(failed_session)
+              }
 
-            {:error, failed_session, observed, reason}
-        end
+              {:error, failed_session, observed, reason}
+          end
 
-      :static ->
-        case Html.find_submit_button(session.document, expected, match_opts, Session.scope(session)) do
-          {:ok, button} ->
-            do_submit(session, button)
+        :static ->
+          case Html.find_submit_button(session.document, expected, match_opts, Session.scope(session)) do
+            {:ok, button} ->
+              do_submit(session, button)
 
-          :error ->
-            observed = %{
-              action: :submit,
-              path: session.current_path,
-              candidate_values: submit_candidate_values(session, match_opts),
-              transition: session_transition(session)
-            }
+            :error ->
+              observed = %{
+                action: :submit,
+                path: session.current_path,
+                candidate_values: submit_candidate_values(session, match_opts),
+                transition: session_transition(session)
+              }
 
-            {:error, session, observed, "no submit button matched locator"}
-        end
+              {:error, session, observed, "no submit button matched locator"}
+          end
+      end
     end
   end
 
@@ -1105,16 +1115,29 @@ defmodule Cerberus.Driver.Live do
   defp live_button_element(view, button, scope) do
     case live_button_selector(button) do
       selector when is_binary(selector) and selector != "" ->
-        element(view, scoped_selector(selector, scope))
+        selector
+        |> scoped_selector(scope)
+        |> button_element_from_selector(view, button)
 
       _ ->
-        case {live_button_tag_selector(button), Map.get(button, :text)} do
-          {selector, text} when is_binary(selector) and selector != "" and is_binary(text) and text != "" ->
-            element(view, scoped_selector(selector, scope), text)
+        live_button_element_from_text(view, button, scope)
+    end
+  end
 
-          _ ->
-            raise ArgumentError, "live button click requires a resolvable selector"
-        end
+  defp button_element_from_selector(selector, view, button) do
+    case Map.get(button, :text) do
+      text when is_binary(text) and text != "" -> element(view, selector, text)
+      _ -> element(view, selector)
+    end
+  end
+
+  defp live_button_element_from_text(view, button, scope) do
+    case {live_button_tag_selector(button), Map.get(button, :text)} do
+      {selector, text} when is_binary(selector) and selector != "" and is_binary(text) and text != "" ->
+        element(view, scoped_selector(selector, scope), text)
+
+      _ ->
+        raise ArgumentError, "live button click requires a resolvable selector"
     end
   end
 
@@ -1248,14 +1271,15 @@ defmodule Cerberus.Driver.Live do
   defp refresh_live_document!(session, render_version \\ nil)
 
   defp refresh_live_document!(%__MODULE__{view: view} = session, render_version) when not is_nil(view) do
-    document = current_live_document!(view)
+    Cerberus.Profiling.profile {:live_internal, :refresh_document} do
+      document = current_live_document!(view)
+      next_render_version = render_version || LiveViewClient.render_version(view)
 
-    next_render_version = render_version || LiveViewClient.render_version(view)
-
-    if session.render_version == next_render_version and is_struct(session.document, LazyHTML) do
-      %{session | document: document}
-    else
-      %{session | document: document, render_version: next_render_version, lookup_cache: %{}}
+      if session.render_version == next_render_version and is_struct(session.document, LazyHTML) do
+        %{session | document: document}
+      else
+        %{session | document: document, render_version: next_render_version, lookup_cache: %{}}
+      end
     end
   end
 
@@ -2814,42 +2838,48 @@ defmodule Cerberus.Driver.Live do
   defp ensure_live_document(%__MODULE__{} = session), do: with_latest_document(session)
 
   defp resolve_cached_live_form_field(%__MODULE__{} = session, expected, opts, op) do
-    key = {:form_field, Session.scope(session), expected, opts, op}
+    Cerberus.Profiling.profile {:live_internal, :resolve_form_field} do
+      key = {:form_field, Session.scope(session), expected, opts, op}
 
-    cached_lookup(session, key, fn current_session ->
-      current_session.document
-      |> LiveViewHTML.find_form_field(
-        expected,
-        opts,
-        Session.scope(current_session),
-        live_field_metadata_requirements(op)
-      )
-      |> resolve_live_form_field_actionability(op)
-    end)
+      cached_lookup(session, key, fn current_session ->
+        current_session.document
+        |> LiveViewHTML.find_form_field(
+          expected,
+          opts,
+          Session.scope(current_session),
+          live_field_metadata_requirements(op)
+        )
+        |> resolve_live_form_field_actionability(op)
+      end)
+    end
   end
 
   defp resolve_cached_live_submit_button(%__MODULE__{} = session, expected, opts) do
-    key = {:submit_button, Session.scope(session), expected, opts}
+    Cerberus.Profiling.profile {:live_internal, :resolve_submit_button} do
+      key = {:submit_button, Session.scope(session), expected, opts}
 
-    cached_lookup(session, key, fn current_session ->
-      case LiveViewHTML.find_submit_button(current_session.document, expected, opts, Session.scope(current_session)) do
-        {:ok, %{disabled: true}} -> {:retry, "matched field is disabled"}
-        {:ok, button} -> {:ok, button}
-        :error -> {:error, "no submit button matched locator"}
-      end
-    end)
+      cached_lookup(session, key, fn current_session ->
+        case LiveViewHTML.find_submit_button(current_session.document, expected, opts, Session.scope(current_session)) do
+          {:ok, %{disabled: true}} -> {:retry, "matched field is disabled"}
+          {:ok, button} -> {:ok, button}
+          :error -> {:error, "no submit button matched locator"}
+        end
+      end)
+    end
   end
 
   defp resolve_cached_live_clickable_button(%__MODULE__{} = session, expected, opts, kind) do
-    key = {:clickable_button, Session.scope(session), expected, opts, kind}
+    Cerberus.Profiling.profile {:live_internal, :resolve_clickable_button} do
+      key = {:clickable_button, Session.scope(session), expected, opts, kind}
 
-    cached_lookup(session, key, fn current_session ->
-      case find_clickable_button(current_session, expected, opts, kind) do
-        {:ok, %{disabled: true}} -> {:retry, "matched field is disabled"}
-        {:ok, button} -> {:ok, button}
-        :error -> {:error, "no button matched locator"}
-      end
-    end)
+      cached_lookup(session, key, fn current_session ->
+        case find_clickable_button(current_session, expected, opts, kind) do
+          {:ok, %{disabled: true}} -> {:retry, "matched field is disabled"}
+          {:ok, button} -> {:ok, button}
+          :error -> {:error, "no button matched locator"}
+        end
+      end)
+    end
   end
 
   defp cached_lookup(%__MODULE__{} = session, key, resolver) when is_function(resolver, 1) do
