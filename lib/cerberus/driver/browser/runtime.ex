@@ -73,7 +73,8 @@ defmodule Cerberus.Driver.Browser.Runtime do
   @type runtime_session :: %{
           service: service(),
           session_id: String.t(),
-          web_socket_url: String.t()
+          web_socket_url: String.t(),
+          debugger_address: String.t() | nil
         }
 
   @type state :: %{
@@ -100,6 +101,11 @@ defmodule Cerberus.Driver.Browser.Runtime do
   @spec session_id(keyword()) :: {:ok, String.t()} | {:error, String.t()}
   def session_id(opts \\ []) when is_list(opts) do
     GenServer.call(__MODULE__, {:session_id, opts}, 20_000)
+  end
+
+  @spec debugger_address(keyword()) :: {:ok, String.t()} | {:error, String.t()}
+  def debugger_address(opts \\ []) when is_list(opts) do
+    GenServer.call(__MODULE__, {:debugger_address, opts}, 20_000)
   end
 
   @impl true
@@ -129,6 +135,19 @@ defmodule Cerberus.Driver.Browser.Runtime do
     case ensure_runtime_session(state, opts) do
       {:ok, runtime_session, state} ->
         {:reply, {:ok, runtime_session.session_id}, state}
+
+      {:error, reason, state} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+
+  def handle_call({:debugger_address, opts}, _from, state) do
+    case ensure_runtime_session(state, opts) do
+      {:ok, %{debugger_address: debugger_address}, state} when is_binary(debugger_address) ->
+        {:reply, {:ok, debugger_address}, state}
+
+      {:ok, _runtime_session, state} ->
+        {:reply, {:error, "webdriver session created without chrome debugger address"}, state}
 
       {:error, reason, state} ->
         {:reply, {:error, reason}, state}
@@ -179,14 +198,15 @@ defmodule Cerberus.Driver.Browser.Runtime do
       retries = startup_retry_attempts(service, opts)
 
       case start_webdriver_session_with_retry(service, opts, retries) do
-        {:ok, service, session_id, web_socket_url} ->
+        {:ok, service, session_id, web_socket_url, debugger_address} ->
           maybe_cleanup_startup_log(service)
 
           {:ok,
            %{
              service: service,
              session_id: session_id,
-             web_socket_url: web_socket_url
+             web_socket_url: web_socket_url,
+             debugger_address: debugger_address
            }}
 
         {:error, service, reason} ->
@@ -271,8 +291,8 @@ defmodule Cerberus.Driver.Browser.Runtime do
   defp start_webdriver_session_with_retry(service, opts, retries_left)
        when is_integer(retries_left) and retries_left >= 0 do
     case start_webdriver_session(service, opts) do
-      {:ok, session_id, web_socket_url} ->
-        {:ok, service, session_id, web_socket_url}
+      {:ok, session_id, web_socket_url, debugger_address} ->
+        {:ok, service, session_id, web_socket_url, debugger_address}
 
       {:error, reason} ->
         handle_startup_session_failure(service, opts, retries_left, reason)
@@ -440,8 +460,8 @@ defmodule Cerberus.Driver.Browser.Runtime do
     payload = webdriver_session_payload(opts, service.managed?)
 
     with {:ok, 200, body} <- http_json(:post, service.url <> "/session", payload, opts),
-         {:ok, session_id, web_socket_url} <- parse_session_response(body, service.url) do
-      {:ok, session_id, web_socket_url}
+         {:ok, session_id, web_socket_url, debugger_address} <- parse_session_response(body, service.url) do
+      {:ok, session_id, web_socket_url, debugger_address}
     else
       {:ok, status, body} ->
         {:error, "webdriver session request failed with status #{status}: #{inspect(body)}"}
@@ -459,9 +479,10 @@ defmodule Cerberus.Driver.Browser.Runtime do
   defp parse_session_response(%{"value" => %{"sessionId" => session_id, "capabilities" => caps}}, service_url)
        when is_binary(session_id) and is_map(caps) do
     web_socket_url = normalize_web_socket_url(caps["webSocketUrl"], service_url)
+    debugger_address = normalize_non_empty_string(get_in(caps, ["goog:chromeOptions", "debuggerAddress"]), nil)
 
     if is_binary(web_socket_url) and byte_size(web_socket_url) > 0 do
-      {:ok, session_id, web_socket_url}
+      {:ok, session_id, web_socket_url, debugger_address}
     else
       {:error, "webdriver session created without capabilities.webSocketUrl"}
     end

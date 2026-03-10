@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-08T09:18:04Z
-updated_at: 2026-03-08T19:40:37Z
+updated_at: 2026-03-10T14:35:48Z
 ---
 
 ## Scope
@@ -79,3 +79,32 @@ updated_at: 2026-03-08T19:40:37Z
   - browser_elixir decode_remote_json: 50 calls / 2.109ms total in the hot test
   - browser_js expressionLocatorTotalMs and expressionActionTotalMs stay tiny (sub-millisecond avg for assertions; roughly 1-2ms avg for actions)
 - Conclusion: the missing time is mostly browser/protocol roundtrip latency for many script.evaluate calls. It is not GenServer queueing, not helper JS execution, and not JSON encode/decode on the Elixir side.
+
+## 2026-03-10 browser unification + profiling update
+- Browser locator assertions now use the same count-first, diagnostics-on-failure algorithmic shape as static/live.
+- This did not materially change the preserved EV2 browser row: project_form_feature_cerberus_test.exs still runs around 16.7s to 19.3s, while the restored Playwright baseline is around 5.7s to 6.0s.
+- Fresh browser profile on project_form_feature_cerberus_test.exs shows the remaining gap is transport-bound, not resolver-JS-bound:
+  - browser_bidi script.evaluate roundtrip: 137 calls / 10927.355ms total / 79.762ms avg
+  - browser_wait evaluate_direct: 34 calls / 3279.840ms in the heaviest test
+  - browser_wait evaluate_action_direct: 18-20 calls / roughly 1.1s per test
+  - browser JS actionResolveMs and expressionLocatorAssertionMs remain tiny (sub-millisecond avg)
+- Conclusion: after the current unification work, the remaining browser EV2 gap is mostly script.evaluate roundtrip volume plus browser-session startup, not locator matcher complexity.
+
+## 2026-03-10 raw CDP-vs-BiDi hot-path experiment
+- Ran a standalone Chrome-only benchmark against the same ChromeDriver session, comparing WebDriver BiDi script.evaluate with direct CDP Runtime.evaluate on the same page target.
+- Results over 1000 sequential calls:
+  - noop expression: BiDi 1159.5ms vs CDP 114.0ms (10.2x faster via CDP)
+  - helper-like JSON expression: BiDi 1433.4ms vs CDP 121.3ms (11.8x faster via CDP)
+- This confirms the remaining browser EV2 hotspot is fundamentally transport-bound.
+- Projected implication for the preserved project_form_feature row: if the 10.9s of current script.evaluate roundtrip cost were perfectly replaced by CDP, the row floor would be in the rough 6-7s range before startup and non-evaluate overhead. That is close to the restored Playwright baseline.
+- Historical repo evidence still matters: the earlier hybrid CDP-evaluate slice brought the preserved EV2 browser row down to roughly 9-10s from about 18-19s, so the practical gain is large but not as perfect as the raw micro-benchmark ceiling.
+
+## 2026-03-10 reapply minimal CDP evaluate slice
+- [ ] Reintroduce the narrow CDP evaluate hot path on top of the current BiDi browser driver so the diff can be inspected again.
+
+## 2026-03-10 narrow CDP evaluate slice reapplied
+- [x] Reintroduce the narrow CDP evaluate hot path on top of the current BiDi browser driver so the diff can be inspected again.
+- Added use_cdp_evaluate to browser session/browser override options.
+- Runtime now exposes Chrome debuggerAddress from webdriver session capabilities.
+- Browser evaluate_with_timeout can route through a small page-level CDP Runtime.evaluate client when the opt is enabled.
+- Added a focused browser_extensions regression that exercises evaluate_js with use_cdp_evaluate: true.

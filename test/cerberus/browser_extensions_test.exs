@@ -291,6 +291,15 @@ defmodule Cerberus.BrowserExtensionsTest do
     end
   end
 
+  test "evaluate_js works with the CDP evaluate hot path enabled" do
+    session =
+      :browser
+      |> session(use_cdp_evaluate: true)
+      |> browser_fixture_session("/articles")
+
+    assert evaluate_js(session, "(() => 20 + 22)()") == 42
+  end
+
   test "with_popup captures popup tab, yields main+popup sessions, and returns canonical main session" do
     main =
       :browser

@@ -82,6 +82,7 @@ Override precedence is:
 - global all-driver config (`config :cerberus, :timeout_ms, ...`)
 - global per-driver config (`config :cerberus, :static | :live | :browser, timeout_ms: ...`)
 - session opts (`session(timeout_ms: ...)`, `session(:browser, ready_timeout_ms: ...)`, `session(:browser, ready_quiet_ms: ...)`, context overrides in `session(:browser, browser: [...])`)
+- optional Chrome-only evaluate hot path: `session(:browser, use_cdp_evaluate: true)` or `config :cerberus, :browser, use_cdp_evaluate: true`
 - call opts (`assert_has(..., timeout: ...)`, `click(..., timeout: ...)`, `assert_path(..., timeout: ...)`)
 
 Unified timeout defaults:
