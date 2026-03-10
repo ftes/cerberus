@@ -6,7 +6,7 @@ defmodule Cerberus.FormActionsTest do
   alias Cerberus.TestSupport.SharedBrowserSession
 
   setup_all do
-    {owner_pid, browser_session} = SharedBrowserSession.start!(use_cdp_evaluate: true)
+    {owner_pid, browser_session} = SharedBrowserSession.start!(use_cdp_evaluate: false)
 
     on_exit(fn ->
       SharedBrowserSession.stop(owner_pid)
