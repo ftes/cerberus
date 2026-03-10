@@ -349,23 +349,43 @@ defmodule Cerberus.Driver.Static do
       match_opts = locator_match_opts(locator, opts)
       visible = Keyword.get(opts, :visible, true)
       match_by = Keyword.get(match_opts, :match_by, :text)
-      texts = Html.assertion_values(session.document, match_by, visible, Session.scope(session))
-      matched = Enum.filter(texts, &Query.match_text?(&1, expected, match_opts))
 
-      observed = %{
-        path: session.current_path,
-        visible: visible,
-        texts: texts,
-        matched: matched,
-        expected: expected,
-        transition: session_transition(session)
-      }
+      match_count =
+        Html.assertion_match_count(
+          session.document,
+          match_by,
+          visible,
+          expected,
+          match_opts,
+          :assert,
+          Session.scope(session)
+        )
 
-      case Query.assertion_count_outcome(length(matched), match_opts, :assert) do
+      case Query.assertion_count_outcome(match_count, match_opts, :assert) do
         :ok ->
+          observed = %{
+            path: session.current_path,
+            visible: visible,
+            expected: expected,
+            match_count: match_count,
+            transition: session_transition(session)
+          }
+
           {:ok, update_last_result(session, :assert_has, observed), observed}
 
         {:error, reason} ->
+          texts = Html.assertion_values(session.document, match_by, visible, Session.scope(session))
+          matched = Enum.filter(texts, &Query.match_text?(&1, expected, match_opts))
+
+          observed = %{
+            path: session.current_path,
+            visible: visible,
+            texts: texts,
+            matched: matched,
+            expected: expected,
+            transition: session_transition(session)
+          }
+
           {:error, session, observed, reason}
       end
     end
@@ -384,23 +404,43 @@ defmodule Cerberus.Driver.Static do
       match_opts = locator_match_opts(locator, opts)
       visible = Keyword.get(opts, :visible, true)
       match_by = Keyword.get(match_opts, :match_by, :text)
-      texts = Html.assertion_values(session.document, match_by, visible, Session.scope(session))
-      matched = Enum.filter(texts, &Query.match_text?(&1, expected, match_opts))
 
-      observed = %{
-        path: session.current_path,
-        visible: visible,
-        texts: texts,
-        matched: matched,
-        expected: expected,
-        transition: session_transition(session)
-      }
+      match_count =
+        Html.assertion_match_count(
+          session.document,
+          match_by,
+          visible,
+          expected,
+          match_opts,
+          :refute,
+          Session.scope(session)
+        )
 
-      case Query.assertion_count_outcome(length(matched), match_opts, :refute) do
+      case Query.assertion_count_outcome(match_count, match_opts, :refute) do
         :ok ->
+          observed = %{
+            path: session.current_path,
+            visible: visible,
+            expected: expected,
+            match_count: match_count,
+            transition: session_transition(session)
+          }
+
           {:ok, update_last_result(session, :refute_has, observed), observed}
 
         {:error, reason} ->
+          texts = Html.assertion_values(session.document, match_by, visible, Session.scope(session))
+          matched = Enum.filter(texts, &Query.match_text?(&1, expected, match_opts))
+
+          observed = %{
+            path: session.current_path,
+            visible: visible,
+            texts: texts,
+            matched: matched,
+            expected: expected,
+            transition: session_transition(session)
+          }
+
           {:error, session, observed, reason}
       end
     end
@@ -455,26 +495,42 @@ defmodule Cerberus.Driver.Static do
   defp run_locator_assertion(%__MODULE__{} = session, %Locator{} = locator, opts, mode) when mode in [:assert, :refute] do
     match_opts = locator_match_opts(locator, opts)
     visible = assertion_visibility(opts, locator)
+    match_count = locator_assertion_match_count(session, locator, visible, match_opts, mode)
 
-    case locator_assertion_values(session, locator, visible) do
-      {:ok, matched} ->
-        finalize_locator_assertion(session, locator, visible, matched, match_opts, mode)
-
-      {:error, reason} ->
+    case Query.assertion_count_outcome(match_count, match_opts, mode) do
+      :ok ->
         observed = %{
           path: session.current_path,
           visible: visible,
-          texts: [],
-          matched: [],
           expected: locator,
+          match_count: match_count,
           transition: session_transition(session)
         }
 
-        {:error, session, observed, reason}
+        op = if(mode == :assert, do: :assert_has, else: :refute_has)
+        {:ok, update_last_result(session, op, observed), observed}
+
+      {:error, reason} ->
+        case locator_assertion_values(session, locator, visible) do
+          {:ok, matched} ->
+            finalize_locator_assertion_error(session, locator, visible, matched, reason)
+
+          {:error, locator_reason} ->
+            observed = %{
+              path: session.current_path,
+              visible: visible,
+              texts: [],
+              matched: [],
+              expected: locator,
+              transition: session_transition(session)
+            }
+
+            {:error, session, observed, locator_reason}
+        end
     end
   end
 
-  defp finalize_locator_assertion(session, locator, visible, matched, match_opts, mode) do
+  defp finalize_locator_assertion_error(session, locator, visible, matched, reason) do
     observed = %{
       path: session.current_path,
       visible: visible,
@@ -484,14 +540,7 @@ defmodule Cerberus.Driver.Static do
       transition: session_transition(session)
     }
 
-    case Query.assertion_count_outcome(length(matched), match_opts, mode) do
-      :ok ->
-        op = if(mode == :assert, do: :assert_has, else: :refute_has)
-        {:ok, update_last_result(session, op, observed), observed}
-
-      {:error, reason} ->
-        {:error, session, observed, reason}
-    end
+    {:error, session, observed, reason}
   end
 
   defp locator_assertion_values(%__MODULE__{} = session, %Locator{} = locator, visible) do
@@ -521,6 +570,20 @@ defmodule Cerberus.Driver.Static do
         _ ->
           :erlang.raise(kind, reason, __STACKTRACE__)
       end
+  end
+
+  defp locator_assertion_match_count(%__MODULE__{} = session, %Locator{} = locator, visible, match_opts, mode) do
+    matched_count =
+      Html.locator_assertion_match_count(session.document, locator, visible, match_opts, mode, Session.scope(session))
+
+    if matched_count == 0 do
+      case SelectorFallback.selected_option_assertion_values(session.form_data, locator, visible) do
+        nil -> matched_count
+        fallback -> length(fallback)
+      end
+    else
+      matched_count
+    end
   end
 
   defp locator_assertion_requires_locator_engine?(%Locator{opts: locator_opts}) do

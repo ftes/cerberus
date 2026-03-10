@@ -59,6 +59,23 @@ defmodule Cerberus.Html do
     collect_assertion_values_in_doc(lazy_html, match_by, visibility, scope)
   end
 
+  @spec assertion_match_count(
+          document(),
+          atom(),
+          true | false | :any,
+          String.t() | Regex.t(),
+          Options.text_match_opts(),
+          :assert | :refute,
+          String.t() | nil
+        ) :: non_neg_integer()
+  def assertion_match_count(%LazyHTML{} = lazy_html, match_by, visibility, expected, opts, mode, scope)
+      when is_atom(match_by) and mode in [:assert, :refute] do
+    case match_by do
+      :text -> collect_text_match_count_in_doc(lazy_html, visibility, expected, opts, mode, scope)
+      _other -> collect_assertion_match_count_in_doc(lazy_html, match_by, visibility, expected, opts, mode, scope)
+    end
+  end
+
   @spec locator_assertion_values(document(), Locator.t(), true | false | :any, String.t() | nil) ::
           [String.t()]
   def locator_assertion_values(%LazyHTML{} = lazy_html, %Locator{} = locator, visibility \\ true, scope \\ nil) do
@@ -80,6 +97,19 @@ defmodule Cerberus.Html do
       |> maybe_filter_scope_target_closest_candidates(root_node, from_locator, hidden_nodes)
       |> Enum.flat_map(&locator_assertion_values_for_node(root_node, hidden_nodes, &1, locator, visibility))
     end)
+  end
+
+  @spec locator_assertion_match_count(
+          document(),
+          Locator.t(),
+          true | false | :any,
+          Options.count_filter_opts(),
+          :assert | :refute,
+          String.t() | nil
+        ) :: non_neg_integer()
+  def locator_assertion_match_count(%LazyHTML{} = lazy_html, %Locator{} = locator, visibility, opts, mode, scope \\ nil)
+      when mode in [:assert, :refute] do
+    collect_locator_assertion_match_count_in_doc(lazy_html, locator, visibility, opts, mode, scope)
   end
 
   @spec node_matches_locator_filters?(term(), Options.locator_filter_opts()) :: boolean()
@@ -1463,6 +1493,46 @@ defmodule Cerberus.Html do
     pick_visibility_values(visibility, visible, hidden)
   end
 
+  defp collect_assertion_match_count_in_doc(lazy_html, match_by, visibility, expected, opts, mode, scope) do
+    {match_count, _decision} =
+      lazy_html
+      |> scoped_nodes(scope)
+      |> Enum.reduce_while({0, :continue}, fn root, {count, _decision} ->
+        {next_count, next_decision} =
+          root
+          |> LazyHTML.to_tree()
+          |> count_assertion_matches(match_by, visibility, expected, opts, mode, false, count)
+
+        if next_decision == :continue do
+          {:cont, {next_count, next_decision}}
+        else
+          {:halt, {next_count, next_decision}}
+        end
+      end)
+
+    match_count
+  end
+
+  defp collect_text_match_count_in_doc(lazy_html, visibility, expected, opts, mode, scope) do
+    {match_count, _decision} =
+      lazy_html
+      |> scoped_nodes(scope)
+      |> Enum.reduce_while({0, :continue}, fn root, {count, _decision} ->
+        {next_count, next_decision} =
+          root
+          |> LazyHTML.to_tree()
+          |> count_text_matches(visibility, expected, opts, mode, false, count)
+
+        if next_decision == :continue do
+          {:cont, {next_count, next_decision}}
+        else
+          {:halt, {next_count, next_decision}}
+        end
+      end)
+
+    match_count
+  end
+
   defp pick_visibility_values(true, visible, _hidden), do: visible
   defp pick_visibility_values(false, _visible, hidden), do: hidden
   defp pick_visibility_values(:any, visible, hidden), do: visible ++ hidden
@@ -1482,6 +1552,19 @@ defmodule Cerberus.Html do
     end)
   end
 
+  defp count_assertion_matches(nodes, match_by, visibility, expected, opts, mode, hidden_parent?, match_count)
+       when is_list(nodes) do
+    Enum.reduce_while(nodes, {match_count, :continue}, fn node, {count, _decision} ->
+      count_assertion_node(node, match_by, visibility, expected, opts, mode, hidden_parent?, count)
+    end)
+  end
+
+  defp count_text_matches(nodes, visibility, expected, opts, mode, hidden_parent?, match_count) when is_list(nodes) do
+    Enum.reduce_while(nodes, {match_count, :continue}, fn node, {count, _decision} ->
+      count_text_node(node, visibility, expected, opts, mode, hidden_parent?, count)
+    end)
+  end
+
   defp locator_assertion_values_for_node(root_node, hidden_nodes, node, locator, visibility) do
     hidden? = node_hidden_in_root?(hidden_nodes, node)
     maybe_locator_assertion_value(selected_visibility?(visibility, hidden?), root_node, node, locator)
@@ -1493,10 +1576,125 @@ defmodule Cerberus.Html do
 
   defp maybe_locator_assertion_value(false, _root_node, _node, _locator), do: []
 
+  defp collect_locator_assertion_match_count_in_doc(lazy_html, locator, visibility, opts, mode, scope) do
+    locator = locator_without_from(locator)
+    from_locator = Keyword.get(locator.opts, :from)
+    query_selector = within_query_selector(locator)
+    locator_for_filter = locator_for_candidate_filter(locator, query_selector)
+
+    if is_struct(from_locator, Locator) do
+      lazy_html
+      |> locator_assertion_values(locator, visibility, scope)
+      |> length()
+    else
+      {match_count, _decision} =
+        lazy_html
+        |> scoped_nodes(scope)
+        |> Enum.reduce_while({0, :continue}, fn root_node, {count, _decision} ->
+          count_locator_assertion_root(root_node, query_selector, locator_for_filter, visibility, opts, mode, count)
+        end)
+
+      match_count
+    end
+  end
+
   defp maybe_append_assertion_value(_node, tag, attrs, children, match_by, hidden?, acc) do
     value = assertion_value_for(tag, attrs, children, match_by)
     append_text(value || "", hidden?, acc)
   end
+
+  defp count_assertion_node(
+         {_tag, attrs, children} = node,
+         match_by,
+         visibility,
+         expected,
+         opts,
+         mode,
+         hidden_parent?,
+         count
+       )
+       when is_list(attrs) and is_list(children) do
+    tag = node_tree_tag(node)
+    hidden? = hidden_parent? or hidden_element?(attrs)
+    value = assertion_value_for(tag, attrs, children, match_by)
+    next_count = maybe_increment_assertion_count(value, visibility, hidden?, expected, opts, count)
+
+    recurse_or_halt_count(next_count, opts, mode, fn ->
+      count_assertion_matches(children, match_by, visibility, expected, opts, mode, hidden?, next_count)
+    end)
+  end
+
+  defp count_assertion_node(_node, _match_by, _visibility, _expected, _opts, _mode, _hidden_parent?, count),
+    do: {:cont, {count, :continue}}
+
+  defp count_text_node(text, visibility, expected, opts, mode, hidden_parent?, count) when is_binary(text) do
+    normalized = text |> String.replace("\u00A0", " ") |> String.trim()
+    next_count = maybe_increment_assertion_count(normalized, visibility, hidden_parent?, expected, opts, count)
+    continue_or_halt_count(next_count, Query.assertion_count_decision(next_count, opts, mode, false))
+  end
+
+  defp count_text_node({"script", _attrs, _children}, _visibility, _expected, _opts, _mode, _hidden_parent?, count),
+    do: {:cont, {count, :continue}}
+
+  defp count_text_node({"style", _attrs, _children}, _visibility, _expected, _opts, _mode, _hidden_parent?, count),
+    do: {:cont, {count, :continue}}
+
+  defp count_text_node({_tag, attrs, children}, visibility, expected, opts, mode, hidden_parent?, count)
+       when is_list(attrs) and is_list(children) do
+    hidden? = hidden_parent? or hidden_element?(attrs)
+    continue_count_reduction(count_text_matches(children, visibility, expected, opts, mode, hidden?, count))
+  end
+
+  defp count_text_node(_node, _visibility, _expected, _opts, _mode, _hidden_parent?, count),
+    do: {:cont, {count, :continue}}
+
+  defp count_locator_assertion_node(root_node, node, locator, hidden_nodes, visibility, opts, mode, count) do
+    next_count =
+      if scope_target_candidate_matches?(root_node, node, locator, hidden_nodes) and
+           selected_visibility?(visibility, node_hidden_in_root?(hidden_nodes, node)) do
+        count + 1
+      else
+        count
+      end
+
+    continue_or_halt_count(next_count, Query.assertion_count_decision(next_count, opts, mode, false))
+  end
+
+  defp count_locator_assertion_root(root_node, query_selector, locator, visibility, opts, mode, count) do
+    hidden_nodes = hidden_nodes_in_root(root_node)
+
+    next_result =
+      root_node
+      |> safe_query(query_selector)
+      |> Enum.reduce_while({count, :continue}, fn node, {inner_count, _} ->
+        count_locator_assertion_node(root_node, node, locator, hidden_nodes, visibility, opts, mode, inner_count)
+      end)
+
+    continue_count_reduction(next_result)
+  end
+
+  defp maybe_increment_assertion_count(value, visibility, hidden?, expected, opts, count) when is_binary(value) do
+    if value != "" and selected_visibility?(visibility, hidden?) and Query.match_text?(value, expected, opts) do
+      count + 1
+    else
+      count
+    end
+  end
+
+  defp maybe_increment_assertion_count(_value, _visibility, _hidden?, _expected, _opts, count), do: count
+
+  defp recurse_or_halt_count(next_count, opts, mode, recurse_fun) when is_function(recurse_fun, 0) do
+    case Query.assertion_count_decision(next_count, opts, mode, false) do
+      :continue -> continue_count_reduction(recurse_fun.())
+      decision -> {:halt, {next_count, decision}}
+    end
+  end
+
+  defp continue_count_reduction({next_count, :continue}), do: {:cont, {next_count, :continue}}
+  defp continue_count_reduction({next_count, decision}), do: {:halt, {next_count, decision}}
+
+  defp continue_or_halt_count(next_count, :continue), do: {:cont, {next_count, :continue}}
+  defp continue_or_halt_count(next_count, decision), do: {:halt, {next_count, decision}}
 
   defp assertion_value_for("label", _attrs, children, :label), do: normalize_text(tree_text(children))
 

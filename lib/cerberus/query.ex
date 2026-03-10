@@ -71,6 +71,21 @@ defmodule Cerberus.Query do
     end
   end
 
+  @spec assertion_count_decision(
+          non_neg_integer(),
+          Options.count_filter_opts(),
+          :assert | :refute,
+          boolean()
+        ) :: :success | :failure | :continue
+  def assertion_count_decision(match_count, opts, mode, finished?)
+      when is_integer(match_count) and match_count >= 0 and mode in [:assert, :refute] and is_boolean(finished?) do
+    if has_count_constraints?(opts) do
+      constrained_decision(match_count, opts, mode, finished?)
+    else
+      default_decision(match_count, mode, finished?)
+    end
+  end
+
   defp assert_default_count_outcome(match_count) do
     if match_count > 0, do: :ok, else: {:error, "expected text not found"}
   end
@@ -85,6 +100,70 @@ defmodule Cerberus.Query do
       {:error, _reason} -> :ok
     end
   end
+
+  defp default_decision(match_count, :assert, finished?), do: decision_for_boolean(match_count > 0, finished?)
+
+  defp default_decision(match_count, :refute, finished?) do
+    cond do
+      match_count > 0 -> :failure
+      finished? -> :success
+      true -> :continue
+    end
+  end
+
+  defp constrained_decision(match_count, opts, :assert, finished?) do
+    decide_constrained(match_count, opts, finished?, :failure, :success)
+  end
+
+  defp constrained_decision(match_count, opts, :refute, finished?) do
+    decide_constrained(match_count, opts, finished?, :success, :failure)
+  end
+
+  defp decide_constrained(match_count, opts, finished?, overflow_decision, satisfied_decision) do
+    cond do
+      exceeds_upper_bound?(match_count, opts) ->
+        overflow_decision
+
+      min_only_satisfied_early?(match_count, opts) ->
+        satisfied_decision
+
+      finished? ->
+        if apply_count_constraints(match_count, opts) == :ok,
+          do: satisfied_decision,
+          else: inverse_decision(satisfied_decision)
+
+      true ->
+        :continue
+    end
+  end
+
+  defp exceeds_upper_bound?(match_count, opts) do
+    case upper_bound(opts) do
+      nil -> false
+      upper_bound -> match_count > upper_bound
+    end
+  end
+
+  defp upper_bound(opts) do
+    cond do
+      is_integer(Keyword.get(opts, :count)) -> Keyword.fetch!(opts, :count)
+      is_integer(Keyword.get(opts, :max)) -> Keyword.fetch!(opts, :max)
+      is_tuple(Keyword.get(opts, :between)) -> elem(Keyword.fetch!(opts, :between), 1)
+      true -> nil
+    end
+  end
+
+  defp min_only_satisfied_early?(match_count, opts) do
+    is_integer(Keyword.get(opts, :min)) and is_nil(Keyword.get(opts, :max)) and is_nil(Keyword.get(opts, :between)) and
+      match_count >= Keyword.fetch!(opts, :min)
+  end
+
+  defp decision_for_boolean(true, _finished?), do: :success
+  defp decision_for_boolean(false, true), do: :failure
+  defp decision_for_boolean(false, false), do: :continue
+
+  defp inverse_decision(:success), do: :failure
+  defp inverse_decision(:failure), do: :success
 
   @spec pick_match([match], Options.count_filter_opts()) :: {:ok, match} | {:error, String.t()}
         when match: var
