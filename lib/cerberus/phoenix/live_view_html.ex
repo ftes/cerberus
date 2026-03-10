@@ -14,9 +14,15 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   @spec find_form_field(LazyHTML.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
           {:ok, map()} | :error
   def find_form_field(%LazyHTML{} = lazy_html, expected, opts, scope \\ nil) do
+    find_form_field(lazy_html, expected, opts, scope, :all)
+  end
+
+  @spec find_form_field(LazyHTML.t(), String.t() | Regex.t(), keyword(), String.t() | nil, atom()) ::
+          {:ok, map()} | :error
+  def find_form_field(%LazyHTML{} = lazy_html, expected, opts, scope, requirements) do
     case find_form_field_with_fallback(lazy_html, expected, opts, scope) do
       {:ok, field} ->
-        {:ok, Map.merge(field, form_field_live_flags(lazy_html, field, scope))}
+        {:ok, Map.merge(field, form_field_live_flags(lazy_html, field, scope, requirements))}
 
       _ ->
         :error
@@ -40,6 +46,46 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
       :error ->
         :error
     end
+  end
+
+  @spec enrich_button(LazyHTML.t(), map(), String.t() | nil) :: map()
+  def enrich_button(%LazyHTML{} = lazy_html, %{} = button, scope \\ nil) do
+    lazy_html
+    |> scoped_nodes(scope)
+    |> Enum.find_value(button, fn root_node ->
+      case resolve_button_node(root_node, button) do
+        nil ->
+          false
+
+        button_node ->
+          enrich_resolved_button(button, root_node, button_node)
+      end
+    end)
+  end
+
+  defp enrich_resolved_button(button, root_node, button_node) do
+    phx_click = attr(button_node, "phx-click")
+    form_node = button_form_node(root_node, button_node)
+    form_id = attr_or_nil(form_node, "id")
+
+    button
+    |> put_button_form_metadata(root_node, button_node, form_node, form_id)
+    |> maybe_put_form_phx_submit(form_node, button_node)
+    |> Map.put(
+      :dispatch_change,
+      dispatch_change_clickable?(root_node, button_node) and not LiveViewBindings.phx_click?(phx_click)
+    )
+  end
+
+  defp put_button_form_metadata(button, root_node, button_node, form_node, form_id) do
+    form_action = attr_or_nil(form_node, "action")
+    form_method = attr_or_nil(form_node, "method")
+
+    button
+    |> Map.put(:form, button[:form] || form_id)
+    |> Map.put(:form_selector, button[:form_selector] || form_selector(root_node, form_node, form_id))
+    |> Map.put(:action, button[:action] || attr_or_nil(button_node, "formaction") || form_action)
+    |> Map.put(:method, button[:method] || attr_or_nil(button_node, "formmethod") || form_method)
   end
 
   @spec trigger_action_forms(LazyHTML.t()) :: [map()]
@@ -398,7 +444,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     end
   end
 
-  defp form_field_live_flags(lazy_html, field, scope) do
+  defp form_field_live_flags(lazy_html, field, scope, requirements) do
     defaults = %{
       input_phx_change: false,
       form_phx_change: false,
@@ -406,12 +452,56 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
       option_phx_click_selectors: %{}
     }
 
-    lazy_html
-    |> scoped_nodes(scope)
-    |> Enum.find_value(defaults, &field_live_flags_in_root(&1, field))
+    if requirements == :fill_like do
+      case form_phx_change_only(lazy_html, field, scope) do
+        {:ok, true} ->
+          %{defaults | form_phx_change: true}
+
+        _ ->
+          field_live_flags_in_roots(lazy_html, field, scope, defaults, requirements)
+      end
+    else
+      field_live_flags_in_roots(lazy_html, field, scope, defaults, requirements)
+    end
   end
 
-  defp field_live_flags_in_root(root_node, field) do
+  defp field_live_flags_in_roots(lazy_html, field, scope, defaults, requirements) do
+    lazy_html
+    |> scoped_nodes(scope)
+    |> Enum.find_value(defaults, &field_live_flags_in_root(&1, field, requirements))
+  end
+
+  defp resolve_button_node(root_node, %{selector: selector}) when is_binary(selector) and selector != "" do
+    root_node
+    |> safe_query(selector)
+    |> Enum.find(&button_node?/1)
+  end
+
+  defp resolve_button_node(_root_node, _button), do: nil
+
+  defp maybe_put_form_phx_submit(button, form_node, button_node) do
+    if submit_capable_button_node?(button_node) do
+      Map.put(button, :form_phx_submit, phx_binding?(attr_or_nil(form_node, "phx-submit")))
+    else
+      button
+    end
+  end
+
+  defp submit_capable_button_node?(node) do
+    case node_tag(node) do
+      "button" ->
+        type = attr(node, "type") || "submit"
+        type in ["submit", ""]
+
+      "input" ->
+        (attr(node, "type") || "text") == "submit"
+
+      _ ->
+        false
+    end
+  end
+
+  defp field_live_flags_in_root(root_node, field, requirements) do
     case resolve_field_node(root_node, field) do
       nil ->
         false
@@ -419,13 +509,35 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
       field_node ->
         form_node = resolve_form_node(root_node, field, field_node)
 
-        %{
-          input_phx_change: phx_binding?(attr(field_node, "phx-change")),
-          form_phx_change: phx_binding?(attr_or_nil(form_node, "phx-change")),
-          input_phx_click: phx_binding?(attr(field_node, "phx-click")),
-          option_phx_click_selectors: option_phx_click_selectors(root_node, field_node)
-        }
+        case requirements do
+          :fill_like ->
+            %{
+              input_phx_change: phx_binding?(attr(field_node, "phx-change")),
+              form_phx_change: phx_binding?(attr_or_nil(form_node, "phx-change")),
+              input_phx_click: false,
+              option_phx_click_selectors: %{}
+            }
+
+          _ ->
+            %{
+              input_phx_change: phx_binding?(attr(field_node, "phx-change")),
+              form_phx_change: phx_binding?(attr_or_nil(form_node, "phx-change")),
+              input_phx_click: phx_binding?(attr(field_node, "phx-click")),
+              option_phx_click_selectors: option_phx_click_selectors(root_node, field_node)
+            }
+        end
     end
+  end
+
+  defp form_phx_change_only(lazy_html, field, scope) do
+    lazy_html
+    |> scoped_nodes(scope)
+    |> Enum.find_value(:error, fn root_node ->
+      case resolve_form_node(root_node, field, nil) do
+        nil -> false
+        form_node -> {:ok, phx_binding?(attr_or_nil(form_node, "phx-change"))}
+      end
+    end)
   end
 
   defp option_phx_click_selectors(root_node, field_node) do

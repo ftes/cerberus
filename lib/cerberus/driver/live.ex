@@ -9,7 +9,6 @@ defmodule Cerberus.Driver.Live do
       element: 3,
       form: 2,
       form: 3,
-      render: 1,
       render_change: 2,
       render_click: 2,
       render_submit: 2
@@ -47,6 +46,7 @@ defmodule Cerberus.Driver.Live do
             view: nil,
             document: nil,
             render_version: 0,
+            lookup_cache: %{},
             form_data: %{active_form: nil, active_form_selector: nil, values: %{}},
             scope: nil,
             current_path: nil,
@@ -1040,14 +1040,9 @@ defmodule Cerberus.Driver.Live do
 
     case result do
       rendered when is_binary(rendered) ->
+        _ = rendered
         path = maybe_live_patch_path(session.view, session.current_path)
-
-        updated = %{
-          session
-          | document: Html.parse!(rendered),
-            render_version: live_progress_version(session),
-            current_path: path
-        }
+        updated = refresh_live_progress_session(session, path)
 
         transition = transition(route_kind(session), :live, :click, session.current_path, path)
 
@@ -1253,16 +1248,15 @@ defmodule Cerberus.Driver.Live do
   defp refresh_live_document!(session, render_version \\ nil)
 
   defp refresh_live_document!(%__MODULE__{view: view} = session, render_version) when not is_nil(view) do
-    document =
-      case LiveViewClient.html_tree(view) do
-        {:ok, html_tree} ->
-          live_document_from_tree(view, html_tree)
+    document = current_live_document!(view)
 
-        :error ->
-          Html.parse!(render(view))
-      end
+    next_render_version = render_version || LiveViewClient.render_version(view)
 
-    %{session | document: document, render_version: render_version || LiveViewClient.render_version(view)}
+    if session.render_version == next_render_version and is_struct(session.document, LazyHTML) do
+      %{session | document: document}
+    else
+      %{session | document: document, render_version: next_render_version, lookup_cache: %{}}
+    end
   end
 
   defp refresh_live_document!(session, _render_version), do: session
@@ -1278,6 +1272,13 @@ defmodule Cerberus.Driver.Live do
 
   defp live_document_from_tree(_view, html_tree) do
     LazyHTML.from_tree(List.wrap(html_tree))
+  end
+
+  defp current_live_document!(%View{} = view) do
+    case LiveViewClient.html_tree(view) do
+      {:ok, html_tree} -> live_document_from_tree(view, html_tree)
+      :error -> raise ArgumentError, "could not read current LiveView document"
+    end
   end
 
   defp assertion_texts(%__MODULE__{} = session, visibility) do
@@ -1563,18 +1564,12 @@ defmodule Cerberus.Driver.Live do
   defp find_clickable_button(_session, _expected, _opts, :link), do: :error
 
   defp find_clickable_button(%{view: view} = session, expected, opts, _kind) when not is_nil(view) do
-    case LiveViewHTML.find_live_clickable_button(session.document, expected, opts, Session.scope(session)) do
+    case Html.find_button(session.document, expected, opts, Session.scope(session)) do
       {:ok, button} ->
-        {:ok, button}
+        {:ok, LiveViewHTML.enrich_button(session.document, button, Session.scope(session))}
 
       :error ->
-        case LiveViewHTML.find_submit_button(session.document, expected, opts, Session.scope(session)) do
-          {:ok, button} ->
-            {:ok, button}
-
-          :error ->
-            Html.find_button(session.document, expected, opts, Session.scope(session))
-        end
+        LiveViewHTML.find_live_clickable_button(session.document, expected, opts, Session.scope(session))
     end
   end
 
@@ -1921,7 +1916,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp submit_button_match?(button) when is_map(button) do
-    Map.has_key?(button, :form_phx_submit)
+    button[:form_phx_submit] == true
   end
 
   defp click_live_submit_button(session, button) do
@@ -1987,15 +1982,27 @@ defmodule Cerberus.Driver.Live do
 
   defp finalize_upload_result(result, session, field, file_name) do
     case result do
-      rendered when is_binary(rendered) ->
+      :refresh ->
         path = maybe_live_patch_path(session.view, session.current_path)
+        updated = refresh_live_progress_session(session, path)
 
-        updated = %{
-          session
-          | document: Html.parse!(rendered),
-            render_version: live_progress_version(session),
-            current_path: path
+        transition = transition(route_kind(session), :live, :upload, session.current_path, path)
+
+        observed = %{
+          action: :upload,
+          path: path,
+          field: field,
+          file_name: file_name,
+          texts: Html.texts(updated.document, :any, Session.scope(updated)),
+          transition: transition
         }
+
+        {:ok, update_session(updated, :upload, observed), observed}
+
+      rendered when is_binary(rendered) ->
+        _ = rendered
+        path = maybe_live_patch_path(session.view, session.current_path)
+        updated = refresh_live_progress_session(session, path)
 
         transition = transition(route_kind(session), :live, :upload, session.current_path, path)
 
@@ -2017,15 +2024,8 @@ defmodule Cerberus.Driver.Live do
         upload_redirect_result(session, field, file_name, to, :redirect)
 
       {:error, {:live_patch, %{to: to}}} ->
-        rendered = render(session.view)
         path = to_request_path(to, session.current_path)
-
-        updated = %{
-          session
-          | document: Html.parse!(rendered),
-            render_version: live_progress_version(session),
-            current_path: path
-        }
+        updated = refresh_live_progress_session(session, path)
 
         transition = transition(route_kind(session), :live, :live_patch, session.current_path, path)
 
@@ -2113,7 +2113,7 @@ defmodule Cerberus.Driver.Live do
     |> render_change(%{"_target" => name})
   end
 
-  defp maybe_upload_change_result(session, _form_selector, _field), do: render(session.view)
+  defp maybe_upload_change_result(_session, _form_selector, _field), do: :refresh
 
   defp live_upload_name!(name) when is_binary(name) and name != "" do
     String.to_existing_atom(name)
@@ -2813,15 +2813,67 @@ defmodule Cerberus.Driver.Live do
   defp ensure_live_document(%__MODULE__{document: %LazyHTML{}} = session), do: session
   defp ensure_live_document(%__MODULE__{} = session), do: with_latest_document(session)
 
+  defp resolve_cached_live_form_field(%__MODULE__{} = session, expected, opts, op) do
+    key = {:form_field, Session.scope(session), expected, opts, op}
+
+    cached_lookup(session, key, fn current_session ->
+      current_session.document
+      |> LiveViewHTML.find_form_field(
+        expected,
+        opts,
+        Session.scope(current_session),
+        live_field_metadata_requirements(op)
+      )
+      |> resolve_live_form_field_actionability(op)
+    end)
+  end
+
+  defp resolve_cached_live_submit_button(%__MODULE__{} = session, expected, opts) do
+    key = {:submit_button, Session.scope(session), expected, opts}
+
+    cached_lookup(session, key, fn current_session ->
+      case LiveViewHTML.find_submit_button(current_session.document, expected, opts, Session.scope(current_session)) do
+        {:ok, %{disabled: true}} -> {:retry, "matched field is disabled"}
+        {:ok, button} -> {:ok, button}
+        :error -> {:error, "no submit button matched locator"}
+      end
+    end)
+  end
+
+  defp resolve_cached_live_clickable_button(%__MODULE__{} = session, expected, opts, kind) do
+    key = {:clickable_button, Session.scope(session), expected, opts, kind}
+
+    cached_lookup(session, key, fn current_session ->
+      case find_clickable_button(current_session, expected, opts, kind) do
+        {:ok, %{disabled: true}} -> {:retry, "matched field is disabled"}
+        {:ok, button} -> {:ok, button}
+        :error -> {:error, "no button matched locator"}
+      end
+    end)
+  end
+
+  defp cached_lookup(%__MODULE__{} = session, key, resolver) when is_function(resolver, 1) do
+    case Map.fetch(session.lookup_cache, key) do
+      {:ok, cached} ->
+        {session, cached}
+
+      :error ->
+        result = resolver.(session)
+        updated = %{session | lookup_cache: Map.put(session.lookup_cache, key, result)}
+        {updated, result}
+    end
+  end
+
   defp wait_for_live_form_field(session, expected, opts, op) do
     finder = fn refreshed ->
-      refreshed.document
-      |> LiveViewHTML.find_form_field(expected, opts, Session.scope(refreshed))
-      |> resolve_live_form_field_actionability(op)
+      resolve_cached_live_form_field(refreshed, expected, opts, op)
     end
 
     wait_for_live_actionable(session, live_action_timeout_ms(session, opts), finder)
   end
+
+  defp live_field_metadata_requirements(op) when op in [:fill_in, :upload], do: :fill_like
+  defp live_field_metadata_requirements(_op), do: :all
 
   defp toggle_checkbox_in_static_mode(session, expected, opts, checked?, op) do
     case Html.find_form_field(session.document, expected, opts, Session.scope(session)) do
@@ -2866,11 +2918,7 @@ defmodule Cerberus.Driver.Live do
 
   defp wait_for_live_submit_button(session, expected, opts) do
     finder = fn refreshed ->
-      case LiveViewHTML.find_submit_button(refreshed.document, expected, opts, Session.scope(refreshed)) do
-        {:ok, %{disabled: true}} -> {:retry, "matched field is disabled"}
-        {:ok, button} -> {:ok, button}
-        :error -> {:error, "no submit button matched locator"}
-      end
+      resolve_cached_live_submit_button(refreshed, expected, opts)
     end
 
     wait_for_live_actionable(session, live_action_timeout_ms(session, opts), finder)
@@ -2878,11 +2926,7 @@ defmodule Cerberus.Driver.Live do
 
   defp wait_for_live_clickable_button(session, expected, opts, kind) do
     finder = fn refreshed ->
-      case find_clickable_button(refreshed, expected, opts, kind) do
-        {:ok, %{disabled: true}} -> {:retry, "matched field is disabled"}
-        {:ok, button} -> {:ok, button}
-        :error -> {:error, "no button matched locator"}
-      end
+      resolve_cached_live_clickable_button(refreshed, expected, opts, kind)
     end
 
     wait_for_live_actionable(session, live_action_timeout_ms(session, opts), finder)
@@ -2895,21 +2939,22 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp do_wait_for_live_actionable(session, deadline, pending_reason, finder) when is_function(finder, 1) do
-    baseline_version = live_progress_version(session)
+    {resolved_session, result} = finder.(session)
+    baseline_version = live_progress_version(resolved_session)
 
-    case finder.(session) do
+    case result do
       {:ok, candidate} ->
-        {:ok, session, candidate}
+        {:ok, resolved_session, candidate}
 
       {:retry, reason} ->
-        retry_live_actionable(session, baseline_version, deadline, reason, finder)
+        retry_live_actionable(resolved_session, baseline_version, deadline, reason, finder)
 
       {:error, reason} when is_nil(pending_reason) ->
-        {:error, session, reason}
+        {:error, resolved_session, reason}
 
       {:error, reason} ->
         maybe_retry_live_actionable(
-          session,
+          resolved_session,
           baseline_version,
           deadline,
           pending_reason,
@@ -3297,19 +3342,14 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp apply_live_rendered_result(session, rendered, reason, path_override \\ nil) do
-    case maybe_follow_trigger_action(session, rendered) do
+    _ = rendered
+    path = path_override || maybe_live_patch_path(session.view, session.current_path)
+    refreshed = refresh_live_progress_session(session, path)
+
+    case maybe_follow_trigger_action(refreshed) do
       :no_trigger ->
-        path = path_override || maybe_live_patch_path(session.view, session.current_path)
-
-        updated = %{
-          session
-          | document: Html.parse!(rendered),
-            render_version: live_progress_version(session),
-            current_path: path
-        }
-
-        transition = transition(route_kind(session), :live, reason, session.current_path, path)
-        {:ok, updated, transition}
+        transition = transition(route_kind(session), :live, reason, session.current_path, refreshed.current_path)
+        {:ok, refreshed, transition}
 
       {:ok, updated} ->
         transition =
@@ -3328,8 +3368,8 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp maybe_follow_trigger_action(session, rendered) do
-    case LiveViewHTML.trigger_action_forms(Html.parse!(rendered)) do
+  defp maybe_follow_trigger_action(session) do
+    case LiveViewHTML.trigger_action_forms(session.document) do
       [] ->
         :no_trigger
 
@@ -3410,7 +3450,8 @@ defmodule Cerberus.Driver.Live do
             view: view,
             document: document,
             render_version: LiveViewClient.render_version(view),
-            current_path: current_path
+            current_path: current_path,
+            lookup_cache: %{}
         }
 
       :error ->
@@ -3481,11 +3522,11 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp unwrap_live_result({:ok, %View{} = view, _extra}, %__MODULE__{} = session) do
-    build_live_session_from_view(session, view, render(view))
+    build_live_session_from_view(session, view)
   end
 
   defp unwrap_live_result(%View{} = view, %__MODULE__{} = session) do
-    build_live_session_from_view(session, view, render(view))
+    build_live_session_from_view(session, view)
   end
 
   defp unwrap_live_result({:error, {kind, %{to: to}}}, %__MODULE__{} = session)
@@ -3509,24 +3550,20 @@ defmodule Cerberus.Driver.Live do
 
   defp unwrap_live_result({:error, {:live_patch, %{to: to}}}, %__MODULE__{} = session) when is_binary(to) do
     path = Cerberus.Path.normalize(to) || session.current_path
-    html = render(session.view)
     unwrap_transition = transition(:live, :live, :live_patch, session.current_path, path)
 
     session
-    |> Map.put(:document, Html.parse!(html))
-    |> Map.put(:render_version, live_progress_version(session))
-    |> Map.put(:current_path, path)
+    |> refresh_live_progress_session(path)
     |> update_last_result(:unwrap, %{path: path, transition: unwrap_transition})
   end
 
   defp unwrap_live_result(rendered, %__MODULE__{} = session) when is_binary(rendered) do
+    _ = rendered
     path = maybe_live_patch_path(session.view, session.current_path)
     unwrap_transition = transition(:live, :live, :unwrap, session.current_path, path)
 
     session
-    |> Map.put(:document, Html.parse!(rendered))
-    |> Map.put(:render_version, live_progress_version(session))
-    |> Map.put(:current_path, path)
+    |> refresh_live_progress_session(path)
     |> update_last_result(:unwrap, %{path: path, transition: unwrap_transition})
   end
 
@@ -3575,14 +3612,20 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp build_live_session_from_view(session, view, html) do
+  defp build_live_session_from_view(session, view, html) when is_binary(html) do
+    _ = html
+    build_live_session_from_view(session, view)
+  end
+
+  defp build_live_session_from_view(session, view) do
     path = maybe_live_patch_path(view, session.current_path)
     unwrap_transition = transition(:live, :live, :unwrap, session.current_path, path)
 
     session
     |> Map.put(:view, view)
-    |> Map.put(:document, Html.parse!(html))
+    |> Map.put(:document, current_live_document!(view))
     |> Map.put(:render_version, LiveViewClient.render_version(view))
+    |> Map.put(:lookup_cache, %{})
     |> Map.put(:current_path, path)
     |> update_last_result(:unwrap, %{path: path, transition: unwrap_transition})
   end

@@ -181,78 +181,39 @@ defmodule Cerberus.Html do
     do: find_scope_target_in_doc(html, locator, scope)
 
   defp find_link_in_doc(lazy_html, expected, opts, scope) do
-    case locator_opt(opts) do
-      %Locator{} = locator ->
-        find_link_by_locator(lazy_html, locator, opts, scope)
+    case_result =
+      case locator_opt(opts) do
+        %Locator{} = locator ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_link_in_root_by_locator(&1, lazy_html, locator, opts))
 
-      nil ->
-        query_selector = selector_opt(opts) || "a[href]"
-        match_by = match_by_opt(opts)
+        nil ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_link_in_root(&1, lazy_html, expected, opts))
+      end
 
-        find_matching(
-          lazy_html,
-          query_selector,
-          expected,
-          opts,
-          scope,
-          fn node, text, root_node ->
-            %{
-              text: text,
-              href: attr(node, "href"),
-              data_method: attr(node, "data-method"),
-              data_to: attr(node, "data-to"),
-              disabled: false,
-              readonly: false,
-              selected: false,
-              checked: false,
-              visible: node_visible_in_root?(root_node, node),
-              title: attr(node, "title") || "",
-              aria_label: attr(node, "aria-label") || "",
-              testid: attr(node, "data-testid") || ""
-            }
-          end,
-          fn _root_node, node -> link_node?(node) end,
-          fn root_node, node -> link_match_value(root_node, node, match_by) end
-        )
-    end
+    matches = Enum.filter(case_result, &Query.matches_state_filters?(&1, opts))
+    pick_match_result(matches, opts)
   end
 
   defp find_button_in_doc(lazy_html, expected, opts, scope) do
-    case locator_opt(opts) do
-      %Locator{} = locator ->
-        find_button_by_locator(lazy_html, locator, opts, scope)
+    case_result =
+      case locator_opt(opts) do
+        %Locator{} = locator ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_button_in_root_by_locator(&1, lazy_html, locator, opts))
 
-      nil ->
-        query_selector = selector_opt(opts) || button_selector()
-        match_by = match_by_opt(opts)
+        nil ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_button_in_root(&1, lazy_html, expected, opts))
+      end
 
-        find_matching(
-          lazy_html,
-          query_selector,
-          expected,
-          opts,
-          scope,
-          fn node, text, root_node ->
-            %{
-              text: text,
-              data_method: attr(node, "data-method"),
-              data_to: attr(node, "data-to"),
-              disabled: disabled?(node),
-              readonly: readonly?(node),
-              selected: false,
-              checked: false,
-              visible: node_visible_in_root?(root_node, node),
-              title: attr(node, "title") || "",
-              aria_label: attr(node, "aria-label") || "",
-              testid: attr(node, "data-testid") || "",
-              button_name: attr(node, "name"),
-              button_value: attr(node, "value")
-            }
-          end,
-          fn _root_node, node -> button_node?(node) end,
-          fn root_node, node -> button_match_value(root_node, node, match_by) end
-        )
-    end
+    matches = Enum.filter(case_result, &Query.matches_state_filters?(&1, opts))
+    pick_match_result(matches, opts)
   end
 
   defp find_form_field_in_doc(lazy_html, expected, opts, scope) do
@@ -269,31 +230,26 @@ defmodule Cerberus.Html do
           |> Enum.flat_map(&find_form_field_in_root(&1, expected, opts))
       end
 
-    matches = Enum.filter(case_result, &Query.matches_state_filters?(&1, opts))
+    matches =
+      case_result
+      |> Enum.filter(&Query.matches_state_filters?(&1, opts))
+      |> Enum.map(&sanitize_form_field_match/1)
 
     pick_match_result(matches, opts)
   end
 
   defp find_submit_button_in_doc(lazy_html, expected, opts, scope) do
-    selector = selector_opt(opts)
-
     case_result =
       case locator_opt(opts) do
         %Locator{} = locator ->
           lazy_html
           |> scoped_nodes(scope)
-          |> Enum.flat_map(fn root_node ->
-            find_submit_button_in_forms_by_locator(root_node, locator, opts, selector) ++
-              find_submit_button_in_owner_form_by_locator(root_node, locator, opts, selector)
-          end)
+          |> Enum.flat_map(&find_submit_button_in_root_by_locator(&1, expected, locator, opts))
 
         nil ->
           lazy_html
           |> scoped_nodes(scope)
-          |> Enum.flat_map(fn root_node ->
-            find_submit_button_in_forms(root_node, expected, opts, selector) ++
-              find_submit_button_in_owner_form(root_node, expected, opts, selector)
-          end)
+          |> Enum.flat_map(&find_submit_button_in_root(&1, expected, opts))
       end
 
     matches = Enum.filter(case_result, &Query.matches_state_filters?(&1, opts))
@@ -714,74 +670,43 @@ defmodule Cerberus.Html do
     end
   end
 
-  defp find_submit_button_in_forms(root_node, expected, opts, selector) do
+  defp find_submit_button_in_root(root_node, expected, opts) do
+    selector = selector_opt(opts) || submit_button_selector()
+    match_by = match_by_opt(opts)
+
     root_node
-    |> safe_query("form")
-    |> Enum.flat_map(&find_submit_button_in_form(root_node, &1, expected, opts, selector))
+    |> safe_query(selector)
+    |> Enum.flat_map(&maybe_submit_button_match(&1, root_node, expected, opts, match_by))
   end
 
-  defp find_submit_button_in_form(root_node, form_node, expected, opts, selector) do
-    form_meta = form_meta_from_form_node(root_node, form_node)
-
-    form_node
-    |> LazyHTML.query(submit_button_selector())
-    |> Enum.flat_map(&maybe_submit_button_match(&1, form_meta, expected, opts, root_node, selector))
-  end
-
-  defp find_submit_button_in_owner_form(root_node, expected, opts, selector) do
-    root_node
-    |> safe_query(owner_submit_button_selector())
-    |> Enum.flat_map(&owner_submit_button_matches(&1, root_node, expected, opts, selector))
-  end
-
-  defp maybe_submit_button_match(button_node, form_meta, expected, opts, root_node, selector) do
-    case build_submit_button(button_node, form_meta, expected, opts, root_node, selector) do
-      nil -> []
-      button -> [button]
-    end
-  end
-
-  defp owner_submit_button_matches(button_node, root_node, expected, opts, selector) do
-    owner_form = attr(button_node, "form")
-
-    with true <- is_binary(owner_form) and owner_form != "",
-         form_node when not is_nil(form_node) <- form_by_id(root_node, owner_form) do
-      form_meta = form_meta_from_form_node(root_node, form_node, owner_form)
-      maybe_submit_button_match(button_node, form_meta, expected, opts, root_node, selector)
+  defp maybe_submit_button_match(node, root_node, expected, opts, match_by) do
+    with true <- submit_button_node?(node),
+         value when is_binary(value) <- button_match_value(root_node, node, match_by),
+         true <- Query.match_text?(value, expected, opts),
+         true <- node_matches_locator_filters?(node, opts),
+         {:ok, button} <- build_submit_button_match(root_node, node) do
+      [button]
     else
       _ -> []
     end
   end
 
-  defp build_submit_button(button_node, form_meta, expected, opts, root_node, selector) do
-    text = button_text(button_node)
-    type = button_type(button_node)
-    match_by = match_by_opt(opts)
-    match_value = button_match_value(root_node, button_node, match_by)
+  defp find_submit_button_in_root_by_locator(root_node, _expected, locator, opts) do
+    selector_signatures = allowed_node_signatures(root_node, selector_opt(opts))
 
-    if submit_button_match?(type, match_value, expected, opts) and
-         node_matches_selector?(root_node, button_node, selector) and
-         node_matches_locator_filters?(button_node, opts) do
-      action = attr(button_node, "formaction") || form_meta.action
-      method = attr(button_node, "formmethod") || form_meta.method
+    root_node
+    |> safe_query(button_query_selector(locator))
+    |> Enum.flat_map(&maybe_submit_button_locator_match(&1, root_node, locator, selector_signatures))
+  end
 
-      %{
-        text: text,
-        title: attr(button_node, "title") || "",
-        alt: button_alt_text(button_node),
-        testid: attr(button_node, "data-testid") || "",
-        disabled: disabled?(button_node),
-        readonly: readonly?(button_node),
-        selected: false,
-        checked: false,
-        visible: node_visible_in_root?(root_node, button_node),
-        action: action,
-        method: method,
-        form: form_meta.form,
-        form_selector: form_meta.form_selector,
-        button_name: attr(button_node, "name"),
-        button_value: attr(button_node, "value")
-      }
+  defp maybe_submit_button_locator_match(node, root_node, locator, selector_signatures) do
+    with true <- submit_button_node?(node),
+         true <- allowed_candidate_node?(node, selector_signatures),
+         true <- locator_matches_action_node?(root_node, node, locator, :submit_button),
+         {:ok, button} <- build_submit_button_match(root_node, node) do
+      [button]
+    else
+      _ -> []
     end
   end
 
@@ -800,129 +725,114 @@ defmodule Cerberus.Html do
     }
   end
 
-  defp submit_button_match?(type, value, expected, opts) do
-    type in ["submit", ""] and is_binary(value) and Query.match_text?(value, expected, opts)
+  defp find_link_in_root(root_node, lazy_html, expected, opts) do
+    selector = selector_opt(opts) || "a[href]"
+    match_by = match_by_opt(opts)
+
+    root_node
+    |> safe_query(selector)
+    |> Enum.flat_map(&maybe_link_match(&1, root_node, lazy_html, expected, opts, match_by))
   end
 
-  defp find_matching(lazy_html, selector, expected, opts, scope, build_fun, node_predicate, match_value_fun) do
-    matches =
-      lazy_html
-      |> scoped_nodes(scope)
-      |> Enum.flat_map(fn root_node ->
-        find_matching_in_root(
-          root_node,
-          lazy_html,
-          selector,
-          expected,
-          opts,
-          build_fun,
-          node_predicate,
-          match_value_fun
-        )
-      end)
-
-    pick_match_result(matches, opts)
+  defp maybe_link_match(node, root_node, lazy_html, expected, opts, match_by) do
+    with true <- link_node?(node),
+         value when is_binary(value) <- link_match_value(root_node, node, match_by),
+         true <- Query.match_text?(value, expected, opts),
+         true <- node_matches_locator_filters?(node, opts) do
+      [build_link_match(root_node, node, lazy_html)]
+    else
+      _ -> []
+    end
   end
 
-  defp find_link_by_locator(lazy_html, locator, opts, scope) do
-    selector = selector_opt(opts)
+  defp find_link_in_root_by_locator(root_node, lazy_html, locator, opts) do
+    selector_signatures = allowed_node_signatures(root_node, selector_opt(opts))
 
-    matches =
-      lazy_html
-      |> scoped_nodes(scope)
-      |> Enum.flat_map(fn root_node ->
-        root_node
-        |> safe_query("a[href]")
-        |> Enum.flat_map(&maybe_link_by_locator(root_node, &1, lazy_html, locator, selector))
-      end)
-
-    pick_match_result(matches, opts)
+    root_node
+    |> safe_query(link_query_selector(locator))
+    |> Enum.flat_map(&maybe_link_locator_match(&1, root_node, lazy_html, locator, selector_signatures))
   end
 
-  defp find_button_by_locator(lazy_html, locator, opts, scope) do
-    selector = selector_opt(opts)
+  defp maybe_link_locator_match(node, root_node, lazy_html, locator, selector_signatures) do
+    with true <- link_node?(node),
+         true <- allowed_candidate_node?(node, selector_signatures),
+         true <- locator_matches_action_node?(root_node, node, locator, :link) do
+      [build_link_match(root_node, node, lazy_html)]
+    else
+      _ -> []
+    end
+  end
 
-    matches =
-      lazy_html
-      |> scoped_nodes(scope)
-      |> Enum.flat_map(fn root_node ->
-        root_node
-        |> safe_query("button")
-        |> Enum.flat_map(&maybe_button_by_locator(root_node, &1, lazy_html, locator, selector))
-      end)
+  defp find_button_in_root(root_node, lazy_html, expected, opts) do
+    selector = selector_opt(opts) || button_selector()
+    match_by = match_by_opt(opts)
 
-    pick_match_result(matches, opts)
+    root_node
+    |> safe_query(selector)
+    |> Enum.flat_map(&maybe_button_match(&1, root_node, lazy_html, expected, opts, match_by))
+  end
+
+  defp maybe_button_match(node, root_node, lazy_html, expected, opts, match_by) do
+    with true <- button_node?(node),
+         value when is_binary(value) <- button_match_value(root_node, node, match_by),
+         true <- Query.match_text?(value, expected, opts),
+         true <- node_matches_locator_filters?(node, opts) do
+      [build_button_match(root_node, node, lazy_html)]
+    else
+      _ -> []
+    end
+  end
+
+  defp find_button_in_root_by_locator(root_node, lazy_html, locator, opts) do
+    selector_signatures = allowed_node_signatures(root_node, selector_opt(opts))
+
+    root_node
+    |> safe_query(button_query_selector(locator))
+    |> Enum.flat_map(&maybe_button_locator_match(&1, root_node, lazy_html, locator, selector_signatures))
+  end
+
+  defp maybe_button_locator_match(node, root_node, lazy_html, locator, selector_signatures) do
+    with true <- button_node?(node),
+         true <- allowed_candidate_node?(node, selector_signatures),
+         true <- locator_matches_action_node?(root_node, node, locator, :button) do
+      [build_button_match(root_node, node, lazy_html)]
+    else
+      _ -> []
+    end
   end
 
   defp find_form_field_in_root_by_locator(root_node, locator, opts) do
-    selector = selector_opt(opts)
+    selector_signatures = allowed_node_signatures(root_node, selector_opt(opts))
 
-    root_node
-    |> safe_query("input,textarea,select")
-    |> Enum.flat_map(fn field_node ->
-      with true <- form_field_candidate_node?(field_node),
-           {:ok, %{name: name} = field} <- field_node_to_map(root_node, field_node),
-           true <- is_binary(name) and name != "",
-           true <- field_matches_selector?(root_node, field, selector),
-           true <- locator_matches_action_node?(root_node, field_node, locator, :form_field) do
-        [
-          build_form_field_match(
-            root_node,
-            field_label_for_node(root_node, field_node),
-            name,
-            field,
-            field_node
-          )
-        ]
-      else
-        _ -> []
-      end
-    end)
+    case Locator.resolved_kind(locator) do
+      :label ->
+        root_node
+        |> find_form_field_by_label(locator.value, locator.opts, selector_signatures)
+        |> Enum.filter(fn %{__node: field_node} = _match ->
+          locator_matches_action_node?(root_node, field_node, locator, :form_field)
+        end)
+
+      _other ->
+        root_node
+        |> safe_query(form_field_query_selector(locator))
+        |> Enum.flat_map(&maybe_form_field_locator_match(&1, root_node, locator, selector_signatures))
+    end
+  end
+
+  defp maybe_form_field_locator_match(field_node, root_node, locator, selector_signatures) do
+    with true <- form_field_candidate_node?(field_node),
+         true <- allowed_candidate_node?(field_node, selector_signatures),
+         true <- locator_matches_action_node?(root_node, field_node, locator, :form_field),
+         {:ok, match} <- build_form_field_match_for_node(root_node, field_node) do
+      [match]
+    else
+      _ -> []
+    end
   end
 
   defp form_field_candidate_node?(field_node) do
     input_type = input_type(field_node)
     input_type not in ["hidden", "submit", "button"]
-  end
-
-  defp find_submit_button_in_forms_by_locator(root_node, locator, opts, selector) do
-    root_node
-    |> safe_query("form")
-    |> Enum.flat_map(fn form_node ->
-      form_meta = form_meta_from_form_node(root_node, form_node)
-      find_submit_button_in_form_by_locator(root_node, form_node, form_meta, locator, opts, selector)
-    end)
-  end
-
-  defp find_submit_button_in_form_by_locator(root_node, form_node, form_meta, locator, opts, selector) do
-    form_node
-    |> LazyHTML.query(submit_button_selector())
-    |> Enum.flat_map(fn button_node ->
-      case build_submit_button_by_locator(button_node, form_meta, locator, opts, root_node, selector) do
-        nil -> []
-        button -> [button]
-      end
-    end)
-  end
-
-  defp find_submit_button_in_owner_form_by_locator(root_node, locator, opts, selector) do
-    root_node
-    |> safe_query(owner_submit_button_selector())
-    |> Enum.flat_map(&owner_form_submit_by_locator(root_node, &1, locator, opts, selector))
-  end
-
-  defp build_submit_button_by_locator(button_node, form_meta, locator, _opts, root_node, selector) do
-    if submit_button_by_locator_candidate?(root_node, button_node, locator, selector) do
-      submit_button_map(button_node, form_meta, root_node)
-    end
-  end
-
-  defp submit_button_by_locator_candidate?(root_node, button_node, locator, selector) do
-    type = button_type(button_node)
-
-    type in ["submit", "", "image"] and
-      node_matches_selector?(root_node, button_node, selector) and
-      locator_matches_action_node?(root_node, button_node, locator, :submit_button)
   end
 
   defp submit_button_map(button_node, form_meta, root_node) do
@@ -949,157 +859,269 @@ defmodule Cerberus.Html do
     }
   end
 
-  defp maybe_link_by_locator(root_node, node, lazy_html, locator, selector) do
-    if link_node?(node) and node_matches_selector?(root_node, node, selector) and
-         locator_matches_action_node?(root_node, node, locator, :link) do
-      mapped =
-        maybe_put_unique_selector(
-          %{
-            text: node_text(node),
-            href: attr(node, "href"),
-            data_method: attr(node, "data-method"),
-            data_to: attr(node, "data-to"),
-            disabled: false,
-            readonly: false,
-            selected: false,
-            checked: false,
-            visible: node_visible_in_root?(root_node, node),
-            title: attr(node, "title") || "",
-            aria_label: attr(node, "aria-label") || "",
-            alt: node_alt_text(root_node, node),
-            testid: attr(node, "data-testid") || ""
-          },
-          lazy_html,
-          node
-        )
-
-      [mapped]
-    else
-      []
+  defp build_submit_button_match(root_node, button_node) do
+    case submit_button_form_meta(root_node, button_node) do
+      {:ok, form_meta} -> {:ok, submit_button_map(button_node, form_meta, root_node)}
+      :error -> :error
     end
   end
 
-  defp maybe_button_by_locator(root_node, node, lazy_html, locator, selector) do
-    if button_node?(node) and node_matches_selector?(root_node, node, selector) and
-         locator_matches_action_node?(root_node, node, locator, :button) do
-      mapped =
-        maybe_put_unique_selector(
-          %{
-            text: button_text(node),
-            data_method: attr(node, "data-method"),
-            data_to: attr(node, "data-to"),
-            disabled: disabled?(node),
-            readonly: readonly?(node),
-            selected: false,
-            checked: false,
-            visible: node_visible_in_root?(root_node, node),
-            title: attr(node, "title") || "",
-            aria_label: attr(node, "aria-label") || "",
-            alt: button_alt_text(node, root_node),
-            testid: attr(node, "data-testid") || "",
-            button_name: attr(node, "name"),
-            button_value: attr(node, "value")
-          },
-          lazy_html,
-          node
-        )
-
-      [mapped]
-    else
-      []
-    end
-  end
-
-  defp owner_form_submit_by_locator(root_node, button_node, locator, opts, selector) do
-    case resolve_owner_form_meta(root_node, button_node) do
-      {:ok, form_meta} ->
-        case build_submit_button_by_locator(button_node, form_meta, locator, opts, root_node, selector) do
-          nil -> []
-          button -> [button]
+  defp submit_button_form_meta(root_node, button_node) do
+    cond do
+      owner_form = attr(button_node, "form") ->
+        case form_by_id(root_node, owner_form) do
+          form_node when not is_nil(form_node) -> {:ok, form_meta_from_form_node(root_node, form_node, owner_form)}
+          _ -> :error
         end
 
-      :error ->
-        []
+      form_node = ancestor_form(root_node, button_node) ->
+        {:ok, form_meta_from_form_node(root_node, form_node)}
+
+      true ->
+        :error
     end
   end
 
-  defp resolve_owner_form_meta(root_node, button_node) do
-    owner_form = attr(button_node, "form")
+  defp ancestor_form(root_node, button_node) do
+    root_node
+    |> safe_query("form")
+    |> Enum.find(&contains_node_or_same?(&1, button_node))
+  end
 
-    with true <- is_binary(owner_form) and owner_form != "",
-         form_node when not is_nil(form_node) <- form_by_id(root_node, owner_form) do
-      {:ok, form_meta_from_form_node(root_node, form_node, owner_form)}
-    else
-      _ -> :error
-    end
+  defp submit_button_node?(node) do
+    type = button_type(node)
+    node_tag(node) in ["button", "input"] and type in ["submit", "", "image"]
+  end
+
+  defp build_link_match(root_node, node, lazy_html) do
+    maybe_put_unique_selector(
+      %{
+        text: node_text(node),
+        href: attr(node, "href"),
+        data_method: attr(node, "data-method"),
+        data_to: attr(node, "data-to"),
+        disabled: false,
+        readonly: false,
+        selected: false,
+        checked: false,
+        visible: node_visible_in_root?(root_node, node),
+        title: attr(node, "title") || "",
+        aria_label: attr(node, "aria-label") || "",
+        alt: node_alt_text(root_node, node),
+        testid: attr(node, "data-testid") || ""
+      },
+      lazy_html,
+      node
+    )
+  end
+
+  defp build_button_match(root_node, node, lazy_html) do
+    maybe_put_unique_selector(
+      %{
+        text: button_text(node),
+        data_method: attr(node, "data-method"),
+        data_to: attr(node, "data-to"),
+        disabled: disabled?(node),
+        readonly: readonly?(node),
+        selected: false,
+        checked: false,
+        visible: node_visible_in_root?(root_node, node),
+        title: attr(node, "title") || "",
+        aria_label: attr(node, "aria-label") || "",
+        alt: button_alt_text(node, root_node),
+        testid: attr(node, "data-testid") || "",
+        button_name: attr(node, "name"),
+        button_value: attr(node, "value")
+      },
+      lazy_html,
+      node
+    )
   end
 
   defp find_form_field_in_root(root_node, expected, opts) do
-    selector = selector_opt(opts)
     match_by = match_by_opt(opts, :label)
+    selector_signatures = allowed_node_signatures(root_node, selector_opt(opts))
 
     case match_by do
       :label ->
-        find_form_field_by_control_label(root_node, expected, opts, selector)
+        find_form_field_by_label(root_node, expected, opts, selector_signatures)
 
       kind when kind in [:placeholder, :title, :testid] ->
-        find_form_field_by_control_attr(root_node, expected, opts, selector, kind)
+        find_form_field_by_control_attr(root_node, expected, opts, selector_signatures, kind)
 
       _ ->
         []
     end
   end
 
-  defp find_form_field_by_control_label(root_node, expected, opts, selector) do
+  defp find_form_field_by_label(root_node, expected, opts, selector_signatures) do
+    Enum.uniq_by(
+      (root_node
+       |> matching_form_labels(expected, opts)
+       |> Enum.flat_map(&associated_form_fields_for_label(root_node, &1, selector_signatures, opts))) ++
+        (root_node
+         |> labelled_form_fields()
+         |> Enum.flat_map(&maybe_form_field_label_attr_match(&1, root_node, expected, opts, selector_signatures))),
+      &form_field_identity/1
+    )
+  end
+
+  defp matching_form_labels(root_node, expected, opts) do
     root_node
-    |> safe_query("input,textarea,select")
-    |> Enum.flat_map(&maybe_form_field_match_list(&1, root_node, expected, opts, selector))
+    |> safe_query("label")
+    |> Enum.filter(fn label_node ->
+      Query.match_text?(label_text_for_matching(label_node), expected, opts)
+    end)
   end
 
-  defp maybe_form_field_match(field_node, root_node, expected, opts, selector) do
-    with {:ok, %{name: name} = field} <- field_node_to_map(root_node, field_node),
-         true <- is_binary(name) and name != "",
-         true <- field_label_matches?(root_node, field_node, expected, opts),
-         true <- field_matches_selector?(root_node, field, selector),
-         true <- node_matches_locator_filters?(field_node, opts) do
-      build_form_field_match(root_node, field_label_for_node(root_node, field_node), name, field, field_node)
-    else
-      _ -> nil
-    end
+  defp associated_form_fields_for_label(root_node, label_node, selector_signatures, opts) do
+    explicit =
+      label_node
+      |> attr("for")
+      |> explicit_label_field(root_node, selector_signatures, opts)
+      |> List.wrap()
+
+    implicit =
+      label_node
+      |> safe_query("input,textarea,select")
+      |> Enum.flat_map(&maybe_build_named_form_field_match(&1, root_node, selector_signatures, opts))
+
+    Enum.uniq_by(explicit ++ implicit, &form_field_identity/1)
   end
 
-  defp maybe_form_field_match_list(field_node, root_node, expected, opts, selector) do
-    case maybe_form_field_match(field_node, root_node, expected, opts, selector) do
-      nil -> []
-      match -> [match]
-    end
-  end
-
-  defp find_form_field_by_control_attr(root_node, expected, opts, selector, kind) do
+  defp explicit_label_field(label_for, root_node, selector_signatures, opts)
+       when is_binary(label_for) and label_for != "" do
     root_node
-    |> safe_query("input,textarea,select")
-    |> Enum.flat_map(&maybe_form_field_attr_match_list(&1, root_node, expected, opts, selector, kind))
+    |> safe_query_by_id(label_for)
+    |> Enum.find(&(form_control_node?(&1) and form_field_candidate_node?(&1)))
+    |> case do
+      nil ->
+        nil
+
+      field_node ->
+        field_node
+        |> maybe_build_named_form_field_match(root_node, selector_signatures, opts)
+        |> List.first()
+    end
   end
 
-  defp maybe_form_field_attr_match(field_node, root_node, expected, opts, selector, kind) do
-    with {:ok, %{name: name} = field} <- field_node_to_map(root_node, field_node),
-         true <- is_binary(name) and name != "",
-         value when is_binary(value) <- field_match_value(root_node, field_node, kind),
-         true <- value != "",
-         true <- Query.match_text?(value, expected, opts),
-         true <- field_matches_selector?(root_node, field, selector),
-         true <- node_matches_locator_filters?(field_node, opts) do
-      build_form_field_match(root_node, field_label_for_node(root_node, field_node), name, field, field_node)
+  defp explicit_label_field(_label_for, _root_node, _selector_signatures, _opts), do: nil
+
+  defp labelled_form_fields(root_node) do
+    root_node
+    |> safe_query(
+      "input[aria-label],input[aria-labelledby],textarea[aria-label],textarea[aria-labelledby],select[aria-label],select[aria-labelledby]"
+    )
+    |> Enum.filter(&form_field_candidate_node?/1)
+  end
+
+  defp maybe_form_field_label_attr_match(field_node, root_node, expected, opts, selector_signatures) do
+    if field_node
+       |> then(&field_label_sources(root_node, &1))
+       |> Enum.any?(&Query.match_text?(&1, expected, opts)) do
+      maybe_build_named_form_field_match(field_node, root_node, selector_signatures, opts)
     else
-      _ -> nil
+      []
     end
   end
 
-  defp maybe_form_field_attr_match_list(field_node, root_node, expected, opts, selector, kind) do
-    case maybe_form_field_attr_match(field_node, root_node, expected, opts, selector, kind) do
-      nil -> []
-      match -> [match]
+  defp find_form_field_by_control_attr(root_node, expected, opts, selector_signatures, kind) do
+    root_node
+    |> safe_query(form_field_attr_query_selector(kind))
+    |> Enum.flat_map(fn field_node ->
+      with true <- form_field_candidate_node?(field_node),
+           true <- allowed_candidate_node?(field_node, selector_signatures),
+           value when is_binary(value) <- field_match_value(root_node, field_node, kind),
+           true <- value != "",
+           true <- Query.match_text?(value, expected, opts),
+           true <- node_matches_locator_filters?(field_node, opts),
+           {:ok, match} <- build_form_field_match_for_node(root_node, field_node) do
+        [match]
+      else
+        _ -> []
+      end
+    end)
+  end
+
+  defp maybe_build_named_form_field_match(field_node, root_node, selector_signatures, opts) do
+    with true <- form_field_candidate_node?(field_node),
+         true <- allowed_candidate_node?(field_node, selector_signatures),
+         true <- node_matches_locator_filters?(field_node, opts),
+         {:ok, match} <- build_form_field_match_for_node(root_node, field_node) do
+      [match]
+    else
+      _ -> []
     end
+  end
+
+  defp build_form_field_match_for_node(root_node, field_node) do
+    with {:ok, %{name: name} = field} <- field_node_to_map(root_node, field_node),
+         true <- is_binary(name) and name != "" do
+      {:ok,
+       root_node
+       |> build_form_field_match(
+         field_label_for_node(root_node, field_node),
+         name,
+         field,
+         field_node
+       )
+       |> Map.put(:__node, field_node)}
+    else
+      _ -> :error
+    end
+  end
+
+  defp form_field_identity(match) when is_map(match) do
+    {
+      Map.get(match, :selector),
+      Map.get(match, :name),
+      Map.get(match, :id),
+      Map.get(match, :form)
+    }
+  end
+
+  defp form_field_query_selector(%Locator{} = locator) do
+    case within_query_selector(locator) do
+      "*" -> "input,textarea,select"
+      selector -> selector
+    end
+  end
+
+  defp link_query_selector(%Locator{} = locator) do
+    case within_query_selector(locator) do
+      "*" -> "a[href]"
+      selector -> selector
+    end
+  end
+
+  defp button_query_selector(%Locator{} = locator) do
+    case within_query_selector(locator) do
+      "*" -> button_selector()
+      selector -> selector
+    end
+  end
+
+  defp form_field_attr_query_selector(:placeholder), do: "input[placeholder],textarea[placeholder],select[placeholder]"
+
+  defp form_field_attr_query_selector(:title), do: "input[title],textarea[title],select[title]"
+  defp form_field_attr_query_selector(:testid), do: "input[data-testid],textarea[data-testid],select[data-testid]"
+
+  defp allowed_node_signatures(_root_node, nil), do: nil
+
+  defp allowed_node_signatures(root_node, selector) when is_binary(selector) do
+    root_node
+    |> safe_query(selector)
+    |> MapSet.new(&node_signature/1)
+  end
+
+  defp allowed_candidate_node?(_node, nil), do: true
+
+  defp allowed_candidate_node?(node, %MapSet{} = signatures) do
+    MapSet.member?(signatures, node_signature(node))
+  end
+
+  defp sanitize_form_field_match(match) when is_map(match) do
+    Map.delete(match, :__node)
   end
 
   defp build_form_field_match(root_node, label_text, name, field, field_node) do
@@ -1130,36 +1152,6 @@ defmodule Cerberus.Html do
 
   defp field_form_id(%{form: form}, _form_node) when is_binary(form) and form != "", do: form
   defp field_form_id(_field, form_node), do: attr_or_nil(form_node, "id")
-
-  defp find_matching_in_root(root_node, lazy_html, selector, expected, opts, build_fun, node_predicate, match_value_fun) do
-    root_node
-    |> safe_query(selector)
-    |> Enum.flat_map(
-      &maybe_matching_node_list(&1, root_node, lazy_html, expected, opts, build_fun, node_predicate, match_value_fun)
-    )
-  end
-
-  defp maybe_matching_node(root_node, node, lazy_html, expected, opts, build_fun, node_predicate, match_value_fun) do
-    text = node_text(node)
-    value = match_value_fun.(root_node, node)
-
-    if node_predicate.(root_node, node) and is_binary(value) and Query.match_text?(value, expected, opts) and
-         node_matches_locator_filters?(node, opts) do
-      mapped =
-        node
-        |> build_fun.(text, root_node)
-        |> maybe_put_unique_selector(lazy_html, node)
-
-      if Query.matches_state_filters?(mapped, opts), do: mapped
-    end
-  end
-
-  defp maybe_matching_node_list(node, root_node, lazy_html, expected, opts, build_fun, node_predicate, match_value_fun) do
-    case maybe_matching_node(root_node, node, lazy_html, expected, opts, build_fun, node_predicate, match_value_fun) do
-      nil -> []
-      match -> [match]
-    end
-  end
 
   defp locator_matches_action_node?(root_node, node, %Locator{kind: :and, value: members, opts: opts}, context)
        when is_list(members) do
@@ -1589,11 +1581,19 @@ defmodule Cerberus.Html do
   end
 
   defp link_match_value(root_node, node, :alt), do: node_alt_text(root_node, node)
-  defp link_match_value(_root_node, node, match_by) when match_by in [:text, :link], do: node_text(node)
+
+  defp link_match_value(root_node, node, match_by) when match_by in [:text, :link] do
+    accessible_action_name(root_node, node, &link_node?/1, &node_text/1)
+  end
+
   defp link_match_value(_root_node, node, match_by), do: action_match_attr_value(node, match_by, node_text(node))
 
   defp button_match_value(root_node, node, :alt), do: button_alt_text(node, root_node)
-  defp button_match_value(_root_node, node, match_by) when match_by in [:text, :button], do: button_text(node)
+
+  defp button_match_value(root_node, node, match_by) when match_by in [:text, :button] do
+    accessible_action_name(root_node, node, &button_node?/1, &button_text/1)
+  end
+
   defp button_match_value(_root_node, node, match_by), do: action_match_attr_value(node, match_by, node_text(node))
 
   defp field_match_value(_root_node, field_node, :placeholder), do: attr(field_node, "placeholder") || ""
@@ -1727,6 +1727,14 @@ defmodule Cerberus.Html do
     end
   end
 
+  defp accessible_action_name(root_node, node, predicate, text_fun)
+       when is_function(predicate, 1) and is_function(text_fun, 1) do
+    root_node
+    |> accessible_name_sources(node, predicate, text_fun)
+    |> List.first()
+    |> Kernel.||("")
+  end
+
   defp role_name(%Locator{opts: opts}) do
     case Keyword.get(opts, :role) do
       value when is_binary(value) and value != "" -> value
@@ -1747,7 +1755,7 @@ defmodule Cerberus.Html do
     |> maybe_filter_alt_by_root(root_node)
   end
 
-  defp button_alt_text(node, root_node \\ nil) do
+  defp button_alt_text(node, root_node) do
     node
     |> direct_or_nested_alt("img[alt],input[type='image'][alt]")
     |> maybe_filter_alt_by_root(root_node)
@@ -2274,28 +2282,6 @@ defmodule Cerberus.Html do
     |> Enum.any?(&same_node?(&1, node))
   end
 
-  defp field_matches_selector?(_root_node, _field, nil), do: true
-
-  defp field_matches_selector?(root_node, field, selector) do
-    root_node
-    |> safe_query(selector)
-    |> Enum.any?(fn node ->
-      node_id = attr(node, "id")
-      node_name = attr(node, "name")
-
-      cond do
-        is_binary(field.id) and field.id != "" ->
-          node_id == field.id
-
-        is_binary(field.name) and field.name != "" ->
-          node_name == field.name
-
-        true ->
-          false
-      end
-    end)
-  end
-
   defp link_node?(node) do
     node_tag(node) == "a" and is_binary(attr(node, "href"))
   end
@@ -2323,7 +2309,6 @@ defmodule Cerberus.Html do
 
   defp button_selector, do: "button,input[type='submit'],input[type='button'],input[type='image']"
   defp submit_button_selector, do: "button,input[type='submit'],input[type='image']"
-  defp owner_submit_button_selector, do: "button[form],input[type='submit'][form],input[type='image'][form]"
 
   defp same_node?(left, right) do
     assert_deadline!()
