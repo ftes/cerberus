@@ -4,14 +4,14 @@ defmodule Cerberus.TestSupport.SharedBrowserSession do
   @boot_timeout_ms 30_000
   @stop_timeout_ms 5_000
 
-  @spec start!() :: {pid(), Cerberus.Session.t()}
-  def start! do
+  @spec start!(keyword()) :: {pid(), Cerberus.Session.t()}
+  def start!(opts \\ []) when is_list(opts) do
     parent = self()
 
     owner_pid =
       spawn_link(fn ->
         try do
-          browser_session = Cerberus.session(:browser)
+          browser_session = Cerberus.session(:browser, opts)
           send(parent, {:shared_browser_session_ready, self(), browser_session})
 
           receive do

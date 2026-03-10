@@ -7,6 +7,7 @@ defmodule Cerberus.LocatorParityTest do
   alias Cerberus.Browser
   alias Cerberus.Driver.Static
   alias Cerberus.InvalidLocatorError
+  alias Cerberus.TestSupport.SharedBrowserSession
   alias ExUnit.AssertionError
 
   @html_prefix """
@@ -424,16 +425,19 @@ defmodule Cerberus.LocatorParityTest do
   end
 
   setup_all do
+    {owner_pid, browser_session} = SharedBrowserSession.start!(use_cdp_evaluate: true)
+
     upload_path =
       Path.join(System.tmp_dir!(), "cerberus-locator-oracle-#{System.unique_integer([:positive])}.txt")
 
     File.write!(upload_path, "locator oracle upload payload")
 
     ExUnit.Callbacks.on_exit(fn ->
+      SharedBrowserSession.stop(owner_pid)
       _ = File.rm(upload_path)
     end)
 
-    {:ok, browser_session: session(:browser), upload_path: upload_path}
+    {:ok, browser_session: browser_session, upload_path: upload_path}
   end
 
   test "chained snippet submit keeps form controls available for follow-up actions", context do
