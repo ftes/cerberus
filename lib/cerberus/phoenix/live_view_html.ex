@@ -14,10 +14,32 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   def find_live_clickable_button(%LazyHTML{} = html, expected, opts, scope \\ nil),
     do: find_live_clickable_button_in_doc(html, expected, opts, scope)
 
+  @spec find_action_live_clickable_button(LazyHTML.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
+          {:ok, map()} | {:error, String.t()}
+  def find_action_live_clickable_button(%LazyHTML{} = html, expected, opts, scope \\ nil),
+    do: find_action_live_clickable_button_in_doc(html, expected, opts, scope)
+
   @spec find_form_field(LazyHTML.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
           {:ok, map()} | :error
   def find_form_field(%LazyHTML{} = lazy_html, expected, opts, scope \\ nil) do
     find_form_field(lazy_html, expected, opts, scope, :all)
+  end
+
+  @spec find_action_form_field(LazyHTML.t(), String.t() | Regex.t(), keyword(), String.t() | nil, atom()) ::
+          {:ok, map()} | {:error, String.t()}
+  def find_action_form_field(%LazyHTML{} = lazy_html, expected, opts, scope \\ nil, requirements \\ :all) do
+    case find_action_form_field_with_fallback(lazy_html, expected, opts, scope) do
+      {:ok, field} ->
+        flags =
+          Profiling.profile {:live_enrich, :form_field_flags} do
+            form_field_live_flags(lazy_html, field, scope, requirements)
+          end
+
+        {:ok, Map.merge(field, flags)}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   @spec find_form_field(LazyHTML.t(), String.t() | Regex.t(), keyword(), String.t() | nil, atom()) ::
@@ -46,6 +68,16 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     end
   end
 
+  defp find_action_form_field_with_fallback(lazy_html, expected, opts, scope) do
+    Profiling.profile {:live_enrich, :form_field_lookup} do
+      case Html.find_action_form_field(lazy_html, expected, opts, scope) do
+        {:ok, field} -> {:ok, field}
+        {:error, "no form field matched locator"} -> find_action_form_field_without_name(lazy_html, expected, opts, scope)
+        {:error, reason} -> {:error, reason}
+      end
+    end
+  end
+
   @spec find_submit_button(LazyHTML.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
           {:ok, map()} | :error
   def find_submit_button(%LazyHTML{} = lazy_html, expected, opts, scope \\ nil) do
@@ -56,6 +88,20 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
 
         :error ->
           :error
+      end
+    end
+  end
+
+  @spec find_action_submit_button(LazyHTML.t(), String.t() | Regex.t(), keyword(), String.t() | nil) ::
+          {:ok, map()} | {:error, String.t()}
+  def find_action_submit_button(%LazyHTML{} = lazy_html, expected, opts, scope \\ nil) do
+    Profiling.profile {:live_enrich, :submit_button} do
+      case Html.find_action_submit_button(lazy_html, expected, opts, scope) do
+        {:ok, button} ->
+          {:ok, Map.put(button, :form_phx_submit, form_phx_submit?(lazy_html, button, scope))}
+
+        {:error, reason} ->
+          {:error, reason}
       end
     end
   end
@@ -121,6 +167,25 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     case Query.pick_match(matches, opts) do
       {:ok, match} -> {:ok, match}
       {:error, _reason} -> :error
+    end
+  end
+
+  defp find_action_live_clickable_button_in_doc(lazy_html, expected, opts, scope) do
+    matches =
+      lazy_html
+      |> scoped_nodes(scope)
+      |> Enum.flat_map(fn root_node ->
+        query_selector = selector_opt(opts) || "[phx-click]"
+
+        root_node
+        |> safe_query(query_selector)
+        |> Enum.flat_map(&maybe_live_clickable_match_list(root_node, &1, expected, opts))
+      end)
+      |> Enum.filter(&Query.matches_state_filters?(&1, opts))
+
+    case Query.pick_action_match(matches, opts) do
+      {:error, "no elements matched locator"} -> {:error, "no button matched locator"}
+      other -> other
     end
   end
 
@@ -286,6 +351,19 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     case Query.pick_match(matches, opts) do
       {:ok, match} -> {:ok, match}
       {:error, _reason} -> :error
+    end
+  end
+
+  defp find_action_form_field_without_name(lazy_html, expected, opts, scope) do
+    matches =
+      lazy_html
+      |> scoped_nodes(scope)
+      |> Enum.flat_map(&find_nameless_matches_in_root(&1, expected, opts))
+      |> Enum.filter(&Query.matches_state_filters?(&1, opts))
+
+    case Query.pick_action_match(matches, opts) do
+      {:error, "no elements matched locator"} -> {:error, "no form field matched locator"}
+      other -> other
     end
   end
 

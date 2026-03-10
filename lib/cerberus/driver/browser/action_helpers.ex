@@ -496,6 +496,12 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       }
     };
 
+    helper.hasExplicitPosition = (options) => {
+      const position = helper.resolvePosition(options);
+      if (position.error) return false;
+      return position.key !== "none";
+    };
+
     helper.matchesStateFilters = (candidate, options) => {
       const stateKeys = ["checked", "disabled", "selected", "readonly", "visible"];
 
@@ -1540,6 +1546,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       const candidates = helper.resolveCandidates(options, roots);
       jsTiming.resolveCandidatesMs = helper.now() - candidatesStartedAt;
       const locator = options.locator && typeof options.locator === "object" ? options.locator : null;
+      const locatorKind = locator ? helper.locatorKind(locator) : null;
+      const useLocatorEngine = !(op !== "click" && op !== "submit" && locatorKind === "text");
       const matchText = helper.buildTextMatcher(options.expected, exact, normalizeWs);
       const prefilterSelector = locator ? helper.querySelectorForLocator(locator) : null;
       const prefilterStartedAt = helper.now();
@@ -1555,7 +1563,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
       const matchCandidatesStartedAt = helper.now();
       const matched = stateMatched.filter((candidate) => {
-        if (locator) {
+        if (locator && useLocatorEngine) {
           return helper.matchesLocator(candidate, locator, op);
         }
 
@@ -1563,6 +1571,22 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         return matchText(value);
       });
       jsTiming.matchCandidatesMs = helper.now() - matchCandidatesStartedAt;
+
+      if (matched.length > 1 && !helper.hasExplicitPosition(options)) {
+        const previewStartedAt = helper.now();
+        const matchedValues = helper.previewValues(matched, op, matchBy);
+        jsTiming.previewMs = helper.now() - previewStartedAt;
+
+        return {
+          ok: false,
+          reason: `${matched.length} elements matched locator; narrow the locator or use :first, :last, :nth, or :index`,
+          matchCount: matched.length,
+          candidateValues: matchedValues,
+          candidateCount: matched.length,
+          path: window.location.pathname + window.location.search,
+          jsTiming
+        };
+      }
 
       if (!helper.countSatisfiesFilters(matched.length, filters)) {
         const previewStartedAt = helper.now();
@@ -1800,7 +1824,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           (option) => typeof option.hasAttribute === "function" && option.hasAttribute("phx-click")
         );
 
-        if (!belongsToForm && !hasOptionPhxClick) {
+        if (helper.inLiveRoot(element) && !belongsToForm && !hasOptionPhxClick) {
           return fail("field_select_contract");
         }
 

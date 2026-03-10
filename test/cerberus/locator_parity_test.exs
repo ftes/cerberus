@@ -553,7 +553,12 @@ defmodule Cerberus.LocatorParityTest do
 
   test "rich snippet locator parity holds for form controls and state filters", context do
     cases = [
-      %{name: "fill_in label locator", expect: :ok, run: &fill_in(&1, ~l"Email Address"l, "alice@example.com")},
+      %{
+        name: "fill_in label locator raises on ambiguous matches",
+        expect: :error,
+        error_module: AssertionError,
+        run: &fill_in(&1, ~l"Email Address"l, "alice@example.com")
+      },
       %{
         name: "fill_in role textbox locator",
         expect: :ok,
@@ -567,11 +572,11 @@ defmodule Cerberus.LocatorParityTest do
       %{name: "fill_in role spinbutton locator", expect: :ok, run: &fill_in(&1, role(:spinbutton, name: "Age"), "42")},
       %{name: "fill_in css locator", expect: :ok, run: &fill_in(&1, css("#search_q"), "cerberus")},
       %{
-        name: "fill_in explicit regex text locator",
-        expect: :ok,
-        run: &fill_in(&1, text(~r/Search term/), "regex value")
+        name: "fill_in explicit text locator raises on ambiguous matches",
+        expect: :error,
+        error_module: AssertionError,
+        run: &fill_in(&1, text("Email Address"), "invalid")
       },
-      %{name: "fill_in explicit text locator", expect: :ok, run: &fill_in(&1, text("Email Address"), "invalid")},
       %{
         name: "fill_in role link locator errors when no field matches",
         expect: :error,
@@ -625,7 +630,12 @@ defmodule Cerberus.LocatorParityTest do
         error_module: AssertionError,
         run: &select(&1, ~l"Language"l, option: ~l"Missing"e)
       },
-      %{name: "check checkbox by label", expect: :ok, run: &check(&1, ~l"Two"l)},
+      %{
+        name: "check checkbox by label raises on ambiguous matches",
+        expect: :error,
+        error_module: AssertionError,
+        run: &check(&1, ~l"Two"l)
+      },
       %{name: "uncheck checkbox by label", expect: :ok, run: &uncheck(&1, ~l"One"l)},
       %{
         name: "check duplicate labels disambiguated by scope chain",
@@ -751,9 +761,10 @@ defmodule Cerberus.LocatorParityTest do
           )
       },
       %{
-        name: "submit supports nested or composition inside has",
+        name: "submit nested or composition inside has raises on ambiguous matches",
         html: @chained_locator_html,
-        expect: :ok,
+        expect: :error,
+        error_module: AssertionError,
         run:
           &submit(
             &1,
@@ -1049,9 +1060,10 @@ defmodule Cerberus.LocatorParityTest do
         run: &fill_in(&1, "#selector-form" |> css() |> css("#s2"), "scoped")
       },
       %{
-        name: "selector-only snippet ambiguous fill_in still succeeds",
+        name: "selector-only snippet ambiguous fill_in raises",
         html: @selector_only_html,
-        expect: :ok,
+        expect: :error,
+        error_module: AssertionError,
         run: &fill_in(&1, ~l"Field"l, "any")
       },
       %{

@@ -24,7 +24,7 @@ defmodule Cerberus.CurrentPathTest do
 
       assert_path(session, "/live/redirects")
 
-      session = click(session, ~l"Patch link"e)
+      session = click(session, role(:link, name: "Patch link", exact: true))
       assert_path(session, "/live/redirects", query: %{details: "true", foo: "bar"})
     end
 
@@ -68,7 +68,7 @@ defmodule Cerberus.CurrentPathTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/live/redirects")
-        |> click(~l"Patch link"e)
+        |> click(role(:link, name: "Patch link", exact: true))
 
       assert_path(session, "/live/redirects", query: %{details: "true", foo: "bar"})
 

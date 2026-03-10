@@ -890,11 +890,13 @@ defmodule Cerberus.Fixtures.PageController do
       <body>
         <main>
           <div data-phx-session="long-action-root" id="long-action-root" class="phx-disconnected">
-            <label for="long-action-select">Slow role</label>
-            <select id="long-action-select" name="role" disabled>
-              <option value="">Choose</option>
-              <option value="analyst">Analyst</option>
-            </select>
+            <form id="long-action-form">
+              <label for="long-action-select">Slow role</label>
+              <select id="long-action-select" name="role" disabled>
+                <option value="">Choose</option>
+                <option value="analyst">Analyst</option>
+              </select>
+            </form>
             <p id="long-action-status">booting</p>
           </div>
         </main>

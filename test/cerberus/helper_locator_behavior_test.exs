@@ -48,14 +48,16 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       |> assert_has(~l"Search query: elixir"e)
     end
 
-    test "duplicate live button labels are disambiguated for render_click conversion (#{driver})", context do
-      unquote(driver)
-      |> driver_session(context)
-      |> visit("/live/selector-edge")
-      |> click(role(:button, name: "Apply"))
-      |> assert_has(text("Selected: primary", exact: true))
-      |> click(role(:button, name: "Apply"))
-      |> assert_has(text("Selected: primary", exact: true))
+    test "duplicate live button labels require explicit disambiguation (#{driver})", context do
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          unquote(driver)
+          |> driver_session(context)
+          |> visit("/live/selector-edge")
+          |> click(role(:button, name: "Apply"))
+        end
+
+      assert error.message =~ "2 elements matched locator"
     end
 
     test "css sigil selector disambiguates duplicate live button labels (#{driver})", context do
@@ -212,7 +214,7 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
 
     test "or composition enforces strict uniqueness for actions (#{driver})", context do
       assert_raise ExUnit.AssertionError,
-                   ~r/(expected exactly 1 matched element|no clickable element matched locator)/,
+                   ~r/2 elements matched locator/,
                    fn ->
                      unquote(driver)
                      |> driver_session(context)
@@ -222,11 +224,18 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
     end
 
     test "count-position filters pick deterministic action targets across fill_in and submit (#{driver})", context do
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          unquote(driver)
+          |> driver_session(context)
+          |> visit("/search")
+          |> submit(role(:button, name: ~r/^Run/))
+        end
+
+      assert error.message =~ "2 elements matched locator"
+
       unquote(driver)
       |> driver_session(context)
-      |> visit("/search")
-      |> submit(role(:button, name: ~r/^Run/))
-      |> assert_path("/search/results")
       |> visit("/search")
       |> fill_in(~l"Search term"l, "shire", first: true)
       |> submit(role(:button, name: ~r/^Run/), first: true)

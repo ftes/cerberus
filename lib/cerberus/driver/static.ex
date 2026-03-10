@@ -157,39 +157,61 @@ defmodule Cerberus.Driver.Static do
       {:ok, link} ->
         click_static_link(session, link)
 
-      :error ->
-        case find_clickable_button(session, expected, match_opts, kind) do
-          {:ok, %{disabled: true}} ->
-            observed = %{
-              action: :button,
-              path: session.current_path,
-              transition: session_transition(session)
-            }
+      {:error, "no link matched locator"} ->
+        resolve_static_button_click(session, expected, match_opts, kind)
 
-            {:error, session, observed, "matched field is disabled"}
+      {:error, reason} ->
+        observed = %{
+          action: :click,
+          path: session.current_path,
+          candidate_values: click_candidate_values(session, match_opts, kind),
+          texts: Html.texts(session.document, :any, Session.scope(session)),
+          transition: session_transition(session)
+        }
 
-          {:ok, button} ->
-            maybe_submit_clicked_button(session, expected, match_opts, kind, button)
-
-          :error ->
-            observed = %{
-              action: :click,
-              path: session.current_path,
-              candidate_values: click_candidate_values(session, match_opts, kind),
-              texts: Html.texts(session.document, :any, Session.scope(session)),
-              transition: session_transition(session)
-            }
-
-            {:error, session, observed, no_clickable_error(kind)}
-        end
+        {:error, session, observed, reason}
     end
+  end
+
+  defp resolve_static_button_click(session, expected, match_opts, kind) do
+    case find_clickable_button(session, expected, match_opts, kind) do
+      {:ok, %{disabled: true}} ->
+        observed = %{
+          action: :button,
+          path: session.current_path,
+          transition: session_transition(session)
+        }
+
+        {:error, session, observed, "matched field is disabled"}
+
+      {:ok, button} ->
+        maybe_submit_clicked_button(session, expected, match_opts, kind, button)
+
+      {:error, "no button matched locator"} ->
+        static_click_resolution_error(session, match_opts, kind, no_clickable_error(kind))
+
+      {:error, reason} ->
+        static_click_resolution_error(session, match_opts, kind, reason)
+    end
+  end
+
+  defp static_click_resolution_error(session, match_opts, kind, reason) do
+    observed = %{
+      action: :click,
+      path: session.current_path,
+      candidate_values: click_candidate_values(session, match_opts, kind),
+      texts: Html.texts(session.document, :any, Session.scope(session)),
+      transition: session_transition(session)
+    }
+
+    {:error, session, observed, reason}
   end
 
   @impl true
   def fill_in(%__MODULE__{} = session, %Locator{} = locator, value, opts) do
     {expected, match_opts} = LocatorOps.form(locator, opts)
 
-    case Html.find_form_field(session.document, expected, match_opts, Session.scope(session)) do
+    case Html.find_action_form_field(session.document, expected, match_opts, Session.scope(session)) do
       {:ok, %{input_disabled: true}} ->
         observed = %{action: :fill_in, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched field is disabled"}
@@ -215,7 +237,7 @@ defmodule Cerberus.Driver.Static do
         observed = %{action: :fill_in, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched field does not include a name attribute"}
 
-      :error ->
+      {:error, reason} ->
         observed = %{
           action: :fill_in,
           path: session.current_path,
@@ -223,7 +245,7 @@ defmodule Cerberus.Driver.Static do
           transition: session_transition(session)
         }
 
-        {:error, session, observed, "no form field matched locator"}
+        {:error, session, observed, reason}
     end
   end
 
@@ -256,7 +278,7 @@ defmodule Cerberus.Driver.Static do
   def upload(%__MODULE__{} = session, %Locator{} = locator, path, opts) do
     {expected, match_opts} = LocatorOps.form(locator, opts)
 
-    case Html.find_form_field(session.document, expected, match_opts, Session.scope(session)) do
+    case Html.find_action_form_field(session.document, expected, match_opts, Session.scope(session)) do
       {:ok, %{input_disabled: true}} ->
         observed = %{action: :upload, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched field is disabled"}
@@ -289,7 +311,7 @@ defmodule Cerberus.Driver.Static do
         observed = %{action: :upload, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched upload field does not include a name attribute"}
 
-      :error ->
+      {:error, reason} ->
         observed = %{
           action: :upload,
           path: session.current_path,
@@ -297,7 +319,7 @@ defmodule Cerberus.Driver.Static do
           transition: session_transition(session)
         }
 
-        {:error, session, observed, "no file input matched locator"}
+        {:error, session, observed, reason}
     end
   rescue
     error in [ArgumentError, File.Error] ->
@@ -309,7 +331,7 @@ defmodule Cerberus.Driver.Static do
   def submit(%__MODULE__{} = session, %Locator{} = locator, opts) do
     {expected, match_opts} = LocatorOps.submit(locator, opts)
 
-    case Html.find_submit_button(session.document, expected, match_opts, Session.scope(session)) do
+    case Html.find_action_submit_button(session.document, expected, match_opts, Session.scope(session)) do
       {:ok, %{disabled: true}} ->
         observed = %{action: :submit, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched field is disabled"}
@@ -317,7 +339,7 @@ defmodule Cerberus.Driver.Static do
       {:ok, button} ->
         do_submit(session, button)
 
-      :error ->
+      {:error, reason} ->
         observed = %{
           action: :submit,
           path: session.current_path,
@@ -325,7 +347,7 @@ defmodule Cerberus.Driver.Static do
           transition: session_transition(session)
         }
 
-        {:error, session, observed, "no submit button matched locator"}
+        {:error, session, observed, reason}
     end
   end
 
@@ -679,16 +701,16 @@ defmodule Cerberus.Driver.Static do
     %{session | last_result: LastResult.new(op, observed, session)}
   end
 
-  defp find_clickable_link(_session, _expected, _opts, :button), do: :error
+  defp find_clickable_link(_session, _expected, _opts, :button), do: {:error, "no link matched locator"}
 
   defp find_clickable_link(session, expected, opts, _kind) do
-    Html.find_link(session.document, expected, opts, Session.scope(session))
+    Html.find_action_link(session.document, expected, opts, Session.scope(session))
   end
 
-  defp find_clickable_button(_session, _expected, _opts, :link), do: :error
+  defp find_clickable_button(_session, _expected, _opts, :link), do: {:error, "no button matched locator"}
 
   defp find_clickable_button(session, expected, opts, _kind) do
-    Html.find_button(session.document, expected, opts, Session.scope(session))
+    Html.find_action_button(session.document, expected, opts, Session.scope(session))
   end
 
   defp click_button_error(_kind), do: "static driver does not support button clicks"
@@ -1323,7 +1345,7 @@ defmodule Cerberus.Driver.Static do
   defp normalize_query_value(value), do: to_string(value)
 
   defp toggle_checkbox(session, expected, opts, checked?, op) do
-    case Html.find_form_field(session.document, expected, opts, Session.scope(session)) do
+    case Html.find_action_form_field(session.document, expected, opts, Session.scope(session)) do
       {:ok, %{input_disabled: true}} ->
         observed = %{action: op, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched field is disabled"}
@@ -1355,14 +1377,14 @@ defmodule Cerberus.Driver.Static do
         observed = %{action: op, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched field does not include a name attribute"}
 
-      :error ->
+      {:error, reason} ->
         observed = %{action: op, path: session.current_path, transition: session_transition(session)}
-        {:error, session, observed, "no form field matched locator"}
+        {:error, session, observed, reason}
     end
   end
 
   defp choose_radio(session, expected, opts) do
-    case Html.find_form_field(session.document, expected, opts, Session.scope(session)) do
+    case Html.find_action_form_field(session.document, expected, opts, Session.scope(session)) do
       {:ok, %{input_disabled: true}} ->
         observed = %{action: :choose, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched field is disabled"}
@@ -1394,14 +1416,14 @@ defmodule Cerberus.Driver.Static do
         observed = %{action: :choose, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched field does not include a name attribute"}
 
-      :error ->
+      {:error, reason} ->
         observed = %{action: :choose, path: session.current_path, transition: session_transition(session)}
-        {:error, session, observed, "no form field matched locator"}
+        {:error, session, observed, reason}
     end
   end
 
   defp select_field(session, expected, opts, option, op) do
-    case Html.find_form_field(session.document, expected, opts, Session.scope(session)) do
+    case Html.find_action_form_field(session.document, expected, opts, Session.scope(session)) do
       {:ok, %{name: name, input_type: "select"} = field} when is_binary(name) and name != "" ->
         case Html.select_values(session.document, field, option, opts, Session.scope(session)) do
           {:ok, %{values: values, multiple?: multiple?}} ->
@@ -1444,9 +1466,9 @@ defmodule Cerberus.Driver.Static do
         observed = %{action: op, path: session.current_path, transition: session_transition(session)}
         {:error, session, observed, "matched field does not include a name attribute"}
 
-      :error ->
+      {:error, reason} ->
         observed = %{action: op, path: session.current_path, transition: session_transition(session)}
-        {:error, session, observed, "no form field matched locator"}
+        {:error, session, observed, reason}
     end
   end
 

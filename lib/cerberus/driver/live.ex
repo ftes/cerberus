@@ -243,41 +243,51 @@ defmodule Cerberus.Driver.Live do
     Cerberus.Profiling.profile {:live_action, :click} do
       {expected, match_opts} = LocatorOps.click(locator, opts)
       kind = Keyword.get(match_opts, :kind, :any)
-      maybe_raise_live_link_ambiguity!(session, expected, match_opts, kind)
 
       case find_clickable_link(session, expected, match_opts, kind) do
         {:ok, link} when is_binary(link.href) ->
           click_resolved_link(session, link)
 
-        :error ->
-          case wait_for_live_clickable_button(session, expected, match_opts, kind) do
-            {:ok, action_session, button} ->
-              click_or_error_for_button(action_session, button, kind)
+        {:error, "no link matched locator"} ->
+          resolve_live_button_click(session, expected, match_opts, kind)
 
-            {:error, action_session, "no button matched locator"} ->
-              observed = %{
-                action: :click,
-                path: action_session.current_path,
-                candidate_values: click_candidate_values(action_session, match_opts, kind),
-                texts: Html.texts(action_session.document, :any, Session.scope(action_session)),
-                transition: session_transition(action_session)
-              }
+        {:error, reason} ->
+          observed = %{
+            action: :click,
+            path: session.current_path,
+            candidate_values: click_candidate_values(session, match_opts, kind),
+            texts: Html.texts(session.document, :any, Session.scope(session)),
+            transition: session_transition(session)
+          }
 
-              {:error, action_session, observed, no_clickable_error(kind)}
-
-            {:error, action_session, reason} ->
-              observed = %{
-                action: :click,
-                path: action_session.current_path,
-                candidate_values: click_candidate_values(action_session, match_opts, kind),
-                texts: Html.texts(action_session.document, :any, Session.scope(action_session)),
-                transition: session_transition(action_session)
-              }
-
-              {:error, action_session, observed, reason}
-          end
+          {:error, session, observed, reason}
       end
     end
+  end
+
+  defp resolve_live_button_click(session, expected, match_opts, kind) do
+    case wait_for_live_clickable_button(session, expected, match_opts, kind) do
+      {:ok, action_session, button} ->
+        click_or_error_for_button(action_session, button, kind)
+
+      {:error, action_session, "no button matched locator"} ->
+        live_click_resolution_error(action_session, match_opts, kind, no_clickable_error(kind))
+
+      {:error, action_session, reason} ->
+        live_click_resolution_error(action_session, match_opts, kind, reason)
+    end
+  end
+
+  defp live_click_resolution_error(session, match_opts, kind, reason) do
+    observed = %{
+      action: :click,
+      path: session.current_path,
+      candidate_values: click_candidate_values(session, match_opts, kind),
+      texts: Html.texts(session.document, :any, Session.scope(session)),
+      transition: session_transition(session)
+    }
+
+    {:error, session, observed, reason}
   end
 
   defp click_resolved_link(session, link) do
@@ -314,7 +324,7 @@ defmodule Cerberus.Driver.Live do
           end
 
         :static ->
-          case Html.find_form_field(session.document, expected, match_opts, Session.scope(session)) do
+          case Html.find_action_form_field(session.document, expected, match_opts, Session.scope(session)) do
             {:ok, %{name: name} = field} when is_binary(name) and name != "" ->
               updated = %{
                 session
@@ -340,7 +350,7 @@ defmodule Cerberus.Driver.Live do
 
               {:error, session, observed, "matched field does not include a name attribute"}
 
-            :error ->
+            {:error, reason} ->
               observed = %{
                 action: :fill_in,
                 path: session.current_path,
@@ -348,7 +358,7 @@ defmodule Cerberus.Driver.Live do
                 transition: session_transition(session)
               }
 
-              {:error, session, observed, "no form field matched locator"}
+              {:error, session, observed, reason}
           end
       end
     end
@@ -473,11 +483,11 @@ defmodule Cerberus.Driver.Live do
           end
 
         :static ->
-          case Html.find_submit_button(session.document, expected, match_opts, Session.scope(session)) do
+          case Html.find_action_submit_button(session.document, expected, match_opts, Session.scope(session)) do
             {:ok, button} ->
               do_submit(session, button)
 
-            :error ->
+            {:error, reason} ->
               observed = %{
                 action: :submit,
                 path: session.current_path,
@@ -485,7 +495,7 @@ defmodule Cerberus.Driver.Live do
                 transition: session_transition(session)
               }
 
-              {:error, session, observed, "no submit button matched locator"}
+              {:error, session, observed, reason}
           end
       end
     end
@@ -1585,78 +1595,29 @@ defmodule Cerberus.Driver.Live do
     %{session | last_result: LastResult.new(op, observed, session)}
   end
 
-  defp find_clickable_link(_session, _expected, _opts, :button), do: :error
+  defp find_clickable_link(_session, _expected, _opts, :button), do: {:error, "no link matched locator"}
 
   defp find_clickable_link(session, expected, opts, _kind) do
-    Html.find_link(session.document, expected, opts, Session.scope(session))
+    Html.find_action_link(session.document, expected, opts, Session.scope(session))
   end
 
-  defp maybe_raise_live_link_ambiguity!(_session, _expected, _opts, kind) when kind != :link do
-    :ok
-  end
-
-  defp maybe_raise_live_link_ambiguity!(session, expected, opts, :link) do
-    if simple_live_link_ambiguity_check?(opts) do
-      match_count =
-        live_link_match_count(session.document, expected, opts, CandidateScope.click_scope(opts, Session.scope(session)))
-
-      if match_count > 1 do
-        raise ArgumentError, "#{match_count} of them matched the text filter"
-      end
-    end
-  end
-
-  defp simple_live_link_ambiguity_check?(opts) do
-    simple_link_locator?(Keyword.get(opts, :locator)) and
-      not Query.has_count_constraints?(opts) and
-      not Keyword.get(opts, :first, false) and
-      not Keyword.get(opts, :last, false) and
-      is_nil(Keyword.get(opts, :index)) and
-      is_nil(Keyword.get(opts, :nth))
-  end
-
-  defp simple_link_locator?(%Locator{kind: :role} = locator), do: Locator.resolved_kind(locator) == :link
-  defp simple_link_locator?(_), do: false
-
-  defp live_link_match_count(%LazyHTML{} = document, expected, opts, scope) do
-    roots =
-      if is_binary(scope) and scope != "" do
-        safe_query(document, scope)
-      else
-        [document]
-      end
-
-    roots
-    |> Enum.flat_map(&safe_query(&1, "a[href]"))
-    |> Enum.count(fn node ->
-      Query.match_text?(link_node_text(node), expected, opts) and
-        Html.node_matches_locator_filters?(node, opts)
-    end)
-  end
-
-  defp live_link_match_count(_html, _expected, _opts, _scope), do: 0
-
-  defp link_node_text(node) do
-    node
-    |> LazyHTML.text()
-    |> String.replace("\u00A0", " ")
-    |> String.trim()
-  end
-
-  defp find_clickable_button(_session, _expected, _opts, :link), do: :error
+  defp find_clickable_button(_session, _expected, _opts, :link), do: {:error, "no button matched locator"}
 
   defp find_clickable_button(%{view: view} = session, expected, opts, _kind) when not is_nil(view) do
-    case Html.find_button(session.document, expected, opts, Session.scope(session)) do
+    case Html.find_action_button(session.document, expected, opts, Session.scope(session)) do
       {:ok, button} ->
         {:ok, LiveViewHTML.enrich_button(session.document, button, Session.scope(session))}
 
-      :error ->
-        LiveViewHTML.find_live_clickable_button(session.document, expected, opts, Session.scope(session))
+      {:error, "no button matched locator"} ->
+        LiveViewHTML.find_action_live_clickable_button(session.document, expected, opts, Session.scope(session))
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
   defp find_clickable_button(%__MODULE__{} = session, expected, opts, _kind) do
-    Html.find_button(session.document, expected, opts, Session.scope(session))
+    Html.find_action_button(session.document, expected, opts, Session.scope(session))
   end
 
   defp click_button_error(_kind), do: "live driver can only click buttons on live routes"
@@ -1788,6 +1749,12 @@ defmodule Cerberus.Driver.Live do
 
   defp normalize_active_submit_button_result({:ok, button}, _session, _selector), do: {:ok, button}
 
+  defp normalize_active_submit_button_result({:error, "no submit button matched locator"}, session, selector) do
+    normalize_active_submit_button_result(:error, session, selector)
+  end
+
+  defp normalize_active_submit_button_result({:error, reason}, _session, _selector), do: {:error, reason}
+
   defp normalize_active_submit_button_result(:error, session, selector) do
     case active_form_submit_fallback(session, selector) do
       {:ok, button} -> {:ok, button}
@@ -1796,8 +1763,8 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp submit_button_finder(:live), do: &LiveViewHTML.find_submit_button/4
-  defp submit_button_finder(:static), do: &Html.find_submit_button/4
+  defp submit_button_finder(:live), do: &LiveViewHTML.find_action_submit_button/4
+  defp submit_button_finder(:static), do: &Html.find_action_submit_button/4
 
   defp no_active_form_submit_error do
     {:error, "submit/1 requires an active form; call fill_in/select/choose/check/uncheck/upload first"}
@@ -2475,7 +2442,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp select_in_static_mode(session, expected, option, opts) do
-    case Html.find_form_field(session.document, expected, opts, Session.scope(session)) do
+    case Html.find_action_form_field(session.document, expected, opts, Session.scope(session)) do
       {:ok, %{name: name, input_type: "select"} = field} when is_binary(name) and name != "" ->
         case Html.select_values(session.document, field, option, opts, Session.scope(session)) do
           {:ok, %{values: values, multiple?: multiple?}} ->
@@ -2527,19 +2494,19 @@ defmodule Cerberus.Driver.Live do
 
         {:error, session, observed, "matched field does not include a name attribute"}
 
-      :error ->
+      {:error, reason} ->
         observed = %{
           action: :select,
           path: session.current_path,
           transition: session_transition(session)
         }
 
-        {:error, session, observed, "no form field matched locator"}
+        {:error, session, observed, reason}
     end
   end
 
   defp choose_in_static_mode(session, expected, opts) do
-    case Html.find_form_field(session.document, expected, opts, Session.scope(session)) do
+    case Html.find_action_form_field(session.document, expected, opts, Session.scope(session)) do
       {:ok, %{name: name, input_type: "radio"} = field} when is_binary(name) and name != "" ->
         value = field[:input_value] || "on"
 
@@ -2576,19 +2543,19 @@ defmodule Cerberus.Driver.Live do
 
         {:error, session, observed, "matched field does not include a name attribute"}
 
-      :error ->
+      {:error, reason} ->
         observed = %{
           action: :choose,
           path: session.current_path,
           transition: session_transition(session)
         }
 
-        {:error, session, observed, "no form field matched locator"}
+        {:error, session, observed, reason}
     end
   end
 
   defp upload_in_static_mode(session, expected, path, opts) do
-    case Html.find_form_field(session.document, expected, opts, Session.scope(session)) do
+    case Html.find_action_form_field(session.document, expected, opts, Session.scope(session)) do
       {:ok, %{name: name, input_type: "file"} = field} when is_binary(name) and name != "" ->
         file = UploadFile.read!(path)
         value = FormData.upload_value_for_update(session, field, file, path, :static)
@@ -2626,7 +2593,7 @@ defmodule Cerberus.Driver.Live do
 
         {:error, session, observed, "matched upload field does not include a name attribute"}
 
-      :error ->
+      {:error, reason} ->
         observed = %{
           action: :upload,
           path: session.current_path,
@@ -2634,7 +2601,7 @@ defmodule Cerberus.Driver.Live do
           transition: session_transition(session)
         }
 
-        {:error, session, observed, "no file input matched locator"}
+        {:error, session, observed, reason}
     end
   rescue
     error in [ArgumentError, File.Error] ->
@@ -2901,7 +2868,7 @@ defmodule Cerberus.Driver.Live do
 
       cached_lookup(session, key, fn current_session ->
         current_session.document
-        |> LiveViewHTML.find_form_field(
+        |> LiveViewHTML.find_action_form_field(
           expected,
           opts,
           Session.scope(current_session),
@@ -2917,10 +2884,15 @@ defmodule Cerberus.Driver.Live do
       key = {:submit_button, Session.scope(session), expected, opts}
 
       cached_lookup(session, key, fn current_session ->
-        case LiveViewHTML.find_submit_button(current_session.document, expected, opts, Session.scope(current_session)) do
+        case LiveViewHTML.find_action_submit_button(
+               current_session.document,
+               expected,
+               opts,
+               Session.scope(current_session)
+             ) do
           {:ok, %{disabled: true}} -> {:retry, "matched field is disabled"}
           {:ok, button} -> {:ok, button}
-          :error -> {:error, "no submit button matched locator"}
+          {:error, reason} -> {:error, reason}
         end
       end)
     end
@@ -2934,7 +2906,7 @@ defmodule Cerberus.Driver.Live do
         case find_clickable_button(current_session, expected, opts, kind) do
           {:ok, %{disabled: true}} -> {:retry, "matched field is disabled"}
           {:ok, button} -> {:ok, button}
-          :error -> {:error, "no button matched locator"}
+          {:error, reason} -> {:error, reason}
         end
       end)
     end
@@ -2964,7 +2936,7 @@ defmodule Cerberus.Driver.Live do
   defp live_field_metadata_requirements(_op), do: :all
 
   defp toggle_checkbox_in_static_mode(session, expected, opts, checked?, op) do
-    case Html.find_form_field(session.document, expected, opts, Session.scope(session)) do
+    case Html.find_action_form_field(session.document, expected, opts, Session.scope(session)) do
       {:ok, %{name: name, input_type: "checkbox"} = field} when is_binary(name) and name != "" ->
         value = FormData.toggled_checkbox_value(session, field, checked?)
 
@@ -2989,8 +2961,8 @@ defmodule Cerberus.Driver.Live do
       {:ok, _field} ->
         static_checkbox_error(session, op, "matched field does not include a name attribute")
 
-      :error ->
-        static_checkbox_error(session, op, "no form field matched locator")
+      {:error, reason} ->
+        static_checkbox_error(session, op, reason)
     end
   end
 
@@ -3143,7 +3115,7 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp resolve_live_form_field_actionability(:error, op), do: {:error, live_field_not_found_error(op)}
+  defp resolve_live_form_field_actionability({:error, reason}, _op), do: {:error, reason}
 
   defp live_field_actionability(field, op) do
     cond do
@@ -3170,9 +3142,6 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp live_form_field_clickable_without_name?(_field), do: false
-
-  defp live_field_not_found_error(:upload), do: "no file input matched locator"
-  defp live_field_not_found_error(_op), do: "no form field matched locator"
 
   defp live_field_missing_name_error(:upload), do: "matched upload field does not include a name attribute"
   defp live_field_missing_name_error(_op), do: "matched field does not include a name attribute"

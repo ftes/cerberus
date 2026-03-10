@@ -177,8 +177,37 @@ defmodule Cerberus.Query do
     end
   end
 
+  @spec pick_action_match([match], Options.count_filter_opts()) :: {:ok, match} | {:error, String.t()}
+        when match: var
+  def pick_action_match(matches, opts) when is_list(matches) do
+    match_count = length(matches)
+
+    with :ok <- ensure_non_empty(matches),
+         :ok <- ensure_unambiguous_action_match(match_count, opts),
+         :ok <- apply_count_constraints(match_count, opts),
+         {:ok, index} <- resolve_position_index(match_count, opts) do
+      {:ok, Enum.at(matches, index)}
+    end
+  end
+
   defp ensure_non_empty([]), do: {:error, "no elements matched locator"}
   defp ensure_non_empty(_matches), do: :ok
+
+  @spec explicit_position?(Options.count_filter_opts()) :: boolean()
+  def explicit_position?(opts) when is_list(opts) do
+    case position_target(opts) do
+      {key, _value} when key in [:first, :last, :nth, :index] -> true
+      _ -> false
+    end
+  end
+
+  defp ensure_unambiguous_action_match(match_count, opts) when is_integer(match_count) and match_count >= 0 do
+    if match_count > 1 and not explicit_position?(opts) do
+      {:error, "#{match_count} elements matched locator; narrow the locator or use :first, :last, :nth, or :index"}
+    else
+      :ok
+    end
+  end
 
   defp resolve_position_index(match_count, opts) when is_integer(match_count) and match_count > 0 do
     case position_target(opts) do

@@ -50,14 +50,62 @@ defmodule Cerberus.LiveSelectRegressionTest do
         select(test_session, css("#no-form-no-phx-click-select"), option: text("Dog"), timeout: 10)
       end)
     end
-  end
 
-  test "live link click raises ambiguity error when duplicate text matches", %{conn: conn} do
-    assert_raise ArgumentError, ~r/2 of them matched the text filter/, fn ->
-      conn
-      |> session()
+    test "link click raises ambiguity error when duplicate text matches (#{driver})", context do
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          unquote(driver)
+          |> driver_session(context)
+          |> visit("/phoenix_test/live/index")
+          |> click(role(:link, name: "Multiple links", exact: false))
+        end
+
+      assert error.message =~ "2 elements matched locator"
+    end
+
+    test "button click raises ambiguity error when duplicate text matches (#{driver})", context do
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          unquote(driver)
+          |> driver_session(context)
+          |> visit("/phoenix_test/live/index")
+          |> click(role(:button, name: "Duplicate button with wrapped id", exact: true))
+        end
+
+      assert error.message =~ "2 elements matched locator"
+    end
+
+    test "field actions raise ambiguity error when duplicate labels match (#{driver})", context do
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          unquote(driver)
+          |> driver_session(context)
+          |> visit("/phoenix_test/live/index")
+          |> fill_in(css("input[id$='characters']"), "Bilbo")
+        end
+
+      assert error.message =~ "2 elements matched locator"
+    end
+
+    test "explicit position disambiguates duplicate link and button actions (#{driver})", context do
+      unquote(driver)
+      |> driver_session(context)
       |> visit("/phoenix_test/live/index")
-      |> click(role(:link, name: "Multiple links", exact: false))
+      |> click(role(:link, name: "Multiple links", exact: false), nth: 2)
+      |> assert_path("/phoenix_test/live/page_4")
+
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/live/selector-edge")
+      |> click(role(:button, name: "Apply"), first: true)
+      |> assert_has(text("Selected: primary", exact: true))
+
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/search")
+      |> fill_in(role(:textbox, name: ~r/^Search term/), "gondor", last: true)
+      |> submit(role(:button, name: ~r/^Run/), last: true)
+      |> assert_path("/search/nested/results", query: [nested_q: "gondor"])
     end
   end
 

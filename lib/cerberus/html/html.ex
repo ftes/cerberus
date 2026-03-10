@@ -154,11 +154,24 @@ defmodule Cerberus.Html do
           | :error
   def find_link(%LazyHTML{} = html, expected, opts, scope \\ nil), do: find_link_in_doc(html, expected, opts, scope)
 
+  @spec find_action_link(document(), String.t() | Regex.t(), Options.locator_filter_opts(), String.t() | nil) ::
+          {:ok, map()} | {:error, String.t()}
+  def find_action_link(%LazyHTML{} = html, expected, opts, scope \\ nil),
+    do: find_action_link_in_doc(html, expected, opts, scope)
+
   @spec find_button(document(), String.t() | Regex.t(), Options.locator_filter_opts(), String.t() | nil) ::
           {:ok, map()} | :error
   def find_button(%LazyHTML{} = html, expected, opts, scope \\ nil) do
     Profiling.profile {:html_resolve, :button} do
       find_button_in_doc(html, expected, opts, scope)
+    end
+  end
+
+  @spec find_action_button(document(), String.t() | Regex.t(), Options.locator_filter_opts(), String.t() | nil) ::
+          {:ok, map()} | {:error, String.t()}
+  def find_action_button(%LazyHTML{} = html, expected, opts, scope \\ nil) do
+    Profiling.profile {:html_resolve, :button} do
+      find_action_button_in_doc(html, expected, opts, scope)
     end
   end
 
@@ -172,6 +185,18 @@ defmodule Cerberus.Html do
   def find_form_field(%LazyHTML{} = lazy_html, expected, opts, scope \\ nil) do
     Profiling.profile {:html_resolve, :form_field} do
       find_form_field_in_doc(lazy_html, expected, opts, scope)
+    end
+  end
+
+  @spec find_action_form_field(
+          document(),
+          String.t() | Regex.t(),
+          Options.locator_filter_opts(),
+          String.t() | nil
+        ) :: {:ok, map()} | {:error, String.t()}
+  def find_action_form_field(%LazyHTML{} = lazy_html, expected, opts, scope \\ nil) do
+    Profiling.profile {:html_resolve, :form_field} do
+      find_action_form_field_in_doc(lazy_html, expected, opts, scope)
     end
   end
 
@@ -216,12 +241,42 @@ defmodule Cerberus.Html do
     end
   end
 
+  @spec find_action_submit_button(
+          document(),
+          String.t() | Regex.t(),
+          Options.locator_filter_opts(),
+          String.t() | nil
+        ) :: {:ok, map()} | {:error, String.t()}
+  def find_action_submit_button(%LazyHTML{} = lazy_html, expected, opts, scope \\ nil) do
+    Profiling.profile {:html_resolve, :submit_button} do
+      find_action_submit_button_in_doc(lazy_html, expected, opts, scope)
+    end
+  end
+
   @spec find_scope_target(document(), Locator.t(), String.t() | nil) ::
           {:ok, %{selector: String.t(), tag: String.t(), iframe?: boolean()}} | {:error, String.t()}
   def find_scope_target(%LazyHTML{} = html, %Locator{} = locator, scope \\ nil),
     do: find_scope_target_in_doc(html, locator, scope)
 
   defp find_link_in_doc(lazy_html, expected, opts, scope) do
+    matches =
+      case locator_opt(opts) do
+        %Locator{} = locator ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_link_in_root_by_locator(&1, lazy_html, locator, opts))
+
+        nil ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_link_in_root(&1, lazy_html, expected, opts))
+      end
+
+    matches = Enum.filter(matches, &Query.matches_state_filters?(&1, opts))
+    pick_match_result(matches, opts)
+  end
+
+  defp find_action_link_in_doc(lazy_html, expected, opts, scope) do
     case_result =
       case locator_opt(opts) do
         %Locator{} = locator ->
@@ -236,10 +291,29 @@ defmodule Cerberus.Html do
       end
 
     matches = Enum.filter(case_result, &Query.matches_state_filters?(&1, opts))
-    pick_match_result(matches, opts)
+
+    action_pick_result(matches, opts, "no link matched locator")
   end
 
   defp find_button_in_doc(lazy_html, expected, opts, scope) do
+    matches =
+      case locator_opt(opts) do
+        %Locator{} = locator ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_button_in_root_by_locator(&1, lazy_html, locator, opts))
+
+        nil ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_button_in_root(&1, lazy_html, expected, opts))
+      end
+
+    matches = Enum.filter(matches, &Query.matches_state_filters?(&1, opts))
+    pick_match_result(matches, opts)
+  end
+
+  defp find_action_button_in_doc(lazy_html, expected, opts, scope) do
     case_result =
       case locator_opt(opts) do
         %Locator{} = locator ->
@@ -254,10 +328,33 @@ defmodule Cerberus.Html do
       end
 
     matches = Enum.filter(case_result, &Query.matches_state_filters?(&1, opts))
-    pick_match_result(matches, opts)
+
+    action_pick_result(matches, opts, "no button matched locator")
   end
 
   defp find_form_field_in_doc(lazy_html, expected, opts, scope) do
+    matches =
+      case locator_opt(opts) do
+        %Locator{} = locator ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_form_field_in_root_by_locator(&1, locator, opts))
+
+        nil ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_form_field_in_root(&1, expected, opts))
+      end
+
+    matches =
+      matches
+      |> Enum.filter(&Query.matches_state_filters?(&1, opts))
+      |> Enum.map(&sanitize_form_field_match/1)
+
+    pick_match_result(matches, opts)
+  end
+
+  defp find_action_form_field_in_doc(lazy_html, expected, opts, scope) do
     case_result =
       case locator_opt(opts) do
         %Locator{} = locator ->
@@ -276,10 +373,29 @@ defmodule Cerberus.Html do
       |> Enum.filter(&Query.matches_state_filters?(&1, opts))
       |> Enum.map(&sanitize_form_field_match/1)
 
-    pick_match_result(matches, opts)
+    action_pick_result(matches, opts, "no form field matched locator")
   end
 
   defp find_submit_button_in_doc(lazy_html, expected, opts, scope) do
+    matches =
+      case locator_opt(opts) do
+        %Locator{} = locator ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_submit_button_in_root_by_locator(&1, expected, locator, opts))
+
+        nil ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_submit_button_in_root(&1, expected, opts))
+      end
+
+    matches = Enum.filter(matches, &Query.matches_state_filters?(&1, opts))
+
+    pick_match_result(matches, opts)
+  end
+
+  defp find_action_submit_button_in_doc(lazy_html, expected, opts, scope) do
     case_result =
       case locator_opt(opts) do
         %Locator{} = locator ->
@@ -295,7 +411,14 @@ defmodule Cerberus.Html do
 
     matches = Enum.filter(case_result, &Query.matches_state_filters?(&1, opts))
 
-    pick_match_result(matches, opts)
+    action_pick_result(matches, opts, "no submit button matched locator")
+  end
+
+  defp action_pick_result(matches, opts, no_match_reason) do
+    case Query.pick_action_match(matches, opts) do
+      {:error, "no elements matched locator"} -> {:error, no_match_reason}
+      other -> other
+    end
   end
 
   defp select_values_in_doc(lazy_html, field, option, opts, scope) do
