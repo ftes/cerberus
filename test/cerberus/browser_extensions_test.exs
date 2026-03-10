@@ -10,7 +10,7 @@ defmodule Cerberus.BrowserExtensionsTest do
   alias ExUnit.AssertionError
 
   setup_all do
-    {:ok, browser_session: session(:browser)}
+    {:ok, browser_session: session(:browser, use_cdp_evaluate: true)}
   end
 
   test "browser-only APIs are explicit unsupported on static and live sessions" do

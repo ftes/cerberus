@@ -422,6 +422,10 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end)
   end
 
+  defp decode_remote_value(%{"type" => "object", "value" => entries}) when is_map(entries) do
+    Map.new(entries, fn {key, value} -> {key, decode_remote_value(value)} end)
+  end
+
   defp decode_remote_value(%{"type" => _type} = value), do: value
   defp decode_remote_value(value), do: value
 
