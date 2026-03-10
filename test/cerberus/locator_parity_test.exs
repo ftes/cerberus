@@ -425,7 +425,7 @@ defmodule Cerberus.LocatorParityTest do
   end
 
   setup_all do
-    {owner_pid, browser_session} = SharedBrowserSession.start!(use_cdp_evaluate: false)
+    {owner_pid, browser_session} = SharedBrowserSession.start!(use_cdp_evaluate: true)
 
     upload_path =
       Path.join(System.tmp_dir!(), "cerberus-locator-oracle-#{System.unique_integer([:positive])}.txt")
