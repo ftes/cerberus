@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAssert && window.__cerberusAssert.__version === 10) return;
+    if (window.__cerberusAssert && window.__cerberusAssert.__version === 11) return;
 
     const helper = {};
-    helper.__version = 10;
+    helper.__version = 11;
     helper.now = () =>
       typeof performance !== "undefined" && typeof performance.now === "function"
         ? performance.now()
@@ -521,6 +521,48 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       }
 
       return mode === "assert" ? "expected text not found" : "unexpected matching text found";
+    };
+
+    helper.assertionDecision = (mode, matchCount, filters, finished) => {
+      if (!helper.hasMatchFilters(filters)) {
+        if (mode === "assert") {
+          if (matchCount > 0) return "success";
+          return finished ? "failure" : "continue";
+        }
+
+        if (matchCount > 0) return "failure";
+        return finished ? "success" : "continue";
+      }
+
+      const upperBound =
+        filters.count !== null
+          ? filters.count
+          : filters.max !== null
+            ? filters.max
+            : filters.betweenMax !== null
+              ? filters.betweenMax
+              : null;
+
+      if (upperBound !== null && matchCount > upperBound) {
+        return mode === "assert" ? "failure" : "success";
+      }
+
+      const minOnly =
+        filters.min !== null &&
+        filters.max === null &&
+        filters.betweenMin === null &&
+        filters.betweenMax === null &&
+        filters.count === null;
+
+      if (minOnly && matchCount >= filters.min) {
+        return mode === "assert" ? "success" : "failure";
+      }
+
+      if (!finished) return "continue";
+
+      const satisfies = helper.countSatisfiesFilters(matchCount, filters);
+      if (mode === "assert") return satisfies ? "success" : "failure";
+      return satisfies ? "failure" : "success";
     };
 
     helper.textQuick = (options) => {
@@ -1186,13 +1228,13 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       return { matches, jsTiming };
     };
 
-    helper.findFirstLocatorMatch = (options) => {
+    helper.countLocatorMatches = (options) => {
       const jsTiming = {};
       const rootsStartedAt = helper.now();
       const roots = helper.resolveRoots(options.scopeSelector || null);
       jsTiming.locatorResolveRootsMs = helper.now() - rootsStartedAt;
       const locator = options.locator && typeof options.locator === "object" ? options.locator : null;
-      if (!locator) return { match: null, jsTiming };
+      if (!locator) return { matchCount: 0, decision: "failure", jsTiming };
 
       const locatorWithoutFrom = helper.locatorWithoutFrom(locator);
       const fromLocator = helper.locatorOpts(locator).from || null;
@@ -1201,41 +1243,45 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const visibility = options.visibility || "visible";
       const selector = helper.locatorQuerySelector(locatorWithoutFrom);
       const context = { altCache: new Map(), labelCache: new WeakMap() };
-      let match = null;
+      const mode = options.mode || "assert";
+      const filters = helper.matchFilters(options);
+      let matchCount = 0;
+      let decision = "continue";
 
       const collectStartedAt = helper.now();
       helper.eachCandidateElement(roots, selector, null, (element) => {
         const hidden = helper.isHidden(element);
         if (visibility !== "all" && !helper.selectedVisibility(visibility, hidden)) return true;
         if (!helper.matchesLocator(element, locatorWithoutFrom, hidden, context)) return true;
-        match = { element, hidden };
-        return false;
+        matchCount += 1;
+        decision = helper.assertionDecision(mode, matchCount, filters, false);
+        return decision === "continue";
       });
       jsTiming.locatorCollectCandidatesMs = helper.now() - collectStartedAt;
 
-      return { match, jsTiming };
+      if (decision === "continue") {
+        decision = helper.assertionDecision(mode, matchCount, filters, true);
+      }
+
+      return { matchCount, decision, jsTiming };
     };
 
     helper.locatorQuick = (options) => {
       const mode = options.mode || "assert";
       const filters = helper.matchFilters(options);
-      const noCountFilters = !helper.hasMatchFilters(filters);
+      const countAttempt = helper.countLocatorMatches(options);
 
-      if (mode === "assert" && noCountFilters) {
-        const firstMatch = helper.findFirstLocatorMatch(options);
+      if (countAttempt) {
+        const ok = countAttempt.decision === "success";
 
-        if (firstMatch) {
-          const ok = !!firstMatch.match;
-
-          return {
-            ok,
-            reason: helper.assertionReason(mode, ok ? 1 : 0, filters, ok),
-            matchCount: ok ? 1 : 0,
-            path: window.location.pathname + window.location.search,
-            title: document.title || "",
-            jsTiming: firstMatch.jsTiming
-          };
-        }
+        return {
+          ok,
+          reason: helper.assertionReason(mode, countAttempt.matchCount, filters, ok),
+          matchCount: countAttempt.matchCount,
+          path: window.location.pathname + window.location.search,
+          title: document.title || "",
+          jsTiming: countAttempt.jsTiming
+        };
       }
 
       const { matches, jsTiming } = helper.collectLocatorMatches(options);

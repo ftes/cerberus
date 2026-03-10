@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-10T08:26:35Z
-updated_at: 2026-03-10T11:22:27Z
+updated_at: 2026-03-10T13:47:07Z
 ---
 
 Rewrite browser and LazyHTML locator resolution from scratch around a selector-first, narrow-resolution model guided by Playwright. Start by removing the temporary live label fast path, then rebuild static and live resolution, broaden browser coverage carefully, and enable parity tests incrementally while keeping complexity minimal.
@@ -22,3 +22,8 @@ Rewrite browser and LazyHTML locator resolution from scratch around a selector-f
 ## Notes
 - kept role locator semantics broad for now (matching accessible-name source variants) after a stricter single-name rewrite broke existing static/live parity coverage
 - selector-first shared button resolution stays in place; the major win in this slice came from avoiding unconditional state projection during matching
+
+## Notes
+- browser locator assertions now mirror the shared count-first, diagnostics-on-failure algorithm used by static/live
+- preserved EV2 browser row project_form_feature_cerberus_test stayed about 16.7s after this slice, so browser resolver JS is no longer the dominant gap there
+- profile on the preserved browser row shows the remaining hotspot is still script.evaluate transport roundtrip and evaluate_direct/evaluate_action_direct volume, not locator matching time
