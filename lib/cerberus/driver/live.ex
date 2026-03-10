@@ -46,6 +46,7 @@ defmodule Cerberus.Driver.Live do
             timeout_overridden?: false,
             view: nil,
             document: nil,
+            render_version: 0,
             form_data: %{active_form: nil, active_form_selector: nil, values: %{}},
             scope: nil,
             current_path: nil,
@@ -145,7 +146,8 @@ defmodule Cerberus.Driver.Live do
         child_session =
           session
           |> Map.put(:view, child_view)
-          |> Map.put(:document, Html.parse!(render(child_view)))
+          |> Map.put(:render_version, 0)
+          |> refresh_live_document!()
           |> Session.with_scope(nil)
 
         callback_result = callback.(child_session)
@@ -176,6 +178,7 @@ defmodule Cerberus.Driver.Live do
           | conn: conn,
             view: view,
             document: document,
+            render_version: LiveViewClient.render_version(view),
             scope: session.scope,
             current_path: current_path,
             last_result: LastResult.new(:visit, %{path: current_path, transition: transition}, __MODULE__)
@@ -235,7 +238,6 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def click(%__MODULE__{} = session, %Locator{} = locator, opts) do
-    session = with_latest_document(session)
     {expected, match_opts} = LocatorOps.click(locator, opts)
     kind = Keyword.get(match_opts, :kind, :any)
     maybe_raise_live_link_ambiguity!(session, expected, match_opts, kind)
@@ -287,7 +289,6 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def fill_in(%__MODULE__{} = session, %Locator{} = locator, value, opts) do
-    session = with_latest_document(session)
     {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case route_kind(session) do
@@ -349,7 +350,6 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def select(%__MODULE__{} = session, %Locator{} = locator, opts) do
-    session = with_latest_document(session)
     {expected, match_opts} = LocatorOps.form(locator, opts)
     option = Keyword.fetch!(opts, :option)
 
@@ -370,7 +370,6 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def choose(%__MODULE__{} = session, %Locator{} = locator, opts) do
-    session = with_latest_document(session)
     {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case route_kind(session) do
@@ -399,7 +398,6 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp toggle_checkbox(%__MODULE__{} = session, %Locator{} = locator, opts, checked?, op) do
-    session = with_latest_document(session)
     {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case route_kind(session) do
@@ -420,7 +418,6 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def upload(%__MODULE__{} = session, %Locator{} = locator, path, opts) do
-    session = with_latest_document(session)
     {expected, match_opts} = LocatorOps.form(locator, opts)
 
     case route_kind(session) do
@@ -447,7 +444,6 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def submit(%__MODULE__{} = session, %Locator{} = locator, opts) do
-    session = with_latest_document(session)
     {expected, match_opts} = LocatorOps.submit(locator, opts)
 
     case route_kind(session) do
@@ -487,8 +483,6 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def submit_active_form(%__MODULE__{} = session, _opts) do
-    session = with_latest_document(session)
-
     case active_form_submit_button(session) do
       {:ok, button} ->
         case route_kind(session) do
@@ -1047,7 +1041,14 @@ defmodule Cerberus.Driver.Live do
     case result do
       rendered when is_binary(rendered) ->
         path = maybe_live_patch_path(session.view, session.current_path)
-        updated = %{session | document: Html.parse!(rendered), current_path: path}
+
+        updated = %{
+          session
+          | document: Html.parse!(rendered),
+            render_version: live_progress_version(session),
+            current_path: path
+        }
+
         transition = transition(route_kind(session), :live, :click, session.current_path, path)
 
         observed = %{
@@ -1238,10 +1239,46 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp with_latest_document(%__MODULE__{view: view} = session) when not is_nil(view) do
-    %{session | document: Html.parse!(render(view))}
+    current_version = LiveViewClient.render_version(view)
+
+    if is_struct(session.document, LazyHTML) and session.render_version == current_version do
+      session
+    else
+      refresh_live_document!(session, current_version)
+    end
   end
 
   defp with_latest_document(session), do: session
+
+  defp refresh_live_document!(session, render_version \\ nil)
+
+  defp refresh_live_document!(%__MODULE__{view: view} = session, render_version) when not is_nil(view) do
+    document =
+      case LiveViewClient.html_tree(view) do
+        {:ok, html_tree} ->
+          live_document_from_tree(view, html_tree)
+
+        :error ->
+          Html.parse!(render(view))
+      end
+
+    %{session | document: document, render_version: render_version || LiveViewClient.render_version(view)}
+  end
+
+  defp refresh_live_document!(session, _render_version), do: session
+
+  defp live_document_from_tree(%View{id: id}, html_tree) when is_binary(id) and id != "" do
+    html_tree
+    |> TreeDOM.by_id!(id)
+    |> List.wrap()
+    |> LazyHTML.from_tree()
+  rescue
+    _ -> LazyHTML.from_tree(List.wrap(html_tree))
+  end
+
+  defp live_document_from_tree(_view, html_tree) do
+    LazyHTML.from_tree(List.wrap(html_tree))
+  end
 
   defp assertion_texts(%__MODULE__{} = session, visibility) do
     case live_texts_from_tree(session, visibility) do
@@ -1373,7 +1410,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp snapshot_document(%__MODULE__{document: %LazyHTML{} = document}), do: document
-  defp snapshot_document(%__MODULE__{view: view}) when not is_nil(view), do: Html.parse!(render(view))
+  defp snapshot_document(%__MODULE__{} = session), do: with_latest_document(session).document
 
   defp endpoint_url(endpoint) when is_atom(endpoint) do
     endpoint.url()
@@ -1416,7 +1453,8 @@ defmodule Cerberus.Driver.Live do
         if live_result.current_path == parent_session.current_path do
           live_result
           |> Map.put(:view, parent_session.view)
-          |> Map.put(:document, Html.parse!(render(parent_session.view)))
+          |> Map.put(:render_version, 0)
+          |> refresh_live_document!()
           |> Session.with_scope(previous_scope)
         else
           Session.with_scope(live_result, previous_scope)
@@ -1951,7 +1989,14 @@ defmodule Cerberus.Driver.Live do
     case result do
       rendered when is_binary(rendered) ->
         path = maybe_live_patch_path(session.view, session.current_path)
-        updated = %{session | document: Html.parse!(rendered), current_path: path}
+
+        updated = %{
+          session
+          | document: Html.parse!(rendered),
+            render_version: live_progress_version(session),
+            current_path: path
+        }
+
         transition = transition(route_kind(session), :live, :upload, session.current_path, path)
 
         observed = %{
@@ -1974,7 +2019,14 @@ defmodule Cerberus.Driver.Live do
       {:error, {:live_patch, %{to: to}}} ->
         rendered = render(session.view)
         path = to_request_path(to, session.current_path)
-        updated = %{session | document: Html.parse!(rendered), current_path: path}
+
+        updated = %{
+          session
+          | document: Html.parse!(rendered),
+            render_version: live_progress_version(session),
+            current_path: path
+        }
+
         transition = transition(route_kind(session), :live, :live_patch, session.current_path, path)
 
         observed = %{
@@ -2758,6 +2810,9 @@ defmodule Cerberus.Driver.Live do
   defp timeout_for_driver(%{timeout_overridden?: true, timeout_ms: timeout_ms}, _driver), do: timeout_ms
   defp timeout_for_driver(_session, driver), do: SessionConfig.default_timeout_ms(driver)
 
+  defp ensure_live_document(%__MODULE__{document: %LazyHTML{}} = session), do: session
+  defp ensure_live_document(%__MODULE__{} = session), do: with_latest_document(session)
+
   defp wait_for_live_form_field(session, expected, opts, op) do
     finder = fn refreshed ->
       refreshed.document
@@ -2835,26 +2890,26 @@ defmodule Cerberus.Driver.Live do
 
   defp wait_for_live_actionable(session, timeout_ms, finder) when is_function(finder, 1) do
     deadline = System.monotonic_time(:millisecond) + timeout_ms
+    session = ensure_live_document(session)
     do_wait_for_live_actionable(session, deadline, nil, finder)
   end
 
   defp do_wait_for_live_actionable(session, deadline, pending_reason, finder) when is_function(finder, 1) do
-    refreshed = with_latest_document(session)
-    baseline_version = live_progress_version(refreshed)
+    baseline_version = live_progress_version(session)
 
-    case finder.(refreshed) do
+    case finder.(session) do
       {:ok, candidate} ->
-        {:ok, refreshed, candidate}
+        {:ok, session, candidate}
 
       {:retry, reason} ->
-        retry_live_actionable(refreshed, baseline_version, deadline, reason, finder)
+        retry_live_actionable(session, baseline_version, deadline, reason, finder)
 
       {:error, reason} when is_nil(pending_reason) ->
-        {:error, refreshed, reason}
+        {:error, session, reason}
 
       {:error, reason} ->
         maybe_retry_live_actionable(
-          refreshed,
+          session,
           baseline_version,
           deadline,
           pending_reason,
@@ -2928,14 +2983,11 @@ defmodule Cerberus.Driver.Live do
   defp await_live_action_progress(session, _baseline_version, _deadline), do: {:ok, session}
 
   defp refresh_live_progress_session(%__MODULE__{} = session, path_override) do
-    case LiveViewClient.render(session.view) do
-      rendered when is_binary(rendered) ->
-        path = path_override || LiveViewClient.current_path(session.view, session.current_path)
-        %{session | document: Html.parse!(rendered), current_path: path || session.current_path}
+    current_path = LiveViewClient.current_path(session.view, session.current_path)
 
-      {:error, {kind, %{to: path}}} when kind in [:redirect, :live_redirect] ->
-        follow_redirect(session, path)
-    end
+    session
+    |> refresh_live_document!()
+    |> Map.put(:current_path, path_override || current_path || session.current_path)
   end
 
   defp live_progress_version(%__MODULE__{view: view}), do: LiveViewClient.render_version(view)
@@ -3248,7 +3300,14 @@ defmodule Cerberus.Driver.Live do
     case maybe_follow_trigger_action(session, rendered) do
       :no_trigger ->
         path = path_override || maybe_live_patch_path(session.view, session.current_path)
-        updated = %{session | document: Html.parse!(rendered), current_path: path}
+
+        updated = %{
+          session
+          | document: Html.parse!(rendered),
+            render_version: live_progress_version(session),
+            current_path: path
+        }
+
         transition = transition(route_kind(session), :live, reason, session.current_path, path)
         {:ok, updated, transition}
 
@@ -3350,6 +3409,7 @@ defmodule Cerberus.Driver.Live do
           | conn: conn,
             view: view,
             document: document,
+            render_version: LiveViewClient.render_version(view),
             current_path: current_path
         }
 
@@ -3454,6 +3514,7 @@ defmodule Cerberus.Driver.Live do
 
     session
     |> Map.put(:document, Html.parse!(html))
+    |> Map.put(:render_version, live_progress_version(session))
     |> Map.put(:current_path, path)
     |> update_last_result(:unwrap, %{path: path, transition: unwrap_transition})
   end
@@ -3464,6 +3525,7 @@ defmodule Cerberus.Driver.Live do
 
     session
     |> Map.put(:document, Html.parse!(rendered))
+    |> Map.put(:render_version, live_progress_version(session))
     |> Map.put(:current_path, path)
     |> update_last_result(:unwrap, %{path: path, transition: unwrap_transition})
   end
@@ -3488,6 +3550,7 @@ defmodule Cerberus.Driver.Live do
           timeout_overridden?: session.timeout_overridden?,
           view: view,
           document: document,
+          render_version: LiveViewClient.render_version(view),
           form_data: Map.get(session, :form_data),
           scope: session.scope,
           current_path: current_path,
@@ -3519,6 +3582,7 @@ defmodule Cerberus.Driver.Live do
     session
     |> Map.put(:view, view)
     |> Map.put(:document, Html.parse!(html))
+    |> Map.put(:render_version, LiveViewClient.render_version(view))
     |> Map.put(:current_path, path)
     |> update_last_result(:unwrap, %{path: path, transition: unwrap_transition})
   end
