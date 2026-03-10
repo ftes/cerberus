@@ -29,6 +29,8 @@ defmodule Cerberus.Browser do
   @press_args_error "Browser.press/4 expects locator, key as a string, and options as a keyword list"
   @drag_args_error "Browser.drag/4 expects source and target selectors as strings and options as a keyword list"
   @with_popup_args_error "Browser.with_popup/4 expects trigger callback arity 1, callback arity 2, and options as a keyword list"
+  @with_evaluate_js_args_error "Browser.with_evaluate_js/3 expects an expression string and callback with arity 1"
+  @with_screenshot_args_error "Browser.with_screenshot expects a path string or keyword options, optionally followed by a callback with arity 1"
   @add_cookie_args_error "Browser.add_cookie/4 expects cookie name and value strings and options as a keyword list"
   @add_cookies_args_error "Browser.add_cookies/2 expects a list of cookie keyword lists"
   @clear_cookies_args_error "Browser.clear_cookies/2 expects options as a keyword list"
@@ -40,7 +42,6 @@ defmodule Cerberus.Browser do
   @with_popup_options_doc NimbleOptions.docs(Options.browser_with_popup_schema())
   @add_cookie_options_doc NimbleOptions.docs(Options.browser_add_cookie_schema())
   @clear_cookies_options_doc NimbleOptions.docs(Options.browser_clear_cookies_schema())
-  @return_result_options_doc NimbleOptions.docs(Options.return_result_schema())
 
   @doc """
   Returns encoded SQL sandbox metadata for browser `user_agent` session wiring.
@@ -79,18 +80,13 @@ defmodule Cerberus.Browser do
 
   `opts_or_path` accepts either a path string or keyword options.
 
-  Use either:
-  - callback form (`screenshot(session, opts, fn png_binary -> ... end)`) to keep piping
-  - `return_result: true` to return the PNG binary
-
   `open: true` opens the saved screenshot path in the default system image viewer.
 
   ## Options
 
   #{@screenshot_options_doc}
   """
-  @spec screenshot(session, String.t() | Options.screenshot_opts()) :: session | binary() when session: var
-  @spec screenshot(session, String.t() | Options.screenshot_opts(), (binary() -> term())) :: session when session: var
+  @spec screenshot(Session.t(), String.t() | Options.screenshot_opts()) :: binary()
   def screenshot(session, opts \\ [])
 
   def screenshot(%Browser{} = session, path) when is_binary(path) do
@@ -99,26 +95,47 @@ defmodule Cerberus.Browser do
 
   def screenshot(%Browser{} = session, opts) when is_list(opts) do
     opts = Options.validate_screenshot!(opts)
-    {updated_session, png_binary, path} = capture_screenshot(session, opts)
+    {_updated_session, png_binary, path} = capture_screenshot(session, opts)
 
     maybe_open_screenshot(path, opts)
-
-    if Keyword.get(opts, :return_result, false) do
-      png_binary
-    else
-      updated_session
-    end
+    png_binary
   end
 
   def screenshot(_session, _opts) do
     raise ArgumentError, "Browser.screenshot/2 expects a path string or keyword options"
   end
 
-  def screenshot(%Browser{} = session, path, callback) when is_binary(path) and is_function(callback, 1) do
-    screenshot(session, [path: path], callback)
+  @doc """
+  Captures a browser screenshot and returns the original session.
+
+  Use `with_screenshot/2` when you only need the side effects (write/open), or
+  `with_screenshot/3` to inspect the PNG binary while preserving piping.
+  """
+  @spec with_screenshot(session, String.t() | Options.screenshot_opts()) :: session when session: var
+  @spec with_screenshot(session, String.t() | Options.screenshot_opts(), (binary() -> term())) :: session
+        when session: var
+  def with_screenshot(session, opts \\ [])
+
+  def with_screenshot(%Browser{} = session, path) when is_binary(path) do
+    with_screenshot(session, path: path)
   end
 
-  def screenshot(%Browser{} = session, opts, callback) when is_list(opts) and is_function(callback, 1) do
+  def with_screenshot(%Browser{} = session, opts) when is_list(opts) do
+    opts = Options.validate_screenshot!(opts)
+    {updated_session, _png_binary, path} = capture_screenshot(session, opts)
+    maybe_open_screenshot(path, opts)
+    updated_session
+  end
+
+  def with_screenshot(_session, _opts_or_path) do
+    raise ArgumentError, @with_screenshot_args_error
+  end
+
+  def with_screenshot(%Browser{} = session, path, callback) when is_binary(path) and is_function(callback, 1) do
+    with_screenshot(session, [path: path], callback)
+  end
+
+  def with_screenshot(%Browser{} = session, opts, callback) when is_list(opts) and is_function(callback, 1) do
     opts = Options.validate_screenshot!(opts)
     {updated_session, png_binary, path} = capture_screenshot(session, opts)
     _ = callback.(png_binary)
@@ -126,8 +143,8 @@ defmodule Cerberus.Browser do
     updated_session
   end
 
-  def screenshot(_session, _opts_or_path, _callback) do
-    raise ArgumentError, "Browser.screenshot/3 expects a path string or keyword options and callback with arity 1"
+  def with_screenshot(_session, _opts_or_path, _callback) do
+    raise ArgumentError, @with_screenshot_args_error
   end
 
   @doc """
@@ -231,58 +248,33 @@ defmodule Cerberus.Browser do
   end
 
   @doc """
-  Evaluates JavaScript and ignores the result, returning the original session.
+  Evaluates JavaScript and returns the computed JS value.
   """
-  @spec evaluate_js(Session.t(), String.t()) :: Session.t()
-  def evaluate_js(session, expression) when is_binary(expression) do
-    evaluate_js(session, expression, [])
-  end
+  @spec evaluate_js(Session.t(), String.t()) :: term()
+  def evaluate_js(%Browser{} = session, expression) when is_binary(expression),
+    do: Extensions.evaluate_js(session, expression)
+
+  def evaluate_js(session, expression) when is_binary(expression), do: Assertions.unsupported(session, :evaluate_js)
 
   def evaluate_js(_session, _expression) do
     raise ArgumentError, "Browser.evaluate_js/2 expects an expression string"
   end
 
   @doc """
-  Evaluates JavaScript and controls result handling.
-
-  Use either:
-  - callback form (`evaluate_js(session, expression, fn value -> ... end)`) to keep piping
-  - `return_result: true` (`evaluate_js(session, expression, return_result: true)`) to return the JS value
-
-  ## Options
-
-  #{@return_result_options_doc}
+  Evaluates JavaScript, passes the computed value to `callback`, and returns `session`.
   """
-  @spec evaluate_js(Session.t(), String.t(), Options.return_result_opts()) :: Session.t() | term()
-  @spec evaluate_js(Session.t(), String.t(), (term() -> term())) :: Session.t()
-  def evaluate_js(session, expression, callback_or_opts)
-      when is_binary(expression) and (is_function(callback_or_opts, 1) or is_list(callback_or_opts)) do
-    case evaluate_js_value(session, expression) do
-      {:ok, value} ->
-        evaluate_js_result(value, session, callback_or_opts)
-
-      {:unsupported, unsupported_session} ->
-        Assertions.unsupported(unsupported_session, :evaluate_js)
-    end
-  end
-
-  def evaluate_js(_session, _expression, _callback_or_opts) do
-    raise ArgumentError, "Browser.evaluate_js/3 expects an expression string and callback with arity 1 or keyword options"
-  end
-
-  defp evaluate_js_result(value, session, callback) when is_function(callback, 1) do
-    callback.(value)
+  @spec with_evaluate_js(session, String.t(), (term() -> term())) :: session when session: var
+  def with_evaluate_js(%Browser{} = session, expression, callback)
+      when is_binary(expression) and is_function(callback, 1) do
+    _ = callback.(Extensions.evaluate_js(session, expression))
     session
   end
 
-  defp evaluate_js_result(value, session, opts) when is_list(opts) do
-    opts = Options.validate_return_result!(opts, "Browser.evaluate_js/3")
+  def with_evaluate_js(session, expression, callback) when is_binary(expression) and is_function(callback, 1),
+    do: Assertions.unsupported(session, :with_evaluate_js)
 
-    if Keyword.get(opts, :return_result, false) do
-      value
-    else
-      session
-    end
+  def with_evaluate_js(_session, _expression, _callback) do
+    raise ArgumentError, @with_evaluate_js_args_error
   end
 
   @doc """
@@ -440,12 +432,6 @@ defmodule Cerberus.Browser do
   def add_session_cookie(_session, _cookie, _session_options) do
     raise ArgumentError, @add_session_cookie_args_error
   end
-
-  defp evaluate_js_value(%Browser{} = session, expression) when is_binary(expression) do
-    {:ok, Extensions.evaluate_js(session, expression)}
-  end
-
-  defp evaluate_js_value(session, _expression), do: {:unsupported, session}
 
   defp capture_screenshot(%Browser{} = session, validated_opts) when is_list(validated_opts) do
     resolved_path = Browser.screenshot_path(validated_opts)

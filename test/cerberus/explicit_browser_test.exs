@@ -16,7 +16,7 @@ defmodule Cerberus.ExplicitBrowserTest do
   test "browser session uses the chrome runtime" do
     :browser
     |> session()
-    |> Cerberus.Browser.evaluate_js("navigator.userAgent", fn user_agent ->
+    |> Cerberus.Browser.with_evaluate_js("navigator.userAgent", fn user_agent ->
       assert user_agent =~ "Chrome"
     end)
   end
@@ -28,7 +28,7 @@ defmodule Cerberus.ExplicitBrowserTest do
       |> visit("/articles")
 
     started_at = System.monotonic_time(:millisecond)
-    assert session == Cerberus.Browser.evaluate_js(session, "1 + 1", &assert(&1 == 2))
+    assert session == Cerberus.Browser.with_evaluate_js(session, "1 + 1", &assert(&1 == 2))
     elapsed_ms = System.monotonic_time(:millisecond) - started_at
 
     assert elapsed_ms >= 100

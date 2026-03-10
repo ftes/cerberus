@@ -18,7 +18,7 @@ The fixture app is started from `test/test_helper.exs` and serves only local rou
 - `/scoped` (static): duplicated link text across scoped sections for `within/3` conformance.
 - `/search` and `/search/results` (static): deterministic query form flow.
 - `/search/profile/a`, `/search/profile/b`, and `/search/profile/results` (static): alternate-form-shape fixture for stale-field pruning conformance across static/browser drivers.
-- `/browser/extensions` (static): browser-only extension fixture for screenshot, keyboard, dialog, drag, and cookie helpers.
+- `/browser/extensions` (static): browser-only extension fixture for screenshot, keyboard, drag, and cookie helpers.
 - `/session/user` and `/session/user/:value` (static): deterministic cookie/session sharing fixture for multi-user and multi-tab conformance.
 - `/live/counter` (live): deterministic counter with `Increment` button.
 - `/live/sandbox/messages` (live): DB-backed fixture with refresh click event.

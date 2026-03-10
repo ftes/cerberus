@@ -43,8 +43,8 @@ import Cerberus.Browser
 
 session(:browser, headless: false, slow_mo: 500) # open chrome
 |> visit("/live/counter")
-|> evaluate_js("prompt('Hey!')")
-|> screenshot(full_page: true, open: true)
+|> with_evaluate_js("document.body.dataset.cerberus = 'ready'", fn _ -> :ok end)
+|> with_screenshot(full_page: true, open: true)
 ```
 
 For progressive, step-by-step examples (scopes, forms, tabs, browser extensions), see [Getting Started](docs/getting-started.md).
@@ -92,21 +92,21 @@ For locator forms and advanced composition (`~l` modifiers, `and_`, `or_`, `not_
 session()
 |> visit("/articles")
 |> open_browser() # 1) human: open static HTML snapshot in browser
-|> render_html(&IO.inspect(LazyHTML.query(&1, "h1"))) # 2) AI: inspect static HTML snapshot
+|> with_render_html(&IO.inspect(LazyHTML.query(&1, "h1"))) # 2) AI: inspect static HTML snapshot
 
 session(:browser, show_browser: true, slow_mo: 500) # 3) human: watch live interaction in browser
 |> visit("/articles")
-|> evaluate_js("document.body.dataset.cerberus = 'ready'", fn _ -> :ok end)
+|> with_evaluate_js("document.body.dataset.cerberus = 'ready'", fn _ -> :ok end)
 
 png =
   session(:browser)
   |> visit("/articles")
-  |> screenshot(path: "tmp/page.png", return_result: true) # raw PNG bytes
+  |> screenshot(path: "tmp/page.png") # raw PNG bytes
 ```
 
 ## Browser Tests
 
-Start in Phoenix mode (static/live) for fast feedback, then switch to browser mode when you add JS-dependent behavior (custom snippets, dialogs, drag/drop, popup flows). In many tests this is just changing `session()` to `session(:browser)`.
+Start in Phoenix mode (static/live) for fast feedback, then switch to browser mode when you add JS-dependent behavior (custom snippets, drag/drop, popup flows). In many tests this is just changing `session()` to `session(:browser)`.
 `visit/2` waits for post-navigation browser readiness and auto-detects LiveView roots (`[data-phx-session]`), only waiting for `phx-connected` when a LiveView is present. Other browser actions rely on browser actionability and on the next action/assertion to wait for whatever state it needs.
 
 Install Chrome with:

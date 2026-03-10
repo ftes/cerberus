@@ -14,13 +14,15 @@ defmodule Cerberus.BrowserTest do
   end
 
   test "screenshot defaults to a temp PNG path" do
-    session =
+    png =
       :browser
       |> session()
       |> visit("/articles")
       |> screenshot()
 
-    assert_path(session, "/articles")
+    assert is_binary(png)
+    assert byte_size(png) > 0
+    assert :binary.part(png, 0, 8) == <<137, 80, 78, 71, 13, 10, 26, 10>>
   end
 
   @tag :tmp_dir
@@ -30,13 +32,14 @@ defmodule Cerberus.BrowserTest do
     # one process can remove this directory while another still reads artifacts.
     path = Path.join(tmp_dir, "cerberus-screenshot.png")
 
-    session =
+    png =
       :browser
       |> session()
       |> visit("/articles")
       |> screenshot(path)
 
-    assert_path(session, "/articles")
+    assert is_binary(png)
+    assert byte_size(png) > 0
     assert File.exists?(path)
 
     png = File.read!(path)
@@ -46,7 +49,7 @@ defmodule Cerberus.BrowserTest do
   end
 
   @tag :tmp_dir
-  test "screenshot supports callback, return_result, and open options", %{tmp_dir: tmp_dir} do
+  test "screenshot returns png bytes and with_screenshot preserves piping", %{tmp_dir: tmp_dir} do
     path = Path.join(tmp_dir, "cerberus-screenshot-options.png")
 
     previous_open_fun = Application.get_env(:cerberus, :open_with_system_cmd)
@@ -69,17 +72,19 @@ defmodule Cerberus.BrowserTest do
       |> session()
       |> visit("/articles")
 
-    assert screenshot(session, [path: path], fn png_binary ->
+    assert with_screenshot(session, [path: path], fn png_binary ->
              assert is_binary(png_binary)
              assert byte_size(png_binary) > 0
              assert :binary.part(png_binary, 0, 8) == <<137, 80, 78, 71, 13, 10, 26, 10>>
            end) == session
 
-    png_binary = screenshot(session, path: path, return_result: true, open: true)
+    assert with_screenshot(session, path: path, open: true) == session
+    png_binary = screenshot(session, path: path, open: true)
 
     assert is_binary(png_binary)
     assert byte_size(png_binary) > 0
     assert :binary.part(png_binary, 0, 8) == <<137, 80, 78, 71, 13, 10, 26, 10>>
+    assert_receive {:opened_screenshot, ^path}
     assert_receive {:opened_screenshot, ^path}
   end
 end

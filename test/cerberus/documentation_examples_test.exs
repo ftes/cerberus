@@ -92,7 +92,7 @@ defmodule Cerberus.DocumentationExamplesTest do
       :browser
       |> driver_session(context)
       |> visit("/articles")
-      |> evaluate_js("document.body.dataset.cerberus = 'ready'", fn _result -> :ok end)
+      |> with_evaluate_js("document.body.dataset.cerberus = 'ready'", fn _result -> :ok end)
 
     assert_path(session, "/articles")
   end

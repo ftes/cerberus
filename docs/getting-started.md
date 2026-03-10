@@ -263,7 +263,7 @@ session
 |> assert_has(~l"Press result: submitted"e)
 
 png =
-  screenshot(session, path: "tmp/extensions.png", return_result: true)
+  screenshot(session, path: "tmp/extensions.png")
 
 cookie(session, "_cerberus_fixture_key", fn entry ->
   assert entry

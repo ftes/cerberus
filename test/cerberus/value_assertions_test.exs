@@ -2,7 +2,7 @@ defmodule Cerberus.ValueAssertionsTest do
   use ExUnit.Case, async: true
 
   import Cerberus
-  import Cerberus.Browser, only: [evaluate_js: 2]
+  import Cerberus.Browser, only: [with_evaluate_js: 3]
 
   alias Cerberus.TestSupport.SharedBrowserSession
 
@@ -49,12 +49,15 @@ defmodule Cerberus.ValueAssertionsTest do
   test "browser assert_value retries until the JS value matches", %{shared_browser_session: browser_session} do
     browser_session
     |> visit("/search")
-    |> evaluate_js("""
-    setTimeout(() => {
-      const input = document.getElementById("search_q");
-      if (input) input.value = "late-value";
-    }, 120);
-    """)
+    |> with_evaluate_js(
+      """
+      setTimeout(() => {
+        const input = document.getElementById("search_q");
+        if (input) input.value = "late-value";
+      }, 120);
+      """,
+      fn _ -> :ok end
+    )
     |> assert_value(~l"Search term"l, "late-value", timeout: 500)
   end
 end

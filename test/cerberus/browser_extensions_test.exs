@@ -27,10 +27,10 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     live_callback_error =
       assert_raise AssertionError, fn ->
-        evaluate_js(live, "(() => 2 + 2)()", fn _value -> :ok end)
+        with_evaluate_js(live, "(() => 2 + 2)()", fn _value -> :ok end)
       end
 
-    assert live_callback_error.message =~ "evaluate_js is not implemented for :live driver"
+    assert live_callback_error.message =~ "with_evaluate_js is not implemented for :live driver"
 
     live_no_callback_error =
       assert_raise AssertionError, fn ->
@@ -67,17 +67,17 @@ defmodule Cerberus.BrowserExtensionsTest do
     session =
       browser_session
       |> browser_fixture_session("/browser/extensions")
-      |> screenshot(path: path)
+      |> with_screenshot(path: path)
       |> type(css("#keyboard-input"), "hello browser")
       |> press(css("#press-input"), "Enter")
 
     assert File.exists?(path)
 
-    assert evaluate_js(session, "document.querySelector('#keyboard-input').value", fn value ->
+    assert with_evaluate_js(session, "document.querySelector('#keyboard-input').value", fn value ->
              assert value == "hello browser"
            end)
 
-    assert evaluate_js(session, "document.querySelector('#keyboard-keydown-count').textContent", fn value ->
+    assert with_evaluate_js(session, "document.querySelector('#keyboard-keydown-count').textContent", fn value ->
              assert value == "Keyboard keydown count: 13"
            end)
 
@@ -101,10 +101,10 @@ defmodule Cerberus.BrowserExtensionsTest do
       |> press(css("#press-input"), "Space")
       |> press(css("#press-input"), "KeyB")
 
-    evaluate_js(session, "document.querySelector('#press-input').value", &assert(&1 == "a b"))
+    with_evaluate_js(session, "document.querySelector('#press-input').value", &assert(&1 == "a b"))
 
     session = press(session, css("#press-input"), "Backspace")
-    evaluate_js(session, "document.querySelector('#press-input').value", &assert(&1 == "a "))
+    with_evaluate_js(session, "document.querySelector('#press-input').value", &assert(&1 == "a "))
 
     session =
       session
@@ -113,7 +113,7 @@ defmodule Cerberus.BrowserExtensionsTest do
 
     assert_has(session, text("Blur result: blurred", exact: true))
     assert_has(session, text("Tab result: focused next", exact: true))
-    evaluate_js(session, "document.activeElement && document.activeElement.id", &assert(&1 == "tab-next"))
+    with_evaluate_js(session, "document.activeElement && document.activeElement.id", &assert(&1 == "tab-next"))
   end
 
   test "click rejects hidden targets via actionability visibility checks", %{browser_session: browser_session} do
@@ -137,14 +137,14 @@ defmodule Cerberus.BrowserExtensionsTest do
   test "click scrolls offscreen targets into view before acting", %{browser_session: browser_session} do
     session = browser_fixture_session(browser_session, "/browser/extensions")
 
-    evaluate_js(session, "window.scrollY", &assert(&1 == 0))
+    with_evaluate_js(session, "window.scrollY", &assert(&1 == 0))
 
     session =
       session
       |> click(role(:button, name: "Offscreen Action", exact: true))
       |> assert_has(text("Offscreen action result: clicked", exact: true))
 
-    evaluate_js(session, "window.scrollY", &assert(&1 > 0))
+    with_evaluate_js(session, "window.scrollY", &assert(&1 > 0))
   end
 
   test "click can target plain label elements in the browser", %{browser_session: browser_session} do
@@ -159,9 +159,9 @@ defmodule Cerberus.BrowserExtensionsTest do
   } do
     session = browser_fixture_session(browser_session, "/articles")
 
-    evaluate_js(session, "(() => 21 + 21)()", &assert(&1 == 42))
+    with_evaluate_js(session, "(() => 21 + 21)()", &assert(&1 == 42))
 
-    evaluate_js(
+    with_evaluate_js(
       session,
       "(() => ({name: 'cerberus', nested: {count: 2}}))()",
       &assert(
@@ -271,25 +271,21 @@ defmodule Cerberus.BrowserExtensionsTest do
     end
   end
 
-  test "evaluate_js supports callback, ignore-result, and return_result forms", %{browser_session: browser_session} do
+  test "evaluate_js returns values and with_evaluate_js preserves piping", %{browser_session: browser_session} do
     session = browser_fixture_session(browser_session, "/articles")
 
-    assert evaluate_js(session, "(() => 21 + 21)()") == session
+    assert evaluate_js(session, "(() => 21 + 21)()") == 42
 
     returned_session =
-      evaluate_js(session, "(() => 21 + 21)()", fn value ->
+      with_evaluate_js(session, "(() => 21 + 21)()", fn value ->
         assert value == 42
       end)
 
     assert returned_session == session
-    assert evaluate_js(session, "(() => 9 * 9)()", return_result: true) == 81
-
-    assert_raise ArgumentError, ~r/Browser.evaluate_js\/3 invalid options/, fn ->
-      evaluate_js(session, "(() => 9 * 9)()", return_result: :yes)
-    end
+    assert evaluate_js(session, "(() => 9 * 9)()") == 81
 
     assert_raise AssertionError, fn ->
-      evaluate_js(session, "(() => 40 + 1)()", fn value ->
+      with_evaluate_js(session, "(() => 40 + 1)()", fn value ->
         assert value == 42
       end)
     end
@@ -415,7 +411,8 @@ defmodule Cerberus.BrowserExtensionsTest do
   test "assert_download waits for download emitted after assertion starts", %{browser_session: _browser_session} do
     session = browser_fixture_session(session(:browser), "/browser/extensions")
 
-    evaluate_js(session, "setTimeout(() => document.getElementById('download-report')?.click(), 30)", fn _ -> :ok end)
+    with_evaluate_js(session, "setTimeout(() => document.getElementById('download-report')?.click(), 30)", fn _ -> :ok end)
+
     assert_download(session, "report.txt", timeout: 1_500)
   end
 

@@ -131,17 +131,17 @@ Use `Cerberus.Browser` only with `session(:browser)`.
 
 | Task | Example |
 | --- | --- |
-| Screenshot | `Browser.screenshot(session, path: "tmp/page.png")` |
-| Screenshot binary result | `png = Browser.screenshot(session, path: "tmp/page.png", return_result: true)` |
-| Screenshot + open viewer | `Browser.screenshot(session, path: "tmp/page.png", open: true)` |
+| Screenshot bytes | `png = Browser.screenshot(session, path: "tmp/page.png")` |
+| Screenshot + keep piping | `Browser.with_screenshot(session, path: "tmp/page.png")` |
+| Screenshot + open viewer | `Browser.with_screenshot(session, path: "tmp/page.png", open: true)` |
 | Type keys | `Browser.type(session, ~l"#input"c, "hello")` |
 | Press key | `Browser.press(session, ~l"#input"c, "Enter")` |
 | Drag and drop | `Browser.drag(session, "#drag-source", "#drop-target")` |
 | Popup capture | `session` \|> `Browser.with_popup(fn main -> click(main, ~l"button:Open Popup"r) end, fn _main, popup -> assert_path(popup, "/browser/popup/destination") end)` |
 | Popup same-tab fallback | `session(:browser, browser: [popup_mode: :same_tab])` \|> `visit("/browser/popup/auto")` \|> `assert_path("/browser/popup/destination", timeout: 1500)` |
 | Assert download (browser/static/live) | `session` \|> `click(~l"link:Download Report"r)` \|> `assert_download("report.txt")` |
-| Evaluate JS (ignore result) | `Browser.evaluate_js(session, "window.__cerberusMarker = 'ready'")` |
-| Evaluate JS (assert result) | `Browser.evaluate_js(session, "(() => 42)()", fn value -> assert value == 42 end)` |
+| Evaluate JS (return result) | `value = Browser.evaluate_js(session, "(() => 42)()")` |
+| Evaluate JS (pipe + callback) | `Browser.with_evaluate_js(session, "(() => 42)()", fn value -> assert value == 42 end)` |
 | Cookie lookup | `Browser.cookie(session, "_my_cookie")` |
 | Cookie callback | `Browser.cookie(session, "_my_cookie", fn cookie -> assert cookie end)` |
 | Bulk cookie add | `Browser.add_cookies(session, [[name: "feature", value: "on"]])` |

@@ -2,7 +2,7 @@ defmodule Cerberus.BrowserTimeoutAssertionsTest do
   use ExUnit.Case, async: true
 
   import Cerberus
-  import Cerberus.Browser, only: [evaluate_js: 3]
+  import Cerberus.Browser, only: [with_evaluate_js: 3]
 
   setup_all do
     {:ok, browser_session: session(:browser)}
@@ -50,7 +50,7 @@ defmodule Cerberus.BrowserTimeoutAssertionsTest do
     session =
       browser_session
       |> browser_fixture_session("/articles")
-      |> evaluate_js(
+      |> with_evaluate_js(
         "(() => { delete window.__cerberusAssert; return window.__cerberusAssert == null; })()",
         fn helper_missing? -> assert helper_missing? end
       )

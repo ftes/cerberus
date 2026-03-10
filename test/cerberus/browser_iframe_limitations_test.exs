@@ -10,7 +10,7 @@ defmodule Cerberus.BrowserIframeLimitationsTest do
       |> session()
       |> visit("/browser/iframe/cross-origin")
 
-    evaluate_js(
+    with_evaluate_js(
       session,
       """
       (() => {
@@ -49,7 +49,7 @@ defmodule Cerberus.BrowserIframeLimitationsTest do
 
     error =
       assert_raise ArgumentError, fn ->
-        evaluate_js(
+        with_evaluate_js(
           session,
           """
           (() => {

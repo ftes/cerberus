@@ -115,25 +115,20 @@ defmodule CerberusTest do
       )
       |> visit("/articles")
 
-    assert Cerberus.Browser.evaluate_js(session, "window.__cerberusInit", fn result ->
-             assert result == "ready"
-           end)
+    assert Cerberus.Browser.evaluate_js(session, "window.__cerberusInit") == "ready"
 
-    Cerberus.Browser.evaluate_js(
-      session,
-      "({ width: window.innerWidth, height: window.innerHeight })",
-      fn %{"width" => width, "height" => height} ->
-        assert is_integer(width) and width >= 880
-        assert is_integer(height) and height >= 620
-      end
-    )
+    %{"width" => width, "height" => height} =
+      Cerberus.Browser.evaluate_js(session, "({ width: window.innerWidth, height: window.innerHeight })")
+
+    assert is_integer(width) and width >= 880
+    assert is_integer(height) and height >= 620
 
     tab2 =
       session
       |> open_tab()
       |> visit("/articles")
 
-    Cerberus.Browser.evaluate_js(tab2, "window.__cerberusInit", &assert(&1 == "ready"))
+    assert Cerberus.Browser.evaluate_js(tab2, "window.__cerberusInit") == "ready"
   end
 
   test "switch_tab rejects mixed browser and non-browser sessions" do
@@ -415,7 +410,7 @@ defmodule CerberusTest do
     session =
       session()
       |> visit("/articles")
-      |> render_html(fn lazy_html ->
+      |> with_render_html(fn lazy_html ->
         send(self(), {:render_html_snapshot, lazy_html, Cerberus.Html.texts(lazy_html, :any, nil)})
       end)
 
@@ -427,18 +422,16 @@ defmodule CerberusTest do
     refute Enum.empty?(LazyHTML.query(lazy_html, "h1"))
   end
 
-  test "render_html supports return_result option" do
+  test "render_html returns LazyHTML and with_render_html preserves piping" do
     session = visit(session(), "/articles")
 
-    assert render_html(session, []) == session
-
-    lazy_html = render_html(session, return_result: true)
+    lazy_html = render_html(session)
 
     assert %LazyHTML{} = lazy_html
     assert Enum.any?(Cerberus.Html.texts(lazy_html, :any, nil), &String.contains?(&1, "Articles"))
 
-    assert_raise ArgumentError, ~r/render_html\/2 invalid options/, fn ->
-      render_html(session, return_result: :yes)
+    assert_raise ArgumentError, ~r/with_render_html\/2 expects a callback with arity 1/, fn ->
+      with_render_html(session, fn -> :ok end)
     end
   end
 
@@ -461,7 +454,7 @@ defmodule CerberusTest do
     session =
       session()
       |> visit("/live/counter")
-      |> render_html(fn lazy_html ->
+      |> with_render_html(fn lazy_html ->
         send(self(), {:render_html_snapshot, lazy_html, Cerberus.Html.texts(lazy_html, :any, nil)})
       end)
 
@@ -665,7 +658,7 @@ defmodule CerberusTest do
       :browser
       |> session()
       |> visit("/articles")
-      |> render_html(fn lazy_html ->
+      |> with_render_html(fn lazy_html ->
         send(self(), {:render_html_snapshot, lazy_html, Cerberus.Html.texts(lazy_html, :any, nil)})
       end)
 
@@ -707,11 +700,11 @@ defmodule CerberusTest do
     end
   end
 
-  test "render_html rejects invalid callback arity" do
+  test "with_render_html rejects invalid callback arity" do
     assert_raise ArgumentError, ~r/callback with arity 1/, fn ->
       session()
       |> visit("/articles")
-      |> render_html(fn -> :ok end)
+      |> with_render_html(fn -> :ok end)
     end
   end
 

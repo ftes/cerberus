@@ -35,7 +35,6 @@ defmodule Cerberus do
   @select_options_doc NimbleOptions.docs(Options.select_schema())
   @assert_options_doc NimbleOptions.docs(Options.assert_schema())
   @assert_value_options_doc NimbleOptions.docs(Options.assert_value_schema())
-  @return_result_options_doc NimbleOptions.docs(Options.return_result_schema())
 
   @doc """
   Starts a default non-browser (`:phoenix`) session with default options.
@@ -156,7 +155,7 @@ defmodule Cerberus do
   rendered page in a real browser tab.
 
   For callback-based DOM inspection in-process (for example, by AI tooling), see
-  `render_html/2`.
+  `with_render_html/2`.
   """
   @spec open_browser(arg) :: arg when arg: var
   def open_browser(session), do: open_browser(session, &OpenBrowser.open_with_system_cmd/1)
@@ -177,36 +176,22 @@ defmodule Cerberus do
   This is primarily for debugging, and can be useful for AI-assisted workflows
   that need to inspect the entire DOM tree in-process.
 
-  Use either:
-  - callback form (`render_html(session, fn lazy_html -> ... end)`) to keep piping
-  - `return_result: true` (`render_html(session, return_result: true)`) to return `LazyHTML`
-
   For human-oriented inspection in a browser, see `open_browser/1`.
-
-  ## Options
-
-  #{@return_result_options_doc}
   """
-  @spec render_html(arg, Options.return_result_opts()) :: arg | LazyHTML.t() when arg: var
-  @spec render_html(arg, (LazyHTML.t() -> term())) :: arg when arg: var
-  def render_html(session, callback_or_opts) when is_function(callback_or_opts, 1) or is_list(callback_or_opts) do
-    case callback_or_opts do
-      callback when is_function(callback, 1) ->
-        driver_module_for_session!(session).render_html(session, callback)
+  @spec render_html(Session.t()) :: LazyHTML.t()
+  def render_html(session), do: render_html_result(session)
 
-      opts ->
-        opts = Options.validate_return_result!(opts, "render_html/2")
-
-        if Keyword.get(opts, :return_result, false) do
-          render_html_result(session)
-        else
-          session
-        end
-    end
+  @doc """
+  Renders the current page HTML, passes the `LazyHTML` snapshot to `callback`,
+  and returns the original session.
+  """
+  @spec with_render_html(Session.t(), (LazyHTML.t() -> term())) :: Session.t()
+  def with_render_html(session, callback) when is_function(callback, 1) do
+    driver_module_for_session!(session).render_html(session, callback)
   end
 
-  def render_html(_session, _callback_or_opts) do
-    raise ArgumentError, "render_html/2 expects a callback with arity 1 or keyword options"
+  def with_render_html(_session, _callback) do
+    raise ArgumentError, "with_render_html/2 expects a callback with arity 1"
   end
 
   @doc """

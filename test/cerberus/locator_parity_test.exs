@@ -287,7 +287,12 @@ defmodule Cerberus.LocatorParityTest do
       |> submit(and_(role(:button, name: "Run Search", exact: false), testid("submit-secondary-button")))
       |> fill_in(role(:textbox, name: "Search term"), "after-submit")
 
-    Browser.evaluate_js(browser_session, "document.getElementById('chained_q')?.value", &assert(&1 == "after-submit"))
+    Browser.with_evaluate_js(
+      browser_session,
+      "document.getElementById('chained_q')?.value",
+      &assert(&1 == "after-submit")
+    )
+
     :ok
   end
 
@@ -360,7 +365,7 @@ defmodule Cerberus.LocatorParityTest do
     })()
     """
 
-    Browser.evaluate_js(browser_session, expression, &assert(&1 == true))
+    Browser.with_evaluate_js(browser_session, expression, &assert(&1 == true))
     browser_session
   end
 

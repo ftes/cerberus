@@ -42,19 +42,9 @@ defmodule Cerberus.TestSupport.PhoenixTestPlaywright.Driver do
   def render_html(%{document: %LazyHTML{} = document}), do: LazyHTML.to_html(document)
 
   def render_html(session) do
-    rendered = :erlang.make_ref()
-    caller = self()
-
-    _ =
-      Cerberus.render_html(session, fn lazy_html ->
-        send(caller, {rendered, inspect(lazy_html)})
-      end)
-
-    receive do
-      {^rendered, html} -> html
-    after
-      1000 -> ""
-    end
+    session
+    |> Cerberus.render_html()
+    |> inspect()
   end
 
   defp strip_prefix(nil), do: nil

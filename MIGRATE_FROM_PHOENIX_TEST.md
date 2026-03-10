@@ -204,7 +204,7 @@ If migrating again, I would create the support module earlier instead of waiting
 
 One migration surprise was that a few old Playwright tests were not really about Playwright itself. They were using frame-level JS evaluation for app checks like accessibility audits.
 
-For Cerberus browser sessions, the practical replacement was usually `Browser.evaluate_js/3`.
+For Cerberus browser sessions, the practical replacement was usually `Browser.evaluate_js/2`.
 
 Example migration shape:
 
@@ -213,7 +213,7 @@ Browser.evaluate_js(session, A11yAudit.JS.axe_core())
 
 results =
   session
-  |> Browser.evaluate_js("(async () => JSON.stringify(await axe.run()))()", return_result: true)
+  |> Browser.evaluate_js("(async () => JSON.stringify(await axe.run()))()")
   |> Jason.decode!()
   |> A11yAudit.Results.from_json()
 ```
