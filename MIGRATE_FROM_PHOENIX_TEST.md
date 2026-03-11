@@ -125,7 +125,7 @@ Examples:
 ```elixir
 click(~l"button:Save"r)
 click(~l"link:Timecards"r)
-fill_in(~l"Email"l, "new@example.com")
+fill_in(~l"Email", "new@example.com")
 ```
 
 This is especially important now that legacy link/button locator styles are gone.
@@ -266,9 +266,9 @@ What would have helped to know upfront:
 Example shape:
 
 ```elixir
-|> select(~l"Department"l, ~l"Production"e)
+|> select(~l"Department", ~l"Production"e)
 |> within_field("Job title", &assert_has(&1, ~l"select:not([disabled])"c))
-|> select(~l"Job title"l, ~l"Rushes Runner"e)
+|> select(~l"Job title", ~l"Rushes Runner"e)
 ```
 
 This is not the ideal long-term browser API, but it is a useful migration technique when a dependent control becomes actionable asynchronously.

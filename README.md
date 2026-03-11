@@ -32,9 +32,9 @@ import Cerberus
 
 session
 |> visit("/auth/static/users/log_in")
-|> fill_in(~l"Email"l, "frodo@example.com")
+|> fill_in(~l"Email", "frodo@example.com")
 |> assert_value(~l"Email"l, "frodo@example.com")
-|> fill_in(~l"Password"l, "shire-secret")
+|> fill_in(~l"Password", "shire-secret")
 |> submit(~l"Log in"e)
 |> assert_has(~l"Signed in as: frodo@example.com"e)
 

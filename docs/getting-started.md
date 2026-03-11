@@ -48,7 +48,7 @@ session()
 ```elixir
 session()
 |> visit("/search")
-|> fill_in(~l"Search term"l, "Aragorn")
+|> fill_in(~l"Search term", "Aragorn")
 |> submit(~l"button:Run Search"r)
 |> assert_path("/search/results", query: %{q: "Aragorn"})
 |> assert_has(~l"Search query: Aragorn"e)
@@ -108,8 +108,8 @@ Examples:
 ```elixir
 session()
 |> visit("/settings")
-|> fill_in(~l"Email"l, "alice@example.com")
-|> check(~l"Receive updates"l)
+|> fill_in(~l"Email", "alice@example.com")
+|> check(~l"Receive updates")
 |> click(~l"button:Save"r)
 |> assert_has(~l"Settings saved"e)
 ```
@@ -121,7 +121,7 @@ session()
 |> visit("/checkout")
 |> within(~l"#shipping-address"c, fn scoped ->
   scoped
-  |> fill_in(~l"City"l, "Berlin")
+  |> fill_in(~l"City", "Berlin")
   |> click(~l"button:Save"r)
 end)
 ```
@@ -177,8 +177,8 @@ Example:
 ```elixir
 session() # or session(conn)
 |> visit("/live/selector-edge")
-|> fill_in(~l"Name"l, "primary", first: true, count: 2)
-|> fill_in(~l"Name"l, "secondary", last: true, count: 2)
+|> fill_in(~l"Name", "primary", first: true, count: 2)
+|> fill_in(~l"Name", "secondary", last: true, count: 2)
 ```
 
 ## Advanced Locator Composition (Optional)

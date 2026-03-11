@@ -23,12 +23,12 @@
 | --- | --- |
 | Visit page | `visit(session, "/articles")` |
 | Click link/button | `click(session, ~l"link:Counter"r)` |
-| Fill input | `fill_in(session, ~l"Search term"l, "Aragorn")` |
-| Select option | `select(session, ~l"Race"l, ~l"Elf"e)` |
-| Choose radio | `choose(session, ~l"Email Choice"l)` |
-| Check checkbox | `check(session, ~l"Accept Terms"l)` |
-| Uncheck checkbox | `uncheck(session, ~l"Receive updates"l)` |
-| Upload file | `upload(session, ~l"Avatar"l, "/tmp/avatar.jpg")` |
+| Fill input | `fill_in(session, ~l"Search term", "Aragorn")` |
+| Select option | `select(session, ~l"Race", ~l"Elf"e)` |
+| Choose radio | `choose(session, ~l"Email Choice")` |
+| Check checkbox | `check(session, ~l"Accept Terms")` |
+| Uncheck checkbox | `uncheck(session, ~l"Receive updates")` |
+| Upload file | `upload(session, ~l"Avatar", "/tmp/avatar.jpg")` |
 | Submit form | `submit(session, ~l"button:Run Search"r)` |
 | Bypass browser actionability checks | `click(session, ~l"button:Hidden Action"r, force: true)` |
 | Assert text present | `assert_has(session, ~l"Articles"e)` |
@@ -73,11 +73,11 @@ Default strategy:
 
 | Goal | Preferred locator | Example |
 | --- | --- | --- |
-| Fill a text input | label text | `fill_in(session, ~l"Email"l, "alice@example.com")` |
+| Fill a text input | field text | `fill_in(session, ~l"Email", "alice@example.com")` |
 | Click a button | role + name | `click(session, ~l"button:Save"r)` |
 | Click a link | role + name | `click(session, ~l"link:Billing"r)` |
 | Assert rendered content | visible text | `assert_has(session, ~l"Settings saved"e)` |
-| Operate inside repeated UI | scope + same locators | `within(session, ~l"#shipping-address"c, fn s -> fill_in(s, ~l"City"l, "Berlin") end)` |
+| Operate inside repeated UI | scope + same locators | `within(session, ~l"#shipping-address"c, fn s -> fill_in(s, ~l"City", "Berlin") end)` |
 | Disambiguate duplicate controls | `testid` | `click(session, ~l"apply-secondary-button"t)` |
 
 ### Supported role aliases
