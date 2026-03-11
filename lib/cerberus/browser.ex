@@ -6,6 +6,7 @@ defmodule Cerberus.Browser do
   """
 
   alias Cerberus.Assertions
+  alias Cerberus.Browser.TestConcurrencyLimiter
   alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Browser.Extensions
   alias Cerberus.Locator
@@ -25,6 +26,10 @@ defmodule Cerberus.Browser do
           same_site: String.t() | nil,
           session: boolean()
         }
+  @default_test_concurrency_limiter :cerberus_browser_tests
+
+  @type limit_concurrent_tests_opt :: {:name, atom()} | {:size, pos_integer()} | {:timeout, timeout()}
+  @type limit_concurrent_tests_opts :: [limit_concurrent_tests_opt]
   @type_args_error "Browser.type/4 expects locator, text as a string, and options as a keyword list"
   @press_args_error "Browser.press/4 expects locator, key as a string, and options as a keyword list"
   @drag_args_error "Browser.drag/4 expects source and target selectors as strings and options as a keyword list"
@@ -42,6 +47,57 @@ defmodule Cerberus.Browser do
   @with_popup_options_doc NimbleOptions.docs(Options.browser_with_popup_schema())
   @add_cookie_options_doc NimbleOptions.docs(Options.browser_add_cookie_schema())
   @clear_cookies_options_doc NimbleOptions.docs(Options.browser_clear_cookies_schema())
+
+  @doc """
+  Limits concurrent browser-backed test modules by blocking in `setup_all` until
+  a shared slot is available.
+
+  Call this from `setup_all` to keep browser-backed modules `async: true` while
+  still capping how many run at once. Cleanup is registered with `on_exit/1`
+  automatically for the current ExUnit setup process.
+
+  The first caller for a limiter `:name` fixes its `:size`. Later callers for the
+  same name must use the same size.
+
+  ## Options
+
+  - `:name` - shared limiter name. Defaults to `#{inspect(@default_test_concurrency_limiter)}`.
+  - `:size` - maximum concurrent holders for that limiter. Defaults to `config :cerberus, :browser, max_concurrent_tests: ...`.
+  - `:timeout` - checkout timeout in milliseconds or `:infinity`. Defaults to `300_000`.
+
+  ## Example
+
+      setup_all do
+        Cerberus.Browser.limit_concurrent_tests()
+        :ok
+      end
+  """
+  @spec limit_concurrent_tests() :: :ok
+  def limit_concurrent_tests, do: limit_concurrent_tests([])
+
+  @spec limit_concurrent_tests(limit_concurrent_tests_opts()) :: :ok
+  def limit_concurrent_tests(opts) when is_list(opts) do
+    name = Keyword.get(opts, :name, @default_test_concurrency_limiter)
+    size = Keyword.get_lazy(opts, :size, &default_max_concurrent_tests!/0)
+    timeout = Keyword.get(opts, :timeout, 300_000)
+
+    validate_limit_concurrent_tests_opts!(name, size, timeout)
+
+    case TestConcurrencyLimiter.checkout(name, size, timeout) do
+      {:ok, token_id} ->
+        ExUnit.Callbacks.on_exit(fn -> TestConcurrencyLimiter.checkin(name, token_id) end)
+        :ok
+
+      {:error, {:size_mismatch, configured_size}} ->
+        raise ArgumentError,
+              "Browser.limit_concurrent_tests/1 expected limiter #{inspect(name)} to use size #{configured_size}"
+    end
+  end
+
+  def limit_concurrent_tests(_opts) do
+    raise ArgumentError,
+          "Browser.limit_concurrent_tests/1 expects optional :name atom, optional :size positive integer, and optional :timeout"
+  end
 
   @doc """
   Returns encoded SQL sandbox metadata for browser `user_agent` session wiring.
@@ -610,4 +666,28 @@ defmodule Cerberus.Browser do
 
   defp contains_already_owner_or_allowed?([]), do: false
   defp contains_already_owner_or_allowed?(_term), do: false
+
+  defp validate_limit_concurrent_tests_opts!(name, size, timeout) do
+    if is_atom(name) and is_integer(size) and size > 0 and valid_timeout?(timeout) do
+      :ok
+    else
+      raise ArgumentError,
+            "Browser.limit_concurrent_tests/1 expects optional :name atom, optional :size positive integer, and optional :timeout"
+    end
+  end
+
+  defp valid_timeout?(:infinity), do: true
+  defp valid_timeout?(timeout) when is_integer(timeout) and timeout >= 0, do: true
+  defp valid_timeout?(_timeout), do: false
+
+  defp default_max_concurrent_tests! do
+    case Application.get_env(:cerberus, :browser, [])[:max_concurrent_tests] do
+      size when is_integer(size) and size > 0 ->
+        size
+
+      _other ->
+        raise ArgumentError,
+              "Browser.limit_concurrent_tests/1 requires :size or config :cerberus, :browser, max_concurrent_tests: <positive integer>"
+    end
+  end
 end

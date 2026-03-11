@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-10T17:28:42Z
-updated_at: 2026-03-11T11:50:48Z
+updated_at: 2026-03-11T13:53:45Z
 ---
 
 Add the next preserved-original EV2 Cerberus copy files for a small clean slice, prioritizing straightforward live/static files before more complex browser flows.
@@ -78,3 +78,23 @@ Added preserved-original Cerberus copies for impersonate and timecard export, fi
 - Both new preserved copies are green in isolation.
 - Full EV2 Cerberus-selected subset is green again at 397 tests, 0 failures, 9 skipped.
 - Remaining unmigrated preserved-copy candidates are now mostly larger LiveView/controller modules rather than the earlier small clean slices.
+
+## Progress 2026-03-11
+
+- Added `/Users/ftes/src/ev2-copy/test/ev2_web/live/offer_live/offer_new_cerberus_test.exs` and got it green (`14 tests, 0 failures`).
+- Added `/Users/ftes/src/ev2-copy/test/ev2_web/live/offer_live/my_offer_show_cerberus_test.exs`; all migrated rows are green, with 2 explicit skipped DocuSign parity-gap rows.
+- Added `/Users/ftes/src/ev2-copy/test/ev2_web/controllers/startpack_controller_cerberus_test.exs` as an initial preserved-copy slice covering section routes and the first redirect/update flow (`17 tests, 0 failures`).
+- Full EV2 Cerberus-selected subset after these additions: `454 tests, 0 failures, 11 skipped`.
+
+## Latest Progress
+- Revalidated the broad EV2 Cerberus-selected preserved-copy subset after the register_and_accept_offer accessibility helper hardening.
+- Broad downstream run is now green: 492 tests, 0 failures, 28 skipped with --only cerberus --max-cases 14.
+- Added preserved-copy migrations for calendar_live/index and distro_live/group_show.
+- Validated existing preserved copies for my_offer_controller_integration, offer_controller_integration, people_picker, export_live/index, and offer_list.
+- Corrected a drift in project_defaults_cerberus_test so it matches the original toast-based assertion instead of slower persisted-field checks.
+
+## Latest Progress 2
+- Added preserved-copy migrations for distro_live/message_new, distro_live/message_show, manage_crew_live/index, and offer_live/offer_show.
+- Kept the broad EV2 Cerberus-selected preserved-copy subset green after folding those files in.
+- Broad downstream run is now 533 tests, 0 failures, 30 skipped with --only cerberus --max-cases 14.
+- Remaining originals without any Cerberus copy are now only the three timecard controller files: timecard_approval_controller_test.exs, timecard_controller_test.exs, and timecard_data_controller_test.exs.

@@ -34,6 +34,27 @@ session(:browser, user_agent: metadata)
 config :cerberus, ecto_sandbox_stop_owner_delay: 100
 ```
 
+Concurrency limiter for `setup_all`:
+
+```elixir
+setup_all do
+  Cerberus.Browser.limit_concurrent_tests()
+  :ok
+end
+```
+
+This keeps browser-backed modules queued behind a shared token pool without forcing the whole suite down to `mix test --max-cases 1`.
+
+Set the default limit once in config:
+
+```elixir
+config :cerberus, :browser,
+  max_concurrent_tests: 2
+```
+
+Pass `size:` to `limit_concurrent_tests/1` only when a specific limiter should override that project-wide default.
+Pass `name:` only when you intentionally want multiple independent browser-test limiters.
+
 Popup behavior:
 - Preferred: use `Browser.with_popup/4` for deterministic popup capture and two-session assertions.
 - `popup_mode: :allow` keeps browser default popup/new-window behavior (default).
