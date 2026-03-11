@@ -365,7 +365,6 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
     helper.retryableActionFailure = (result, options) => {
       if (!result || result.ok === true) return false;
-      if (options && options.force === true) return false;
 
       const op = options && options.op ? options.op : "click";
       const reason = result.reason || "";
@@ -373,6 +372,8 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       if (reason === "field_disabled") {
         return ["fill_in", "select", "choose", "check", "uncheck", "upload", "click", "submit"].includes(op);
       }
+
+      if (options && options.force === true) return false;
 
       return false;
     };

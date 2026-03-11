@@ -77,12 +77,14 @@ defmodule Cerberus.MixProject do
         "README.md",
         "docs/getting-started.md",
         "docs/cheatsheet.md",
+        "docs/browser-tests.md",
         "docs/architecture.md",
         "docs/browser-support-policy.md"
       ],
       groups_for_extras: [
         Guides: [
           "docs/getting-started.md",
+          "docs/browser-tests.md",
           "docs/architecture.md",
           "docs/browser-support-policy.md"
         ],

@@ -118,5 +118,15 @@ defmodule Cerberus.ActionabilityDisabledStateTest do
     end
   end
 
+  test "force click waits for delayed enabled button on live routes (browser)", context do
+    :browser
+    |> driver_session(context)
+    |> visit("/live/actionability/delayed")
+    |> select(~l"Category"l, ~l"Advanced"e)
+    |> click(role(:button, name: "Confirm advanced", exact: true), force: true, timeout: 600)
+    |> assert_has(text("confirmed: true", exact: true))
+    |> assert_has(text("notify_enabled: true", exact: true))
+  end
+
   defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)
 end

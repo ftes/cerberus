@@ -73,16 +73,18 @@ defmodule Cerberus.Browser.TestConcurrencyLimiter do
   defp ensure_started(name) do
     :global.trans({__MODULE__, name}, fn ->
       case :global.whereis_name(global_name(name)) do
-        :undefined ->
-          case start_link(name: name) do
-            {:ok, pid} -> pid
-            {:error, {:already_started, pid}} -> pid
-          end
-
-        pid when is_pid(pid) ->
-          pid
+        :undefined -> start_or_existing_pid(name)
+        pid when is_pid(pid) -> pid
       end
     end)
+  end
+
+  @spec start_or_existing_pid(limiter_name()) :: pid()
+  defp start_or_existing_pid(name) do
+    case start_link(name: name) do
+      {:ok, pid} -> pid
+      {:error, {:already_started, pid}} -> pid
+    end
   end
 
   @spec put_size(state(), pos_integer()) :: {:ok, state()} | {:error, {:size_mismatch, pos_integer()}}

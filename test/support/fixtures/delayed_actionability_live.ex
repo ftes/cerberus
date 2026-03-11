@@ -12,6 +12,7 @@ defmodule Cerberus.Fixtures.DelayedActionabilityLive do
        category: "basic",
        role: "",
        notify: false,
+       confirmed: false,
        role_enabled: false,
        notify_enabled: false,
        role_options: []
@@ -27,6 +28,7 @@ defmodule Cerberus.Fixtures.DelayedActionabilityLive do
      |> assign(:category, category)
      |> assign(:role, Map.get(params, "role", ""))
      |> assign(:notify, truthy?(Map.get(params, "notify")))
+     |> assign(:confirmed, false)
      |> assign(:role_enabled, false)
      |> assign(:notify_enabled, false)
      |> assign(:role_options, [])}
@@ -38,6 +40,10 @@ defmodule Cerberus.Fixtures.DelayedActionabilityLive do
      |> assign(:category, Map.get(params, "category", socket.assigns.category))
      |> assign(:role, Map.get(params, "role", ""))
      |> assign(:notify, truthy?(Map.get(params, "notify")))}
+  end
+
+  def handle_event("confirm", _params, socket) do
+    {:noreply, assign(socket, :confirmed, true)}
   end
 
   @impl true
@@ -89,12 +95,22 @@ defmodule Cerberus.Fixtures.DelayedActionabilityLive do
           checked={@notify}
           disabled={!@notify_enabled}
         />
+
+        <button
+          id="delayed_actionability_confirm"
+          type="button"
+          phx-click="confirm"
+          disabled={!@notify_enabled}
+        >
+          Confirm advanced
+        </button>
       </form>
 
       <div id="delayed-actionability-state">
         <p>category: <%= @category %></p>
         <p>role: <%= @role %></p>
         <p>notify: <%= @notify %></p>
+        <p>confirmed: <%= @confirmed %></p>
         <p>role_enabled: <%= @role_enabled %></p>
         <p>notify_enabled: <%= @notify_enabled %></p>
       </div>
