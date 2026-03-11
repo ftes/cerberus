@@ -7,7 +7,7 @@ defmodule Cerberus do
   consistent API shape.
 
   Technical guarantees:
-  - Public operations accept and return `Cerberus.Session` structs.
+  - Public operations accept and return opaque session handles.
   - Locator-based operations keep `session` first and support locator composition forms.
   - Path and assertion operations resolve timeout defaults per driver.
   - Profiling buckets are emitted per operation and driver kind.
@@ -22,7 +22,6 @@ defmodule Cerberus do
   alias Cerberus.Options
   alias Cerberus.Path
   alias Cerberus.Profiling
-  alias Cerberus.Session
 
   @session_common_options_doc NimbleOptions.docs(Options.session_common_schema())
   @session_browser_options_doc NimbleOptions.docs(Options.session_browser_schema())
@@ -36,12 +35,13 @@ defmodule Cerberus do
   @assert_options_doc NimbleOptions.docs(Options.assert_schema())
   @assert_value_options_doc NimbleOptions.docs(Options.assert_value_schema())
 
+  @opaque session_handle :: struct()
   @type select_option_input :: Locator.t() | [Locator.t()]
 
   @doc """
   Starts a default non-browser (`:phoenix`) session with default options.
   """
-  @spec session() :: Session.t()
+  @spec session() :: session_handle()
   def session, do: session([])
 
   @doc """
@@ -57,20 +57,20 @@ defmodule Cerberus do
 
   #{@session_common_options_doc}
   """
-  @spec session(Options.session_common_opts()) :: Session.t()
+  @spec session(Options.session_common_opts()) :: session_handle()
   def session(opts) when is_list(opts) do
     opts
     |> Options.validate_session_common!()
     |> Static.new_session()
   end
 
-  @spec session(Plug.Conn.t()) :: Session.t()
+  @spec session(Plug.Conn.t()) :: session_handle()
   def session(%Plug.Conn{} = conn), do: session(conn: conn)
 
-  @spec session(:phoenix) :: Session.t()
+  @spec session(:phoenix) :: session_handle()
   def session(:phoenix), do: session([])
 
-  @spec session(:browser) :: Session.t()
+  @spec session(:browser) :: session_handle()
   def session(:browser), do: session(:browser, [])
 
   def session(driver) when is_atom(driver) do
@@ -78,7 +78,7 @@ defmodule Cerberus do
           "unsupported public driver #{inspect(driver)}; use session()/session(:phoenix) for non-browser and session(:browser) for browser"
   end
 
-  @spec session(:phoenix, Options.session_common_opts()) :: Session.t()
+  @spec session(:phoenix, Options.session_common_opts()) :: session_handle()
   def session(:phoenix, opts) when is_list(opts), do: session(opts)
 
   @doc """
@@ -99,7 +99,7 @@ defmodule Cerberus do
 
   #{@session_browser_options_doc}
   """
-  @spec session(:browser, Options.session_browser_opts()) :: Session.t()
+  @spec session(:browser, Options.session_browser_opts()) :: session_handle()
   def session(:browser, opts) when is_list(opts) do
     new_browser_session(opts)
   end
@@ -126,7 +126,7 @@ defmodule Cerberus do
   @doc """
   Switches the active tab to `target_session` for browser sessions.
   """
-  @spec switch_tab(Session.t(), Session.t()) :: Session.t()
+  @spec switch_tab(session_handle(), session_handle()) :: session_handle()
   def switch_tab(session, target_session), do: dispatch_tab_operation!(session, :switch_tab, [target_session])
 
   @doc """
@@ -180,14 +180,14 @@ defmodule Cerberus do
 
   For human-oriented inspection in a browser, see `open_browser/1`.
   """
-  @spec render_html(Session.t()) :: LazyHTML.t()
+  @spec render_html(session_handle()) :: LazyHTML.t()
   def render_html(session), do: render_html_result(session)
 
   @doc """
   Renders the current page HTML, passes the `LazyHTML` snapshot to `callback`,
   and returns the original session.
   """
-  @spec with_render_html(Session.t(), (LazyHTML.t() -> term())) :: Session.t()
+  @spec with_render_html(session_handle(), (LazyHTML.t() -> term())) :: session_handle()
   def with_render_html(session, callback) when is_function(callback, 1) do
     driver_module_for_session!(session).render_html(session, callback)
   end

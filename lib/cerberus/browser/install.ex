@@ -1,10 +1,5 @@
 defmodule Cerberus.Browser.Install do
-  @moduledoc """
-  Shared Chrome runtime installer for Cerberus Mix tasks.
-
-  This module executes the Cerberus Chrome installer script and returns a parsed
-  payload that can be rendered as JSON, key/value env lines, or shell exports.
-  """
+  @moduledoc false
 
   @typedoc "Parsed install payload from installer output"
   @type install_payload :: %{

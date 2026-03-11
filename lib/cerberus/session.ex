@@ -1,5 +1,5 @@
 defprotocol Cerberus.Session do
-  @moduledoc "Runtime session access protocol used by Cerberus drivers."
+  @moduledoc false
 
   @type observed :: %{optional(String.t() | atom()) => term()}
   @type scope_value :: String.t() | observed() | nil

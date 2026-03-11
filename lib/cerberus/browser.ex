@@ -86,7 +86,7 @@ defmodule Cerberus.Browser do
 
   #{@screenshot_options_doc}
   """
-  @spec screenshot(Session.t(), String.t() | Options.screenshot_opts()) :: binary()
+  @spec screenshot(struct(), String.t() | Options.screenshot_opts()) :: binary()
   def screenshot(session, opts \\ [])
 
   def screenshot(%Browser{} = session, path) when is_binary(path) do
@@ -250,7 +250,7 @@ defmodule Cerberus.Browser do
   @doc """
   Evaluates JavaScript and returns the computed JS value.
   """
-  @spec evaluate_js(Session.t(), String.t()) :: term()
+  @spec evaluate_js(struct(), String.t()) :: term()
   def evaluate_js(%Browser{} = session, expression) when is_binary(expression),
     do: Extensions.evaluate_js(session, expression)
 
@@ -280,7 +280,7 @@ defmodule Cerberus.Browser do
   @doc """
   Returns all browser cookies visible to the active page.
   """
-  @spec cookies(Session.t()) :: [cookie]
+  @spec cookies(struct()) :: [cookie]
   def cookies(%Browser{} = session), do: Extensions.cookies(session)
   def cookies(session), do: Assertions.unsupported(session, :cookies)
 
@@ -302,7 +302,7 @@ defmodule Cerberus.Browser do
   @doc """
   Returns the cookie by `name` or `nil` when not present.
   """
-  @spec cookie(Session.t(), String.t()) :: cookie | nil
+  @spec cookie(struct(), String.t()) :: cookie | nil
   def cookie(%Browser{} = session, name) when is_binary(name), do: Extensions.cookie(session, name)
   def cookie(session, _name), do: Assertions.unsupported(session, :cookie)
 
@@ -324,7 +324,7 @@ defmodule Cerberus.Browser do
   @doc """
   Returns the session cookie (commonly `_app_key`) when present.
   """
-  @spec session_cookie(Session.t()) :: cookie | nil
+  @spec session_cookie(struct()) :: cookie | nil
   def session_cookie(%Browser{} = session), do: Extensions.session_cookie(session)
   def session_cookie(session), do: Assertions.unsupported(session, :session_cookie)
 
