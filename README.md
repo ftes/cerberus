@@ -133,6 +133,15 @@ Current scope:
 - Browser assertions/path checks run polling in browser JS and include bounded retry handling for navigation/context-reset races.
 - Browser-mode throughput is in the same class as Playwright-style real-browser E2E (both pay real browser/runtime costs), while Cerberus keeps one API across both lanes.
 
+## Difference To PhoenixTest
+
+- Faster Phoenix lane for most feature tests, especially when staying out of the browser.
+- One session-first API across static controllers, LiveView, and browser tests.
+- Browser-backed parity tests keep Phoenix-mode semantics aligned with real browser behavior.
+- Built-in Chrome driver, so browser coverage does not require a separate test tool.
+- Richer locators (`role`, `label`, `testid`, composition, filters) for more precise intent.
+- Portal-backed LiveView button clicks work in both Phoenix and browser drivers.
+
 ## Learn More
 
 - [Getting Started Guide](docs/getting-started.md)
