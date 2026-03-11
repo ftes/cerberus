@@ -192,6 +192,23 @@ defmodule Cerberus.Options do
           index: non_neg_integer() | nil
         ]
 
+  @type select_action_opts :: [
+          timeout: non_neg_integer(),
+          force: boolean(),
+          checked: boolean() | nil,
+          disabled: boolean() | nil,
+          selected: boolean() | nil,
+          readonly: boolean() | nil,
+          count: non_neg_integer() | nil,
+          min: non_neg_integer() | nil,
+          max: non_neg_integer() | nil,
+          between: between_filter(),
+          first: boolean(),
+          last: boolean(),
+          nth: pos_integer() | nil,
+          index: non_neg_integer() | nil
+        ]
+
   @type select_opts :: [
           option: select_value(),
           exact_option: boolean(),
@@ -445,6 +462,8 @@ defmodule Cerberus.Options do
     index: [type: :any, default: nil, doc: "Selects the index (0-based) matched candidate."]
   ]
 
+  @select_action_opts_schema Keyword.drop(@select_opts_schema, [:option, :exact_option])
+
   @path_opts_schema [
     exact: [type: :boolean, default: true, doc: "Requires an exact path match unless disabled."],
     query: [
@@ -574,6 +593,9 @@ defmodule Cerberus.Options do
 
   @spec select_schema() :: keyword()
   def select_schema, do: @select_opts_schema
+
+  @spec select_action_schema() :: keyword()
+  def select_action_schema, do: @select_action_opts_schema
 
   @spec path_schema() :: keyword()
   def path_schema, do: @path_opts_schema

@@ -24,6 +24,7 @@ Keep a log of what you did to present when you're done.
 - If public API/behavior/examples changed, update docs in the same change (`README.md`, relevant guides, moduledocs).
 - Current browser policy: run Chrome only. Ignore Firefox and websocket lanes locally and in CI unless explicitly requested.
 - If in doubt about static/live driver behavior, check PhoenixTest static and live driver implementations for reference patterns.
+- Live driver rule: when a connected LiveView tree is available, use that tree and build `LazyHTML` from it. Do not parse returned live HTML strings for normal live session snapshots. Only parse HTML strings on true static/fallback paths where no live tree is available.
 - If in doubt about browser driver behavior, use Cuprite as the primary implementation reference; use Playwright JS as the secondary reference.
 - Tests should default to parity coverage across applicable drivers. Only keep a test driver-specific when it is explicitly asserting driver-specific behavior.
 - There is NO `@tag :browser`. Don't try to filter tests with `--only browser` or `--exclude browser`. Running browser tests is cheap and fine.

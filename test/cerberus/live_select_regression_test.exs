@@ -24,8 +24,8 @@ defmodule Cerberus.LiveSelectRegressionTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/phoenix_test/live/index")
-      |> select(~l"Race 2"l, option: text("Elf"))
-      |> select(~l"Race 2"l, option: text("Dwarf"))
+      |> select(~l"Race 2"l, text("Elf"))
+      |> select(~l"Race 2"l, text("Dwarf"))
       |> click(role(:button, name: "Save Full Form"))
       |> assert_has(and_(css("#form-data"), text("[elf, dwarf]", exact: false)))
     end
@@ -35,7 +35,7 @@ defmodule Cerberus.LiveSelectRegressionTest do
       |> driver_session(context)
       |> visit("/phoenix_test/live/index")
       |> within(css("#not-a-form"), fn scoped ->
-        select(scoped, ~l"Choose a pet:"l, option: [text("Dog"), text("Cat")])
+        select(scoped, ~l"Choose a pet:"l, [text("Dog"), text("Cat")])
       end)
       |> assert_has(and_(css("#form-data"), text("selected: [dog, cat]")))
     end
@@ -47,7 +47,7 @@ defmodule Cerberus.LiveSelectRegressionTest do
         |> visit("/phoenix_test/live/index")
 
       assert_contract_error(fn ->
-        select(test_session, css("#no-form-no-phx-click-select"), option: text("Dog"), timeout: 10)
+        select(test_session, css("#no-form-no-phx-click-select"), text("Dog"), timeout: 10)
       end)
     end
 

@@ -24,7 +24,7 @@
 | Visit page | `visit(session, "/articles")` |
 | Click link/button | `click(session, ~l"link:Counter"r)` |
 | Fill input | `fill_in(session, ~l"Search term"l, "Aragorn")` |
-| Select option | `select(session, ~l"Race"l, option: ~l"Elf"e)` |
+| Select option | `select(session, ~l"Race"l, ~l"Elf"e)` |
 | Choose radio | `choose(session, ~l"Email Choice"l)` |
 | Check checkbox | `check(session, ~l"Accept Terms"l)` |
 | Uncheck checkbox | `uncheck(session, ~l"Receive updates"l)` |

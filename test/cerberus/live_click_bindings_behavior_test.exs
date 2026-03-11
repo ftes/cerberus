@@ -32,6 +32,24 @@ defmodule Cerberus.LiveClickBindingsBehaviorTest do
     end
   end
 
+  test "live JS navigate click updates path through metadata redirect handling" do
+    :phoenix
+    |> session()
+    |> visit("/live/redirects")
+    |> click(role(:button, name: "JS Navigate to Counter", exact: true))
+    |> assert_path("/live/counter", query: [foo: "bar"])
+    |> assert_has(text("Counter", exact: true))
+  end
+
+  test "live JS dispatch plus push click updates path through rendered push handling" do
+    :phoenix
+    |> session()
+    |> visit("/live/redirects")
+    |> click(role(:button, name: "JS Dispatch + Push", exact: true))
+    |> assert_path("/live/counter", query: [foo: "bar"])
+    |> assert_has(text("Counter", exact: true))
+  end
+
   test "live driver excludes dispatch-only JS command bindings from server-actionable click resolution" do
     assert_raise AssertionError, ~r/no button matched locator/, fn ->
       session()

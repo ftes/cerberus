@@ -132,6 +132,13 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       refute error.message =~ "Articles"
     end
 
+    test "and css plus descendant text matches EV2-style toast markup (#{driver})", context do
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/live/toast-locator")
+      |> assert_has(and_(~l".toast-success"c, text("will email an official quote", exact: false)))
+    end
+
     test "testid helper works across drivers for assertions and form actions (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
@@ -309,14 +316,14 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/live/controls")
-        |> select(~l"Disabled select"l, option: ~l"Cannot submit"e, disabled: false, timeout: 0)
+        |> select(~l"Disabled select"l, ~l"Cannot submit"e, disabled: false, timeout: 0)
       end
 
       assert_raise ExUnit.AssertionError, ~r/matched select field is disabled/, fn ->
         unquote(driver)
         |> driver_session(context)
         |> visit("/live/controls")
-        |> select(~l"Disabled select"l, option: ~l"Cannot submit"e, disabled: true, timeout: 0)
+        |> select(~l"Disabled select"l, ~l"Cannot submit"e, disabled: true, timeout: 0)
       end
     end
 

@@ -601,34 +601,30 @@ defmodule Cerberus.LocatorParityTest do
         expect: :ok,
         run: &fill_in(&1, ~l"Inline Email"l, "wrapped@example.com")
       },
-      %{name: "select label locator", expect: :ok, run: &select(&1, ~l"Language"l, option: ~l"Elixir"e)},
+      %{name: "select label locator", expect: :ok, run: &select(&1, ~l"Language"l, ~l"Elixir"e)},
       %{
         name: "select role combobox locator",
         expect: :ok,
-        run: &select(&1, role(:combobox, name: "Language"), option: ~l"Erlang"e)
+        run: &select(&1, role(:combobox, name: "Language"), ~l"Erlang"e)
       },
       %{
         name: "select role listbox locator",
         expect: :ok,
-        run: &select(&1, role(:listbox, name: "Language"), option: ~l"Elixir"e)
+        run: &select(&1, role(:listbox, name: "Language"), ~l"Elixir"e)
       },
-      %{name: "select css locator", expect: :ok, run: &select(&1, css("#language_select"), option: ~l"Erlang"e)},
-      %{
-        name: "select exact_option false supports substring",
-        expect: :ok,
-        run: &select(&1, ~l"Language"l, option: ~l"Elix"e, exact_option: false)
-      },
+      %{name: "select css locator", expect: :ok, run: &select(&1, css("#language_select"), ~l"Erlang"e)},
+      %{name: "select inexact text sigil supports substring", expect: :ok, run: &select(&1, ~l"Language"l, ~l"Elix"i)},
       %{
         name: "select disabled option errors",
         expect: :error,
         error_module: AssertionError,
-        run: &select(&1, ~l"Language"l, option: ~l"Rust"e)
+        run: &select(&1, ~l"Language"l, ~l"Rust"e)
       },
       %{
         name: "select option missing errors",
         expect: :error,
         error_module: AssertionError,
-        run: &select(&1, ~l"Language"l, option: ~l"Missing"e)
+        run: &select(&1, ~l"Language"l, ~l"Missing"e)
       },
       %{
         name: "check checkbox by label raises on ambiguous matches",
@@ -866,12 +862,12 @@ defmodule Cerberus.LocatorParityTest do
       %{
         name: "sigil role locator for select",
         expect: :ok,
-        run: &select(&1, ~l"combobox:Language"r, option: ~l"Elixir"e)
+        run: &select(&1, ~l"combobox:Language"r, ~l"Elixir"e)
       },
       %{
         name: "sigil role locator for listbox",
         expect: :ok,
-        run: &select(&1, ~l"listbox:Language"r, option: ~l"Erlang"e)
+        run: &select(&1, ~l"listbox:Language"r, ~l"Erlang"e)
       },
       %{name: "sigil role exact assertion", expect: :ok, run: &assert_has(&1, ~l"button:Increment"re)},
       %{
@@ -1031,27 +1027,27 @@ defmodule Cerberus.LocatorParityTest do
         name: "select supports first count-position filter",
         html: @count_position_html,
         expect: :ok,
-        run: &select(&1, ~l"Pet"l, option: ~l"Dog"e, first: true, count: 2)
+        run: &select(&1, ~l"Pet"l, ~l"Dog"e, first: true, count: 2)
       },
       %{
         name: "select supports last count-position filter",
         html: @count_position_html,
         expect: :ok,
-        run: &select(&1, ~l"Pet"l, option: ~l"Fish"e, last: true, between: {2, 2})
+        run: &select(&1, ~l"Pet"l, ~l"Fish"e, last: true, between: {2, 2})
       },
       %{
         name: "select fails when position is out of bounds",
         html: @count_position_html,
         expect: :error,
         error_module: AssertionError,
-        run: &select(&1, ~l"Pet"l, option: ~l"Dog"e, nth: 3)
+        run: &select(&1, ~l"Pet"l, ~l"Dog"e, nth: 3)
       },
       %{
         name: "select fails when count filter mismatches",
         html: @count_position_html,
         expect: :error,
         error_module: AssertionError,
-        run: &select(&1, ~l"Pet"l, option: ~l"Dog"e, count: 1)
+        run: &select(&1, ~l"Pet"l, ~l"Dog"e, count: 1)
       },
       %{
         name: "scope-chain snippet fill_in with scoped locator",

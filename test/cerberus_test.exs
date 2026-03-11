@@ -270,10 +270,10 @@ defmodule CerberusTest do
   end
 
   test "select requires explicit locator options" do
-    assert_raise ArgumentError, ~r/:option must be a text locator or list of text locators/, fn ->
+    assert_raise ArgumentError, ~r/select\/3 invalid option locator/, fn ->
       session()
       |> visit("/controls")
-      |> select(~l"Race"l, option: "Dwarf")
+      |> select(~l"Race"l, "Dwarf")
     end
   end
 
@@ -349,7 +349,7 @@ defmodule CerberusTest do
     assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
       session()
       |> visit("/controls")
-      |> select(~l"Race"l, option: ~l"Elf"e, timeout: -1)
+      |> select(~l"Race"l, ~l"Elf"e, timeout: -1)
     end
 
     assert_raise ArgumentError, ~r/invalid value for :timeout option/, fn ->
@@ -470,7 +470,7 @@ defmodule CerberusTest do
     static_session =
       session()
       |> visit("/controls")
-      |> select(~l"Race"l, option: ~l"Elf"e)
+      |> select(~l"Race"l, ~l"Elf"e)
       |> choose(~l"Email Choice"l)
       |> submit(text("Save Controls"))
 
@@ -481,7 +481,7 @@ defmodule CerberusTest do
     live_session =
       session()
       |> visit("/live/controls")
-      |> select(~l"Race"l, option: ~l"Dwarf"e)
+      |> select(~l"Race"l, ~l"Dwarf"e)
       |> choose(~l"Phone Choice"l)
 
     assert live_session.current_path == "/live/controls"
@@ -489,11 +489,11 @@ defmodule CerberusTest do
     assert_has(live_session, text("contact: phone", exact: true))
   end
 
-  test "select validates required option and choose validates radio targets" do
-    assert_raise ArgumentError, ~r/select\/3 invalid options: required :option option/, fn ->
+  test "select validates option locator shape and choose validates radio targets" do
+    assert_raise ArgumentError, ~r/select\/3 invalid option locator/, fn ->
       session()
       |> visit("/controls")
-      |> select(~l"Race"l)
+      |> select(~l"Race"l, "Dwarf")
     end
 
     choose_error =
@@ -713,7 +713,7 @@ defmodule CerberusTest do
       :browser
       |> session()
       |> visit("/controls")
-      |> select(~l"Race"l, option: ~l"Dwarf"e)
+      |> select(~l"Race"l, ~l"Dwarf"e)
       |> choose(~l"Email Choice"l)
       |> submit(text("Save Controls"))
 

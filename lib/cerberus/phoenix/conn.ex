@@ -28,6 +28,13 @@ defmodule Cerberus.Phoenix.Conn do
 
   def ensure_conn(conn), do: recycle_preserving_headers(conn)
 
+  @spec recycle_all_headers(Plug.Conn.t()) :: Plug.Conn.t()
+  def recycle_all_headers(%Plug.Conn{} = conn) do
+    conn
+    |> recycle(Enum.map(conn.req_headers, &elem(&1, 0)))
+    |> preserve_private(conn)
+  end
+
   @spec fork_tab_conn(Plug.Conn.t() | nil) :: Plug.Conn.t() | nil
   def fork_tab_conn(nil), do: nil
   def fork_tab_conn(conn), do: ensure_conn(conn)

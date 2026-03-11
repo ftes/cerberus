@@ -266,9 +266,9 @@ What would have helped to know upfront:
 Example shape:
 
 ```elixir
-|> select(~l"Department"l, option: ~l"Production"e)
+|> select(~l"Department"l, ~l"Production"e)
 |> within_field("Job title", &assert_has(&1, ~l"select:not([disabled])"c))
-|> select(~l"Job title"l, option: ~l"Rushes Runner"e)
+|> select(~l"Job title"l, ~l"Rushes Runner"e)
 ```
 
 This is not the ideal long-term browser API, but it is a useful migration technique when a dependent control becomes actionable asynchronously.
@@ -338,6 +338,11 @@ If doing another migration pass, I would follow this order:
 2. For non-browser, use `ConnCase` and `session(conn)`.
 3. For browser, set up a support helper with UI login and browser sandbox metadata from test `context`.
 4. Rewrite selectors directly to sigil locators.
+What helped in practice:
+- prefer sigil locators over helper constructors when they express the same thing more directly
+- for combined assertions, prefer `and_(~l"css"c, ~l"text"i)` over mixing sigils with `text(...)`
+- PhoenixTest text assertions are inexact by default, so the closest rewrite is often `~l"... "i`, not exact text
+- PhoenixTest `assert_has/refute_has(..., label: ...)` only applies the label constraint when paired with `value:`; if an original assertion uses `label:` without `value:`, inspect the rendered HTML and treat it as suspicious before migrating it literally
 5. Rewrite `text:` assertions intentionally, often with `within/3`.
 6. Use `assert_value` for actual field values.
 7. Add tiny app-specific helpers early when patterns repeat.

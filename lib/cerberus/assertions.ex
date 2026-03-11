@@ -55,10 +55,10 @@ defmodule Cerberus.Assertions do
     end
   end
 
-  @spec select(arg, Locator.t(), Driver.select_opts()) :: arg when arg: var
-  def select(session, locator_input, opts \\ []) when is_locator_input(locator_input) and is_list(opts) do
+  @spec select(arg, Locator.t(), select_option_input(), Options.select_action_opts()) :: arg when arg: var
+  def select(session, locator_input, option_input, opts \\ []) when is_locator_input(locator_input) and is_list(opts) do
     {locator, opts} = normalize_locator_and_opts(locator_input, opts)
-    opts = normalize_select_option_opts!(opts)
+    opts = normalize_select_option_input_into_opts!(option_input, opts)
     opts = Options.validate_select!(opts)
     driver = driver_module_for_session!(session)
     result = profile_driver_operation(session, :select, fn -> driver.select(session, locator, opts) end)
@@ -597,28 +597,22 @@ defmodule Cerberus.Assertions do
     {locator, opts}
   end
 
-  @spec normalize_select_option_opts!(keyword()) :: keyword()
-  defp normalize_select_option_opts!(opts) when is_list(opts) do
-    case Keyword.fetch(opts, :option) do
-      {:ok, option_input} ->
-        {normalized_option, exact_option} = normalize_select_option_input!(option_input)
-        opts = Keyword.put(opts, :option, normalized_option)
+  @spec normalize_select_option_input_into_opts!(select_option_input(), keyword()) :: keyword()
+  defp normalize_select_option_input_into_opts!(option_input, opts) when is_list(opts) do
+    {normalized_option, exact_option} = normalize_select_option_input!(option_input)
+    opts = Keyword.put(opts, :option, normalized_option)
 
-        if Keyword.has_key?(opts, :exact_option) do
-          opts
-        else
-          Keyword.put(opts, :exact_option, exact_option)
-        end
-
-      :error ->
-        opts
+    if Keyword.has_key?(opts, :exact_option) do
+      opts
+    else
+      Keyword.put(opts, :exact_option, exact_option)
     end
   end
 
   @spec normalize_select_option_input!(select_option_input()) :: {String.t() | [String.t()], boolean()}
   defp normalize_select_option_input!(option_input) when is_list(option_input) do
     if option_input == [] do
-      raise ArgumentError, "select/3 invalid options: :option list must contain at least one value"
+      raise ArgumentError, "select/3 invalid option locator: list must contain at least one value"
     end
 
     normalized = Enum.map(option_input, &normalize_select_option_locator!/1)
@@ -631,7 +625,7 @@ defmodule Cerberus.Assertions do
 
       _ ->
         raise ArgumentError,
-              "select/3 invalid options: :option locators must use a consistent :exact setting when selecting multiple values"
+              "select/3 invalid option locator: list values must use a consistent :exact setting"
     end
   end
 
@@ -648,7 +642,7 @@ defmodule Cerberus.Assertions do
 
         _other ->
           raise ArgumentError,
-                "select/3 invalid options: :option must be a text locator or list of text locators (for example ~l\"Transport\" or text(\"Transport\")); got: #{inspect(option_input)}"
+                "select/3 invalid option locator: expected a text locator or list of text locators (for example ~l\"Transport\" or text(\"Transport\")); got: #{inspect(option_input)}"
       end
 
     case locator do
@@ -656,14 +650,14 @@ defmodule Cerberus.Assertions do
         {value, Keyword.get(locator_opts, :exact, true)}
 
       %Locator{kind: :text, value: value} when is_binary(value) ->
-        raise ArgumentError, "select/3 invalid options: :option text locators must use non-empty text values"
+        raise ArgumentError, "select/3 invalid option locator: text locators must use non-empty text values"
 
       %Locator{kind: :text, value: %Regex{}} ->
-        raise ArgumentError, "select/3 invalid options: :option text locators do not support regex values"
+        raise ArgumentError, "select/3 invalid option locator: text locators do not support regex values"
 
       %Locator{kind: kind} ->
         raise ArgumentError,
-              "select/3 invalid options: :option must be a text locator or list of text locators, got locator kind #{inspect(kind)}"
+              "select/3 invalid option locator: expected a text locator or list of text locators, got locator kind #{inspect(kind)}"
     end
   end
 

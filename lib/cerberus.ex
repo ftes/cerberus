@@ -32,9 +32,11 @@ defmodule Cerberus do
   @fill_in_options_doc NimbleOptions.docs(Options.fill_in_schema())
   @submit_options_doc NimbleOptions.docs(Options.submit_schema())
   @upload_options_doc NimbleOptions.docs(Options.upload_schema())
-  @select_options_doc NimbleOptions.docs(Options.select_schema())
+  @select_options_doc NimbleOptions.docs(Options.select_action_schema())
   @assert_options_doc NimbleOptions.docs(Options.assert_schema())
   @assert_value_options_doc NimbleOptions.docs(Options.assert_value_schema())
+
+  @type select_option_input :: Locator.t() | [Locator.t()]
 
   @doc """
   Starts a default non-browser (`:phoenix`) session with default options.
@@ -726,13 +728,13 @@ defmodule Cerberus do
   Bare string/regex shorthand is not supported.
 
   For multi-select fields, pass the full desired selection on every call
-  (`option: [~l"Elf"e, ~l"Dwarf"e]`). Each `select/3` call replaces the selection
+  (`[~l"Elf"e, ~l"Dwarf"e]`). Each `select/4` call replaces the selection
   with the provided option value(s).
-  Sigil examples: `select(session, ~l"#race_select"c, option: ~l"Elf"e)`,
-  `select(session, ~l"race-select"t, option: ~l"Elf"e)`.
+  Sigil examples: `select(session, ~l"#race_select"c, ~l"Elf"e)`,
+  `select(session, ~l"race-select"t, ~l"Elf"e)`.
   """
-  @spec select(arg, Locator.t()) :: arg when arg: var
-  def select(session, locator), do: select(session, locator, [])
+  @spec select(arg, Locator.t(), select_option_input()) :: arg when arg: var
+  def select(session, locator, option_input), do: select(session, locator, option_input, [])
 
   @doc """
   Selects option text in a matched `<select>` field.
@@ -741,9 +743,9 @@ defmodule Cerberus do
 
   #{@select_options_doc}
   """
-  @spec select(arg, Locator.t(), Options.select_opts()) :: arg when arg: var
-  def select(session, locator, opts) when is_list(opts) do
-    Assertions.select(session, locator, opts)
+  @spec select(arg, Locator.t(), select_option_input(), Options.select_action_opts()) :: arg when arg: var
+  def select(session, locator, option_input, opts) when is_list(opts) do
+    Assertions.select(session, locator, option_input, opts)
   end
 
   @doc """

@@ -235,18 +235,18 @@ defmodule Cerberus.TestSupport.PhoenixTest.Legacy do
   end
 
   def select(session, field_or_selector, opts) when is_list(opts) do
-    normalized_opts = normalize_select_opts(opts)
+    {option_input, action_opts} = normalize_select_opts(opts)
     locator = field_locator(field_or_selector, opts)
-    Cerberus.select(ensure_session(session), locator, normalized_opts)
+    Cerberus.select(ensure_session(session), locator, option_input, action_opts)
   end
 
   def select(session, selector, field, opts) when is_list(opts) do
-    normalized_opts = normalize_select_opts(opts)
+    {option_input, action_opts} = normalize_select_opts(opts)
 
     locator =
       Cerberus.label(Cerberus.css(selector), normalize_scalar(field), exact: Keyword.get(opts, :exact, false))
 
-    Cerberus.select(ensure_session(session), locator, normalized_opts)
+    Cerberus.select(ensure_session(session), locator, option_input, action_opts)
   end
 
   def choose(session, field_or_selector, opts \\ [])
@@ -406,7 +406,7 @@ defmodule Cerberus.TestSupport.PhoenixTest.Legacy do
       |> then(&{&1, opts |> Keyword.delete(:option) |> Keyword.delete(:exact)})
 
     exact_option = Keyword.get(opts, :exact_option, true)
-    Keyword.put(opts, :option, normalize_option(option, exact_option))
+    {normalize_option(option, exact_option), Keyword.delete(opts, :exact_option)}
   end
 
   defp normalize_option(list, exact_option) when is_list(list), do: Enum.map(list, &normalize_option(&1, exact_option))

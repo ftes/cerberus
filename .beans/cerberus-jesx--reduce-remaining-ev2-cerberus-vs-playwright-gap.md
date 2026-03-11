@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-08T09:18:04Z
-updated_at: 2026-03-10T14:35:48Z
+updated_at: 2026-03-10T21:34:58Z
 ---
 
 ## Scope
@@ -108,3 +108,12 @@ updated_at: 2026-03-10T14:35:48Z
 - Runtime now exposes Chrome debuggerAddress from webdriver session capabilities.
 - Browser evaluate_with_timeout can route through a small page-level CDP Runtime.evaluate client when the opt is enabled.
 - Added a focused browser_extensions regression that exercises evaluate_js with use_cdp_evaluate: true.
+
+## 2026-03-10 Browser vs Live/Static EV2 Comparison\n\nMeasured preserved original/copy pairs in /Users/ftes/src/ev2-copy with MIX_ENV=test and max-cases 14.\n\nBucket totals with use_cdp_evaluate enabled:\n- original browser bucket: 48 tests, 0 failures, 1 skipped, 34.1s\n- Cerberus browser bucket: 50 tests, 0 failures, 5 skipped, 63.9s\n- original live/static bucket: 176 tests, 0 failures, 22 skipped, 11.1s\n- Cerberus live/static bucket: 161 tests, 0 failures, 1 skipped, 8.1s\n\nAggregate preserved sets:\n- originals full preserved set: 225 tests, 24.5s\n- Cerberus full preserved set: 205 tests, 70.3s\n\nCDP evaluate effect:\n- full preserved Cerberus set with use_cdp_evaluate=true: 70.3s\n- full preserved Cerberus set with use_cdp_evaluate=false: 117.6s\n- hot browser row project_form_feature_cerberus_test: 8.4s with CDP evaluate vs 25.5s without\n\nMain conclusion: remaining downstream gap is browser-heavy. Live/static preserved bucket is now slightly faster than the original preserved bucket on this set, while browser remains about 1.9x slower even with CDP evaluate enabled.
+
+## Next Browser Follow-ups
+- cerberus-dp08 Trim EV2 project form Cerberus browser runtime
+- cerberus-g8gv Trim EV2 construction rates Cerberus browser runtime
+- cerberus-eo5a Trim EV2 create offer Cerberus browser runtime
+- cerberus-egsr Trim EV2 register and accept offer Cerberus browser runtime
+- cerberus-fga6 Trim EV2 invite admin Cerberus browser runtime

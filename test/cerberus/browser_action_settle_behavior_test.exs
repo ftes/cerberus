@@ -125,7 +125,7 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     :browser
     |> SharedBrowserSession.driver_session(context)
     |> visit("/browser/actionability/long-budget")
-    |> select(~l"Slow role"l, option: ~l"Analyst"e, timeout: 1_500)
+    |> select(~l"Slow role"l, ~l"Analyst"e, timeout: 1_500)
     |> assert_has(text("selected", exact: true), timeout: 1_500)
   end
 

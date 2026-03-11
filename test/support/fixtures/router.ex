@@ -227,6 +227,7 @@ defmodule Cerberus.Fixtures.Router do
       live("/live/portal", PortalLive)
       live("/live/trigger-action", TriggerActionLive)
       live("/live/selector-edge", SelectorEdgeLive)
+      live("/live/toast-locator", ToastLocatorLive)
       live("/live/uploads", UploadLive)
       live("/live/nested", NestedLive)
       live("/live/oracle/mismatch", OracleMismatchLive)

@@ -20,7 +20,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/controls")
-      |> select(~l"Race"l, option: ~l"Dwarf"e)
+      |> select(~l"Race"l, ~l"Dwarf"e)
       |> submit(text("Save Controls"))
       |> assert_has(text("race: dwarf", exact: true))
     end
@@ -30,7 +30,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       |> driver_session(context)
       |> visit("/controls")
       |> fill_in(role(:spinbutton, name: "Age"), "41")
-      |> select(role(:listbox, name: "Race 2"), option: ~l"Orc"e)
+      |> select(role(:listbox, name: "Race 2"), ~l"Orc"e)
       |> submit(text("Save Controls"))
       |> assert_has(text("age: 41", exact: true))
       |> assert_has(text("race_2: [orc]", exact: true))
@@ -40,7 +40,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/controls")
-      |> select(testid("controls-race-select"), option: ~l"Dwarf"e)
+      |> select(testid("controls-race-select"), ~l"Dwarf"e)
       |> choose(testid("controls-contact-email"))
       |> submit(testid("save-controls"))
       |> assert_has(text("race: dwarf", exact: true))
@@ -51,8 +51,8 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/controls")
-      |> select(~l"Race 2"l, option: ~l"Elf"e)
-      |> select(~l"Race 2"l, option: ~l"Dwarf"e)
+      |> select(~l"Race 2"l, ~l"Elf"e)
+      |> select(~l"Race 2"l, ~l"Dwarf"e)
       |> submit(text("Save Controls"))
       |> assert_has(text("race_2: [dwarf]", exact: true))
     end
@@ -61,7 +61,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/controls")
-      |> select(~l"Race 2"l, option: [~l"Elf"e, ~l"Dwarf"e])
+      |> select(~l"Race 2"l, [~l"Elf"e, ~l"Dwarf"e])
       |> submit(text("Save Controls"))
       |> assert_has(text("race_2: [elf,dwarf]", exact: true))
     end
@@ -89,7 +89,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/controls")
-        |> select(~l"Race"l, option: ~l"Disabled Race"e)
+        |> select(~l"Race"l, ~l"Disabled Race"e)
       end
     end
 
@@ -97,7 +97,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/controls")
-      |> select(~l"Race"l, option: ~l"Elf"e)
+      |> select(~l"Race"l, ~l"Elf"e)
       |> assert_has(text("_target: [race]", exact: true))
       |> assert_has(text("race: elf", exact: true))
     end
@@ -109,7 +109,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       |> fill_in(role(:spinbutton, name: "Age"), "44")
       |> assert_has(text("_target: [age]", exact: true))
       |> assert_has(text("age: 44", exact: true))
-      |> select(role(:listbox, name: "Race 2"), option: ~l"Dwarf"e)
+      |> select(role(:listbox, name: "Race 2"), ~l"Dwarf"e)
       |> assert_has(text("_target: [race_2]", exact: true))
       |> assert_has(text("race_2: [dwarf]", exact: true))
     end
@@ -118,7 +118,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/controls")
-      |> select(testid("live-race-select"), option: ~l"Elf"e)
+      |> select(testid("live-race-select"), ~l"Elf"e)
       |> assert_has(text("_target: [race]", exact: true))
       |> assert_has(text("race: elf", exact: true))
     end
@@ -162,9 +162,9 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/controls")
-      |> select(~l"Race 2"l, option: ~l"Elf"e)
+      |> select(~l"Race 2"l, ~l"Elf"e)
       |> assert_has(text("race_2: [elf]", exact: true))
-      |> select(~l"Race 2"l, option: ~l"Dwarf"e)
+      |> select(~l"Race 2"l, ~l"Dwarf"e)
       |> assert_has(text("race_2: [elf,dwarf]", exact: true))
     end
 
@@ -172,7 +172,7 @@ defmodule Cerberus.SelectChooseBehaviorTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/controls")
-      |> select(~l"Race 2"l, option: [~l"Elf"e, ~l"Dwarf"e])
+      |> select(~l"Race 2"l, [~l"Elf"e, ~l"Dwarf"e])
       |> assert_has(text("race_2: [elf,dwarf]", exact: true))
     end
 

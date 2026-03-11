@@ -171,15 +171,14 @@ defmodule Cerberus.Driver.Live do
     from_path = session.current_path
 
     case try_live(conn) do
-      {:ok, view, html} ->
+      {:ok, view, _html} ->
         transition = transition(from_driver, :live, :visit, from_path, current_path)
-        document = Html.parse!(html)
 
         %{
           session
           | conn: conn,
             view: view,
-            document: document,
+            document: current_live_document!(view),
             render_version: LiveViewClient.render_version(view),
             scope: session.scope,
             current_path: current_path,
@@ -1060,8 +1059,8 @@ defmodule Cerberus.Driver.Live do
       {:rendered, rendered, path_override} when is_binary(rendered) ->
         click_live_button_rendered(session, button, rendered, :click, path_override)
 
-      {:redirect, to, reason} when reason in [:redirect, :live_redirect] ->
-        redirected_result(session, button, to, reason)
+      {:redirect, redirect, reason} when reason in [:redirect, :live_redirect] ->
+        redirected_result(session, button, redirect, reason)
 
       {:error, _failed_session, _reason, _details} = error ->
         error
@@ -1126,7 +1125,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp run_live_click_command(session, ["navigate", %{"href" => to}], _fallback_target, _dom_values) when is_binary(to) do
-    {:redirect, to_request_path(to, session.current_path), :live_redirect}
+    {:redirect, %{to: to_request_path(to, session.current_path)}, :live_redirect}
   end
 
   defp run_live_click_command(_session, _command, _fallback_target, _dom_values), do: :skip
@@ -1138,9 +1137,9 @@ defmodule Cerberus.Driver.Live do
     {:rendered, rendered, path_override}
   end
 
-  defp normalize_live_click_metadata_result({:error, {reason, %{to: to}}}, _path_override)
+  defp normalize_live_click_metadata_result({:error, {reason, %{to: to} = redirect}}, _path_override)
        when reason in [:redirect, :live_redirect] and is_binary(to) do
-    {:redirect, to, reason}
+    {:redirect, redirect, reason}
   end
 
   defp normalize_live_click_metadata_result(_other, _path_override), do: :error
@@ -1196,11 +1195,11 @@ defmodule Cerberus.Driver.Live do
 
         {:ok, update_session(updated, :click, observed), observed}
 
-      {:error, {:live_redirect, %{to: to}}} ->
-        redirected_result(session, link, to, :live_redirect, :link)
+      {:error, {:live_redirect, %{to: _to} = redirect}} ->
+        redirected_result(session, link, redirect, :live_redirect, :link)
 
-      {:error, {:redirect, %{to: to}}} ->
-        redirected_result(session, link, to, :redirect, :link)
+      {:error, {:redirect, %{to: _to} = redirect}} ->
+        redirected_result(session, link, redirect, :redirect, :link)
 
       {:error, :live_click_unsupported} ->
         click_link_via_visit(session, link, :click)
@@ -1282,8 +1281,10 @@ defmodule Cerberus.Driver.Live do
   defp css_attr_char_escape(char) when char in [?\n, ?\r, ?\t, ?\f], do: "\\#{Integer.to_string(char, 16)} "
   defp css_attr_char_escape(char), do: <<char::utf8>>
 
-  defp redirected_result(session, clicked, to, reason, action \\ :button) do
-    updated = visit(session, to, [])
+  defp redirected_result(session, clicked, redirect, reason, action \\ :button)
+
+  defp redirected_result(session, clicked, %{to: _to} = redirect, reason, action) do
+    updated = follow_live_redirect_result(session, nil, redirect, reason)
 
     transition =
       transition(
@@ -1303,6 +1304,10 @@ defmodule Cerberus.Driver.Live do
     }
 
     {:ok, update_last_result(updated, :click, observed), observed}
+  end
+
+  defp redirected_result(session, clicked, to, reason, action) when is_binary(to) do
+    redirected_result(session, clicked, %{to: to}, reason, action)
   end
 
   defp scoped_selector(selector, scope) when is_binary(scope) and scope != "", do: "#{scope} #{selector}"
@@ -3583,7 +3588,10 @@ defmodule Cerberus.Driver.Live do
 
   defp follow_live_redirect_result(%__MODULE__{} = session, _result, %{to: to} = redirect, reason)
        when is_binary(to) and reason in [:redirect, :live_redirect] do
-    conn = Conn.ensure_conn(session.conn)
+    conn =
+      session.conn
+      |> Conn.ensure_conn()
+      |> Conn.recycle_all_headers()
 
     {redirect_conn, redirect_to} =
       Phoenix.LiveViewTest.__follow_redirect__(conn, session.endpoint, nil, redirect)
@@ -3594,10 +3602,7 @@ defmodule Cerberus.Driver.Live do
     case reason do
       :live_redirect ->
         case Phoenix.LiveViewTest.__live__(sent_conn, request_path, []) do
-          {:ok, %View{} = view, html} when is_binary(html) ->
-            build_live_session_from_view(session, view, html)
-
-          {:ok, %View{} = view, _extra} ->
+          {:ok, %View{} = view, _html} ->
             build_live_session_from_view(session, view)
 
           _ ->
@@ -3754,7 +3759,7 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp build_live_session_from_view(session, view) do
-    path = maybe_live_patch_path(view, session.current_path)
+    path = LiveViewClient.current_path(view, maybe_live_patch_path(view, session.current_path))
     unwrap_transition = transition(:live, :live, :unwrap, session.current_path, path)
 
     session

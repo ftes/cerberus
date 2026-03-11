@@ -79,7 +79,7 @@ defmodule Cerberus.ActionabilityDisabledStateTest do
         unquote(driver)
         |> driver_session(context)
         |> visit("/live/controls")
-        |> select(~l"Disabled select"l, option: ~l"Cannot submit"e, timeout: 0)
+        |> select(~l"Disabled select"l, ~l"Cannot submit"e, timeout: 0)
       end
 
       assert_raise ExUnit.AssertionError, ~r/matched field is disabled/, fn ->
@@ -101,8 +101,8 @@ defmodule Cerberus.ActionabilityDisabledStateTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/actionability/delayed")
-      |> select(~l"Category"l, option: ~l"Advanced"e)
-      |> select(~l"Role"l, option: ~l"Analyst"e, timeout: 600)
+      |> select(~l"Category"l, ~l"Advanced"e)
+      |> select(~l"Role"l, ~l"Analyst"e, timeout: 600)
       |> assert_has(text("role: analyst", exact: true))
       |> assert_has(text("role_enabled: true", exact: true))
     end
@@ -111,7 +111,7 @@ defmodule Cerberus.ActionabilityDisabledStateTest do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/actionability/delayed")
-      |> select(~l"Category"l, option: ~l"Advanced"e)
+      |> select(~l"Category"l, ~l"Advanced"e)
       |> check(~l"Notify team"l, timeout: 600)
       |> assert_has(text("notify: true", exact: true))
       |> assert_has(text("notify_enabled: true", exact: true))

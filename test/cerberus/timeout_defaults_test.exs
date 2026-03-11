@@ -99,8 +99,8 @@ defmodule Cerberus.TimeoutDefaultsTest do
     :phoenix
     |> session(timeout_ms: 600)
     |> visit("/live/actionability/delayed")
-    |> select(~l"Category"l, option: ~l"Advanced"e)
-    |> select(~l"Role"l, option: ~l"Analyst"e)
+    |> select(~l"Category"l, ~l"Advanced"e)
+    |> select(~l"Role"l, ~l"Analyst"e)
     |> assert_has(text("role: analyst", exact: true))
   end
 
