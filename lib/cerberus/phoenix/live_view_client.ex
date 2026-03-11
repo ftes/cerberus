@@ -10,6 +10,7 @@ defmodule Cerberus.Phoenix.LiveViewClient do
   @type view :: %View{}
   @type element :: %Element{}
   @type text_filter :: String.t() | Regex.t() | nil
+  @type target :: String.t() | integer() | nil
   @type event_value_key :: String.t() | atom()
   @type event_value :: %{optional(event_value_key()) => term()} | [{event_value_key(), term()}]
   @type redirect_kind :: :redirect | :live_redirect
@@ -51,6 +52,12 @@ defmodule Cerberus.Phoenix.LiveViewClient do
     render_event(element, :click, value)
   end
 
+  @spec render_click(view(), String.t() | atom(), event_value()) :: render_result()
+  def render_click(%View{} = view, event, value)
+      when (is_binary(event) or is_atom(event)) and (is_map(value) or is_list(value)) do
+    render_view_event(view, :click, event, value)
+  end
+
   @spec render_change(element(), event_value()) :: render_result()
   def render_change(%Element{} = element, value \\ %{}) when is_map(value) or is_list(value) do
     render_event(element, :change, value)
@@ -64,6 +71,11 @@ defmodule Cerberus.Phoenix.LiveViewClient do
   @spec html(view() | element()) :: html_snapshot()
   def html(view_or_element) do
     call(view_or_element, :html)
+  end
+
+  @spec with_target(view(), target()) :: view()
+  def with_target(%View{} = view, target) do
+    %{view | target: target}
   end
 
   @spec html_tree(view() | element()) :: {:ok, html_tree()} | :error
@@ -151,6 +163,11 @@ defmodule Cerberus.Phoenix.LiveViewClient do
     |> Enum.find(fn %View{id: id} -> id == child_id end)
   end
 
+  @spec render_patch(view(), String.t()) :: render_result()
+  def render_patch(%View{} = view, path) when is_binary(path) do
+    call(view, {:render_patch, proxy_topic(view), path})
+  end
+
   @spec assert_redirect(view(), non_neg_integer()) :: {String.t(), map()}
   def assert_redirect(%View{} = view, timeout \\ Application.fetch_env!(:ex_unit, :assert_receive_timeout))
       when is_integer(timeout) do
@@ -193,6 +210,10 @@ defmodule Cerberus.Phoenix.LiveViewClient do
 
   defp render_event(%Element{} = element, type, value) do
     call(element, {:render_event, element, type, value})
+  end
+
+  defp render_view_event(%View{} = view, type, event, value) do
+    call(view, {:render_event, {proxy_topic(view), to_string(event), view.target}, type, value})
   end
 
   defp render_tree(%View{} = view) do

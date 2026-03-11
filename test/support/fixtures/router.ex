@@ -224,6 +224,7 @@ defmodule Cerberus.Fixtures.Router do
       live("/live/controls", SelectControlsLive)
       live("/live/actionability/delayed", DelayedActionabilityLive)
       live("/live/checkbox-array", CheckboxArrayLive)
+      live("/live/portal", PortalLive)
       live("/live/trigger-action", TriggerActionLive)
       live("/live/selector-edge", SelectorEdgeLive)
       live("/live/uploads", UploadLive)

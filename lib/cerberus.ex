@@ -635,6 +635,11 @@ defmodule Cerberus do
   @doc """
   Clicks a matched element.
 
+  Live-driver note:
+  - Portal-backed LiveView button clicks are supported.
+  - Broader portal interactions are not fully generalized yet; if a portal flow needs
+    form interactions or other non-click behaviors, use `session(:browser)`.
+
   ## Options
 
   #{@click_options_doc}

@@ -119,6 +119,14 @@ That task is simple to run in CI setup steps too.
 
 Most tests only need `session(:browser)`; deeper runtime/config details are documented in [Browser Support Policy](docs/browser-support-policy.md).
 
+## Portal Support
+
+Cerberus supports portal-backed LiveView button clicks in both the live and browser drivers.
+
+Current scope:
+- `click/2` and `click/3` on portal-backed buttons are supported.
+- Broader portal interactions are not fully generalized yet. For portal forms, `within` scopes, or more complex teleported flows, use `session(:browser)`.
+
 ## Performance
 
 - Non-browser Phoenix mode is the fast lane for most feature tests.

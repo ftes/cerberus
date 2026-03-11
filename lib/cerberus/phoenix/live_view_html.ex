@@ -129,6 +129,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
     form_id = attr_or_nil(form_node, "id")
 
     button
+    |> Map.merge(click_metadata(button_node))
     |> put_button_form_metadata(root_node, button_node, form_node, form_id)
     |> maybe_put_form_phx_submit(form_node, button_node)
     |> Map.put(
@@ -156,7 +157,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
 
     matches =
       lazy_html
-      |> scoped_nodes(scope)
+      |> live_clickable_roots(scope)
       |> Enum.flat_map(fn root_node ->
         root_node
         |> safe_query(query_selector)
@@ -173,7 +174,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   defp find_action_live_clickable_button_in_doc(lazy_html, expected, opts, scope) do
     matches =
       lazy_html
-      |> scoped_nodes(scope)
+      |> live_clickable_roots(scope)
       |> Enum.flat_map(fn root_node ->
         query_selector = selector_opt(opts) || "[phx-click]"
 
@@ -217,6 +218,31 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
       nil -> []
       mapped -> [mapped]
     end
+  end
+
+  defp live_clickable_roots(lazy_html, scope) do
+    lazy_html
+    |> scoped_nodes(scope)
+    |> Enum.flat_map(fn root_node -> [root_node | portal_query_roots(root_node)] end)
+  end
+
+  defp portal_query_roots(root_node) do
+    root_node
+    |> safe_query("template[data-phx-portal]")
+    |> Enum.flat_map(fn template_node ->
+      template_node
+      |> LazyHTML.to_tree()
+      |> List.wrap()
+      |> Enum.flat_map(fn
+        {"template", _attrs, children} when is_list(children) ->
+          children
+          |> Enum.filter(&match?({_, _, _}, &1))
+          |> Enum.map(&LazyHTML.from_tree([&1]))
+
+        _other ->
+          []
+      end)
+    end)
   end
 
   defp live_clickable_locator_match?(root_node, node, %Locator{kind: :and, value: members, opts: opts})
@@ -858,8 +884,29 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
       button_value: attr(node, "value"),
       form: form_id,
       form_selector: form_selector(root_node, form_node, form_id),
+      phx_click: attr(node, "phx-click"),
+      phx_target: attr(node, "phx-target"),
+      phx_values: click_values(node_attrs(node)),
       dispatch_change: dispatch_change_clickable?(root_node, node) and not LiveViewBindings.phx_click?(phx_click)
     }
+  end
+
+  defp click_metadata(node) do
+    attrs = node_attrs(node)
+
+    %{
+      phx_click: Map.get(attrs, "phx-click"),
+      phx_target: Map.get(attrs, "phx-target"),
+      phx_values: click_values(attrs)
+    }
+  end
+
+  defp click_values(attrs) when is_map(attrs) do
+    Enum.reduce(attrs, %{}, fn
+      {"phx-value-" <> key, value}, acc -> Map.put(acc, key, value)
+      {"value", value}, acc -> Map.put(acc, "value", value)
+      _entry, acc -> acc
+    end)
   end
 
   defp button_form_node(root_node, button_node) do

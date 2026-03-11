@@ -6,7 +6,6 @@ defmodule Cerberus.Driver.Live do
   import Cerberus.Phoenix.LiveViewClient,
     only: [
       element: 2,
-      element: 3,
       form: 2,
       form: 3,
       render_change: 2,
@@ -38,6 +37,7 @@ defmodule Cerberus.Driver.Live do
   alias Phoenix.LiveViewTest.View
 
   require Cerberus.Profiling
+  require Phoenix.LiveViewTest
 
   @type t :: %__MODULE__{}
 
@@ -968,32 +968,19 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp click_live_button(session, button, kind) do
-    result =
-      try do
-        session.view
-        |> live_button_element(button, Session.scope(session))
-        |> render_click(%{})
-      rescue
-        error in ArgumentError ->
-          {:error, {:invalid_live_click, Exception.message(error)}}
-      end
+    case click_live_button_via_metadata(session, button) do
+      {:ok, _updated, _observed} = ok ->
+        ok
 
-    case result do
-      rendered when is_binary(rendered) ->
-        click_live_button_rendered(session, button, rendered, :click)
+      {:error, _failed_session, _observed, _reason} = error ->
+        error
 
-      {:error, {:live_redirect, %{to: to}}} ->
-        redirected_result(session, button, to, :live_redirect)
-
-      {:error, {:redirect, %{to: to}}} ->
-        redirected_result(session, button, to, :redirect)
-
-      {:error, {:invalid_live_click, reason}} ->
+      :error ->
         observed = %{
           action: :button,
           clicked: button.text,
           path: session.current_path,
-          result: reason,
+          result: "metadata dispatch unavailable",
           transition: session_transition(session)
         }
 
@@ -1068,7 +1055,97 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp click_live_button_rendered(session, button, rendered, reason, path_override \\ nil) do
+  defp click_live_button_via_metadata(session, button) do
+    case render_live_click_metadata(session, button) do
+      {:rendered, rendered, path_override} when is_binary(rendered) ->
+        click_live_button_rendered(session, button, rendered, :click, path_override)
+
+      {:redirect, to, reason} when reason in [:redirect, :live_redirect] ->
+        redirected_result(session, button, to, reason)
+
+      {:error, _failed_session, _reason, _details} = error ->
+        error
+
+      :error ->
+        :error
+    end
+  end
+
+  defp render_live_click_metadata(session, %{phx_click: phx_click} = button) when is_binary(phx_click) do
+    target = Map.get(button, :phx_target)
+    dom_values = Map.get(button, :phx_values, %{})
+
+    phx_click
+    |> decode_live_click_commands()
+    |> Enum.find_value(:error, fn command ->
+      case run_live_click_command(session, command, target, dom_values) do
+        :skip -> false
+        other -> other
+      end
+    end)
+  end
+
+  defp render_live_click_metadata(_session, _button), do: :error
+
+  defp decode_live_click_commands(value) when is_binary(value) do
+    trimmed = String.trim(value)
+
+    cond do
+      trimmed == "" ->
+        []
+
+      String.starts_with?(trimmed, "[") ->
+        case Jason.decode(trimmed) do
+          {:ok, commands} when is_list(commands) -> commands
+          _ -> []
+        end
+
+      true ->
+        [["push", %{"event" => trimmed}]]
+    end
+  end
+
+  defp run_live_click_command(session, ["push", %{"event" => event} = opts], fallback_target, dom_values)
+       when is_binary(event) and is_map(opts) do
+    payload = Map.merge(dom_values, Map.get(opts, "value", %{}))
+
+    target = Map.get(opts, "target") || fallback_target
+
+    session.view
+    |> maybe_target_live_view(target)
+    |> LiveViewClient.render_click(event, payload)
+    |> normalize_live_click_metadata_result(session.current_path)
+  end
+
+  defp run_live_click_command(session, ["patch", %{"href" => to}], _fallback_target, _dom_values) when is_binary(to) do
+    path = to_request_path(to, session.current_path)
+
+    session.view
+    |> LiveViewClient.render_patch(path)
+    |> normalize_live_click_metadata_result(path)
+  end
+
+  defp run_live_click_command(session, ["navigate", %{"href" => to}], _fallback_target, _dom_values) when is_binary(to) do
+    {:redirect, to_request_path(to, session.current_path), :live_redirect}
+  end
+
+  defp run_live_click_command(_session, _command, _fallback_target, _dom_values), do: :skip
+
+  defp maybe_target_live_view(%View{} = view, target) when target in [nil, ""], do: view
+  defp maybe_target_live_view(%View{} = view, target), do: LiveViewClient.with_target(view, target)
+
+  defp normalize_live_click_metadata_result(rendered, path_override) when is_binary(rendered) do
+    {:rendered, rendered, path_override}
+  end
+
+  defp normalize_live_click_metadata_result({:error, {reason, %{to: to}}}, _path_override)
+       when reason in [:redirect, :live_redirect] and is_binary(to) do
+    {:redirect, to, reason}
+  end
+
+  defp normalize_live_click_metadata_result(_other, _path_override), do: :error
+
+  defp click_live_button_rendered(session, button, rendered, reason, path_override) do
     case apply_live_rendered_result(session, rendered, reason, path_override) do
       {:ok, updated, transition} ->
         observed = %{
@@ -1161,39 +1238,6 @@ defmodule Cerberus.Driver.Live do
     _ -> {:error, :live_click_unsupported}
   end
 
-  defp live_button_element(view, %{selector: selector}, scope) when is_binary(selector) and selector != "" do
-    element(view, scoped_selector(selector, scope))
-  end
-
-  defp live_button_element(view, button, scope) do
-    case live_button_selector(button) do
-      selector when is_binary(selector) and selector != "" ->
-        selector
-        |> scoped_selector(scope)
-        |> button_element_from_selector(view, button)
-
-      _ ->
-        live_button_element_from_text(view, button, scope)
-    end
-  end
-
-  defp button_element_from_selector(selector, view, button) do
-    case Map.get(button, :text) do
-      text when is_binary(text) and text != "" -> element(view, selector, text)
-      _ -> element(view, selector)
-    end
-  end
-
-  defp live_button_element_from_text(view, button, scope) do
-    case {live_button_tag_selector(button), Map.get(button, :text)} do
-      {selector, text} when is_binary(selector) and selector != "" and is_binary(text) and text != "" ->
-        element(view, scoped_selector(selector, scope), text)
-
-      _ ->
-        raise ArgumentError, "live button click requires a resolvable selector"
-    end
-  end
-
   defp live_link_element(view, %{selector: selector}, scope) when is_binary(selector) and selector != "" do
     element(view, scoped_selector(selector, scope))
   end
@@ -1205,29 +1249,6 @@ defmodule Cerberus.Driver.Live do
 
       _ ->
         raise ArgumentError, "live link click requires a resolvable selector"
-    end
-  end
-
-  defp live_button_selector(button) when is_map(button) do
-    tag = live_button_tag_selector(button)
-
-    Enum.find(
-      [
-        attr_selector(tag, "data-testid", Map.get(button, :testid)),
-        attr_selector(tag, "title", Map.get(button, :title)),
-        attr_selector(tag, "aria-label", Map.get(button, :aria_label)),
-        attr_selector(tag, "name", Map.get(button, :button_name)),
-        attr_selector(tag, "value", Map.get(button, :button_value)),
-        attr_selector(tag, "form", Map.get(button, :form))
-      ],
-      &(is_binary(&1) and &1 != "")
-    )
-  end
-
-  defp live_button_tag_selector(button) when is_map(button) do
-    case Map.get(button, :tag, "button") do
-      tag when is_binary(tag) and tag != "" -> tag
-      _ -> "button"
     end
   end
 
@@ -2381,12 +2402,22 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp resolve_live_submit_result(session, {:error, {:live_redirect, %{to: to}}}, button, submitted_params) do
-    submitted_redirect_result(session, button, to, submitted_params, :live_redirect)
+  defp resolve_live_submit_result(
+         session,
+         {:error, {:live_redirect, %{to: _to} = redirect}} = result,
+         button,
+         submitted_params
+       ) do
+    submitted_redirect_result(session, button, result, redirect, submitted_params, :live_redirect)
   end
 
-  defp resolve_live_submit_result(session, {:error, {:redirect, %{to: to}}}, button, submitted_params) do
-    submitted_redirect_result(session, button, to, submitted_params, :redirect)
+  defp resolve_live_submit_result(
+         session,
+         {:error, {:redirect, %{to: _to} = redirect}} = result,
+         button,
+         submitted_params
+       ) do
+    submitted_redirect_result(session, button, result, redirect, submitted_params, :redirect)
   end
 
   defp resolve_live_submit_result(session, other, _button, _submitted_params) do
@@ -2400,8 +2431,8 @@ defmodule Cerberus.Driver.Live do
     {:error, session, observed, "unexpected live submit result"}
   end
 
-  defp submitted_redirect_result(session, button, to, submitted_params, reason) do
-    updated = visit(session, to, [])
+  defp submitted_redirect_result(session, button, result, redirect, submitted_params, reason) do
+    updated = follow_live_redirect_result(session, result, redirect, reason)
 
     transition =
       transition(
@@ -3376,8 +3407,8 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp resolve_live_change_result(session, {:error, {:live_redirect, %{to: to}}}, target) do
-    redirected = visit(session, to, [])
+  defp resolve_live_change_result(session, {:error, {:live_redirect, %{to: _to} = redirect}} = result, target) do
+    redirected = follow_live_redirect_result(session, result, redirect, :live_redirect)
 
     transition =
       transition(
@@ -3391,8 +3422,8 @@ defmodule Cerberus.Driver.Live do
     {:ok, redirected, %{triggered: true, target: target, transition: transition}}
   end
 
-  defp resolve_live_change_result(session, {:error, {:redirect, %{to: to}}}, target) do
-    redirected = visit(session, to, [])
+  defp resolve_live_change_result(session, {:error, {:redirect, %{to: _to} = redirect}} = result, target) do
+    redirected = follow_live_redirect_result(session, result, redirect, :redirect)
 
     transition =
       transition(
@@ -3411,9 +3442,15 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp apply_live_rendered_result(session, rendered, reason, path_override \\ nil) do
-    _ = rendered
     path = path_override || maybe_live_patch_path(session.view, session.current_path)
-    refreshed = refresh_live_progress_session(session, path)
+
+    refreshed = %{
+      session
+      | document: Html.parse!(rendered),
+        render_version: LiveViewClient.render_version(session.view),
+        lookup_cache: %{},
+        current_path: path || session.current_path
+    }
 
     case maybe_follow_trigger_action(refreshed) do
       :no_trigger ->
@@ -3545,6 +3582,38 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp maybe_store_follow_redirect_flash(session, _flash), do: session
+
+  defp follow_live_redirect_result(%__MODULE__{} = session, _result, %{to: to} = redirect, reason)
+       when is_binary(to) and reason in [:redirect, :live_redirect] do
+    conn = Conn.ensure_conn(session.conn)
+
+    {redirect_conn, redirect_to} =
+      Phoenix.LiveViewTest.__follow_redirect__(conn, session.endpoint, nil, redirect)
+
+    request_path = to_request_path(redirect_to, session.current_path)
+    sent_conn = Conn.follow_get(session.endpoint, redirect_conn, request_path)
+
+    case reason do
+      :live_redirect ->
+        case Phoenix.LiveViewTest.__live__(sent_conn, request_path, []) do
+          {:ok, %View{} = view, html} when is_binary(html) ->
+            build_live_session_from_view(session, view, html)
+
+          {:ok, %View{} = view, _extra} ->
+            build_live_session_from_view(session, view)
+
+          _ ->
+            session
+            |> session_from_conn(sent_conn, request_path)
+            |> maybe_store_follow_redirect_flash(Map.get(redirect, :flash))
+        end
+
+      :redirect ->
+        session
+        |> session_from_conn(sent_conn, request_path)
+        |> maybe_store_follow_redirect_flash(Map.get(redirect, :flash))
+    end
+  end
 
   defp unwrap_conn_result(%Plug.Conn{} = conn, session, from_driver) when from_driver in [:static, :live] do
     case redirect_target(conn) do
@@ -3682,8 +3751,16 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp build_live_session_from_view(session, view, html) when is_binary(html) do
-    _ = html
-    build_live_session_from_view(session, view)
+    path = maybe_live_patch_path(view, session.current_path)
+    unwrap_transition = transition(:live, :live, :unwrap, session.current_path, path)
+
+    session
+    |> Map.put(:view, view)
+    |> Map.put(:document, Html.parse!(html))
+    |> Map.put(:render_version, LiveViewClient.render_version(view))
+    |> Map.put(:lookup_cache, %{})
+    |> Map.put(:current_path, path)
+    |> update_last_result(:unwrap, %{path: path, transition: unwrap_transition})
   end
 
   defp build_live_session_from_view(session, view) do

@@ -28,6 +28,7 @@ The fixture app is started from `test/test_helper.exs` and serves only local rou
 - `/live/redirect-return` (live): immediate live redirect-back fixture with flash.
 - `/live/form-change` (live): `phx-change` fixture for `_target` payload semantics, no-change forms, and hidden-input ordering checks.
 - `/live/form-sync` (live): dynamic/conditional form synchronization fixture for stale-field pruning, submit-only forms, and `JS.dispatch("change")` add/remove flows.
+- `/live/portal` (live): `Phoenix.Component.portal/1` click-parity fixture. Portal-backed button clicks are supported; broader portal interactions remain follow-up work.
 - `/live/trigger-action` (live): `phx-trigger-action` fixture for static POST handoff, patch sequencing, dynamic forms, and ambiguity handling.
 - `/trigger-action/result` (static POST): deterministic sink page echoing trigger-action payloads and HTTP method.
 - `/live/selector-edge` (live): duplicate button-label fixture for selector disambiguation checks.
