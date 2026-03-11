@@ -3442,15 +3442,13 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp apply_live_rendered_result(session, rendered, reason, path_override \\ nil) do
+    _ = rendered
     path = path_override || maybe_live_patch_path(session.view, session.current_path)
 
-    refreshed = %{
+    refreshed =
       session
-      | document: Html.parse!(rendered),
-        render_version: LiveViewClient.render_version(session.view),
-        lookup_cache: %{},
-        current_path: path || session.current_path
-    }
+      |> refresh_live_document!()
+      |> Map.put(:current_path, path || session.current_path)
 
     case maybe_follow_trigger_action(refreshed) do
       :no_trigger ->
@@ -3548,13 +3546,13 @@ defmodule Cerberus.Driver.Live do
 
     case try_live(conn) do
       {:ok, view, html} ->
-        document = Html.parse!(html)
+        _ = html
 
         %{
           session
           | conn: conn,
             view: view,
-            document: document,
+            document: current_live_document!(view),
             render_version: LiveViewClient.render_version(view),
             current_path: current_path,
             lookup_cache: %{}
@@ -3751,16 +3749,8 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp build_live_session_from_view(session, view, html) when is_binary(html) do
-    path = maybe_live_patch_path(view, session.current_path)
-    unwrap_transition = transition(:live, :live, :unwrap, session.current_path, path)
-
-    session
-    |> Map.put(:view, view)
-    |> Map.put(:document, Html.parse!(html))
-    |> Map.put(:render_version, LiveViewClient.render_version(view))
-    |> Map.put(:lookup_cache, %{})
-    |> Map.put(:current_path, path)
-    |> update_last_result(:unwrap, %{path: path, transition: unwrap_transition})
+    _ = html
+    build_live_session_from_view(session, view)
   end
 
   defp build_live_session_from_view(session, view) do

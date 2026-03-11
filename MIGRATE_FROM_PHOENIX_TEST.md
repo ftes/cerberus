@@ -93,6 +93,7 @@ Keep this in support code so the test body stays focused on behavior.
 
 Using sigils consistently made migrations easier:
 - `~l"... "l` for label locators
+- `~l"... "li` for inexact label locators
 - `~l"... "r` for role locators
 - `~l"... "e` for exact text
 - `~l"... "i` for inexact text
@@ -101,6 +102,14 @@ Using sigils consistently made migrations easier:
 This was easier to read and easier to review than mixing sigils and older string selectors.
 
 If doing the migration again, I would switch to sigils immediately instead of partially converting and then normalizing later.
+
+One easy thing to miss:
+- `~l"... "li` is usually the right rewrite for old inexact label matching
+- do not jump straight to regex labels unless the old test was really regex-shaped
+
+Another migration surprise:
+- PhoenixTest can target hidden modal submit buttons because it is not enforcing browser visibility semantics
+- a Cerberus browser migration may need the real visible trigger first, or an intentional `force: true` if the old test was effectively interacting with hidden DOM
 
 ## Prefer Role/Label-Based Locators Over Old PhoenixTest Habits
 
@@ -278,10 +287,12 @@ What would have helped:
 That would have shortened a lot of debugging loops during migration.
 
 Another useful split:
-- if submit already navigated to the expected destination, prefer asserting that stable destination over waiting on a transient success toast
-- if a post-submit toast is the only assertion and the page has already moved, the toast may be the flaky part rather than the action itself
 
 In practice, a destination-path assertion was often the better success signal for browser migrations.
+
+Two more failure shapes were worth learning faster:
+- if a modal is always present in the DOM but hidden by class/JS state, broad text assertions may match the wrong thing; scope to the visible modal container before clicking or refuting
+- if a Cerberus copy keeps failing only on a cross-tab browser interaction, it may be a real browser-driver parity gap rather than a bad locator rewrite; don't burn the whole migration stream on one stubborn row
 
 One small detail that cost time once: regex `assert_path` checks needed `exact: false` in that migration.
 
@@ -342,3 +353,7 @@ If I had to do the migration again, the biggest time savers would have been:
 - rewriting assertions semantically instead of mechanically preserving PhoenixTest shapes
 - treating dependent disabled-to-enabled controls as a normal migration concern in browser tests
 - using sigil locators consistently from the first edit
+- using `~l"... "li` immediately for inexact label matches instead of reaching for regexes
+- remembering that Cerberus `fill_in` takes the value positionally, not `with: ...`
+- On some LiveView pages, rendered label text includes extra content or punctuation; use inexact text matching (`exact: false` or `~l"..."li`) rather than forcing exact label text.
+- PhoenixTest workarounds that depend on wrapper internals (for example reading `active_form.form_data`) do not map directly to Cerberus `unwrap/2`; keep the low-level `render_change` path only where the page really needs JS.dispatch simulation.
