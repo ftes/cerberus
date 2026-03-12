@@ -5,6 +5,7 @@ ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_DIR="$ROOT_DIR/tmp"
 CLI_VERSION=""
 PLATFORM_KEY=""
+DEFAULT_FIREFOX_VERSION="148.0"
 
 usage() {
   cat <<'USAGE'
@@ -41,11 +42,7 @@ platform() {
 }
 
 resolve_default_firefox_version() {
-  local version
-
-  version="$(curl -fsSL "https://product-details.mozilla.org/1.0/firefox_versions.json" | jq -r '.LATEST_FIREFOX_VERSION // empty')"
-  [[ -n "$version" ]] || fail "unable to resolve latest Firefox version"
-  echo "$version"
+  echo "$DEFAULT_FIREFOX_VERSION"
 }
 
 resolve_firefox_version() {

@@ -3,7 +3,6 @@ defmodule Cerberus.Browser.Install do
 
   @typedoc "Supported browser runtime lanes"
   @type browser :: :chrome | :firefox
-
   @typedoc "Parsed install payload from installer output"
   @type install_payload :: %{
           required(:browser) => browser(),

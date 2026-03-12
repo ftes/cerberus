@@ -5,7 +5,7 @@ defmodule Mix.Tasks.Cerberus.Install.Chrome do
   output payload for downstream config handoff.
 
       mix cerberus.install.chrome
-      mix cerberus.install.chrome --version 146.0.7680.31
+      mix cerberus.install.chrome --version 146.0.7680.72
   """
 
   use Mix.Task

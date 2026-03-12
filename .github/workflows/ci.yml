@@ -36,15 +36,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Load browser env
-        run: |
-          source .envrc
-
-          {
-            echo "CERBERUS_CHROME_VERSION=${CERBERUS_CHROME_VERSION}"
-            echo "CERBERUS_FIREFOX_VERSION=${CERBERUS_FIREFOX_VERSION}"
-          } >> "$GITHUB_ENV"
-
       - name: Setup BEAM
         uses: erlef/setup-beam@v1
         with:
@@ -84,15 +75,17 @@ jobs:
             tmp/chrome-*
             tmp/chromedriver-*
             tmp/firefox-*
-          key: ${{ runner.os }}-browser-runtime-${{ env.CERBERUS_CHROME_VERSION }}-${{ env.CERBERUS_FIREFOX_VERSION }}
+          key: ${{ runner.os }}-browser-runtime-${{ hashFiles('bin/chrome.sh', 'bin/firefox.sh') }}
           restore-keys: |
             ${{ runner.os }}-browser-runtime-
 
       - name: Install browsers
-        run: mix cerberus.install.firefox
+        run: |
+          mix cerberus.install.chrome
+          mix cerberus.install.firefox
 
-      # - name: Run tests with Chrome
-      #   run: mix test --warnings-as-errors
+      - name: Run tests with Chrome
+        run: mix test --warnings-as-errors
 
       - name: Run tests with Firefox
         run: CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors

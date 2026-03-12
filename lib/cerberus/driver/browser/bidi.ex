@@ -4,6 +4,7 @@ defmodule Cerberus.Driver.Browser.BiDi do
   use GenServer
 
   alias Bibbidi.Connection
+  alias Bibbidi.Session, as: BibbidiSession
   alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.Types
 
@@ -157,6 +158,7 @@ defmodule Cerberus.Driver.Browser.BiDi do
   defp ensure_connected(state, opts) do
     with {:ok, web_socket_url} <- Runtime.web_socket_url(opts),
          {:ok, connection} <- Connection.start_link(url: web_socket_url),
+         :ok <- maybe_start_direct_firefox_session(connection, opts),
          :ok <- subscribe_connection_events(connection) do
       Process.unlink(connection)
       connection_ref = Process.monitor(connection)
@@ -172,6 +174,17 @@ defmodule Cerberus.Driver.Browser.BiDi do
       :ok = Connection.subscribe(connection, method, self())
       {:cont, :ok}
     end)
+  end
+
+  defp maybe_start_direct_firefox_session(connection, opts) when is_pid(connection) and is_list(opts) do
+    if Runtime.browser_name(opts) == :firefox and is_nil(Runtime.remote_webdriver_url(opts)) do
+      case BibbidiSession.new(connection) do
+        {:ok, _capabilities} -> :ok
+        {:error, reason} -> {:error, inspect(reason)}
+      end
+    else
+      :ok
+    end
   end
 
   defp maybe_close_connection(pid) when is_pid(pid) do

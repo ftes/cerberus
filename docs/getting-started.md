@@ -309,12 +309,14 @@ Install browser binaries with Cerberus Mix tasks:
 
 ```bash
 MIX_ENV=test mix cerberus.install.chrome
+MIX_ENV=test mix cerberus.install.firefox
 ```
 
 For explicit versions:
 
 ```bash
-MIX_ENV=test mix cerberus.install.chrome --version 146.0.7680.31
+MIX_ENV=test mix cerberus.install.chrome --version 146.0.7680.72
+MIX_ENV=test mix cerberus.install.firefox --version 148.0
 ```
 
 Cerberus writes stable local links on install (`tmp/chrome-current`, `tmp/chromedriver-current`, `tmp/firefox-current`), so local managed browser runs work without extra binary-path config.

@@ -105,6 +105,25 @@ defmodule Mix.Tasks.Cerberus.InstallTest do
     assert script =~ "/bin/firefox.sh"
   end
 
+  test "mix cerberus.install.firefox forwards explicit version flag" do
+    Install.put_command_runner(fn script, args, _opts ->
+      send(self(), {:runner_invocation, script, args})
+
+      {"""
+       Firefox runtime ready
+       firefox_binary=/tmp/firefox-150/firefox
+       firefox_version=150.0
+       """, 0}
+    end)
+
+    capture_io(fn ->
+      Mix.Task.reenable(@firefox_task)
+      Mix.Task.run(@firefox_task, ["--version", "150.0"])
+    end)
+
+    assert_receive {:runner_invocation, _script, ["--version", "150.0"]}
+  end
+
   test "browser_config and env_vars support firefox payload" do
     payload = %{
       browser: :firefox,

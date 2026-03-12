@@ -202,12 +202,19 @@ mix test test/cerberus/explicit_browser_test.exs
 Install the local browser runtime with the public Mix task:
 
 ```bash
-MIX_ENV=test mix cerberus.install.chrome --version 146.0.7680.31
+MIX_ENV=test mix cerberus.install.chrome
+MIX_ENV=test mix cerberus.install.firefox
+```
+
+For explicit versions:
+
+```bash
+MIX_ENV=test mix cerberus.install.chrome --version 146.0.7680.72
 MIX_ENV=test mix cerberus.install.firefox --version 148.0
 ```
 
 The task installs missing binaries and reuses existing per-version installations.
-Version precedence is flags first, then matching env vars (`CERBERUS_CHROME_VERSION` or `CERBERUS_FIREFOX_VERSION`), then the latest stable browser release for that task.
+Version precedence is flags first, then matching env vars (`CERBERUS_CHROME_VERSION` or `CERBERUS_FIREFOX_VERSION`), then the installer's pinned default version.
 
 After install, Cerberus automatically discovers local managed-runtime binaries via stable links:
 - `tmp/chrome-current`

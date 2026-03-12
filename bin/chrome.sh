@@ -4,9 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_DIR="$ROOT_DIR/tmp"
 METADATA_URL="https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json"
-LATEST_METADATA_URL="https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json"
 PLATFORM_KEY=""
 CLI_CHROME_VERSION=""
+DEFAULT_CHROME_VERSION="146.0.7680.72"
 
 usage() {
   cat <<'USAGE'
@@ -62,11 +62,7 @@ version_of() {
 }
 
 resolve_default_chrome_version() {
-  local version
-
-  version="$(curl -fsSL "$LATEST_METADATA_URL" | jq -r '.channels.Stable.version // empty')"
-  [[ -n "$version" ]] || fail "unable to resolve latest Stable Chrome version"
-  echo "$version"
+  echo "$DEFAULT_CHROME_VERSION"
 }
 
 resolve_chrome_version() {
