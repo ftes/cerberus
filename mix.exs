@@ -53,6 +53,7 @@ defmodule Cerberus.MixProject do
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test --warnings-as-errors"],
       precommit: [
         "format --check-formatted",
+        "compile --warnings-as-errors",
         "credo --strict",
         "dialyzer",
         "docs --warnings-as-errors --formatter html"
