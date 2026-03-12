@@ -1,6 +1,8 @@
 defmodule Cerberus.TestSupport.SharedBrowserSession do
   @moduledoc false
 
+  alias Cerberus.Driver.Browser.Runtime
+
   @boot_timeout_ms 30_000
   @stop_timeout_ms 5_000
 
@@ -57,4 +59,13 @@ defmodule Cerberus.TestSupport.SharedBrowserSession do
   @spec driver_session(:phoenix | :browser, map()) :: Cerberus.Session.t()
   def driver_session(:phoenix, _context), do: Cerberus.session(:phoenix)
   def driver_session(:browser, %{shared_browser_session: browser_session}), do: browser_session
+
+  @spec maybe_use_cdp_evaluate(keyword()) :: keyword()
+  def maybe_use_cdp_evaluate(opts \\ []) when is_list(opts) do
+    if Runtime.browser_name(opts) == :chrome do
+      Keyword.put(opts, :use_cdp_evaluate, true)
+    else
+      Keyword.delete(opts, :use_cdp_evaluate)
+    end
+  end
 end

@@ -1,11 +1,11 @@
-defmodule Mix.Tasks.Cerberus.Install.Chrome do
-  @shortdoc "Installs Chrome + ChromeDriver runtime binaries for Cerberus"
+defmodule Mix.Tasks.Cerberus.Install.Firefox do
+  @shortdoc "Installs Firefox runtime binaries for Cerberus"
   @moduledoc """
-  Installs Chrome for Testing and matching ChromeDriver, then prints a stable
-  output payload for downstream config handoff.
+  Installs Firefox runtime binaries, then prints a stable output payload for
+  downstream config handoff.
 
-      mix cerberus.install.chrome
-      mix cerberus.install.chrome --version 146.0.7680.31
+      mix cerberus.install.firefox
+      mix cerberus.install.firefox --version 148.0
   """
 
   use Mix.Task
@@ -28,7 +28,7 @@ defmodule Mix.Tasks.Cerberus.Install.Chrome do
         _ -> []
       end
 
-    case Install.install(:chrome, install_opts) do
+    case Install.install(:firefox, install_opts) do
       {:ok, payload} ->
         payload
         |> Install.render()

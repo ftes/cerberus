@@ -60,6 +60,26 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
       assert Runtime.remote_webdriver_url(chrome_webdriver_url: "http://override-chrome:4444") ==
                "http://override-chrome:4444"
     end
+
+    test "supports firefox webdriver url override keys" do
+      Application.put_env(:cerberus, :browser,
+        browser_name: :firefox,
+        firefox_webdriver_url: "http://config-firefox:4444"
+      )
+
+      assert Runtime.remote_webdriver_url([]) == "http://config-firefox:4444"
+
+      assert Runtime.remote_webdriver_url(firefox_webdriver_url: "http://override-firefox:4444", browser_name: :firefox) ==
+               "http://override-firefox:4444"
+    end
+  end
+
+  describe "browser_name/1" do
+    test "defaults to chrome and supports explicit firefox selection" do
+      assert Runtime.browser_name([]) == :chrome
+      assert Runtime.browser_name(browser_name: :firefox) == :firefox
+      assert Runtime.browser_name(browser: [browser_name: :firefox]) == :firefox
+    end
   end
 
   describe "resolve_base_url/1" do
@@ -123,6 +143,20 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
       assert "--mute-audio" in chrome_opts["args"]
       assert Enum.any?(chrome_opts["args"], &String.starts_with?(&1, "--disable-features="))
       assert Enum.any?(chrome_opts["args"], &String.starts_with?(&1, "--blink-settings="))
+    end
+
+    @tag :tmp_dir
+    test "firefox managed payload uses firefox options", %{tmp_dir: tmp_dir} do
+      firefox_path = Path.join(tmp_dir, "cerberus-fake-firefox")
+      File.write!(firefox_path, "")
+
+      payload = Runtime.webdriver_session_payload([browser_name: :firefox, firefox_binary: firefox_path], true)
+      always_match = payload["capabilities"]["alwaysMatch"]
+      firefox_opts = always_match["moz:firefoxOptions"]
+
+      assert always_match["browserName"] == "firefox"
+      assert always_match["webSocketUrl"] == true
+      assert firefox_opts["binary"] == firefox_path
     end
   end
 

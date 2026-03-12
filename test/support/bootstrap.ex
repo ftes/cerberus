@@ -121,9 +121,12 @@ defmodule Cerberus.TestSupport.Bootstrap do
   end
 
   defp configure_browser! do
+    browser_name = browser_name_env()
+    browser_webdriver_url = browser_webdriver_url(browser_name)
+
     browser_overrides =
       Enum.reject(
-        browser_runtime_overrides(browser_webdriver_url()),
+        browser_runtime_overrides(browser_name, browser_webdriver_url),
         fn {_key, value} -> is_nil(value) end
       )
 
@@ -133,8 +136,9 @@ defmodule Cerberus.TestSupport.Bootstrap do
     |> then(&Application.put_env(:cerberus, :browser, &1))
   end
 
-  defp browser_runtime_overrides(chrome_webdriver_url) do
+  defp browser_runtime_overrides(:chrome, chrome_webdriver_url) do
     [
+      browser_name: :chrome,
       headless: boolean_env("HEADLESS"),
       slow_mo: non_neg_integer_env("SLOW_MO"),
       chrome_args: ["--disable-setuid-sandbox", "--disable-dev-shm-usage"],
@@ -145,7 +149,34 @@ defmodule Cerberus.TestSupport.Bootstrap do
     ]
   end
 
-  defp browser_webdriver_url, do: non_empty_env("WEBDRIVER_URL_CHROME")
+  defp browser_runtime_overrides(:firefox, firefox_webdriver_url) do
+    [
+      browser_name: :firefox,
+      headless: boolean_env("HEADLESS"),
+      slow_mo: non_neg_integer_env("SLOW_MO"),
+      firefox_webdriver_url: firefox_webdriver_url,
+      webdriver_url: firefox_webdriver_url || non_empty_env("WEBDRIVER_URL"),
+      firefox_binary: System.fetch_env!("FIREFOX")
+    ]
+  end
+
+  defp browser_name_env do
+    case System.get_env("CERBERUS_BROWSER_NAME") do
+      nil -> :chrome
+      value -> parse_browser_name!(value)
+    end
+  end
+
+  defp parse_browser_name!(value) when is_binary(value) do
+    case value |> String.trim() |> String.downcase() do
+      "chrome" -> :chrome
+      "firefox" -> :firefox
+      other -> raise ArgumentError, "unsupported CERBERUS_BROWSER_NAME #{inspect(other)}"
+    end
+  end
+
+  defp browser_webdriver_url(:chrome), do: non_empty_env("WEBDRIVER_URL_CHROME")
+  defp browser_webdriver_url(:firefox), do: non_empty_env("WEBDRIVER_URL_FIREFOX")
 
   defp non_empty_env(key) do
     case System.get_env(key) do

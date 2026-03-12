@@ -104,6 +104,7 @@ Override precedence is:
 - global per-driver config (`config :cerberus, :static | :live | :browser, timeout_ms: ...`)
 - session opts (`session(timeout_ms: ...)`, `session(:browser, ready_timeout_ms: ...)`, `session(:browser, ready_quiet_ms: ...)`, context overrides in `session(:browser, browser: [...])`)
 - optional Chrome-only evaluate hot path: `session(:browser, use_cdp_evaluate: true)` or `config :cerberus, :browser, use_cdp_evaluate: true`
+  Firefox rejects `use_cdp_evaluate`.
 - call opts (`assert_has(..., timeout: ...)`, `click(..., timeout: ...)`, `assert_path(..., timeout: ...)`)
 
 Unified timeout defaults:
@@ -114,7 +115,7 @@ Unified timeout defaults:
 
 Option scopes:
 - Per-session context options: `ready_timeout_ms`, `ready_quiet_ms`, `user_agent`, `browser: [viewport: ..., user_agent: ..., popup_mode: :allow | :same_tab, init_script: ... | init_scripts: [...]]`.
-- Global runtime launch options: `webdriver_url`, `chrome_webdriver_url`, `headless`, `slow_mo`, `chrome_args`, `chrome_binary`, `chromedriver_binary`.
+- Global runtime launch options: `browser_name`, `webdriver_url`, `chrome_webdriver_url`, `firefox_webdriver_url`, `headless`, `slow_mo`, `chrome_args`, `chrome_binary`, `firefox_binary`, `chromedriver_binary`.
 - Global browser defaults: `bidi_command_timeout_ms`, `runtime_http_timeout_ms`, `screenshot_full_page`, `screenshot_artifact_dir`, `screenshot_path`.
 
 Set `headless: false` to run headed mode.
@@ -124,8 +125,8 @@ Because browser runtime + BiDi transport are shared per browser lane, runtime la
 
 ## Browser Runtime Setup
 
-Cerberus browser tests use WebDriver BiDi over ChromeDriver.
-Chrome is the active browser target.
+Cerberus browser tests default to Chrome via ChromeDriver BiDi.
+Firefox is also supported and launches locally through Firefox BiDi without geckodriver.
 
 Local managed runtime (default) uses configured browser and WebDriver binaries:
 
@@ -133,6 +134,14 @@ Local managed runtime (default) uses configured browser and WebDriver binaries:
 config :cerberus, :browser,
   chrome_binary: "/path/to/chrome-or-chromium",
   chromedriver_binary: "/path/to/chromedriver"
+```
+
+Local managed Firefox sessions use the Firefox binary directly:
+
+```elixir
+config :cerberus, :browser,
+  browser_name: :firefox,
+  firefox_binary: "/path/to/firefox"
 ```
 
 Managed Chrome sessions use a Playwright-style Chromium switch set by default, with any configured `chrome_args` appended after those defaults.
@@ -157,6 +166,14 @@ To keep the Chrome endpoint explicit:
 ```elixir
 config :cerberus, :browser,
   chrome_webdriver_url: "http://127.0.0.1:4444"
+```
+
+To keep the Firefox endpoint explicit:
+
+```elixir
+config :cerberus, :browser,
+  browser_name: :firefox,
+  firefox_webdriver_url: "http://127.0.0.1:4444"
 ```
 
 Remote `webdriver_url` integration smoke test (Docker required):
@@ -186,15 +203,11 @@ Install the local browser runtime with the public Mix task:
 
 ```bash
 MIX_ENV=test mix cerberus.install.chrome --version 146.0.7680.31
+MIX_ENV=test mix cerberus.install.firefox --version 148.0
 ```
 
 The task installs missing binaries and reuses existing per-version installations.
-Version precedence is flags first, then matching env vars (`CERBERUS_CHROME_VERSION`), then the latest stable Chrome for Testing release.
-
-Stable output contracts:
-- `--format json` for machine-readable payloads (paths, versions, env handoff keys)
-- `--format env` for `KEY=VALUE` lines (for CI env files)
-- `--format shell` for `export KEY='VALUE'` lines
+Version precedence is flags first, then matching env vars (`CERBERUS_CHROME_VERSION` or `CERBERUS_FIREFOX_VERSION`), then the latest stable browser release for that task.
 
 After install, Cerberus automatically discovers local managed-runtime binaries via stable links:
 - `tmp/chrome-current`

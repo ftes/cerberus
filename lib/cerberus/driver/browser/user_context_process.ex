@@ -686,12 +686,20 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   end
 
   defp use_cdp_evaluate?(opts) when is_list(opts) do
+    browser_name = Runtime.browser_name(opts)
+
     browser_opts =
       :cerberus
       |> Application.get_env(:browser, [])
       |> Keyword.merge(Keyword.get(opts, :browser, []))
 
-    Keyword.get(opts, :use_cdp_evaluate, Keyword.get(browser_opts, :use_cdp_evaluate, false))
+    enabled? = Keyword.get(opts, :use_cdp_evaluate, Keyword.get(browser_opts, :use_cdp_evaluate, false))
+
+    if enabled? and browser_name != :chrome do
+      raise ArgumentError, "use_cdp_evaluate is only supported for Chrome browser sessions"
+    end
+
+    enabled?
   end
 
   defp start_pending_evaluation(state, pid, expression, timeout_ms, from)

@@ -5,7 +5,6 @@ defmodule Cerberus.Options do
   This module centralizes validation and normalized defaults for operation
   option lists (`click`, `fill_in`, `assert_has`, `submit`, and related helpers).
   """
-
   @type locator_match_by :: :text | :label | :link | :button | :placeholder | :title | :alt | :testid
   @type role_locator_name :: String.t() | Regex.t() | nil
   @type visibility_filter :: boolean() | :any
@@ -68,9 +67,11 @@ defmodule Cerberus.Options do
           conn: Plug.Conn.t() | nil,
           timeout_ms: non_neg_integer()
         ]
+  @type browser_name :: :chrome | :firefox
   @type browser_override_opts :: [
           viewport: {pos_integer(), pos_integer()} | %{width: pos_integer(), height: pos_integer()} | keyword() | nil,
           user_agent: String.t() | nil,
+          browser_name: browser_name() | nil,
           use_cdp_evaluate: boolean() | nil,
           popup_mode: :allow | :same_tab | nil,
           init_script: String.t() | nil,
@@ -84,9 +85,11 @@ defmodule Cerberus.Options do
           runtime_http_timeout_ms: pos_integer() | nil,
           webdriver_url: String.t() | nil,
           chrome_webdriver_url: String.t() | nil,
+          firefox_webdriver_url: String.t() | nil,
           headless: boolean() | nil,
           slow_mo: non_neg_integer() | nil,
           chrome_binary: String.t() | nil,
+          firefox_binary: String.t() | nil,
           chromedriver_binary: String.t() | nil,
           chrome_startup_retries: non_neg_integer() | nil,
           chromedriver_log_path: String.t() | nil,
@@ -99,11 +102,14 @@ defmodule Cerberus.Options do
           ready_timeout_ms: pos_integer(),
           ready_quiet_ms: pos_integer(),
           user_agent: String.t() | nil,
+          browser_name: browser_name(),
           use_cdp_evaluate: boolean() | nil,
           browser: browser_override_opts(),
           webdriver_url: String.t() | nil,
           chrome_webdriver_url: String.t() | nil,
+          firefox_webdriver_url: String.t() | nil,
           chrome_binary: String.t() | nil,
+          firefox_binary: String.t() | nil,
           chromedriver_binary: String.t() | nil,
           chrome_args: [String.t()] | nil,
           headless: boolean() | nil,
@@ -496,11 +502,17 @@ defmodule Cerberus.Options do
     ready_timeout_ms: [type: :pos_integer, doc: "Browser readiness timeout in milliseconds."],
     ready_quiet_ms: [type: :pos_integer, doc: "Browser readiness quiet window in milliseconds."],
     user_agent: [type: :any, doc: "Top-level user-agent override for browser session context."],
-    use_cdp_evaluate: [type: :boolean, doc: "Runs browser evaluate hot paths via Chrome DevTools Runtime.evaluate."],
+    browser_name: [type: {:in, [:chrome, :firefox]}, doc: "Browser runtime selection."],
+    use_cdp_evaluate: [
+      type: :boolean,
+      doc: "Runs browser evaluate hot paths via Chrome DevTools Runtime.evaluate. Chrome only."
+    ],
     browser: [type: :keyword_list, doc: "Per-session browser overrides."],
     webdriver_url: [type: :any, doc: "Remote WebDriver URL."],
     chrome_webdriver_url: [type: :any, doc: "Remote Chrome WebDriver URL."],
+    firefox_webdriver_url: [type: :any, doc: "Remote Firefox WebDriver URL."],
     chrome_binary: [type: :any, doc: "Chrome binary path override."],
+    firefox_binary: [type: :any, doc: "Firefox binary path override."],
     chromedriver_binary: [type: :any, doc: "ChromeDriver binary path override."],
     chrome_args: [type: :any, doc: "Additional Chrome launch arguments."],
     headless: [type: :boolean, doc: "Headless browser toggle."],
@@ -516,7 +528,11 @@ defmodule Cerberus.Options do
   @browser_override_opts_schema [
     viewport: [type: :any, doc: "Viewport override."],
     user_agent: [type: :any, doc: "User agent override."],
-    use_cdp_evaluate: [type: :boolean, doc: "Runs browser evaluate hot paths via Chrome DevTools Runtime.evaluate."],
+    browser_name: [type: {:in, [:chrome, :firefox]}, doc: "Browser runtime selection."],
+    use_cdp_evaluate: [
+      type: :boolean,
+      doc: "Runs browser evaluate hot paths via Chrome DevTools Runtime.evaluate. Chrome only."
+    ],
     popup_mode: [type: {:in, [:allow, :same_tab]}, doc: "Popup behavior mode."],
     init_script: [type: :any, doc: "Single preload script."],
     init_scripts: [type: :any, doc: "Multiple preload scripts."],
@@ -529,9 +545,11 @@ defmodule Cerberus.Options do
     runtime_http_timeout_ms: [type: :pos_integer, doc: "Runtime HTTP timeout in milliseconds."],
     webdriver_url: [type: :any, doc: "Remote WebDriver URL."],
     chrome_webdriver_url: [type: :any, doc: "Remote Chrome WebDriver URL."],
+    firefox_webdriver_url: [type: :any, doc: "Remote Firefox WebDriver URL."],
     headless: [type: :boolean, doc: "Headless browser toggle."],
     slow_mo: [type: :non_neg_integer, doc: "Delay in milliseconds applied before each browser BiDi command."],
     chrome_binary: [type: :any, doc: "Chrome binary path override."],
+    firefox_binary: [type: :any, doc: "Firefox binary path override."],
     chromedriver_binary: [type: :any, doc: "ChromeDriver binary path override."],
     chrome_args: [type: :any, doc: "Additional Chrome launch arguments."],
     chrome_startup_retries: [type: :non_neg_integer, doc: "Chrome startup retry count."],
@@ -869,7 +887,9 @@ defmodule Cerberus.Options do
     |> validate_optional_non_empty_string!("session(:browser, opts)", :user_agent)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :webdriver_url)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :chrome_webdriver_url)
+    |> validate_optional_non_empty_string!("session(:browser, opts)", :firefox_webdriver_url)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :chrome_binary)
+    |> validate_optional_non_empty_string!("session(:browser, opts)", :firefox_binary)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :chromedriver_binary)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :chromedriver_log_path)
     |> validate_optional_non_empty_string!("session(:browser, opts)", :base_url)
@@ -1008,7 +1028,9 @@ defmodule Cerberus.Options do
         |> validate_optional_non_empty_string!(op_name, :screenshot_path)
         |> validate_optional_non_empty_string!(op_name, :webdriver_url)
         |> validate_optional_non_empty_string!(op_name, :chrome_webdriver_url)
+        |> validate_optional_non_empty_string!(op_name, :firefox_webdriver_url)
         |> validate_optional_non_empty_string!(op_name, :chrome_binary)
+        |> validate_optional_non_empty_string!(op_name, :firefox_binary)
         |> validate_optional_non_empty_string!(op_name, :chromedriver_binary)
         |> validate_optional_non_empty_string!(op_name, :chromedriver_log_path)
         |> validate_optional_string_list!(op_name, :init_scripts)

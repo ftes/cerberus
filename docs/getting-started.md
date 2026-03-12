@@ -317,7 +317,7 @@ For explicit versions:
 MIX_ENV=test mix cerberus.install.chrome --version 146.0.7680.31
 ```
 
-Cerberus writes stable local links on install (`tmp/chrome-current`, `tmp/chromedriver-current`), so local managed browser runs work without extra binary-path config.
+Cerberus writes stable local links on install (`tmp/chrome-current`, `tmp/chromedriver-current`, `tmp/firefox-current`), so local managed browser runs work without extra binary-path config.
 
 ## Step 10: Remote WebDriver Mode
 
@@ -333,6 +333,22 @@ To keep one global remote Chrome lane while still making the browser endpoint ex
 ```elixir
 config :cerberus, :browser,
   chrome_webdriver_url: "http://127.0.0.1:4444"
+```
+
+To run Firefox instead:
+
+```elixir
+config :cerberus, :browser,
+  browser_name: :firefox,
+  firefox_binary: "/path/to/firefox"
+```
+
+Or keep the Firefox remote endpoint explicit:
+
+```elixir
+config :cerberus, :browser,
+  browser_name: :firefox,
+  firefox_webdriver_url: "http://127.0.0.1:4444"
 ```
 
 ## Step 11: Headed Browser and Runtime Launch Options
@@ -351,4 +367,4 @@ config :cerberus, :browser,
   slow_mo: 120
 ```
 
-Runtime launch settings (for example `headless`, `slow_mo`, browser binaries, driver binaries, `webdriver_url`, and `chrome_webdriver_url`) are runtime-level and should be configured globally per test invocation, not per test.
+Runtime launch settings (for example `browser_name`, `headless`, `slow_mo`, browser binaries, driver binaries, `webdriver_url`, `chrome_webdriver_url`, and `firefox_webdriver_url`) are runtime-level and should be configured globally per test invocation, not per test.

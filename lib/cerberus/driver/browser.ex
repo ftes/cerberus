@@ -7,6 +7,7 @@ defmodule Cerberus.Driver.Browser do
   alias Cerberus.Driver.Browser.Config
   alias Cerberus.Driver.Browser.Expressions
   alias Cerberus.Driver.Browser.Extensions
+  alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.Driver.LocatorOps
   alias Cerberus.Html
@@ -86,7 +87,7 @@ defmodule Cerberus.Driver.Browser do
     context_defaults = browser_context_defaults(opts)
     {timeout_ms, timeout_overridden?} = SessionConfig.timeout_from_opts!(opts, :browser)
     session_bidi_opts = session_bidi_opts(opts)
-    ensure_popup_mode_supported!(:chrome, context_defaults.popup_mode)
+    ensure_popup_mode_supported!(Runtime.browser_name(opts), context_defaults.popup_mode)
 
     start_opts =
       opts
@@ -2231,5 +2232,7 @@ defmodule Cerberus.Driver.Browser do
     raise ArgumentError, "within/3 callback must return a Cerberus session"
   end
 
-  defp ensure_popup_mode_supported!(:chrome, popup_mode), do: Config.ensure_popup_mode_supported!(:chrome, popup_mode)
+  defp ensure_popup_mode_supported!(browser_name, popup_mode) when browser_name in [:chrome, :firefox] do
+    Config.ensure_popup_mode_supported!(browser_name, popup_mode)
+  end
 end

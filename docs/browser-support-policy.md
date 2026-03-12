@@ -1,20 +1,22 @@
 # Browser Support Policy
 
 This document defines current browser support for Cerberus WebDriver BiDi execution.
-Status last reviewed: March 3, 2026.
+Status last reviewed: March 12, 2026.
 
 ## Supported Browsers
 
 Cerberus currently supports:
 
 - Chrome/Chromium via ChromeDriver BiDi
+- Firefox via direct BiDi runtime launch
 
 ## Runtime Model
 
 - Cerberus uses one shared browser runtime process and one shared BiDi connection per test invocation.
 - Browser isolation is done through per-session `userContext` and per-tab `browsingContext`.
-- Runtime launch settings are invocation-level, including headless mode, slow-motion pacing, WebDriver endpoint, binary paths, and driver args.
+- Runtime launch settings are invocation-level, including browser selection, headless mode, slow-motion pacing, WebDriver endpoint, binary paths, and driver args.
 - If you need different runtime launch settings, run separate test invocations.
+- `use_cdp_evaluate` is Chrome-only and raises if enabled for Firefox.
 
 ## Popup Lifecycle Support
 
@@ -46,10 +48,11 @@ Recommended alternatives:
 Install runtimes:
 
 ```bash
-MIX_ENV=test mix cerberus.install.chrome --format shell
+MIX_ENV=test mix cerberus.install.chrome
+MIX_ENV=test mix cerberus.install.firefox
 ```
 
-Install tasks maintain stable links (`tmp/chrome-current`, `tmp/chromedriver-current`) that Cerberus auto-detects for local managed runtime startup.
+Install tasks maintain stable links (`tmp/chrome-current`, `tmp/chromedriver-current`, `tmp/firefox-current`) that Cerberus auto-detects for local managed runtime startup.
 
 ## Remote Runtime
 
@@ -61,6 +64,14 @@ config :cerberus, :browser,
 ```
 
 With `webdriver_url` set, Cerberus skips local browser/WebDriver process launch.
+
+You can also keep browser-specific remote endpoints explicit:
+
+```elixir
+config :cerberus, :browser,
+  browser_name: :firefox,
+  firefox_webdriver_url: "http://127.0.0.1:4444"
+```
 
 ## Not Current Targets
 

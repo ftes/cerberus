@@ -7,10 +7,11 @@ defmodule Cerberus.BrowserExtensionsTest do
   alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.Fixtures.Endpoint
+  alias Cerberus.TestSupport.SharedBrowserSession
   alias ExUnit.AssertionError
 
   setup_all do
-    {:ok, browser_session: session(:browser, use_cdp_evaluate: true)}
+    {:ok, browser_session: session(:browser, SharedBrowserSession.maybe_use_cdp_evaluate())}
   end
 
   test "browser-only APIs are explicit unsupported on static and live sessions" do
@@ -294,7 +295,7 @@ defmodule Cerberus.BrowserExtensionsTest do
   test "evaluate_js works with the CDP evaluate hot path enabled" do
     session =
       :browser
-      |> session(use_cdp_evaluate: true)
+      |> session(SharedBrowserSession.maybe_use_cdp_evaluate())
       |> browser_fixture_session("/articles")
 
     assert evaluate_js(session, "(() => 20 + 22)()") == 42

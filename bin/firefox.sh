@@ -3,27 +3,24 @@ set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_DIR="$ROOT_DIR/tmp"
-CLI_FIREFOX_VERSION=""
-CLI_GECKODRIVER_VERSION=""
+CLI_VERSION=""
 PLATFORM_KEY=""
 
 usage() {
   cat <<'USAGE'
-Usage: bin/firefox.sh [--firefox-version VERSION] [--geckodriver-version VERSION]
+Usage: bin/firefox.sh [--version VERSION]
 
 Ensures Firefox runtime binaries for Cerberus:
-- ensures Firefox + GeckoDriver are installed under tmp,
+- ensures Firefox is installed under tmp,
 - reuses existing binaries when already installed,
 - prints resolved binary paths.
 
 Options:
-  --firefox-version VERSION      Override Firefox version for this run.
-  --geckodriver-version VERSION  Override GeckoDriver version for this run.
-  -h, --help                     Show this help.
+  --version VERSION  Override Firefox version for this run.
+  -h, --help         Show this help.
 
 Environment:
-  CERBERUS_FIREFOX_VERSION      Default Firefox version when --firefox-version is not provided.
-  CERBERUS_GECKODRIVER_VERSION  Default GeckoDriver version when --geckodriver-version is not provided.
+  CERBERUS_FIREFOX_VERSION  Default Firefox version when --version is not provided.
 USAGE
 }
 
@@ -52,8 +49,8 @@ resolve_default_firefox_version() {
 }
 
 resolve_firefox_version() {
-  if [[ -n "$CLI_FIREFOX_VERSION" ]]; then
-    echo "$CLI_FIREFOX_VERSION"
+  if [[ -n "$CLI_VERSION" ]]; then
+    echo "$CLI_VERSION"
     return
   fi
 
@@ -63,20 +60,6 @@ resolve_firefox_version() {
   fi
 
   resolve_default_firefox_version
-}
-
-resolve_geckodriver_version() {
-  if [[ -n "$CLI_GECKODRIVER_VERSION" ]]; then
-    echo "$CLI_GECKODRIVER_VERSION"
-    return
-  fi
-
-  if [[ -n "${CERBERUS_GECKODRIVER_VERSION:-}" ]]; then
-    echo "$CERBERUS_GECKODRIVER_VERSION"
-    return
-  fi
-
-  echo "0.36.0"
 }
 
 firefox_download_url() {
@@ -97,25 +80,6 @@ firefox_download_url() {
       fail "unsupported Firefox platform key: $platform_key"
       ;;
   esac
-}
-
-geckodriver_platform_key() {
-  local platform_key="$1"
-
-  case "$platform_key" in
-    mac-arm64) echo "macos-aarch64" ;;
-    mac-x64) echo "macos" ;;
-    linux64) echo "linux64" ;;
-    linux-arm64) echo "linux-aarch64" ;;
-    *) fail "unsupported GeckoDriver platform key: $platform_key" ;;
-  esac
-}
-
-geckodriver_download_url() {
-  local version="$1"
-  local platform_key="$2"
-
-  echo "https://github.com/mozilla/geckodriver/releases/download/v${version}/geckodriver-v${version}-${platform_key}.tar.gz"
 }
 
 version_of() {
@@ -178,43 +142,11 @@ install_firefox() {
   FIREFOX_BIN="$firefox_bin"
 }
 
-install_geckodriver() {
-  local version="$1"
-  local platform_key="$2"
-  local gecko_platform
-  local install_dir="$TMP_DIR/geckodriver-${version}"
-  local geckodriver_bin="$install_dir/geckodriver"
-  local archive_file
-  local download_url
-
-  gecko_platform="$(geckodriver_platform_key "$platform_key")"
-
-  if [[ ! -x "$geckodriver_bin" ]]; then
-    archive_file="$TMP_DIR/geckodriver-${version}-${gecko_platform}.tar.gz"
-    download_url="$(geckodriver_download_url "$version" "$gecko_platform")"
-
-    mkdir -p "$TMP_DIR"
-    curl -fsSL "$download_url" -o "$archive_file"
-    rm -rf "$install_dir"
-    mkdir -p "$install_dir"
-    tar -xzf "$archive_file" -C "$install_dir"
-    chmod +x "$geckodriver_bin"
-  fi
-
-  [[ -x "$geckodriver_bin" ]] || fail "installed GeckoDriver is not executable: $geckodriver_bin"
-  GECKODRIVER_BIN="$geckodriver_bin"
-}
-
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --firefox-version)
-      [[ $# -ge 2 ]] || fail "missing value for --firefox-version"
-      CLI_FIREFOX_VERSION="$2"
-      shift 2
-      ;;
-    --geckodriver-version)
-      [[ $# -ge 2 ]] || fail "missing value for --geckodriver-version"
-      CLI_GECKODRIVER_VERSION="$2"
+    --version)
+      [[ $# -ge 2 ]] || fail "missing value for --version"
+      CLI_VERSION="$2"
       shift 2
       ;;
     -h|--help)
@@ -229,19 +161,12 @@ done
 
 PLATFORM_KEY="$(platform)"
 FIREFOX_VERSION_REQUESTED="$(resolve_firefox_version)"
-GECKODRIVER_VERSION_REQUESTED="$(resolve_geckodriver_version)"
 
 install_firefox "$FIREFOX_VERSION_REQUESTED" "$PLATFORM_KEY"
-install_geckodriver "$GECKODRIVER_VERSION_REQUESTED" "$PLATFORM_KEY"
 
 FIREFOX_VERSION="$(version_of "$FIREFOX_BIN")"
-GECKODRIVER_VERSION="$(version_of "$GECKODRIVER_BIN")"
 
 [[ -n "$FIREFOX_VERSION" ]] || fail "unable to determine Firefox version from $FIREFOX_BIN"
-[[ -n "$GECKODRIVER_VERSION" ]] || fail "unable to determine GeckoDriver version from $GECKODRIVER_BIN"
 
-echo "Firefox runtime ready"
-echo "firefox_binary=$FIREFOX_BIN"
-echo "firefox_version=$FIREFOX_VERSION"
-echo "geckodriver_binary=$GECKODRIVER_BIN"
-echo "geckodriver_version=$GECKODRIVER_VERSION"
+printf 'firefox_binary=%s\n' "$FIREFOX_BIN"
+printf 'firefox_version=%s\n' "$FIREFOX_VERSION"
