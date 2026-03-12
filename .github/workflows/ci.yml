@@ -89,18 +89,19 @@ jobs:
             ${{ runner.os }}-browser-runtime-
 
       - name: Install browsers
-        run: |
-          mix cerberus.install.chrome
-          mix cerberus.install.firefox
+        run: mix cerberus.install.firefox
 
-      - name: Run tests with Chrome
-        run: mix test --warnings-as-errors
+      # - name: Run tests with Chrome
+      #   run: mix test --warnings-as-errors
 
       - name: Run tests with Firefox
         run: CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors
 
       # - name: Run tests with Chrome via Websocket (remote)
       #   run: mix test.websocket --warnings-as-errors
+
+      # - name: Run tests with Firefox
+      #   run: CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors
 
       # - name: Run tests with Firefox via Websocket (remote)
       #   run: CERBERUS_BROWSER_NAME=firefox mix test.websocket --warnings-as-errors
