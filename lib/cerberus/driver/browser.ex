@@ -1823,46 +1823,25 @@ defmodule Cerberus.Driver.Browser do
        ) do
     remaining_timeout_ms = remaining_budget_ms(started_at_ms, timeout_ms)
     expression = build_expression.(remaining_timeout_ms)
+    retry_context = {state, started_at_ms, timeout_ms, retry_budget_ms, build_expression, helper_reloaded?}
 
     case eval_json_read(state, expression, command_timeout_ms(remaining_timeout_ms)) do
       {:error, reason, details} = error ->
-        remaining_retry_ms = remaining_budget_ms(started_at_ms, retry_budget_ms)
-
-        if TransientErrors.retryable?(reason, details) and remaining_retry_ms > 0 do
-          recovered_state = maybe_recover_transient_state(state)
-          Process.sleep(min(@transient_eval_retry_interval_ms, remaining_retry_ms))
-
-          do_eval_json_with_transient_retry(
-            recovered_state,
-            started_at_ms,
-            timeout_ms,
-            retry_budget_ms,
-            build_expression,
-            helper_reloaded?
-          )
-        else
-          error
-        end
+        maybe_retry_transient_eval_error(
+          error,
+          reason,
+          details,
+          retry_context,
+          &do_eval_json_with_transient_retry/6
+        )
 
       {:ok, result} = ok_result ->
-        remaining_retry_ms = remaining_budget_ms(started_at_ms, retry_budget_ms)
-
-        if not helper_reloaded? and helper_missing_result?(result) and remaining_retry_ms > 0 and
-             reinstall_browser_helpers(state, remaining_retry_ms) == :ok do
-          do_eval_json_with_transient_retry(
-            state,
-            started_at_ms,
-            timeout_ms,
-            retry_budget_ms,
-            build_expression,
-            true
-          )
-        else
-          ok_result
-        end
-
-      result ->
-        result
+        maybe_retry_missing_helpers(
+          ok_result,
+          result,
+          retry_context,
+          &do_eval_json_with_transient_retry/6
+        )
     end
   end
 
@@ -1876,47 +1855,82 @@ defmodule Cerberus.Driver.Browser do
        ) do
     remaining_timeout_ms = remaining_budget_ms(started_at_ms, timeout_ms)
     expression = build_expression.(remaining_timeout_ms)
+    retry_context = {state, started_at_ms, timeout_ms, retry_budget_ms, build_expression, helper_reloaded?}
 
     case eval_json_action(state, expression, action_command_timeout_ms(remaining_timeout_ms)) do
       {:error, reason, details} = error ->
-        remaining_retry_ms = remaining_budget_ms(started_at_ms, retry_budget_ms)
-
-        if TransientErrors.retryable?(reason, details) and remaining_retry_ms > 0 do
-          recovered_state = maybe_recover_transient_state(state)
-          Process.sleep(min(@transient_eval_retry_interval_ms, remaining_retry_ms))
-
-          do_eval_json_action_with_transient_retry(
-            recovered_state,
-            started_at_ms,
-            timeout_ms,
-            retry_budget_ms,
-            build_expression,
-            helper_reloaded?
-          )
-        else
-          error
-        end
+        maybe_retry_transient_eval_error(
+          error,
+          reason,
+          details,
+          retry_context,
+          &do_eval_json_action_with_transient_retry/6
+        )
 
       {:ok, result} = ok_result ->
-        remaining_retry_ms = remaining_budget_ms(started_at_ms, retry_budget_ms)
-
-        if not helper_reloaded? and helper_missing_result?(result) and remaining_retry_ms > 0 and
-             reinstall_browser_helpers(state, remaining_retry_ms) == :ok do
-          do_eval_json_action_with_transient_retry(
-            state,
-            started_at_ms,
-            timeout_ms,
-            retry_budget_ms,
-            build_expression,
-            true
-          )
-        else
-          ok_result
-        end
-
-      result ->
-        result
+        maybe_retry_missing_helpers(
+          ok_result,
+          result,
+          retry_context,
+          &do_eval_json_action_with_transient_retry/6
+        )
     end
+  end
+
+  defp maybe_retry_transient_eval_error(
+         error,
+         reason,
+         details,
+         {state, started_at_ms, timeout_ms, retry_budget_ms, build_expression, helper_reloaded?},
+         retry_fun
+       )
+       when is_function(retry_fun, 6) do
+    remaining_retry_ms = remaining_budget_ms(started_at_ms, retry_budget_ms)
+
+    if remaining_retry_ms > 0 and TransientErrors.retryable?(reason, details) do
+      recovered_state = maybe_recover_transient_state(state)
+      Process.sleep(min(@transient_eval_retry_interval_ms, remaining_retry_ms))
+
+      retry_fun.(
+        recovered_state,
+        started_at_ms,
+        timeout_ms,
+        retry_budget_ms,
+        build_expression,
+        helper_reloaded?
+      )
+    else
+      error
+    end
+  end
+
+  defp maybe_retry_missing_helpers(
+         ok_result,
+         result,
+         {state, started_at_ms, timeout_ms, retry_budget_ms, build_expression, helper_reloaded?},
+         retry_fun
+       )
+       when is_function(retry_fun, 6) do
+    remaining_retry_ms = remaining_budget_ms(started_at_ms, retry_budget_ms)
+
+    if should_retry_with_reloaded_helpers?(state, helper_reloaded?, result, remaining_retry_ms) do
+      retry_fun.(
+        state,
+        started_at_ms,
+        timeout_ms,
+        retry_budget_ms,
+        build_expression,
+        true
+      )
+    else
+      ok_result
+    end
+  end
+
+  defp should_retry_with_reloaded_helpers?(state, helper_reloaded?, result, remaining_retry_ms)
+       when is_integer(remaining_retry_ms) do
+    not helper_reloaded? and helper_missing_result?(result) and remaining_retry_ms > 0 and
+      reinstall_browser_helpers(state, remaining_retry_ms) == :ok
   end
 
   defp helper_missing_result?(%{"helperMissing" => true}), do: true

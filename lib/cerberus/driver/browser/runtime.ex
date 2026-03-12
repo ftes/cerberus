@@ -253,50 +253,75 @@ defmodule Cerberus.Driver.Browser.Runtime do
     binary = opts |> firefox_binary!(merged) |> Path.expand()
     profile_dir_path = firefox_profile_dir()
 
-    case File.mkdir_p(profile_dir_path) do
-      :ok ->
-        case start_direct_firefox_process(binary, headless?(opts, merged), profile_dir_path) do
-          {:ok, process} ->
-            watchdog_marker_path = maybe_start_watchdog(process)
-
-            case wait_for_bidi_url(process, "", browser_launch_attempts(opts)) do
-              {:ok, web_socket_url} ->
-                service = %{
-                  browser_name: :firefox,
-                  url: web_socket_url,
-                  managed?: true,
-                  process: process,
-                  startup_log_path: nil,
-                  startup_log_ephemeral?: false,
-                  watchdog_marker_path: watchdog_marker_path,
-                  profile_dir_path: profile_dir_path
-                }
-
-                {:ok,
-                 %{
-                   service: service,
-                   browser_name: :firefox,
-                   session_id: nil,
-                   web_socket_url: web_socket_url,
-                   debugger_address: nil
-                 }}
-
-              {:error, reason} ->
-                cleanup_direct_firefox_startup(process, watchdog_marker_path, profile_dir_path)
-                {:error, reason}
-            end
-
-          {:error, reason} ->
-            cleanup_direct_firefox_startup(nil, nil, profile_dir_path)
-            {:error, reason}
-        end
-
-      {:error, reason} ->
-        {:error, inspect(reason)}
+    with :ok <- ensure_firefox_profile_dir(profile_dir_path) do
+      start_direct_firefox_process_session(
+        binary,
+        headless?(opts, merged),
+        profile_dir_path,
+        browser_launch_attempts(opts)
+      )
     end
   rescue
     error ->
       {:error, Exception.message(error)}
+  end
+
+  defp ensure_firefox_profile_dir(profile_dir_path) do
+    case File.mkdir_p(profile_dir_path) do
+      :ok -> :ok
+      {:error, reason} -> {:error, inspect(reason)}
+    end
+  end
+
+  defp start_direct_firefox_process_session(binary, headless, profile_dir_path, launch_attempts) do
+    case start_direct_firefox_process(binary, headless, profile_dir_path) do
+      {:ok, process} ->
+        complete_direct_firefox_runtime_session(process, profile_dir_path, launch_attempts)
+
+      {:error, reason} ->
+        cleanup_direct_firefox_startup(nil, nil, profile_dir_path)
+        {:error, reason}
+    end
+  end
+
+  defp complete_direct_firefox_runtime_session(process, profile_dir_path, launch_attempts) do
+    watchdog_marker_path = maybe_start_watchdog(process)
+
+    case wait_for_bidi_url(process, "", launch_attempts) do
+      {:ok, web_socket_url} ->
+        {:ok,
+         build_direct_firefox_runtime_session(
+           process,
+           watchdog_marker_path,
+           profile_dir_path,
+           web_socket_url
+         )}
+
+      {:error, reason} ->
+        cleanup_direct_firefox_startup(process, watchdog_marker_path, profile_dir_path)
+        {:error, reason}
+    end
+  end
+
+  defp build_direct_firefox_runtime_session(process, watchdog_marker_path, profile_dir_path, web_socket_url) do
+    service = %{
+      browser_name: :firefox,
+      url: web_socket_url,
+      managed?: true,
+      process: process,
+      startup_log_path: nil,
+      startup_log_ephemeral?: false,
+      watchdog_marker_path: watchdog_marker_path,
+      profile_dir_path: profile_dir_path
+    }
+
+    %{
+      service: service,
+      browser_name: :firefox,
+      session_id: nil,
+      web_socket_url: web_socket_url,
+      debugger_address: nil
+    }
   end
 
   defp maybe_stop_runtime_session(%{service: service, session_id: session_id}, opts) do
