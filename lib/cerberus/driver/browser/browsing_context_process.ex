@@ -4,6 +4,7 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   use GenServer
 
   alias Cerberus.Driver.Browser.BiDi
+  alias Cerberus.Driver.Browser.TransientErrors
   alias Cerberus.Driver.Browser.Types
 
   @default_ready_timeout_ms 1_500
@@ -326,7 +327,7 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
       {:ok, browsing_context_id}
     else
       {:error, reason, details} ->
-        if retries_left > 0 and transient_create_browsing_context_error?(reason, details) do
+        if retries_left > 0 and TransientErrors.retryable?(reason, details) do
           Process.sleep(25)
           create_browsing_context(user_context_id, bidi_opts, retries_left - 1)
         else
@@ -336,14 +337,6 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
       _ ->
         {:error, "unexpected browsingContext.create response", %{}}
     end
-  end
-
-  defp transient_create_browsing_context_error?(reason, details) do
-    combined = "#{reason} #{inspect(details)}"
-
-    String.contains?(combined, "DiscardedBrowsingContextError") or
-      String.contains?(combined, "no such frame") or
-      String.contains?(combined, "argument is not a global object")
   end
 
   defp maybe_set_viewport(_context_id, nil, _bidi_opts), do: :ok
@@ -399,7 +392,7 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
     case evaluate_json(context_id, expression, bidi_opts) do
       {:error, reason, details} ->
-        if transient_readiness_error?(reason, details) do
+        if TransientErrors.retryable?(reason, details) do
           Process.sleep(25)
           evaluate_json(context_id, expression, bidi_opts)
         else
@@ -409,23 +402,6 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
       result ->
         result
     end
-  end
-
-  defp transient_readiness_error?(reason, details) do
-    combined = "#{reason} #{inspect(details)}"
-
-    Enum.any?(
-      [
-        "JSWindowActorChild cannot send",
-        "argument is not a global object",
-        "Inspected target navigated or closed",
-        "Cannot find context with specified id",
-        "execution contexts cleared",
-        "DiscardedBrowsingContextError",
-        "no such frame"
-      ],
-      &String.contains?(combined, &1)
-    )
   end
 
   defp decode_remote_json(%{"result" => %{"type" => "string", "value" => payload}}) when is_binary(payload) do

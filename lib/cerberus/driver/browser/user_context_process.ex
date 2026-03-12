@@ -697,7 +697,7 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
         :ok
 
       {:error, emulation_reason, emulation_details} ->
-        # Chrome BiDi coverage varies by channel; fallback keeps sandbox metadata working.
+        # BiDi emulation coverage varies by runtime/channel; fallback keeps sandbox metadata working.
         headers = [
           %{
             "name" => "user-agent",

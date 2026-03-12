@@ -58,6 +58,55 @@ defmodule Cerberus.BrowserTimeoutAssertionsTest do
     assert_path(session, "/articles")
   end
 
+  test "browser locator assertions reinstall helpers when current document lost them", %{
+    browser_session: browser_session
+  } do
+    session =
+      browser_session
+      |> browser_fixture_session("/live/toast-locator")
+      |> with_evaluate_js(
+        "(() => { delete window.__cerberusAssert; return window.__cerberusAssert == null; })()",
+        fn helper_missing? -> assert helper_missing? end
+      )
+
+    assert_has(session, and_(~l".toast-success"c, text("will email an official quote", exact: false)))
+  end
+
+  test "browser actions reinstall helpers when current document lost them", %{browser_session: browser_session} do
+    session =
+      browser_session
+      |> browser_fixture_session("/browser/extensions")
+      |> with_evaluate_js(
+        "(() => { delete window.__cerberusAction; return window.__cerberusAction == null; })()",
+        fn helper_missing? -> assert helper_missing? end
+      )
+      |> click(role(:button, name: "Offscreen Action", exact: true))
+
+    assert_has(session, text("Offscreen action result: clicked", exact: true))
+  end
+
+  test "browser assert_path succeeds from current path when helper evaluation hits a transient navigation error", %{
+    browser_session: browser_session
+  } do
+    session =
+      browser_session
+      |> browser_fixture_session("/articles")
+      |> with_evaluate_js(
+        """
+        (() => {
+          window.__cerberusAssert.path = () => {
+            throw new Error("Execution context was destroyed");
+          };
+
+          return true;
+        })()
+        """,
+        fn patched? -> assert patched? end
+      )
+
+    assert_path(session, "/articles")
+  end
+
   defp browser_fixture_session(session, path) when is_binary(path) do
     visit(session, path)
   end

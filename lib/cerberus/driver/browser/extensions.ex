@@ -3,6 +3,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Browser.BiDi
+  alias Cerberus.Driver.Browser.TransientErrors
   alias Cerberus.Driver.Browser.Types
   alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.Options
@@ -14,16 +15,6 @@ defmodule Cerberus.Driver.Browser.Extensions do
   @default_evaluate_timeout_ms 10_000
   @popup_task_poll_ms 10
   @transient_eval_retry_interval_ms 25
-  @transient_navigation_eval_markers [
-    "JSWindowActorChild cannot send",
-    "argument is not a global object",
-    "Inspected target navigated or closed",
-    "Cannot find context with specified id",
-    "execution contexts cleared",
-    "DiscardedBrowsingContextError",
-    "no such frame",
-    "navigation canceled by concurrent navigation"
-  ]
   @webdriver_key_values %{
     "Alt" => <<0xE00A::utf8>>,
     "AltLeft" => <<0xE00A::utf8>>,
@@ -352,7 +343,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   defp do_evaluate_with_transient_retry(session, expression, timeout_ms, started_at_ms) do
     remaining_timeout_ms = max(timeout_ms - elapsed_ms(started_at_ms), 1)
-    tab_id = recovered_tab_id(session)
+    tab_id = TransientErrors.recover_tab_id(session.user_context_pid, session.tab_id)
 
     case UserContextProcess.evaluate_with_timeout(
            session.user_context_pid,
@@ -361,7 +352,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
            tab_id
          ) do
       {:error, reason, details} = error ->
-        if navigation_transition_error?(reason, details) and remaining_timeout_ms > @transient_eval_retry_interval_ms do
+        if TransientErrors.retryable?(reason, details) and remaining_timeout_ms > @transient_eval_retry_interval_ms do
           Process.sleep(@transient_eval_retry_interval_ms)
           do_evaluate_with_transient_retry(session, expression, timeout_ms, started_at_ms)
         else
@@ -373,22 +364,7 @@ defmodule Cerberus.Driver.Browser.Extensions do
     end
   end
 
-  defp recovered_tab_id(%Browser{} = session) do
-    case UserContextProcess.recover_active_tab(session.user_context_pid, session.tab_id) do
-      {:ok, tab_id} when is_binary(tab_id) -> tab_id
-      _ -> session.tab_id
-    end
-  end
-
   defp elapsed_ms(started_at_ms), do: System.monotonic_time(:millisecond) - started_at_ms
-
-  defp navigation_transition_error?(reason, details) when is_binary(reason) and is_map(details) do
-    message = details["message"] || details[:message] || ""
-    payload = "#{reason}: #{message}"
-    Enum.any?(@transient_navigation_eval_markers, &String.contains?(payload, &1))
-  end
-
-  defp navigation_transition_error?(_reason, _details), do: false
 
   defp decode_remote_json(%{"result" => %{"type" => "string", "value" => payload}}) when is_binary(payload) do
     case JSON.decode(payload) do

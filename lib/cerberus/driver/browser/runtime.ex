@@ -3,7 +3,6 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   use GenServer
 
-  alias Bibbidi.Browser, as: BibbidiBrowser
   alias Cerberus.Driver.Browser.Types
 
   @default_browser_name :chrome
@@ -12,6 +11,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
   @default_chrome_startup_retries 1
   @default_startup_log_tail_bytes 8_192
   @default_startup_log_tail_lines 40
+  @default_browser_launch_timeout_ms 15_000
   @watchdog_script_name "cerberus-browser-runtime-watchdog.sh"
   @startup_attempts 120
   @startup_sleep_ms 50
@@ -67,10 +67,11 @@ defmodule Cerberus.Driver.Browser.Runtime do
           browser_name: Types.browser_name(),
           url: String.t(),
           managed?: boolean(),
-          process: port() | pid() | nil,
+          process: port() | nil,
           startup_log_path: String.t() | nil,
           startup_log_ephemeral?: boolean(),
-          watchdog_marker_path: String.t() | nil
+          watchdog_marker_path: String.t() | nil,
+          profile_dir_path: String.t() | nil
         }
 
   @type runtime_session :: %{
@@ -249,28 +250,46 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   defp start_direct_firefox_runtime_session(opts) do
     merged = browser_opts(opts)
-    launch_opts = [headless: headless?(opts, merged), browser_path: firefox_binary!(opts, merged)]
+    binary = opts |> firefox_binary!(merged) |> Path.expand()
+    profile_dir_path = firefox_profile_dir()
 
-    case BibbidiBrowser.start_link(launch_opts) do
-      {:ok, pid} ->
-        _ = Process.monitor(pid)
+    case File.mkdir_p(profile_dir_path) do
+      :ok ->
+        case start_direct_firefox_process(binary, headless?(opts, merged), profile_dir_path) do
+          {:ok, process} ->
+            watchdog_marker_path = maybe_start_watchdog(process)
 
-        {:ok,
-         %{
-           service: %{
-             browser_name: :firefox,
-             url: "",
-             managed?: true,
-             process: pid,
-             startup_log_path: nil,
-             startup_log_ephemeral?: false,
-             watchdog_marker_path: nil
-           },
-           browser_name: :firefox,
-           session_id: nil,
-           web_socket_url: BibbidiBrowser.url(pid),
-           debugger_address: nil
-         }}
+            case wait_for_bidi_url(process, "", browser_launch_attempts(opts)) do
+              {:ok, web_socket_url} ->
+                service = %{
+                  browser_name: :firefox,
+                  url: web_socket_url,
+                  managed?: true,
+                  process: process,
+                  startup_log_path: nil,
+                  startup_log_ephemeral?: false,
+                  watchdog_marker_path: watchdog_marker_path,
+                  profile_dir_path: profile_dir_path
+                }
+
+                {:ok,
+                 %{
+                   service: service,
+                   browser_name: :firefox,
+                   session_id: nil,
+                   web_socket_url: web_socket_url,
+                   debugger_address: nil
+                 }}
+
+              {:error, reason} ->
+                cleanup_direct_firefox_startup(process, watchdog_marker_path, profile_dir_path)
+                {:error, reason}
+            end
+
+          {:error, reason} ->
+            cleanup_direct_firefox_startup(nil, nil, profile_dir_path)
+            {:error, reason}
+        end
 
       {:error, reason} ->
         {:error, inspect(reason)}
@@ -309,7 +328,8 @@ defmodule Cerberus.Driver.Browser.Runtime do
          process: nil,
          startup_log_path: nil,
          startup_log_ephemeral?: false,
-         watchdog_marker_path: nil
+         watchdog_marker_path: nil,
+         profile_dir_path: nil
        }}
     else
       start_managed_service(opts, browser_name)
@@ -343,7 +363,8 @@ defmodule Cerberus.Driver.Browser.Runtime do
            process: process,
            startup_log_path: startup_log_path,
            startup_log_ephemeral?: startup_log_ephemeral?,
-           watchdog_marker_path: watchdog_marker_path
+           watchdog_marker_path: watchdog_marker_path,
+           profile_dir_path: nil
          }}
 
       {:error, reason} ->
@@ -358,6 +379,91 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   defp webdriver_service_args(port, startup_log_path) do
     [to_charlist("--port=#{port}"), ~c"--verbose"] ++ maybe_log_path_arg(startup_log_path)
+  end
+
+  defp start_direct_firefox_process(binary, headless?, profile_dir_path) do
+    port = random_port!()
+    args = firefox_service_args(port, headless?, profile_dir_path)
+
+    {:ok,
+     Port.open({:spawn_executable, to_charlist(binary)}, [
+       :binary,
+       :hide,
+       :stderr_to_stdout,
+       :exit_status,
+       args: args
+     ])}
+  rescue
+    error -> {:error, Exception.message(error)}
+  end
+
+  defp firefox_service_args(port, headless?, profile_dir_path) do
+    headless_args =
+      if headless? do
+        [~c"--headless"]
+      else
+        []
+      end
+
+    headless_args ++
+      [
+        ~c"--remote-debugging-port",
+        to_charlist(Integer.to_string(port)),
+        ~c"--profile",
+        to_charlist(profile_dir_path)
+      ]
+  end
+
+  defp wait_for_bidi_url(_process, buffer, 0) do
+    {:error, browser_launch_timeout_message(buffer)}
+  end
+
+  defp wait_for_bidi_url(process, buffer, attempts_left) when is_port(process) and attempts_left > 0 do
+    receive do
+      {^process, {:data, data}} ->
+        buffer = buffer <> data
+
+        case Regex.run(~r{WebDriver BiDi listening on (ws://[^\s]+)}, buffer) do
+          [_, web_socket_url] ->
+            {:ok, web_socket_url <> "/session"}
+
+          nil ->
+            wait_for_bidi_url(process, buffer, attempts_left)
+        end
+
+      {^process, {:exit_status, status}} ->
+        {:error, firefox_exit_message(status, buffer)}
+    after
+      @startup_sleep_ms ->
+        wait_for_bidi_url(process, buffer, attempts_left - 1)
+    end
+  end
+
+  defp browser_launch_timeout_message(buffer) do
+    message = "browser process did not report a WebDriver BiDi URL"
+
+    case String.trim(buffer) do
+      "" -> message
+      output -> message <> ": " <> output
+    end
+  end
+
+  defp firefox_exit_message(status, buffer) do
+    message = "firefox process exited before WebDriver BiDi became ready (status #{status})"
+
+    case String.trim(buffer) do
+      "" -> message
+      output -> message <> ": " <> output
+    end
+  end
+
+  defp browser_launch_attempts(opts) do
+    timeout_ms =
+      opts
+      |> runtime_http_timeout_ms()
+      |> max(@default_browser_launch_timeout_ms)
+
+    div(timeout_ms + @startup_sleep_ms - 1, @startup_sleep_ms)
   end
 
   defp maybe_log_path_arg(path) when is_binary(path), do: [to_charlist("--log-path=#{path}")]
@@ -684,23 +790,14 @@ defmodule Cerberus.Driver.Browser.Runtime do
       signal_local_service(kill_target, "KILL")
     end
 
-    :ok
-  end
-
-  defp maybe_stop_service(%{managed?: true, process: process} = service) when is_pid(process) do
-    maybe_disable_watchdog_marker(service)
-
-    if Process.alive?(process) do
-      _ = BibbidiBrowser.stop(process)
-    end
+    maybe_cleanup_profile_dir(service)
 
     :ok
-  catch
-    :exit, _reason -> :ok
   end
 
   defp maybe_stop_service(service) do
     maybe_disable_watchdog_marker(service)
+    maybe_cleanup_profile_dir(service)
     :ok
   end
 
@@ -719,7 +816,7 @@ defmodule Cerberus.Driver.Browser.Runtime do
     marker_path =
       Path.join(
         System.tmp_dir!(),
-        "cerberus-chrome-webdriver-watchdog-#{:erlang.unique_integer([:positive])}.marker"
+        "cerberus-browser-runtime-watchdog-#{:erlang.unique_integer([:positive])}.marker"
       )
 
     case File.write(marker_path, "") do
@@ -810,6 +907,13 @@ defmodule Cerberus.Driver.Browser.Runtime do
 
   defp maybe_disable_watchdog_marker(_), do: :ok
 
+  defp maybe_cleanup_profile_dir(%{profile_dir_path: profile_dir_path}) when is_binary(profile_dir_path) do
+    _ = File.rm_rf(profile_dir_path)
+    :ok
+  end
+
+  defp maybe_cleanup_profile_dir(_service), do: :ok
+
   defp shell_escape(value) when is_binary(value) do
     "'" <> String.replace(value, "'", "'\"'\"'") <> "'"
   end
@@ -869,6 +973,25 @@ defmodule Cerberus.Driver.Browser.Runtime do
     :os.getpid()
     |> List.to_string()
     |> parse_positive_integer()
+  end
+
+  defp firefox_profile_dir do
+    Path.join(System.tmp_dir!(), "cerberus-firefox-#{:erlang.unique_integer([:positive])}")
+  end
+
+  defp cleanup_direct_firefox_startup(process, watchdog_marker_path, profile_dir_path) do
+    maybe_stop_service(%{
+      browser_name: :firefox,
+      url: "",
+      managed?: true,
+      process: process,
+      startup_log_path: nil,
+      startup_log_ephemeral?: false,
+      watchdog_marker_path: watchdog_marker_path,
+      profile_dir_path: profile_dir_path
+    })
+
+    :ok
   end
 
   defp current_process_group_id do

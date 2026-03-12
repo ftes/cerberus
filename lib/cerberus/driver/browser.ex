@@ -8,6 +8,7 @@ defmodule Cerberus.Driver.Browser do
   alias Cerberus.Driver.Browser.Expressions
   alias Cerberus.Driver.Browser.Extensions
   alias Cerberus.Driver.Browser.Runtime
+  alias Cerberus.Driver.Browser.TransientErrors
   alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.Driver.LocatorOps
   alias Cerberus.Html
@@ -28,17 +29,6 @@ defmodule Cerberus.Driver.Browser do
   @value_assertion_poll_interval_ms 50
   @transient_eval_retry_min_budget_ms 3_000
   @transient_ready_retry_min_budget_ms 3_000
-  @transient_navigation_eval_markers [
-    "JSWindowActorChild cannot send",
-    "argument is not a global object",
-    "Inspected target navigated or closed",
-    "Cannot find context with specified id",
-    "Execution context was destroyed",
-    "execution contexts cleared",
-    "DiscardedBrowsingContextError",
-    "no such frame",
-    "navigation canceled by concurrent navigation"
-  ]
   @user_context_supervisor Cerberus.Driver.Browser.UserContextSupervisor
   @empty_browser_context_defaults %{viewport: nil, user_agent: nil, init_scripts: [], popup_mode: :allow}
   @action_failure_reason_messages %{
@@ -1306,7 +1296,7 @@ defmodule Cerberus.Driver.Browser do
          timeout_ms,
          retry_budget_ms
        ) do
-    transient? = navigation_transition_error?(reason, details)
+    transient? = TransientErrors.retryable?(reason, details)
 
     retry_ctx = %{
       transient?: transient?,
@@ -1327,8 +1317,8 @@ defmodule Cerberus.Driver.Browser do
 
   defp maybe_retry_await_ready(
          state,
-         reason,
-         details,
+         _reason,
+         _details,
          %{
            transient?: true,
            remaining_retry_ms: remaining_retry_ms,
@@ -1339,7 +1329,7 @@ defmodule Cerberus.Driver.Browser do
          _normalized
        )
        when remaining_retry_ms > 0 do
-    recovered_state = maybe_recover_transient_state(state, reason, details)
+    recovered_state = maybe_recover_transient_state(state)
     Process.sleep(min(@transient_eval_retry_interval_ms, remaining_retry_ms))
     do_await_driver_ready(recovered_state, started_at_ms, timeout_ms, retry_budget_ms)
   end
@@ -1380,7 +1370,7 @@ defmodule Cerberus.Driver.Browser do
 
   defp recoverable_action_readiness_error?(action, reason, readiness)
        when action in [:click, :submit] and is_binary(reason) and is_map(readiness) do
-    reason == "browser readiness timeout" or navigation_transition_error?(reason, readiness)
+    reason == "browser readiness timeout" or TransientErrors.retryable?(reason, readiness)
   end
 
   defp recoverable_action_readiness_error?(_action, _reason, _readiness), do: false
@@ -1395,29 +1385,14 @@ defmodule Cerberus.Driver.Browser do
 
   defp recoverable_visit_readiness_error?(_reason, _readiness), do: false
 
-  defp navigation_transition_error?(reason, details) do
-    combined = "#{reason} #{inspect(details)}"
+  defp maybe_recover_transient_state(state) do
+    recovered_tab_id = TransientErrors.recover_tab_id(state.user_context_pid, state.tab_id)
 
-    Enum.any?(@transient_navigation_eval_markers, &String.contains?(combined, &1))
-  end
-
-  defp maybe_recover_transient_state(state, reason, details) do
-    if missing_context_error?(reason, details) do
-      case UserContextProcess.recover_active_tab(state.user_context_pid, state.tab_id) do
-        {:ok, recovered_tab_id} when is_binary(recovered_tab_id) and recovered_tab_id != "" ->
-          %{state | tab_id: recovered_tab_id}
-
-        _ ->
-          state
-      end
-    else
+    if recovered_tab_id == state.tab_id do
       state
+    else
+      %{state | tab_id: recovered_tab_id}
     end
-  end
-
-  defp missing_context_error?(reason, details) do
-    combined = "#{reason} #{inspect(details)}"
-    String.contains?(combined, "Cannot find context with specified id") or String.contains?(combined, "no such frame")
   end
 
   defp readiness_payload?(payload) when is_map(payload) do
@@ -1740,20 +1715,46 @@ defmodule Cerberus.Driver.Browser do
         end
 
       {:error, reason, details} ->
+        fallback_path = current_path_or_nil(state)
+
         observed = %{
-          path: current_path_or_nil(state),
+          path: fallback_path,
           scope: Session.scope(session),
           expected: expected,
           query: expected_query,
           exact: exact,
           timeout: timeout_ms,
-          path_match?: false,
-          query_match?: false,
+          path_match?: path_matches_fallback?(fallback_path, expected, exact),
+          query_match?: query_matches_fallback?(fallback_path, expected_query),
           details: details
         }
 
-        {:error, session, observed, "failed to evaluate browser path assertion: #{reason}"}
+        if fallback_path_assertion_matches?(op, observed) do
+          {:ok, session, observed}
+        else
+          {:error, session, observed, "failed to evaluate browser path assertion: #{reason}"}
+        end
     end
+  end
+
+  defp path_matches_fallback?(path, expected, exact) when is_binary(path) do
+    Cerberus.Path.match_path?(path, expected, exact: exact)
+  end
+
+  defp path_matches_fallback?(_path, _expected, _exact), do: false
+
+  defp query_matches_fallback?(path, expected_query) when is_binary(path) do
+    Cerberus.Path.query_matches?(path, expected_query)
+  end
+
+  defp query_matches_fallback?(_path, expected_query), do: is_nil(expected_query)
+
+  defp fallback_path_assertion_matches?(:assert_path, observed) do
+    observed.path_match? and observed.query_match?
+  end
+
+  defp fallback_path_assertion_matches?(:refute_path, observed) do
+    not (observed.path_match? and observed.query_match?)
   end
 
   defp text_assertion_observed(result, expected, visible, match_by) when is_map(result) do
@@ -1802,17 +1803,24 @@ defmodule Cerberus.Driver.Browser do
        when is_integer(timeout_ms) and timeout_ms >= 0 and is_function(build_expression, 1) do
     started_at_ms = System.monotonic_time(:millisecond)
     retry_budget_ms = max(timeout_ms, @transient_eval_retry_min_budget_ms)
-    do_eval_json_with_transient_retry(state, started_at_ms, timeout_ms, retry_budget_ms, build_expression)
+    do_eval_json_with_transient_retry(state, started_at_ms, timeout_ms, retry_budget_ms, build_expression, false)
   end
 
   defp eval_json_action_with_transient_retry(state, timeout_ms, build_expression)
        when is_integer(timeout_ms) and timeout_ms >= 0 and is_function(build_expression, 1) do
     started_at_ms = System.monotonic_time(:millisecond)
     retry_budget_ms = max(timeout_ms, @transient_eval_retry_min_budget_ms)
-    do_eval_json_action_with_transient_retry(state, started_at_ms, timeout_ms, retry_budget_ms, build_expression)
+    do_eval_json_action_with_transient_retry(state, started_at_ms, timeout_ms, retry_budget_ms, build_expression, false)
   end
 
-  defp do_eval_json_with_transient_retry(state, started_at_ms, timeout_ms, retry_budget_ms, build_expression) do
+  defp do_eval_json_with_transient_retry(
+         state,
+         started_at_ms,
+         timeout_ms,
+         retry_budget_ms,
+         build_expression,
+         helper_reloaded?
+       ) do
     remaining_timeout_ms = remaining_budget_ms(started_at_ms, timeout_ms)
     expression = build_expression.(remaining_timeout_ms)
 
@@ -1820,8 +1828,8 @@ defmodule Cerberus.Driver.Browser do
       {:error, reason, details} = error ->
         remaining_retry_ms = remaining_budget_ms(started_at_ms, retry_budget_ms)
 
-        if navigation_transition_error?(reason, details) and remaining_retry_ms > 0 do
-          recovered_state = maybe_recover_transient_state(state, reason, details)
+        if TransientErrors.retryable?(reason, details) and remaining_retry_ms > 0 do
+          recovered_state = maybe_recover_transient_state(state)
           Process.sleep(min(@transient_eval_retry_interval_ms, remaining_retry_ms))
 
           do_eval_json_with_transient_retry(
@@ -1829,10 +1837,28 @@ defmodule Cerberus.Driver.Browser do
             started_at_ms,
             timeout_ms,
             retry_budget_ms,
-            build_expression
+            build_expression,
+            helper_reloaded?
           )
         else
           error
+        end
+
+      {:ok, result} = ok_result ->
+        remaining_retry_ms = remaining_budget_ms(started_at_ms, retry_budget_ms)
+
+        if not helper_reloaded? and helper_missing_result?(result) and remaining_retry_ms > 0 and
+             reinstall_browser_helpers(state, remaining_retry_ms) == :ok do
+          do_eval_json_with_transient_retry(
+            state,
+            started_at_ms,
+            timeout_ms,
+            retry_budget_ms,
+            build_expression,
+            true
+          )
+        else
+          ok_result
         end
 
       result ->
@@ -1840,7 +1866,14 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp do_eval_json_action_with_transient_retry(state, started_at_ms, timeout_ms, retry_budget_ms, build_expression) do
+  defp do_eval_json_action_with_transient_retry(
+         state,
+         started_at_ms,
+         timeout_ms,
+         retry_budget_ms,
+         build_expression,
+         helper_reloaded?
+       ) do
     remaining_timeout_ms = remaining_budget_ms(started_at_ms, timeout_ms)
     expression = build_expression.(remaining_timeout_ms)
 
@@ -1848,8 +1881,8 @@ defmodule Cerberus.Driver.Browser do
       {:error, reason, details} = error ->
         remaining_retry_ms = remaining_budget_ms(started_at_ms, retry_budget_ms)
 
-        if navigation_transition_error?(reason, details) and remaining_retry_ms > 0 do
-          recovered_state = maybe_recover_transient_state(state, reason, details)
+        if TransientErrors.retryable?(reason, details) and remaining_retry_ms > 0 do
+          recovered_state = maybe_recover_transient_state(state)
           Process.sleep(min(@transient_eval_retry_interval_ms, remaining_retry_ms))
 
           do_eval_json_action_with_transient_retry(
@@ -1857,14 +1890,57 @@ defmodule Cerberus.Driver.Browser do
             started_at_ms,
             timeout_ms,
             retry_budget_ms,
-            build_expression
+            build_expression,
+            helper_reloaded?
           )
         else
           error
         end
 
+      {:ok, result} = ok_result ->
+        remaining_retry_ms = remaining_budget_ms(started_at_ms, retry_budget_ms)
+
+        if not helper_reloaded? and helper_missing_result?(result) and remaining_retry_ms > 0 and
+             reinstall_browser_helpers(state, remaining_retry_ms) == :ok do
+          do_eval_json_action_with_transient_retry(
+            state,
+            started_at_ms,
+            timeout_ms,
+            retry_budget_ms,
+            build_expression,
+            true
+          )
+        else
+          ok_result
+        end
+
       result ->
         result
+    end
+  end
+
+  defp helper_missing_result?(%{"helperMissing" => true}), do: true
+  defp helper_missing_result?(_result), do: false
+
+  defp reinstall_browser_helpers(state, remaining_retry_ms)
+       when is_integer(remaining_retry_ms) and remaining_retry_ms > 0 do
+    timeout_ms = command_timeout_ms(remaining_retry_ms)
+
+    with :ok <- reinstall_browser_helper(state, Expressions.assertion_helpers_preload(), timeout_ms),
+         :ok <- reinstall_browser_helper(state, Expressions.action_helpers_preload(), timeout_ms) do
+      :ok
+    else
+      _error -> :error
+    end
+  end
+
+  defp reinstall_browser_helpers(_state, _remaining_retry_ms), do: :error
+
+  defp reinstall_browser_helper(state, expression, timeout_ms)
+       when is_binary(expression) and is_integer(timeout_ms) and timeout_ms > 0 do
+    case eval_json_read(state, expression, timeout_ms) do
+      {:ok, %{"ok" => true}} -> :ok
+      _other -> :error
     end
   end
 
