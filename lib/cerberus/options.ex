@@ -72,7 +72,6 @@ defmodule Cerberus.Options do
           viewport: {pos_integer(), pos_integer()} | %{width: pos_integer(), height: pos_integer()} | keyword() | nil,
           user_agent: String.t() | nil,
           browser_name: browser_name() | nil,
-          use_cdp_evaluate: boolean() | nil,
           popup_mode: :allow | :same_tab | nil,
           init_script: String.t() | nil,
           init_scripts: [String.t()] | nil,
@@ -103,7 +102,6 @@ defmodule Cerberus.Options do
           ready_quiet_ms: pos_integer(),
           user_agent: String.t() | nil,
           browser_name: browser_name(),
-          use_cdp_evaluate: boolean() | nil,
           browser: browser_override_opts(),
           webdriver_url: String.t() | nil,
           chrome_webdriver_url: String.t() | nil,
@@ -503,10 +501,6 @@ defmodule Cerberus.Options do
     ready_quiet_ms: [type: :pos_integer, doc: "Browser readiness quiet window in milliseconds."],
     user_agent: [type: :any, doc: "Top-level user-agent override for browser session context."],
     browser_name: [type: {:in, [:chrome, :firefox]}, doc: "Browser runtime selection."],
-    use_cdp_evaluate: [
-      type: :boolean,
-      doc: "Runs browser evaluate hot paths via Chrome DevTools Runtime.evaluate. Chrome only."
-    ],
     browser: [type: :keyword_list, doc: "Per-session browser overrides."],
     webdriver_url: [type: :any, doc: "Remote WebDriver URL."],
     chrome_webdriver_url: [type: :any, doc: "Remote Chrome WebDriver URL."],
@@ -529,10 +523,6 @@ defmodule Cerberus.Options do
     viewport: [type: :any, doc: "Viewport override."],
     user_agent: [type: :any, doc: "User agent override."],
     browser_name: [type: {:in, [:chrome, :firefox]}, doc: "Browser runtime selection."],
-    use_cdp_evaluate: [
-      type: :boolean,
-      doc: "Runs browser evaluate hot paths via Chrome DevTools Runtime.evaluate. Chrome only."
-    ],
     popup_mode: [type: {:in, [:allow, :same_tab]}, doc: "Popup behavior mode."],
     init_script: [type: :any, doc: "Single preload script."],
     init_scripts: [type: :any, doc: "Multiple preload scripts."],

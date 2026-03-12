@@ -16,7 +16,6 @@ Cerberus currently supports:
 - Browser isolation is done through per-session `userContext` and per-tab `browsingContext`.
 - Runtime launch settings are invocation-level, including browser selection, headless mode, slow-motion pacing, WebDriver endpoint, binary paths, and driver args.
 - If you need different runtime launch settings, run separate test invocations.
-- `use_cdp_evaluate` is Chrome-only and raises if enabled for Firefox.
 
 ## Popup Lifecycle Support
 

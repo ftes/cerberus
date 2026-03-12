@@ -136,12 +136,6 @@ defmodule Cerberus.TimeoutDefaultsTest do
     end
   end
 
-  test "browser session constructor rejects use_cdp_evaluate for firefox before runtime startup" do
-    assert_raise ArgumentError, ~r/use_cdp_evaluate is only supported for Chrome browser sessions/, fn ->
-      session(:browser, browser_name: :firefox, use_cdp_evaluate: true)
-    end
-  end
-
   test "browser ready timeout falls back to global browser config and allows session override" do
     Application.put_env(:cerberus, :browser, ready_timeout_ms: 2_200)
 

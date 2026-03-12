@@ -425,7 +425,7 @@ defmodule Cerberus.LocatorParityTest do
   end
 
   setup_all do
-    {owner_pid, browser_session} = SharedBrowserSession.start!(SharedBrowserSession.maybe_use_cdp_evaluate())
+    {owner_pid, browser_session} = SharedBrowserSession.start!()
 
     upload_path =
       Path.join(System.tmp_dir!(), "cerberus-locator-oracle-#{System.unique_integer([:positive])}.txt")
@@ -613,7 +613,11 @@ defmodule Cerberus.LocatorParityTest do
         run: &select(&1, role(:listbox, name: "Language"), ~l"Elixir"e)
       },
       %{name: "select css locator", expect: :ok, run: &select(&1, css("#language_select"), ~l"Erlang"e)},
-      %{name: "select inexact text sigil supports substring", expect: :ok, run: &select(&1, ~l"Language"l, ~l"Elix"i)},
+      %{
+        name: "select exact_option false supports substring",
+        expect: :ok,
+        run: &select(&1, ~l"Language"l, ~l"Elix"e, exact_option: false)
+      },
       %{
         name: "select disabled option errors",
         expect: :error,
