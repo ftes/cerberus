@@ -220,9 +220,9 @@ defmodule Cerberus.Driver.Browser.Extensions do
     session
   end
 
-  @spec evaluate_js(Browser.t(), String.t()) :: term()
-  def evaluate_js(%Browser{} = session, expression) when is_binary(expression) do
-    timeout_ms = @default_evaluate_timeout_ms
+  @spec evaluate_js(Browser.t(), String.t(), Options.browser_evaluate_js_opts()) :: term()
+  def evaluate_js(%Browser{} = session, expression, opts \\ []) when is_binary(expression) and is_list(opts) do
+    timeout_ms = extension_timeout_ms(session, opts)
 
     result =
       Profiling.measure({:driver_operation, :browser, :evaluate_js}, fn ->

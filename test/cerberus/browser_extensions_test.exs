@@ -291,6 +291,20 @@ defmodule Cerberus.BrowserExtensionsTest do
     end
   end
 
+  test "evaluate_js persists window state across calls", %{browser_session: browser_session} do
+    session = browser_fixture_session(browser_session, "/articles")
+
+    assert evaluate_js(session, "(() => (window.__cerberusEvalState = 41))()") == 41
+    assert evaluate_js(session, "(() => window.__cerberusEvalState + 1)()") == 42
+  end
+
+  test "evaluate_js raw scripts attach globals through top-level this", %{browser_session: browser_session} do
+    session = browser_fixture_session(browser_session, "/articles")
+
+    assert evaluate_js(session, "this.__cerberusRawScriptState = 41") == 41
+    assert evaluate_js(session, "(() => window.__cerberusRawScriptState + 1)()") == 42
+  end
+
   test "evaluate_js works in browser sessions" do
     session =
       :browser

@@ -1542,7 +1542,9 @@ defmodule Cerberus.Driver.Browser do
 
       {:error, reason, details} ->
         observed = %{path: current_path_or_nil(state), details: details}
-        {:error, "failed to evaluate browser text assertion: #{reason}", observed}
+
+        {:error, "failed to evaluate browser text assertion: #{format_browser_evaluation_reason(reason, details)}",
+         observed}
     end
   end
 
@@ -1568,9 +1570,23 @@ defmodule Cerberus.Driver.Browser do
 
       {:error, reason, details} ->
         observed = %{path: current_path_or_nil(state), details: details}
-        {:error, "failed to evaluate browser locator assertion: #{reason}", observed}
+
+        {:error, "failed to evaluate browser locator assertion: #{format_browser_evaluation_reason(reason, details)}",
+         observed}
     end
   end
+
+  defp format_browser_evaluation_reason(reason, %{"reason" => details_reason})
+       when is_binary(reason) and is_binary(details_reason) and details_reason != "" do
+    "#{reason} (#{details_reason})"
+  end
+
+  defp format_browser_evaluation_reason(reason, %{reason: details_reason})
+       when is_binary(reason) and is_binary(details_reason) and details_reason != "" do
+    "#{reason} (#{details_reason})"
+  end
+
+  defp format_browser_evaluation_reason(reason, _details), do: reason
 
   defp build_text_assertion_payload(state, expected, visible, match_opts, timeout_ms, mode, match_by) do
     {between_min, between_max} = between_bounds(match_opts)
@@ -1802,14 +1818,21 @@ defmodule Cerberus.Driver.Browser do
   defp eval_json_with_transient_retry(state, timeout_ms, build_expression)
        when is_integer(timeout_ms) and timeout_ms >= 0 and is_function(build_expression, 1) do
     started_at_ms = System.monotonic_time(:millisecond)
-    retry_budget_ms = max(timeout_ms, @transient_eval_retry_min_budget_ms)
+
+    retry_budget_ms =
+      max(command_timeout_ms(timeout_ms), @transient_eval_retry_min_budget_ms) + @transient_eval_retry_interval_ms
+
     do_eval_json_with_transient_retry(state, started_at_ms, timeout_ms, retry_budget_ms, build_expression, false)
   end
 
   defp eval_json_action_with_transient_retry(state, timeout_ms, build_expression)
        when is_integer(timeout_ms) and timeout_ms >= 0 and is_function(build_expression, 1) do
     started_at_ms = System.monotonic_time(:millisecond)
-    retry_budget_ms = max(timeout_ms, @transient_eval_retry_min_budget_ms)
+
+    retry_budget_ms =
+      max(action_command_timeout_ms(timeout_ms), @transient_eval_retry_min_budget_ms) +
+        @transient_eval_retry_interval_ms
+
     do_eval_json_action_with_transient_retry(state, started_at_ms, timeout_ms, retry_budget_ms, build_expression, false)
   end
 

@@ -7,6 +7,11 @@ defmodule Cerberus.Driver.Browser.TransientErrorsTest do
     assert TransientErrors.retryable?("bidi command failed", %{"message" => "Execution context was destroyed"})
     assert TransientErrors.retryable?(:error, %{message: "Cannot find context with specified id"})
 
+    assert TransientErrors.retryable?("evaluate task crashed", %{
+             reason:
+               "exited in: GenServer.call(#PID<0.1.0>, {:send_command, \"script.evaluate\", %{}}, 9000)\n    ** (EXIT) time out"
+           })
+
     refute TransientErrors.retryable?("browser evaluate_js failed", %{
              "message" => "ReferenceError: missingValue is not defined"
            })

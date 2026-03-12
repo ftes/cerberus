@@ -21,7 +21,9 @@ defmodule Cerberus.Driver.Browser.TransientErrors do
   @spec retryable?(term(), term()) :: boolean()
   def retryable?(reason, details) do
     payload = "#{stringify(reason)} #{stringify(details)}"
-    Enum.any?(@retryable_markers, &String.contains?(payload, &1))
+
+    Enum.any?(@retryable_markers, &String.contains?(payload, &1)) or
+      stale_script_evaluate_timeout?(payload)
   end
 
   @spec recover_tab_id(pid(), String.t() | nil) :: String.t() | nil
@@ -41,4 +43,10 @@ defmodule Cerberus.Driver.Browser.TransientErrors do
 
   defp stringify(value) when is_binary(value), do: value
   defp stringify(value), do: inspect(value)
+
+  defp stale_script_evaluate_timeout?(payload) when is_binary(payload) do
+    String.contains?(payload, "evaluate task crashed") and
+      String.contains?(payload, "script.evaluate") and
+      String.contains?(payload, "** (EXIT) time out")
+  end
 end

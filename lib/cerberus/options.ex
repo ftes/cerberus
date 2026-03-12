@@ -309,6 +309,10 @@ defmodule Cerberus.Options do
           timeout: non_neg_integer()
         ]
 
+  @type browser_evaluate_js_opts :: [
+          timeout: pos_integer()
+        ]
+
   @type assert_download_opts :: [
           timeout: pos_integer()
         ]
@@ -561,6 +565,10 @@ defmodule Cerberus.Options do
     timeout: [type: :non_neg_integer, doc: "Browser action timeout in milliseconds."]
   ]
 
+  @browser_evaluate_js_opts_schema [
+    timeout: [type: :pos_integer, doc: "JavaScript evaluation timeout in milliseconds."]
+  ]
+
   @assert_download_opts_schema [
     timeout: [type: :pos_integer, default: 1_500, doc: "Wait timeout in milliseconds for download detection."]
   ]
@@ -619,6 +627,9 @@ defmodule Cerberus.Options do
 
   @spec browser_drag_schema() :: keyword()
   def browser_drag_schema, do: @browser_drag_opts_schema
+
+  @spec browser_evaluate_js_schema() :: keyword()
+  def browser_evaluate_js_schema, do: @browser_evaluate_js_opts_schema
 
   @spec assert_download_schema() :: keyword()
   def assert_download_schema, do: @assert_download_opts_schema
@@ -754,6 +765,11 @@ defmodule Cerberus.Options do
   @spec validate_browser_drag!(keyword()) :: browser_drag_opts()
   def validate_browser_drag!(opts) do
     validate!(opts, @browser_drag_opts_schema, "Browser.drag/4")
+  end
+
+  @spec validate_browser_evaluate_js!(keyword()) :: browser_evaluate_js_opts()
+  def validate_browser_evaluate_js!(opts) do
+    validate!(opts, @browser_evaluate_js_opts_schema, "Browser.evaluate_js/3")
   end
 
   @spec validate_assert_download!(keyword()) :: assert_download_opts()

@@ -34,7 +34,8 @@ defmodule Cerberus.Browser do
   @press_args_error "Browser.press/4 expects locator, key as a string, and options as a keyword list"
   @drag_args_error "Browser.drag/4 expects source and target selectors as strings and options as a keyword list"
   @with_popup_args_error "Browser.with_popup/4 expects trigger callback arity 1, callback arity 2, and options as a keyword list"
-  @with_evaluate_js_args_error "Browser.with_evaluate_js/3 expects an expression string and callback with arity 1"
+  @evaluate_js_args_error "Browser.evaluate_js/3 expects an expression string and options as a keyword list"
+  @with_evaluate_js_args_error "Browser.with_evaluate_js/4 expects an expression string, options as a keyword list, and callback with arity 1"
   @with_screenshot_args_error "Browser.with_screenshot expects a path string or keyword options, optionally followed by a callback with arity 1"
   @add_cookie_args_error "Browser.add_cookie/4 expects cookie name and value strings and options as a keyword list"
   @add_cookies_args_error "Browser.add_cookies/2 expects a list of cookie keyword lists"
@@ -44,6 +45,7 @@ defmodule Cerberus.Browser do
   @type_options_doc NimbleOptions.docs(Options.browser_type_schema())
   @press_options_doc NimbleOptions.docs(Options.browser_press_schema())
   @drag_options_doc NimbleOptions.docs(Options.browser_drag_schema())
+  @evaluate_js_options_doc NimbleOptions.docs(Options.browser_evaluate_js_schema())
   @with_popup_options_doc NimbleOptions.docs(Options.browser_with_popup_schema())
   @add_cookie_options_doc NimbleOptions.docs(Options.browser_add_cookie_schema())
   @clear_cookies_options_doc NimbleOptions.docs(Options.browser_clear_cookies_schema())
@@ -305,31 +307,54 @@ defmodule Cerberus.Browser do
 
   @doc """
   Evaluates JavaScript and returns the computed JS value.
+
+  ## Options
+
+  #{@evaluate_js_options_doc}
   """
   @spec evaluate_js(struct(), String.t()) :: term()
-  def evaluate_js(%Browser{} = session, expression) when is_binary(expression),
-    do: Extensions.evaluate_js(session, expression)
+  @spec evaluate_js(struct(), String.t(), Options.browser_evaluate_js_opts()) :: term()
+  def evaluate_js(session, expression, opts \\ [])
 
-  def evaluate_js(session, expression) when is_binary(expression), do: Assertions.unsupported(session, :evaluate_js)
+  def evaluate_js(%Browser{} = session, expression, opts) when is_binary(expression) and is_list(opts) do
+    opts = Options.validate_browser_evaluate_js!(opts)
+    Extensions.evaluate_js(session, expression, opts)
+  end
 
-  def evaluate_js(_session, _expression) do
-    raise ArgumentError, "Browser.evaluate_js/2 expects an expression string"
+  def evaluate_js(session, expression, opts) when is_binary(expression) and is_list(opts),
+    do: Assertions.unsupported(session, :evaluate_js)
+
+  def evaluate_js(_session, _expression, _opts) do
+    raise ArgumentError, @evaluate_js_args_error
   end
 
   @doc """
   Evaluates JavaScript, passes the computed value to `callback`, and returns `session`.
+
+  ## Options
+
+  #{@evaluate_js_options_doc}
   """
   @spec with_evaluate_js(session, String.t(), (term() -> term())) :: session when session: var
-  def with_evaluate_js(%Browser{} = session, expression, callback)
-      when is_binary(expression) and is_function(callback, 1) do
-    _ = callback.(Extensions.evaluate_js(session, expression))
+  @spec with_evaluate_js(session, String.t(), Options.browser_evaluate_js_opts(), (term() -> term())) ::
+          session
+        when session: var
+  def with_evaluate_js(session, expression, callback) when is_function(callback, 1) do
+    with_evaluate_js(session, expression, [], callback)
+  end
+
+  def with_evaluate_js(%Browser{} = session, expression, opts, callback)
+      when is_binary(expression) and is_list(opts) and is_function(callback, 1) do
+    opts = Options.validate_browser_evaluate_js!(opts)
+    _ = callback.(Extensions.evaluate_js(session, expression, opts))
     session
   end
 
-  def with_evaluate_js(session, expression, callback) when is_binary(expression) and is_function(callback, 1),
-    do: Assertions.unsupported(session, :with_evaluate_js)
+  def with_evaluate_js(session, expression, opts, callback)
+      when is_binary(expression) and is_list(opts) and is_function(callback, 1),
+      do: Assertions.unsupported(session, :with_evaluate_js)
 
-  def with_evaluate_js(_session, _expression, _callback) do
+  def with_evaluate_js(_session, _expression, _opts, _callback) do
     raise ArgumentError, @with_evaluate_js_args_error
   end
 
