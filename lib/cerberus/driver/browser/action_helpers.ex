@@ -369,7 +369,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       const op = options && options.op ? options.op : "click";
       const reason = result.reason || "";
 
-      if (reason === "field_disabled") {
+      if (["field_disabled", "target_detached", "target_not_visible"].includes(reason)) {
         return ["fill_in", "select", "choose", "check", "uncheck", "upload", "click", "submit"].includes(op);
       }
 

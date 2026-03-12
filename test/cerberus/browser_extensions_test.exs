@@ -135,6 +135,51 @@ defmodule Cerberus.BrowserExtensionsTest do
     |> assert_has(text("Hidden action result: clicked", exact: true))
   end
 
+  test "click waits for delayed visibility before acting", %{browser_session: browser_session} do
+    session =
+      browser_session
+      |> browser_fixture_session("/browser/extensions")
+      |> with_evaluate_js(
+        """
+        (() => {
+          const button = document.getElementById("hidden-action");
+          button.style.display = "none";
+          window.setTimeout(() => {
+            button.style.display = "block";
+          }, 200);
+          return button.style.display;
+        })()
+        """,
+        &assert(&1 == "none")
+      )
+
+    session
+    |> click(role(:button, name: "Hidden Action", exact: true), timeout: 600)
+    |> assert_has(text("Hidden action result: clicked", exact: true))
+  end
+
+  test "fill_in waits for delayed visibility before acting", %{browser_session: browser_session} do
+    session =
+      browser_session
+      |> browser_fixture_session("/browser/extensions")
+      |> with_evaluate_js(
+        """
+        (() => {
+          const input = document.getElementById("keyboard-input");
+          input.style.display = "none";
+          window.setTimeout(() => {
+            input.style.display = "block";
+          }, 200);
+          return input.style.display;
+        })()
+        """,
+        &assert(&1 == "none")
+      )
+      |> fill_in(css("#keyboard-input"), "late value", timeout: 600)
+
+    with_evaluate_js(session, "document.getElementById('keyboard-input').value", &assert(&1 == "late value"))
+  end
+
   test "click scrolls offscreen targets into view before acting", %{browser_session: browser_session} do
     session = browser_fixture_session(browser_session, "/browser/extensions")
 
