@@ -83,13 +83,22 @@ jobs:
           path: |
             tmp/chrome-*
             tmp/chromedriver-*
-          key: ${{ runner.os }}-browser-runtime-${{ env.CERBERUS_CHROME_VERSION }}
+            tmp/firefox-*
+          key: ${{ runner.os }}-browser-runtime-${{ env.CERBERUS_CHROME_VERSION }}-${{ env.CERBERUS_FIREFOX_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-browser-runtime-
 
       - name: Install Chrome
         run: mix cerberus.install.chrome
 
+      - name: Install Firefox
+        run: mix cerberus.install.firefox
+
       - name: Run tests with Chrome
         run: mix test --warnings-as-errors
+
+      - name: Run tests with Firefox
+        run: CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors
 
       # - name: Run tests with Chrome via Websocket (remote)
       #   run: mix test.websocket --warnings-as-errors
@@ -103,69 +112,3 @@ jobs:
       # - name: Run browser-driver tests in websocket Firefox lane
       #   run: |
       #     mix test.websocket --warnings-as-errors --browsers firefox $BROWSER_DRIVER_FILES
-
-  firefox:
-    name: Firefox
-    runs-on: ubuntu-latest
-    env:
-      POSTGRES_HOST: 127.0.0.1
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 6
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Load browser env
-        run: |
-          source .envrc
-
-          {
-            echo "CERBERUS_FIREFOX_VERSION=${CERBERUS_FIREFOX_VERSION}"
-          } >> "$GITHUB_ENV"
-
-      - name: Setup BEAM
-        uses: erlef/setup-beam@v1
-        with:
-          version-file: .tool-versions
-          version-type: strict
-
-      - name: Cache deps and build
-        uses: actions/cache@v4
-        with:
-          path: |
-            deps
-            _build
-          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-mix-
-
-      - name: Install deps
-        run: mix deps.get
-
-      - name: Cache Firefox runtime
-        uses: actions/cache@v4
-        with:
-          path: |
-            tmp/firefox-*
-          key: ${{ runner.os }}-firefox-runtime-${{ env.CERBERUS_FIREFOX_VERSION }}
-
-      - name: Install Firefox
-        run: mix cerberus.install.firefox
-
-      - name: Run tests with Firefox
-        run: CERBERUS_BROWSER_NAME=firefox mix test --warnings-as-errors
