@@ -132,11 +132,39 @@ defmodule Cerberus.HelperLocatorBehaviorTest do
       refute error.message =~ "Articles"
     end
 
+    test "assert_has candidate hints are scoped by css members on static routes (#{driver})", context do
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          unquote(driver)
+          |> driver_session(context)
+          |> visit("/search")
+          |> assert_has(and_(css("button"), ~l"Definitely Missing Button Text"i), timeout: 0)
+        end
+
+      assert error.message =~ "possible candidates:"
+      assert error.message =~ "Run Search"
+      assert error.message =~ "Run Nested Search"
+      refute error.message =~ "Articles"
+    end
+
     test "and css plus descendant text matches EV2-style toast markup (#{driver})", context do
       unquote(driver)
       |> driver_session(context)
       |> visit("/live/toast-locator")
       |> assert_has(and_(~l".toast-success"c, text("will email an official quote", exact: false)))
+    end
+
+    test "assert_has candidate hints explain css plus text toast near misses (#{driver})", context do
+      error =
+        assert_raise ExUnit.AssertionError, fn ->
+          unquote(driver)
+          |> driver_session(context)
+          |> visit("/live/toast-locator")
+          |> assert_has(and_(~l".toast-success"c, text("Definitely missing toast copy", exact: false)), timeout: 0)
+        end
+
+      assert error.message =~ "possible candidates:"
+      assert error.message =~ "official quote"
     end
 
     test "testid helper works across drivers for assertions and form actions (#{driver})", context do

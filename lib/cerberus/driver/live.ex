@@ -707,49 +707,39 @@ defmodule Cerberus.Driver.Live do
 
     case locator_assertion_match_count(session, locator, visible, match_opts, mode) do
       {:ok, match_count} ->
-        case Query.assertion_count_outcome(match_count, match_opts, mode) do
-          :ok ->
-            observed = %{
-              path: session.current_path,
-              visible: visible,
-              expected: locator,
-              match_count: match_count,
-              transition: session_transition(session)
-            }
-
-            op = if(mode == :assert, do: :assert_has, else: :refute_has)
-            {:ok, update_session(session, op, observed), observed}
-
-          {:error, reason} ->
-            case locator_assertion_values(session, locator, visible) do
-              {:ok, matched} ->
-                finalize_locator_assertion_error(session, locator, visible, matched, reason)
-
-              {:error, locator_reason} ->
-                observed = %{
-                  path: session.current_path,
-                  visible: visible,
-                  texts: [],
-                  matched: [],
-                  expected: locator,
-                  transition: session_transition(session)
-                }
-
-                {:error, session, observed, locator_reason}
-            end
-        end
+        locator_assertion_count_outcome(session, locator, visible, match_count, match_opts, mode)
 
       {:error, reason} ->
+        locator_assertion_empty_error(session, locator, visible, reason)
+    end
+  end
+
+  defp locator_assertion_count_outcome(session, locator, visible, match_count, match_opts, mode) do
+    case Query.assertion_count_outcome(match_count, match_opts, mode) do
+      :ok ->
         observed = %{
           path: session.current_path,
           visible: visible,
-          texts: [],
-          matched: [],
           expected: locator,
+          match_count: match_count,
           transition: session_transition(session)
         }
 
-        {:error, session, observed, reason}
+        op = if(mode == :assert, do: :assert_has, else: :refute_has)
+        {:ok, update_session(session, op, observed), observed}
+
+      {:error, reason} ->
+        finalize_locator_assertion_error_for_reason(session, locator, visible, reason)
+    end
+  end
+
+  defp finalize_locator_assertion_error_for_reason(session, locator, visible, reason) do
+    case locator_assertion_values(session, locator, visible) do
+      {:ok, matched} ->
+        finalize_locator_assertion_error(session, locator, visible, matched, reason)
+
+      {:error, locator_reason} ->
+        locator_assertion_empty_error(session, locator, visible, locator_reason)
     end
   end
 
@@ -757,8 +747,22 @@ defmodule Cerberus.Driver.Live do
     observed = %{
       path: session.current_path,
       visible: visible,
+      candidate_values: locator_candidate_values(session, locator, visible, matched),
       texts: matched,
       matched: matched,
+      expected: locator,
+      transition: session_transition(session)
+    }
+
+    {:error, session, observed, reason}
+  end
+
+  defp locator_assertion_empty_error(session, locator, visible, reason) do
+    observed = %{
+      path: session.current_path,
+      visible: visible,
+      texts: [],
+      matched: [],
       expected: locator,
       transition: session_transition(session)
     }
@@ -793,6 +797,19 @@ defmodule Cerberus.Driver.Live do
         _ ->
           :erlang.raise(kind, reason, __STACKTRACE__)
       end
+  end
+
+  defp locator_candidate_values(_session, _locator, _visible, matched) when matched != [], do: []
+
+  defp locator_candidate_values(%__MODULE__{} = session, %Locator{} = locator, visible, []) do
+    case CandidateScope.locator_scope_selector(locator) do
+      selector when is_binary(selector) ->
+        scope = CandidateScope.merge_scope(selector, Session.scope(session))
+        Html.assertion_values(session.document, :text, visible, scope)
+
+      _other ->
+        []
+    end
   end
 
   defp locator_assertion_match_count(%__MODULE__{} = session, %Locator{} = locator, visible, match_opts, mode) do

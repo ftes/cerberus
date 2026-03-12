@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAction && window.__cerberusAction.__version === 18) return;
+    if (window.__cerberusAction && window.__cerberusAction.__version === 19) return;
 
     const helper = {};
-    helper.__version = 18;
+    helper.__version = 19;
     helper.now = () =>
       typeof performance !== "undefined" && typeof performance.now === "function"
         ? performance.now()
@@ -1139,6 +1139,63 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       return scoped.length > 0 ? scoped : candidates;
     };
 
+    helper.locatorDiagnosticScore = (candidate, locator, op) => {
+      if (!candidate || !locator || typeof locator !== "object") return 0;
+
+      const rawKind = String(locator.kind || "").toLowerCase();
+      const kind = rawKind === "role" ? helper.locatorKind(locator) : rawKind;
+      if (!kind) return 0;
+
+      if (kind === "and") {
+        const members = Array.isArray(locator.members) ? locator.members : [];
+        if (members.length === 0) return 0;
+        if (!helper.matchesLocatorCommonOpts(candidate, locator.opts, op)) return 0;
+
+        return members.reduce((score, member) => {
+          return helper.matchesLocator(candidate, member, op) ? score + 1 : score;
+        }, 0);
+      }
+
+      if (kind === "scope") {
+        const members = Array.isArray(locator.members) ? locator.members : [];
+        if (members.length === 0) return 0;
+        if (!helper.matchesLocatorCommonOpts(candidate, locator.opts, op)) return 0;
+
+        return members.reduce((score, member) => {
+          return helper.matchesLocator(candidate, member, op) ? score + 1 : score;
+        }, 0);
+      }
+
+      return helper.matchesLocator(candidate, locator, op) ? 1 : 0;
+    };
+
+    helper.diagnosticCandidates = (candidates, locator, op) => {
+      const preview = helper.previewCandidates(candidates, locator, op);
+      if (!Array.isArray(preview) || !locator) return preview;
+
+      const kind = helper.locatorKind(locator);
+      if (kind !== "and" && kind !== "scope") return preview;
+
+      let bestScore = 0;
+      const scored = [];
+
+      for (const candidate of preview) {
+        const score = helper.locatorDiagnosticScore(candidate, locator, op);
+        if (score <= 0) continue;
+
+        if (score > bestScore) {
+          bestScore = score;
+          scored.length = 0;
+        }
+
+        if (score === bestScore) {
+          scored.push(candidate);
+        }
+      }
+
+      return scored.length > 0 ? scored : preview;
+    };
+
     helper.querySelectorForLocator = (locator) => {
       if (!locator || typeof locator !== "object") return "*";
 
@@ -1607,7 +1664,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
       if (matched.length === 0) {
         const previewStartedAt = helper.now();
-        const previewCandidates = helper.previewCandidates(stateMatched, locator, op);
+        const previewCandidates = helper.diagnosticCandidates(stateMatched, locator, op);
         const candidateValues = helper.previewValues(previewCandidates, op, matchBy);
         jsTiming.previewMs = helper.now() - previewStartedAt;
 

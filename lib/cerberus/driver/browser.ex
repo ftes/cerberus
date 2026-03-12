@@ -1772,6 +1772,7 @@ defmodule Cerberus.Driver.Browser do
       path: result["path"],
       title: result["title"] || "",
       visible: visible,
+      candidate_values: result["candidateValues"] || [],
       texts: result["texts"] || [],
       matched: result["matched"] || [],
       expected: locator
