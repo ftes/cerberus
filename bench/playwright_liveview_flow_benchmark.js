@@ -3,10 +3,12 @@
 
 const fs = require("fs");
 const path = require("path");
-const { chromium } = require("playwright");
+const { chromium, firefox } = require("playwright");
 
 const BASE_URL = process.env.BASE_URL || "http://localhost:4002";
 const CHROME = process.env.CHROME;
+const FIREFOX = process.env.FIREFOX;
+const PLAYWRIGHT_BROWSER = process.env.PLAYWRIGHT_BROWSER || "chromium";
 const ITERATIONS = parseInt(process.env.ITERATIONS || "10", 10);
 const WARMUP = parseInt(process.env.WARMUP || "2", 10);
 const SCENARIO = process.env.SCENARIO || "churn";
@@ -77,6 +79,11 @@ function resolveChromeExecutable() {
   const managed = findManagedChromeExecutable();
   if (managed) return managed;
   if (CHROME) return CHROME;
+  return null;
+}
+
+function resolveFirefoxExecutable() {
+  if (FIREFOX) return FIREFOX;
   return null;
 }
 
@@ -195,17 +202,36 @@ async function runFlow(page) {
 }
 
 (async () => {
-  const executablePath = resolveChromeExecutable();
+  let browserType;
+  let executablePath;
+  let launchOptions;
 
-  if (!executablePath) {
-    throw new Error("Set CHROME or install the managed Chrome runtime before running the Playwright benchmark");
+  if (PLAYWRIGHT_BROWSER === "firefox") {
+    browserType = firefox;
+    executablePath = resolveFirefoxExecutable();
+    launchOptions = {
+      headless: true
+    };
+
+    if (executablePath) {
+      launchOptions.executablePath = executablePath;
+    }
+  } else {
+    browserType = chromium;
+    executablePath = resolveChromeExecutable();
+
+    if (!executablePath) {
+      throw new Error("Set CHROME or install the managed Chrome runtime before running the Playwright benchmark");
+    }
+
+    launchOptions = {
+      executablePath,
+      headless: true,
+      args: ["--disable-dev-shm-usage", "--disable-setuid-sandbox"]
+    };
   }
 
-  const browser = await chromium.launch({
-    executablePath,
-    headless: true,
-    args: ["--disable-dev-shm-usage", "--disable-setuid-sandbox"]
-  });
+  const browser = await browserType.launch(launchOptions);
 
   const page = await browser.newPage();
   const samples = [];
@@ -223,10 +249,11 @@ async function runFlow(page) {
 
     const metrics = summarize(samples);
 
-    console.log("runner,scenario,iterations,warmup,mean_ms,median_ms,p95_ms");
+    console.log("runner,browser,scenario,iterations,warmup,mean_ms,median_ms,p95_ms");
     console.log(
       [
         "playwright",
+        PLAYWRIGHT_BROWSER,
         SCENARIO,
         ITERATIONS,
         WARMUP,
