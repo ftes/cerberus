@@ -128,6 +128,8 @@ defmodule Cerberus.Fixtures.Router do
       on_mount: LiveSandbox do
       live("/live/index", IndexLive)
       live("/live/index/alias", IndexLive)
+      live("/live/performance", PerformanceLive)
+      live("/live/performance/done", PerformanceDoneLive)
       live("/live/page_2", Page2Live)
       live("/live/async_page", AsyncPageLive)
       live("/live/async_page_2", AsyncPage2Live)
