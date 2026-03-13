@@ -9,15 +9,23 @@ const BASE_URL = process.env.BASE_URL || "http://localhost:4002";
 const CHROME = process.env.CHROME;
 const ITERATIONS = parseInt(process.env.ITERATIONS || "10", 10);
 const WARMUP = parseInt(process.env.WARMUP || "2", 10);
+const SCENARIO = process.env.SCENARIO || "churn";
 const FLOW_PATH = "/phoenix_test/playwright/live/performance";
-const DONE_PATH = "/phoenix_test/playwright/live/performance/done?candidate=wizard-prime";
+const DONE_PATH = "/phoenix_test/playwright/live/performance/done";
 const SEARCH_VALUE = "wiz";
 const CANDIDATE_NAME = "Wizard Prime";
 const CANDIDATE_SCORE = "score 98";
 const CANDIDATE_ID = "wizard-prime";
-const TARGET_SLOT = "slot-120";
 const TARGET_STATUS = "status-ready";
 const TARGET_MARKER = "priority-prime";
+const ASSIGNMENT_NAME = "Queue Cobalt";
+const ASSIGNMENT_ID = "queue-cobalt";
+const ASSIGNMENT_REGION = "region-central";
+const ASSIGNMENT_LANE = "lane-27";
+const ASSIGNMENT_WINDOW = "window-3";
+const ASSIGNMENT_SKILL = "skill-runes";
+const ASSIGNMENT_BATCH = "batch-orchid";
+const ASSIGNMENT_OWNER = "owner-wizard-prime";
 
 function percentile(samples, pct) {
   if (samples.length === 0) return 0;
@@ -82,10 +90,15 @@ async function waitForExactText(page, selector, text) {
   );
 }
 
-async function runFlow(page) {
-  await page.goto(`${BASE_URL}${FLOW_PATH}`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("heading", { name: "Performance LiveView", exact: true }).waitFor();
-  await page.locator("[data-phx-main].phx-connected").waitFor();
+function scenarioFlowPath() {
+  if (SCENARIO === "locator_stress") {
+    return `${FLOW_PATH}?scenario=locator_stress`;
+  }
+
+  return FLOW_PATH;
+}
+
+async function chooseCandidate(page) {
   await page.getByRole("button", { name: "Open candidate search", exact: true }).click();
   const candidateDialog = page.getByRole("dialog", { name: "Candidate search", exact: true });
   await candidateDialog.waitFor();
@@ -97,12 +110,14 @@ async function runFlow(page) {
   await candidateOption.waitFor();
   await candidateOption.getByRole("button", { name: "Choose", exact: true }).click();
   await page.getByText(`Selected candidate: ${CANDIDATE_NAME}`, { exact: true }).waitFor();
+}
+
+async function runChurnFlow(page) {
   await page.getByRole("button", { name: "Load heavy results", exact: true }).click();
   const targetCard = page
-    .locator('article[data-card-kind="result"]')
+    .locator('article[data-card-kind="result"][data-slot="120"]')
     .filter({ hasText: CANDIDATE_NAME })
     .filter({ hasText: TARGET_STATUS })
-    .filter({ hasText: TARGET_SLOT })
     .filter({ hasText: TARGET_MARKER });
   await targetCard.waitFor();
   await targetCard.getByRole("button", { name: "Review", exact: true }).click();
@@ -110,10 +125,73 @@ async function runFlow(page) {
   await reviewDialog.waitFor();
   await reviewDialog.getByText(CANDIDATE_NAME, { exact: true }).waitFor();
   await reviewDialog.getByRole("button", { name: "Apply filters", exact: true }).click();
-  await page.waitForURL(`${BASE_URL}${FLOW_PATH}?step=patched&candidate=${CANDIDATE_ID}`);
+  await page.waitForURL(`${BASE_URL}${FLOW_PATH}?step=patched&candidate=${CANDIDATE_ID}&scenario=churn`);
   await page.getByRole("button", { name: "Continue workflow", exact: true }).click();
-  await page.waitForURL(`${BASE_URL}${DONE_PATH}`);
+  await page.waitForURL(`${BASE_URL}${DONE_PATH}?candidate=${CANDIDATE_ID}`);
   await page.getByRole("heading", { name: "Performance flow complete", exact: true }).waitFor();
+}
+
+async function runLocatorStressFlow(page) {
+  await page.getByRole("button", { name: "Load heavy results", exact: true }).click();
+  const targetCard = page
+    .locator('article[data-card-kind="result"][data-slot="120"]')
+    .filter({ hasText: CANDIDATE_NAME })
+    .filter({ hasText: TARGET_STATUS })
+    .filter({ hasText: TARGET_MARKER });
+  await targetCard.waitFor();
+
+  const assignmentPanel = targetCard
+    .locator('section[data-panel-kind="assignment"]')
+    .filter({ hasText: ASSIGNMENT_NAME })
+    .filter({ hasText: ASSIGNMENT_REGION })
+    .filter({ hasText: ASSIGNMENT_LANE })
+    .filter({ hasText: ASSIGNMENT_WINDOW })
+    .filter({ hasText: ASSIGNMENT_SKILL })
+    .filter({ hasText: ASSIGNMENT_BATCH })
+    .filter({ hasNotText: "duplicate-lure" });
+
+  await assignmentPanel.waitFor();
+  await assignmentPanel.getByRole("button", { name: "Inspect queue", exact: true }).click();
+
+  const assignmentDialog = page.getByRole("dialog", { name: "Assignment queue", exact: true });
+  await assignmentDialog.waitFor();
+
+  const assignmentRow = assignmentDialog
+    .locator('[data-testid="assignment-row"]')
+    .filter({ hasText: ASSIGNMENT_NAME })
+    .filter({ hasText: "state-ready" })
+    .filter({ hasText: ASSIGNMENT_REGION })
+    .filter({ hasText: ASSIGNMENT_WINDOW })
+    .filter({ hasText: ASSIGNMENT_SKILL })
+    .filter({ hasText: ASSIGNMENT_OWNER })
+    .filter({ hasNotText: "secondary-marker" });
+
+  await assignmentRow.waitFor();
+  await assignmentRow.getByRole("button", { name: "Select", exact: true }).click();
+  await page.getByText(`Selected assignment: ${ASSIGNMENT_NAME}`, { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Apply locator filters", exact: true }).click();
+  await page.waitForURL(
+    `${BASE_URL}${FLOW_PATH}?step=patched&candidate=${CANDIDATE_ID}&scenario=locator_stress&assignment=${ASSIGNMENT_ID}`
+  );
+  await page.getByRole("button", { name: "Continue workflow", exact: true }).click();
+  await page.waitForURL(`${BASE_URL}${DONE_PATH}?candidate=${CANDIDATE_ID}&assignment=${ASSIGNMENT_ID}`);
+  await page.getByRole("heading", { name: "Performance flow complete", exact: true }).waitFor();
+  await page.getByText(`Assignment carried forward: ${ASSIGNMENT_ID}`, { exact: true }).waitFor();
+}
+
+async function runFlow(page) {
+  await page.goto(`${BASE_URL}${scenarioFlowPath()}`, { waitUntil: "domcontentloaded" });
+  await page.getByRole("heading", { name: "Performance LiveView", exact: true }).waitFor();
+  await page.locator("[data-phx-main].phx-connected").waitFor();
+  await page.getByText(`Scenario: ${SCENARIO}`, { exact: true }).waitFor();
+  await chooseCandidate(page);
+
+  if (SCENARIO === "locator_stress") {
+    await runLocatorStressFlow(page);
+    return;
+  }
+
+  await runChurnFlow(page);
 }
 
 (async () => {
@@ -145,10 +223,11 @@ async function runFlow(page) {
 
     const metrics = summarize(samples);
 
-    console.log("runner,iterations,warmup,mean_ms,median_ms,p95_ms");
+    console.log("runner,scenario,iterations,warmup,mean_ms,median_ms,p95_ms");
     console.log(
       [
         "playwright",
+        SCENARIO,
         ITERATIONS,
         WARMUP,
         metrics.meanMs.toFixed(3),

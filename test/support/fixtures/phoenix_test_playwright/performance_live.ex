@@ -14,6 +14,7 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
   def mount(_params, _session, socket) do
     {:ok,
      assign(socket,
+       scenario: "churn",
        candidate_modal_open?: false,
        candidate_query: "",
        candidate_results: [],
@@ -21,6 +22,8 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
        rows_loaded?: false,
        review_modal_open?: false,
        reviewed_slot: nil,
+       assignment_modal_open?: false,
+       selected_assignment: nil,
        step: "start"
      )}
   end
@@ -34,7 +37,9 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
 
     {:noreply,
      assign(socket,
+       scenario: Map.get(params, "scenario", socket.assigns.scenario || "churn"),
        selected_candidate: selected_candidate,
+       selected_assignment: assignment_by_id(Map.get(params, "assignment")) || socket.assigns.selected_assignment,
        step: Map.get(params, "step", "start")
      )}
   end
@@ -54,11 +59,24 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
       <div class="benchmark-actions">
         <button type="button" phx-click="open-candidate-modal">Open candidate search</button>
         <button type="button" phx-click="load-results">Load heavy results</button>
+        <button
+          :if={@scenario == "locator_stress"}
+          type="button"
+          phx-click="apply-filters"
+        >
+          Apply locator filters
+        </button>
         <button type="button" phx-click="navigate-done">Continue workflow</button>
       </div>
 
+      <div data-testid="benchmark-scenario">Scenario: {@scenario}</div>
+
       <div data-testid="selected-candidate">
         Selected candidate: {@candidate_name || "none"}
+      </div>
+
+      <div :if={@selected_assignment} data-testid="selected-assignment">
+        Selected assignment: {@selected_assignment.name}
       </div>
 
       <div data-testid="flow-step">Step: {@step}</div>
@@ -124,6 +142,37 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
               <button type="button" phx-click="review-card" phx-value-slot={index}>Review</button>
             </div>
           </div>
+
+          <div :if={@scenario == "locator_stress"} class="assignment-panel-stack">
+            <section
+              :for={panel <- card_assignment_panels(index)}
+              data-panel-kind="assignment"
+              data-panel-id={panel.id}
+            >
+              <header>
+                <h4>{panel.name}</h4>
+                <span>{panel.region}</span>
+              </header>
+              <p>{panel.lane}</p>
+              <p>{panel.window}</p>
+              <p>{panel.skill}</p>
+              <p>{panel.batch}</p>
+              <p :if={panel.duplicate_lure?}>duplicate-lure</p>
+
+              <div class="panel-actions">
+                <button type="button">Archive queue</button>
+
+                <button
+                  type="button"
+                  phx-click="open-assignment-modal"
+                  phx-value-slot={index}
+                  phx-value-panel={panel.id}
+                >
+                  Inspect queue
+                </button>
+              </div>
+            </section>
+          </div>
         </article>
       </section>
 
@@ -142,6 +191,42 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
         <div class="review-actions">
           <button type="button">Close</button>
           <button type="button" phx-click="apply-filters">Apply filters</button>
+        </div>
+      </div>
+
+      <div
+        :if={@assignment_modal_open?}
+        id="assignment-modal"
+        role="dialog"
+        aria-label="Assignment queue"
+        data-testid="assignment-modal"
+      >
+        <h2>Assignment queue</h2>
+
+        <div data-testid="assignment-rows">
+          <article
+            :for={assignment <- assignment_queue_rows(@selected_candidate, @reviewed_slot)}
+            data-testid="assignment-row"
+            data-assignment-id={assignment.id}
+          >
+            <header>
+              <h3>{assignment.name}</h3>
+              <span>{assignment.state}</span>
+            </header>
+            <p>{assignment.region}</p>
+            <p>{assignment.window}</p>
+            <p>{assignment.skill}</p>
+            <p>{assignment.owner}</p>
+            <p :if={assignment.secondary_marker?}>secondary-marker</p>
+
+            <div class="assignment-actions">
+              <button type="button">Dismiss</button>
+
+              <button type="button" phx-click="choose-assignment" phx-value-id={assignment.id}>
+                Select
+              </button>
+            </div>
+          </article>
         </div>
       </div>
     </section>
@@ -171,6 +256,17 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
   def handle_event("review-card", %{"slot" => slot}, socket) do
     {slot, ""} = Integer.parse(slot)
     Process.send_after(self(), {:open_review_modal, slot}, 75)
+    {:noreply, socket}
+  end
+
+  def handle_event("open-assignment-modal", %{"slot" => slot, "panel" => _panel}, socket) do
+    {slot, ""} = Integer.parse(slot)
+    Process.send_after(self(), {:open_assignment_modal, slot}, 85)
+    {:noreply, socket}
+  end
+
+  def handle_event("choose-assignment", %{"id" => id}, socket) do
+    Process.send_after(self(), {:choose_assignment, id}, 70)
     {:noreply, socket}
   end
 
@@ -220,21 +316,49 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
     {:noreply, assign(socket, review_modal_open?: true, reviewed_slot: slot)}
   end
 
+  def handle_info({:open_assignment_modal, slot}, socket) do
+    {:noreply, assign(socket, assignment_modal_open?: true, reviewed_slot: slot)}
+  end
+
+  def handle_info({:choose_assignment, id}, socket) do
+    {:noreply,
+     assign(socket,
+       selected_assignment: assignment_by_id(id),
+       assignment_modal_open?: false
+     )}
+  end
+
   def handle_info(:patch_filters, socket) do
     candidate = socket.assigns.selected_candidate || candidate_by_id("wizard-prime")
+    assignment = socket.assigns.selected_assignment
+
+    query =
+      [
+        {"step", "patched"},
+        {"candidate", candidate.id},
+        {"scenario", socket.assigns.scenario}
+      ]
+      |> maybe_put_query("assignment", assignment && assignment.id)
+      |> URI.encode_query()
 
     {:noreply,
      push_patch(socket,
-       to: "/phoenix_test/playwright/live/performance?step=patched&candidate=#{URI.encode_www_form(candidate.id)}"
+       to: "/phoenix_test/playwright/live/performance?#{query}"
      )}
   end
 
   def handle_info(:navigate_done, socket) do
     candidate = socket.assigns.selected_candidate || candidate_by_id("wizard-prime")
+    assignment = socket.assigns.selected_assignment
+
+    query =
+      [{"candidate", candidate.id}]
+      |> maybe_put_query("assignment", assignment && assignment.id)
+      |> URI.encode_query()
 
     {:noreply,
      push_navigate(socket,
-       to: "/phoenix_test/playwright/live/performance/done?candidate=#{URI.encode_www_form(candidate.id)}"
+       to: "/phoenix_test/playwright/live/performance/done?#{query}"
      )}
   end
 
@@ -249,6 +373,15 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
   defp candidate_by_id(id) do
     Enum.find(@candidate_results, &(&1.id == id))
   end
+
+  defp assignment_by_id(nil), do: nil
+
+  defp assignment_by_id(id) do
+    Enum.find(assignment_queue_rows(candidate_by_id("wizard-prime"), 120), &(&1.id == id))
+  end
+
+  defp maybe_put_query(params, _key, nil), do: params
+  defp maybe_put_query(params, key, value), do: params ++ [{key, value}]
 
   defp card_title(120, %{name: name}), do: name
   defp card_title(90, %{name: name}), do: name
@@ -265,6 +398,114 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
   defp card_marker(90), do: "priority-backup"
   defp card_marker(60), do: "priority-prime"
   defp card_marker(index), do: "priority-#{rem(index, 9)}"
+
+  defp card_assignment_panels(120) do
+    [
+      %{
+        id: "assignment-shadow",
+        name: "Queue Cobalt",
+        region: "region-central",
+        lane: "lane-27",
+        window: "window-3",
+        skill: "skill-runes",
+        batch: "batch-orchid",
+        duplicate_lure?: true
+      },
+      %{
+        id: "assignment-target",
+        name: "Queue Cobalt",
+        region: "region-central",
+        lane: "lane-27",
+        window: "window-3",
+        skill: "skill-runes",
+        batch: "batch-orchid",
+        duplicate_lure?: false
+      },
+      %{
+        id: "assignment-backup",
+        name: "Queue Amber",
+        region: "region-central",
+        lane: "lane-27",
+        window: "window-3",
+        skill: "skill-runes",
+        batch: "batch-orchid",
+        duplicate_lure?: false
+      }
+    ]
+  end
+
+  defp card_assignment_panels(index) do
+    for panel_index <- 1..3 do
+      %{
+        id: "assignment-#{index}-#{panel_index}",
+        name: "Queue #{index}-#{panel_index}",
+        region: "region-#{rem(index, 9)}",
+        lane: "lane-#{rem(index + panel_index, 31)}",
+        window: "window-#{rem(index + panel_index, 5)}",
+        skill: "skill-#{rem(index + panel_index, 7)}",
+        batch: "batch-#{rem(index * panel_index, 17)}",
+        duplicate_lure?: false
+      }
+    end
+  end
+
+  defp assignment_queue_rows(candidate, 120) do
+    owner = "owner-#{candidate_id(candidate)}"
+
+    [
+      %{
+        id: "queue-shadow",
+        name: "Queue Cobalt",
+        state: "state-ready",
+        region: "region-central",
+        window: "window-3",
+        skill: "skill-runes",
+        owner: owner,
+        secondary_marker?: true
+      },
+      %{
+        id: "queue-cobalt",
+        name: "Queue Cobalt",
+        state: "state-ready",
+        region: "region-central",
+        window: "window-3",
+        skill: "skill-runes",
+        owner: owner,
+        secondary_marker?: false
+      },
+      %{
+        id: "queue-amber",
+        name: "Queue Amber",
+        state: "state-ready",
+        region: "region-central",
+        window: "window-3",
+        skill: "skill-runes",
+        owner: owner,
+        secondary_marker?: false
+      }
+      | assignment_queue_rows(candidate, 90)
+    ]
+  end
+
+  defp assignment_queue_rows(candidate, slot) do
+    owner = "owner-#{candidate_id(candidate)}"
+
+    for offset <- 1..36 do
+      %{
+        id: "queue-#{slot}-#{offset}",
+        name: "Queue #{slot}-#{offset}",
+        state: "state-#{rem(slot + offset, 5)}",
+        region: "region-#{rem(slot + offset, 9)}",
+        window: "window-#{rem(slot + offset, 5)}",
+        skill: "skill-#{rem(slot + offset, 7)}",
+        owner: owner,
+        secondary_marker?: false
+      }
+    end
+  end
+
+  defp candidate_id(%{id: id}), do: id
+  defp candidate_id(nil), do: "wizard-prime"
 end
 
 defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceDoneLive do
@@ -273,7 +514,11 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceDoneLive do
   use Phoenix.LiveView
 
   def mount(params, _session, socket) do
-    {:ok, assign(socket, :candidate, Map.get(params, "candidate", ""))}
+    {:ok,
+     assign(socket,
+       candidate: Map.get(params, "candidate", ""),
+       assignment: Map.get(params, "assignment", "")
+     )}
   end
 
   def render(assigns) do
@@ -281,6 +526,9 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceDoneLive do
     <section id="performance-live-done">
       <h1>Performance flow complete</h1>
       <p data-testid="done-candidate">Candidate carried forward: {@candidate}</p>
+      <p :if={@assignment != ""} data-testid="done-assignment">
+        Assignment carried forward: {@assignment}
+      </p>
     </section>
     """
   end

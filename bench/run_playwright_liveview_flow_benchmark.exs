@@ -12,7 +12,8 @@ defmodule Cerberus.Bench.RunPlaywrightLiveViewFlow do
       {"BASE_URL", Endpoint.url()},
       {"CHROME", System.fetch_env!("CHROME")},
       {"ITERATIONS", Integer.to_string(opts.iterations)},
-      {"WARMUP", Integer.to_string(opts.warmup)}
+      {"WARMUP", Integer.to_string(opts.warmup)},
+      {"SCENARIO", opts.scenario}
     ]
 
     {_, exit_code} =
@@ -38,12 +39,13 @@ defmodule Cerberus.Bench.RunPlaywrightLiveViewFlow do
   defp parse_args(args) do
     {parsed, _rest, _invalid} =
       OptionParser.parse(args,
-        strict: [iterations: :integer, warmup: :integer]
+        strict: [iterations: :integer, warmup: :integer, scenario: :string]
       )
 
     %{
       iterations: parsed[:iterations] || 10,
-      warmup: parsed[:warmup] || 2
+      warmup: parsed[:warmup] || 2,
+      scenario: parsed[:scenario] || "churn"
     }
   end
 end

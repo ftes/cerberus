@@ -14,7 +14,7 @@ defmodule Cerberus.Bench.PlaywrightLiveViewFlow do
       Enum.reduce(1..(opts.warmup + opts.iterations), {session(:browser), []}, fn index, {session, samples} ->
         {microseconds, session} =
           :timer.tc(fn ->
-            PlaywrightPerformanceBenchmark.run_cerberus_flow(session)
+            PlaywrightPerformanceBenchmark.run_cerberus_flow(session, opts.scenario)
           end)
 
         samples =
@@ -29,12 +29,13 @@ defmodule Cerberus.Bench.PlaywrightLiveViewFlow do
 
     metrics = summarize(Enum.reverse(samples))
 
-    IO.puts("runner,iterations,warmup,mean_ms,median_ms,p95_ms")
+    IO.puts("runner,scenario,iterations,warmup,mean_ms,median_ms,p95_ms")
 
     IO.puts(
       Enum.join(
         [
           "cerberus",
+          Atom.to_string(opts.scenario),
           Integer.to_string(opts.iterations),
           Integer.to_string(opts.warmup),
           format_ms(metrics.mean_ms),
@@ -49,14 +50,18 @@ defmodule Cerberus.Bench.PlaywrightLiveViewFlow do
   defp parse_args(args) do
     {parsed, _rest, _invalid} =
       OptionParser.parse(args,
-        strict: [iterations: :integer, warmup: :integer]
+        strict: [iterations: :integer, warmup: :integer, scenario: :string]
       )
 
     %{
       iterations: parsed[:iterations] || 10,
-      warmup: parsed[:warmup] || 2
+      warmup: parsed[:warmup] || 2,
+      scenario: parse_scenario(parsed[:scenario])
     }
   end
+
+  defp parse_scenario("locator_stress"), do: :locator_stress
+  defp parse_scenario(_), do: :churn
 
   defp summarize(samples) do
     sorted = Enum.sort(samples)
