@@ -44,6 +44,14 @@ defmodule Cerberus.ValueAssertionsTest do
         |> refute_value(~l"Missing field"l, "value", timeout: 50)
       end
     end
+
+    test "value assertions can target labeled fixture fields with preset values (#{driver})", context do
+      unquote(driver)
+      |> SharedBrowserSession.driver_session(context)
+      |> visit("/phoenix_test/page/by_value")
+      |> assert_value(label("Wizard", exact: true), "Gandalf")
+      |> refute_value(label("Wizard", exact: true), "Saruman")
+    end
   end
 
   test "browser assert_value retries until the JS value matches", %{shared_browser_session: browser_session} do

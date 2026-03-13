@@ -39,6 +39,7 @@ defmodule Cerberus.MixProject do
       {:ecto_sql, "~> 3.13", optional: true},
       {:postgrex, "~> 0.19", optional: true},
       {:lazy_html, ">= 0.1.0"},
+      {:phoenix_test, "~> 0.10.0", only: :test, runtime: false},
       {:nimble_options, "~> 1.1"},
       {:styler, "~> 1.10", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},

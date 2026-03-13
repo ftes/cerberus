@@ -24,19 +24,25 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
        reviewed_slot: nil,
        assignment_modal_open?: false,
        selected_assignment: nil,
-       step: "start"
+       step: "start",
+       flow_events: [],
+       flow_event_count: 0
      )}
   end
 
-  def handle_params(params, _uri, socket) do
+  def handle_params(params, uri, socket) do
     selected_candidate =
       case Map.get(params, "candidate") do
         nil -> socket.assigns.selected_candidate
         candidate_id -> candidate_by_id(candidate_id)
       end
 
+    flow_path = current_flow_path(socket, uri)
+
     {:noreply,
      assign(socket,
+       flow_path: flow_path,
+       done_path: flow_path <> "/done",
        scenario: Map.get(params, "scenario", socket.assigns.scenario || "churn"),
        selected_candidate: selected_candidate,
        selected_assignment: assignment_by_id(Map.get(params, "assignment")) || socket.assigns.selected_assignment,
@@ -60,7 +66,7 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
         <button type="button" phx-click="open-candidate-modal">Open candidate search</button>
         <button type="button" phx-click="load-results">Load heavy results</button>
         <button
-          :if={@scenario == "locator_stress"}
+          :if={locator_stress_scenario?(@scenario)}
           type="button"
           phx-click="apply-filters"
         >
@@ -80,6 +86,8 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
       </div>
 
       <div data-testid="flow-step">Step: {@step}</div>
+      <div data-testid="flow-event-count">Flow events: {@flow_event_count}</div>
+      <div data-testid="flow-proof">Flow proof: {Enum.join(@flow_events, ">")}</div>
 
       <div
         :if={@candidate_modal_open?}
@@ -143,7 +151,7 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
             </div>
           </div>
 
-          <div :if={@scenario == "locator_stress"} class="assignment-panel-stack">
+          <div :if={locator_stress_scenario?(@scenario)} class="assignment-panel-stack">
             <section
               :for={panel <- card_assignment_panels(index)}
               data-panel-kind="assignment"
@@ -234,54 +242,57 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
   end
 
   def handle_event("open-candidate-modal", _, socket) do
-    Process.send_after(self(), :show_candidate_modal, 60)
+    Process.send_after(self(), :show_candidate_modal, delay_ms(socket, 60))
     {:noreply, socket}
   end
 
   def handle_event("candidate-search", %{"candidate_search" => query}, socket) do
-    Process.send_after(self(), {:candidate_search_results, query}, 80)
+    Process.send_after(self(), {:candidate_search_results, query}, delay_ms(socket, 80))
     {:noreply, assign(socket, :candidate_query, query)}
   end
 
   def handle_event("choose-candidate", %{"id" => id}, socket) do
-    Process.send_after(self(), {:choose_candidate, id}, 70)
+    Process.send_after(self(), {:choose_candidate, id}, delay_ms(socket, 70))
     {:noreply, socket}
   end
 
   def handle_event("load-results", _, socket) do
-    Process.send_after(self(), :load_results, 90)
+    Process.send_after(self(), :load_results, delay_ms(socket, 90))
     {:noreply, socket}
   end
 
   def handle_event("review-card", %{"slot" => slot}, socket) do
     {slot, ""} = Integer.parse(slot)
-    Process.send_after(self(), {:open_review_modal, slot}, 75)
+    Process.send_after(self(), {:open_review_modal, slot}, delay_ms(socket, 75))
     {:noreply, socket}
   end
 
   def handle_event("open-assignment-modal", %{"slot" => slot, "panel" => _panel}, socket) do
     {slot, ""} = Integer.parse(slot)
-    Process.send_after(self(), {:open_assignment_modal, slot}, 85)
+    Process.send_after(self(), {:open_assignment_modal, slot}, delay_ms(socket, 85))
     {:noreply, socket}
   end
 
   def handle_event("choose-assignment", %{"id" => id}, socket) do
-    Process.send_after(self(), {:choose_assignment, id}, 70)
+    Process.send_after(self(), {:choose_assignment, id}, delay_ms(socket, 70))
     {:noreply, socket}
   end
 
   def handle_event("apply-filters", _, socket) do
-    Process.send_after(self(), :patch_filters, 70)
+    Process.send_after(self(), :patch_filters, delay_ms(socket, 70))
     {:noreply, socket}
   end
 
   def handle_event("navigate-done", _, socket) do
-    Process.send_after(self(), :navigate_done, 90)
+    Process.send_after(self(), :navigate_done, delay_ms(socket, 90))
     {:noreply, socket}
   end
 
   def handle_info(:show_candidate_modal, socket) do
-    {:noreply, assign(socket, :candidate_modal_open?, true)}
+    {:noreply,
+     socket
+     |> assign(:candidate_modal_open?, true)
+     |> record_flow_event("candidate-modal-opened")}
   end
 
   def handle_info({:candidate_search_results, query}, socket) do
@@ -292,45 +303,62 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
         filter_candidates(query)
       end
 
-    {:noreply, assign(socket, candidate_query: query, candidate_results: results)}
+    {:noreply,
+     socket
+     |> assign(candidate_query: query, candidate_results: results)
+     |> record_flow_event("candidate-results-loaded")}
   end
 
   def handle_info({:choose_candidate, id}, socket) do
     candidate = candidate_by_id(id)
 
     {:noreply,
-     assign(socket,
+     socket
+     |> assign(
        selected_candidate: candidate,
        candidate_modal_open?: false,
        candidate_results: [],
        review_modal_open?: false,
        reviewed_slot: nil
-     )}
+     )
+     |> record_flow_event("candidate-chosen")}
   end
 
   def handle_info(:load_results, socket) do
-    {:noreply, assign(socket, :rows_loaded?, true)}
+    {:noreply,
+     socket
+     |> assign(:rows_loaded?, true)
+     |> record_flow_event("results-loaded")}
   end
 
   def handle_info({:open_review_modal, slot}, socket) do
-    {:noreply, assign(socket, review_modal_open?: true, reviewed_slot: slot)}
+    {:noreply,
+     socket
+     |> assign(review_modal_open?: true, reviewed_slot: slot)
+     |> record_flow_event("review-opened")}
   end
 
   def handle_info({:open_assignment_modal, slot}, socket) do
-    {:noreply, assign(socket, assignment_modal_open?: true, reviewed_slot: slot)}
+    {:noreply,
+     socket
+     |> assign(assignment_modal_open?: true, reviewed_slot: slot)
+     |> record_flow_event("assignment-modal-opened")}
   end
 
   def handle_info({:choose_assignment, id}, socket) do
     {:noreply,
-     assign(socket,
+     socket
+     |> assign(
        selected_assignment: assignment_by_id(id),
        assignment_modal_open?: false
-     )}
+     )
+     |> record_flow_event("assignment-chosen")}
   end
 
   def handle_info(:patch_filters, socket) do
     candidate = socket.assigns.selected_candidate || candidate_by_id("wizard-prime")
     assignment = socket.assigns.selected_assignment
+    socket = record_flow_event(socket, "filters-patched")
 
     query =
       [
@@ -343,22 +371,27 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
 
     {:noreply,
      push_patch(socket,
-       to: "/phoenix_test/playwright/live/performance?#{query}"
+       to: "#{socket.assigns.flow_path}?#{query}"
      )}
   end
 
   def handle_info(:navigate_done, socket) do
     candidate = socket.assigns.selected_candidate || candidate_by_id("wizard-prime")
     assignment = socket.assigns.selected_assignment
+    socket = record_flow_event(socket, "done-navigated")
 
     query =
-      [{"candidate", candidate.id}]
+      [
+        {"candidate", candidate.id},
+        {"proof", Enum.join(socket.assigns.flow_events, ">")},
+        {"events", Integer.to_string(socket.assigns.flow_event_count)}
+      ]
       |> maybe_put_query("assignment", assignment && assignment.id)
       |> URI.encode_query()
 
     {:noreply,
      push_navigate(socket,
-       to: "/phoenix_test/playwright/live/performance/done?#{query}"
+       to: "#{socket.assigns.done_path}?#{query}"
      )}
   end
 
@@ -372,6 +405,25 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
 
   defp candidate_by_id(id) do
     Enum.find(@candidate_results, &(&1.id == id))
+  end
+
+  defp locator_stress_scenario?(scenario), do: scenario == "locator_stress"
+
+  defp current_flow_path(socket, uri) do
+    case uri do
+      value when is_binary(value) ->
+        case URI.parse(value) do
+          %URI{path: path} when is_binary(path) and path != "" -> path
+          _ -> socket.assigns[:flow_path] || "/phoenix_test/playwright/live/performance"
+        end
+
+      _ ->
+        socket.assigns[:flow_path] || "/phoenix_test/playwright/live/performance"
+    end
+  end
+
+  defp delay_ms(socket, normal_delay) when is_integer(normal_delay) and normal_delay >= 0 do
+    if socket.assigns.scenario == "churn_no_delay", do: 0, else: normal_delay
   end
 
   defp assignment_by_id(nil), do: nil
@@ -506,6 +558,12 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceLive do
 
   defp candidate_id(%{id: id}), do: id
   defp candidate_id(nil), do: "wizard-prime"
+
+  defp record_flow_event(socket, event) when is_binary(event) do
+    socket
+    |> update(:flow_events, &(&1 ++ [event]))
+    |> update(:flow_event_count, &(&1 + 1))
+  end
 end
 
 defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceDoneLive do
@@ -517,7 +575,9 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceDoneLive do
     {:ok,
      assign(socket,
        candidate: Map.get(params, "candidate", ""),
-       assignment: Map.get(params, "assignment", "")
+       assignment: Map.get(params, "assignment", ""),
+       proof: Map.get(params, "proof", ""),
+       events: Map.get(params, "events", "")
      )}
   end
 
@@ -529,6 +589,8 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.PerformanceDoneLive do
       <p :if={@assignment != ""} data-testid="done-assignment">
         Assignment carried forward: {@assignment}
       </p>
+      <p data-testid="done-proof">Flow proof: {@proof}</p>
+      <p data-testid="done-event-count">Flow events: {@events}</p>
     </section>
     """
   end

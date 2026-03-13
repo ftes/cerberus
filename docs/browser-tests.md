@@ -218,6 +218,33 @@ After install, Cerberus automatically discovers local managed-runtime binaries v
 - `tmp/chrome-current`
 - `tmp/chromedriver-current`
 
+## Benchmark Matrix
+
+Run the combined Cerberus-vs-Playwright browser benchmark matrix with:
+
+```bash
+source .envrc
+mix run bench/run_playwright_benchmark_matrix.exs --iterations 3 --warmup 1 --concurrency 14
+```
+
+This runs the full matrix sequentially and prints one CSV with:
+- Cerberus on Chrome and Firefox
+- Playwright on Chromium and Firefox
+- the live driver on Phoenix
+- PhoenixTest on Phoenix
+- `churn`, `churn_no_delay`, and `locator_stress` scenarios
+
+The live and PhoenixTest lanes run through `mix test` internally, so they use the same CSV shape but measure their rounds from inside ExUnit instead of wrapper wall time.
+
+Rows stream as each run completes. If you pass `--out`, the script writes the CSV header immediately and appends each completed row to that file, so partial results survive an interruption or a later row failure. When a row fails under `--out`, details are also written to `<out>.failures.txt`.
+
+Useful filters:
+
+```bash
+mix run bench/run_playwright_benchmark_matrix.exs --browsers chrome,chromium --scenarios churn
+mix run bench/run_playwright_benchmark_matrix.exs --runners cerberus --out tmp/benchmark-matrix.csv
+```
+
 No extra binary-path config is required for normal local runs after installation.
 
 Installed paths are stable per version, for example:
