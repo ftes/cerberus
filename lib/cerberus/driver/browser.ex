@@ -26,6 +26,7 @@ defmodule Cerberus.Driver.Browser do
   @default_ready_timeout_ms 1_500
   @default_ready_quiet_ms 40
   @default_capture_timeout_ms 30_000
+  @startup_retry_sleep_ms 25
   @transient_eval_retry_interval_ms 25
   @value_assertion_poll_interval_ms 50
   @transient_eval_retry_min_budget_ms 3_000
@@ -86,7 +87,7 @@ defmodule Cerberus.Driver.Browser do
       |> Keyword.put(:browser_context_defaults, context_defaults)
 
     {user_context_pid, base_url} =
-      case start_user_context(start_opts) do
+      case start_user_context_with_retry(start_opts) do
         {:ok, user_context_pid} ->
           {user_context_pid, UserContextProcess.base_url(user_context_pid)}
 
@@ -660,6 +661,7 @@ defmodule Cerberus.Driver.Browser do
   defp perform_action(session, state, op, expected, opts, extra_payload \\ %{})
        when is_list(opts) and is_map(extra_payload) do
     timeout_ms = action_timeout_ms(state, opts)
+    pre_action_bidi_event = UserContextProcess.last_bidi_event(state.user_context_pid, state.tab_id)
 
     eval_result =
       eval_json_action_with_transient_retry(state, timeout_ms, fn remaining_timeout_ms ->
@@ -669,7 +671,13 @@ defmodule Cerberus.Driver.Browser do
 
     case eval_result do
       {:ok, result} ->
-        action_perform_result(session, state, op, opts, result)
+        action_perform_result(
+          session,
+          state,
+          op,
+          opts,
+          Map.put(result, "preActionBidiEvent", pre_action_bidi_event)
+        )
 
       {:error, reason, details} ->
         observed = %{action: op, path: current_path_or_nil(state), details: details}
@@ -946,7 +954,7 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp await_action_navigation(session, state, result, opts, fallback_observed, on_success) do
-    maybe_sleep_for_navigation_settle(result)
+    maybe_await_navigation_signal(state, result)
     started_at_ms = System.monotonic_time(:millisecond)
     timeout_ms = action_timeout_ms(state, opts)
 
@@ -1018,11 +1026,35 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp maybe_sleep_for_navigation_settle(%{"awaitReadyGraceMs" => grace_ms}) when is_integer(grace_ms) and grace_ms > 0 do
-    Process.sleep(grace_ms)
+  @navigation_signal_methods [
+    "browsingContext.navigationStarted",
+    "browsingContext.domContentLoaded",
+    "browsingContext.load"
+  ]
+
+  defp maybe_await_navigation_signal(state, %{"awaitReadyGraceMs" => grace_ms} = result)
+       when is_integer(grace_ms) and grace_ms > 0 do
+    baseline_event = Map.get(result, "preActionBidiEvent")
+
+    case UserContextProcess.await_bidi_event(
+           state.user_context_pid,
+           @navigation_signal_methods,
+           baseline_event,
+           grace_ms,
+           state.tab_id
+         ) do
+      {:ok, _event} ->
+        :ok
+
+      {:error, :timeout, _last_event} ->
+        :ok
+
+      {:error, _reason, _details} ->
+        :ok
+    end
   end
 
-  defp maybe_sleep_for_navigation_settle(_result), do: :ok
+  defp maybe_await_navigation_signal(_state, _result), do: :ok
 
   defp action_navigation_observed?(%{"needsAwaitReady" => value}) when is_boolean(value), do: value
   defp action_navigation_observed?(_result), do: false
@@ -2253,6 +2285,45 @@ defmodule Cerberus.Driver.Browser do
         DynamicSupervisor.start_child(supervisor_pid, {UserContextProcess, opts})
     end
   end
+
+  defp start_user_context_with_retry(opts) when is_list(opts) do
+    do_start_user_context_with_retry(opts, outer_startup_retry_attempts(opts))
+  end
+
+  defp do_start_user_context_with_retry(opts, retries_left)
+       when is_list(opts) and is_integer(retries_left) and retries_left >= 0 do
+    case start_user_context(opts) do
+      {:ok, user_context_pid} ->
+        {:ok, user_context_pid}
+
+      {:error, reason} = error ->
+        if retries_left > 0 and start_user_context_retryable?(reason) do
+          Process.sleep(@startup_retry_sleep_ms)
+          do_start_user_context_with_retry(opts, retries_left - 1)
+        else
+          error
+        end
+    end
+  end
+
+  defp outer_startup_retry_attempts(opts) when is_list(opts) do
+    if Runtime.chrome_startup_retries(opts) > 0, do: 1, else: 0
+  end
+
+  defp start_user_context_retryable?(reason) do
+    case start_user_context_reason_details(reason) do
+      {startup_reason, details} ->
+        TransientErrors.retryable?(startup_reason, details) or
+          TransientErrors.transport_closed?(startup_reason, details)
+
+      :error ->
+        false
+    end
+  end
+
+  defp start_user_context_reason_details({:shutdown, {startup_reason, details}}), do: {startup_reason, details}
+  defp start_user_context_reason_details({startup_reason, details}), do: {startup_reason, details}
+  defp start_user_context_reason_details(_reason), do: :error
 
   defp session_bidi_opts(opts) when is_list(opts) do
     opts

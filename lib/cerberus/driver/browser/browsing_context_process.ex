@@ -75,6 +75,22 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     GenServer.call(pid, :last_readiness)
   end
 
+  @spec last_bidi_event(pid()) :: Types.payload() | nil
+  def last_bidi_event(pid) when is_pid(pid) do
+    GenServer.call(pid, :last_bidi_event)
+  end
+
+  @spec await_bidi_event(pid(), [String.t()], Types.payload() | nil, pos_integer()) ::
+          {:ok, Types.payload()} | {:error, :timeout, Types.payload() | nil}
+  def await_bidi_event(pid, methods, baseline_event, timeout_ms)
+      when is_pid(pid) and is_list(methods) and is_integer(timeout_ms) and timeout_ms > 0 do
+    GenServer.call(
+      pid,
+      {:await_bidi_event, methods, baseline_event, timeout_ms},
+      timeout_ms + @call_timeout_padding_ms
+    )
+  end
+
   @spec download_events(pid()) :: [Types.payload()]
   def download_events(pid) when is_pid(pid) do
     GenServer.call(pid, :download_events)
@@ -111,9 +127,11 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
          bidi_opts: bidi_opts,
          slow_mo_ms: slow_mo_ms,
          last_bidi_event: nil,
+         last_bidi_event_sequence: 0,
          last_readiness: %{},
          download_events: [],
          download_waiters: %{},
+         bidi_event_waiters: %{},
          pending_evaluations: %{}
        }}
     else
@@ -132,6 +150,34 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   def handle_call(:last_readiness, _from, state) do
     {:reply, state.last_readiness, state}
+  end
+
+  def handle_call(:last_bidi_event, _from, state) do
+    {:reply, state.last_bidi_event, state}
+  end
+
+  def handle_call({:await_bidi_event, methods, baseline_event, timeout_ms}, from, state) do
+    method_set = MapSet.new(methods)
+    baseline_sequence = bidi_event_sequence(baseline_event)
+
+    case matching_bidi_event(state.last_bidi_event, method_set, baseline_sequence) do
+      %{} = event ->
+        {:reply, {:ok, event}, state}
+
+      nil ->
+        waiter_id = make_ref()
+        timer = Process.send_after(self(), {:bidi_event_waiter_timeout, waiter_id}, timeout_ms)
+
+        bidi_event_waiters =
+          Map.put(state.bidi_event_waiters, waiter_id, %{
+            from: from,
+            timer: timer,
+            method_set: method_set,
+            baseline_sequence: baseline_sequence
+          })
+
+        {:noreply, %{state | bidi_event_waiters: bidi_event_waiters}}
+    end
   end
 
   def handle_call(:download_events, _from, state) do
@@ -223,6 +269,8 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
       when is_binary(method) and is_map(params) do
     event =
       if params["context"] == state.id do
+        sequence = state.last_bidi_event_sequence + 1
+
         %{
           "method" => method,
           "context" => params["context"],
@@ -235,7 +283,8 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
           "accepted" => params["accepted"],
           "userText" => params["userText"],
           "status" => params["status"],
-          "timestampMs" => System.monotonic_time(:millisecond)
+          "timestampMs" => System.monotonic_time(:millisecond),
+          "sequence" => sequence
         }
       end
 
@@ -244,13 +293,21 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
         state = %{
           state
           | last_bidi_event: event,
+            last_bidi_event_sequence: event["sequence"],
             download_events: push_download_event(state.download_events, event)
         }
 
-        {:noreply, resolve_download_waiters(state, event)}
+        state = resolve_download_waiters(state, event)
+        {:noreply, resolve_bidi_event_waiters(state, event)}
 
       is_map(event) ->
-        {:noreply, %{state | last_bidi_event: event}}
+        state = %{
+          state
+          | last_bidi_event: event,
+            last_bidi_event_sequence: event["sequence"]
+        }
+
+        {:noreply, resolve_bidi_event_waiters(state, event)}
 
       true ->
         {:noreply, state}
@@ -265,6 +322,17 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
       {waiter, download_waiters} ->
         GenServer.reply(waiter.from, {:error, :timeout, state.download_events})
         {:noreply, %{state | download_waiters: download_waiters}}
+    end
+  end
+
+  def handle_info({:bidi_event_waiter_timeout, waiter_id}, state) do
+    case Map.pop(state.bidi_event_waiters, waiter_id) do
+      {nil, _waiters} ->
+        {:noreply, state}
+
+      {waiter, bidi_event_waiters} ->
+        GenServer.reply(waiter.from, {:error, :timeout, state.last_bidi_event})
+        {:noreply, %{state | bidi_event_waiters: bidi_event_waiters}}
     end
   end
 
@@ -518,6 +586,37 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
     %{state | download_waiters: Map.new(pending)}
   end
+
+  defp resolve_bidi_event_waiters(%{bidi_event_waiters: waiters} = state, event)
+       when map_size(waiters) == 0 or not is_map(event) do
+    state
+  end
+
+  defp resolve_bidi_event_waiters(%{bidi_event_waiters: waiters} = state, event) do
+    {resolved, pending} =
+      Enum.split_with(waiters, fn {_waiter_id, waiter} ->
+        matching_bidi_event(event, waiter.method_set, waiter.baseline_sequence) != nil
+      end)
+
+    Enum.each(resolved, fn {_waiter_id, waiter} ->
+      Process.cancel_timer(waiter.timer)
+      GenServer.reply(waiter.from, {:ok, event})
+    end)
+
+    %{state | bidi_event_waiters: Map.new(pending)}
+  end
+
+  defp matching_bidi_event(%{"method" => method} = event, %MapSet{} = method_set, baseline_sequence)
+       when is_binary(method) and is_integer(baseline_sequence) do
+    if MapSet.member?(method_set, method) and bidi_event_sequence(event) > baseline_sequence do
+      event
+    end
+  end
+
+  defp matching_bidi_event(_event, _method_set, _baseline_sequence), do: nil
+
+  defp bidi_event_sequence(%{"sequence" => sequence}) when is_integer(sequence), do: sequence
+  defp bidi_event_sequence(_event), do: 0
 
   defp command_call_timeout_ms(timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
     timeout_ms + @call_timeout_padding_ms

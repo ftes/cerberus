@@ -148,6 +148,22 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     GenServer.call(pid, {:last_readiness_tab, tab_id})
   end
 
+  @spec last_bidi_event(pid(), String.t() | nil) :: Types.payload() | nil
+  def last_bidi_event(pid, tab_id) when is_pid(pid) do
+    GenServer.call(pid, {:last_bidi_event_tab, tab_id})
+  end
+
+  @spec await_bidi_event(pid(), [String.t()], Types.payload() | nil, pos_integer(), String.t() | nil) ::
+          {:ok, Types.payload()} | {:error, :timeout, Types.payload() | nil} | {:error, String.t(), map()}
+  def await_bidi_event(pid, methods, baseline_event, timeout_ms, tab_id)
+      when is_pid(pid) and is_list(methods) and is_integer(timeout_ms) and timeout_ms > 0 do
+    GenServer.call(
+      pid,
+      {:await_bidi_event_tab, tab_id, methods, baseline_event, timeout_ms},
+      timeout_ms + @call_timeout_padding_ms
+    )
+  end
+
   @spec download_events(pid()) :: [Types.payload()]
   def download_events(pid) when is_pid(pid) do
     GenServer.call(pid, {:download_events_tab, nil})
@@ -395,6 +411,16 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     end
   end
 
+  def handle_call({:last_bidi_event_tab, tab_id}, _from, state) do
+    case browsing_context_pid(state, tab_id) do
+      {:ok, pid} ->
+        {:reply, BrowsingContextProcess.last_bidi_event(pid), state}
+
+      {:error, _reason, _details} ->
+        {:reply, nil, state}
+    end
+  end
+
   def handle_call({:download_events_tab, tab_id}, _from, state) do
     case browsing_context_pid(state, tab_id) do
       {:ok, pid} ->
@@ -409,6 +435,16 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     case browsing_context_pid(state, tab_id) do
       {:ok, pid} ->
         {:reply, BrowsingContextProcess.await_download(pid, expected_filename, timeout_ms), state}
+
+      {:error, reason, details} ->
+        {:reply, {:error, reason, details}, state}
+    end
+  end
+
+  def handle_call({:await_bidi_event_tab, tab_id, methods, baseline_event, timeout_ms}, _from, state) do
+    case browsing_context_pid(state, tab_id) do
+      {:ok, pid} ->
+        {:reply, BrowsingContextProcess.await_bidi_event(pid, methods, baseline_event, timeout_ms), state}
 
       {:error, reason, details} ->
         {:reply, {:error, reason, details}, state}
@@ -715,12 +751,7 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   end
 
   defp startup_retryable?(reason, details, bidi_opts) when is_list(bidi_opts) do
-    TransientErrors.retryable?(reason, details) or transport_closed?(reason, details)
-  end
-
-  defp transport_closed?(reason, details) do
-    payload = "#{inspect(reason)} #{inspect(details)}"
-    String.contains?(payload, "Mint.TransportError") and String.contains?(payload, "reason: :closed")
+    TransientErrors.retryable?(reason, details) or TransientErrors.transport_closed?(reason, details)
   end
 
   defp start_browsing_context(browsing_context_supervisor, user_context_id, defaults, bidi_opts, extra_opts) do

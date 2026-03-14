@@ -19,6 +19,17 @@ defmodule Cerberus.Driver.Browser.TransientErrorsTest do
     refute TransientErrors.retryable?("browser readiness timeout", %{"reason" => "timeout"})
   end
 
+  test "transport_closed?/2 matches serialized Mint transport close payloads" do
+    assert TransientErrors.transport_closed?("%Mint.TransportError{reason: :closed}", %{
+             "__exception__" => true,
+             "reason" => :closed
+           })
+
+    refute TransientErrors.transport_closed?("webdriver session request failed", %{
+             "message" => "session not created"
+           })
+  end
+
   test "recover_tab_id/3 returns recovered tab id when available and falls back otherwise" do
     current_tab_id = "original-tab"
     user_context_pid = self()

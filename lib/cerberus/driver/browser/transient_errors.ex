@@ -26,6 +26,12 @@ defmodule Cerberus.Driver.Browser.TransientErrors do
       stale_script_evaluate_timeout?(payload)
   end
 
+  @spec transport_closed?(term(), term()) :: boolean()
+  def transport_closed?(reason, details) do
+    payload = "#{stringify(reason)} #{stringify(details)}"
+    String.contains?(payload, "Mint.TransportError") and String.contains?(payload, "reason: :closed")
+  end
+
   @spec recover_tab_id(pid(), String.t() | nil) :: String.t() | nil
   def recover_tab_id(user_context_pid, current_tab_id) when is_pid(user_context_pid) do
     recover_tab_id(user_context_pid, current_tab_id, &UserContextProcess.recover_active_tab/2)
