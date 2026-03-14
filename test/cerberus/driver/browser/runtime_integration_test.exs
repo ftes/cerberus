@@ -36,8 +36,8 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
   test "watchdog cleans up chromedriver and chrome when the runtime VM exits abruptly", %{
     tmp_dir: _tmp_dir
   } do
-    chrome_binary = configured_binary!("CHROME")
-    chromedriver_binary = configured_binary!("CHROMEDRIVER")
+    chrome_binary = configured_binary!("CHROME", :chrome_binary, "chrome-current")
+    chromedriver_binary = configured_binary!("CHROMEDRIVER", :chromedriver_binary, "chromedriver-current")
 
     {port, os_pid} =
       start_runtime_subprocess!("""
@@ -245,20 +245,48 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
     end
   end
 
-  defp configured_binary!(env_name) when is_binary(env_name) do
-    case System.get_env(env_name) do
+  defp configured_binary!(env_name, config_key, stable_name)
+       when is_binary(env_name) and is_atom(config_key) and is_binary(stable_name) do
+    binary =
+      first_existing_path([
+        System.get_env(env_name),
+        Application.get_env(:cerberus, :browser, [])[config_key],
+        stable_binary_path(stable_name)
+      ])
+
+    if is_binary(binary) do
+      binary
+    else
+      flunk(
+        "expected #{env_name}, :cerberus browser #{inspect(config_key)}, or #{stable_name} to point to an installed browser binary"
+      )
+    end
+  end
+
+  defp first_existing_path(paths) when is_list(paths) do
+    Enum.find_value(paths, fn
       path when is_binary(path) and path != "" ->
         path = Path.expand(path)
-
-        if File.exists?(path) do
-          path
-        else
-          flunk("expected #{env_name} to point to an installed browser binary")
-        end
+        if File.exists?(path), do: resolve_existing_path(path)
 
       _ ->
-        flunk("expected #{env_name} to point to an installed browser binary")
+        nil
+    end)
+  end
+
+  defp resolve_existing_path(path) when is_binary(path) do
+    case :file.read_link_all(String.to_charlist(path)) do
+      {:ok, resolved} ->
+        resolved = List.to_string(resolved)
+        if File.exists?(resolved), do: resolved, else: path
+
+      _ ->
+        path
     end
+  end
+
+  defp stable_binary_path(name) when is_binary(name) do
+    Path.expand(Path.join("tmp", name))
   end
 
   defp process_pid(command_path) do
