@@ -22,12 +22,12 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
              Runtime.web_socket_url(browser_name: :firefox, firefox_binary: fake_firefox)
 
     assert web_socket_url =~ "ws://127.0.0.1:"
-    assert_process_running(fake_firefox)
+    fake_firefox_pid = assert_process_running(fake_firefox)
 
     GenServer.stop(Runtime, :shutdown, 5_000)
 
     assert_receive {:DOWN, ^runtime_ref, :process, ^runtime_pid, :shutdown}, 5_000
-    assert_process_stopped(fake_firefox)
+    assert_process_stopped(fake_firefox_pid, fake_firefox)
     assert_runtime_restarted(runtime_pid)
   end
 
@@ -65,14 +65,14 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
 
     await_runtime_ready!(port)
 
-    assert_process_running(chromedriver_binary)
-    assert_process_running(chrome_binary)
+    chromedriver_pid = assert_process_running(chromedriver_binary)
+    chrome_pid = assert_process_running(chrome_binary)
 
     kill_os_pid(os_pid, "KILL")
     await_subprocess_exit!(port)
 
-    assert_process_stopped(chromedriver_binary)
-    assert_process_stopped(chrome_binary)
+    assert_process_stopped(chromedriver_pid, chromedriver_binary)
+    assert_process_stopped(chrome_pid, chrome_binary)
   end
 
   @tag :tmp_dir
@@ -82,27 +82,31 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
     File.cp!(Path.expand("../../../support/bin/fake_firefox.sh", __DIR__), fake_firefox)
     File.chmod!(fake_firefox, 0o755)
 
+    {port, os_pid} =
+      start_runtime_subprocess!("""
+      alias Cerberus.Driver.Browser.Runtime
+
+      {:ok, _} = Runtime.start_link(base_url: "http://127.0.0.1")
+      {:ok, _url} = Runtime.web_socket_url(browser_name: :firefox, firefox_binary: #{inspect(fake_firefox)})
+
+      IO.puts("RUNTIME_READY")
+      Process.sleep(:infinity)
+      """)
+
     on_exit(fn ->
+      kill_os_pid(os_pid, "KILL")
       kill_matching_processes(fake_firefox)
+      close_port_safe(port)
     end)
 
-    script = """
-    alias Cerberus.Driver.Browser.Runtime
+    await_runtime_ready!(port)
 
-    {:ok, _} = Runtime.start_link(base_url: "http://127.0.0.1")
-    {:ok, _url} = Runtime.web_socket_url(browser_name: :firefox, firefox_binary: #{inspect(fake_firefox)})
-    Process.sleep(100)
-    System.halt(0)
-    """
+    fake_firefox_pid = assert_process_running(fake_firefox)
 
-    assert {_, 0} =
-             System.cmd("mix", ["run", "--no-compile", "-e", script],
-               cd: File.cwd!(),
-               env: [{"MIX_ENV", "test"}],
-               stderr_to_stdout: true
-             )
+    kill_os_pid(os_pid, "KILL")
+    await_subprocess_exit!(port)
 
-    assert_process_stopped(fake_firefox)
+    assert_process_stopped(fake_firefox_pid, fake_firefox)
   end
 
   defp restart_runtime! do
@@ -154,11 +158,13 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
   defp assert_process_running(command_path, attempts \\ 50)
 
   defp assert_process_running(command_path, attempts) when attempts > 0 do
-    if process_running?(command_path) do
-      :ok
-    else
-      Process.sleep(100)
-      assert_process_running(command_path, attempts - 1)
+    case process_pid(command_path) do
+      pid when is_integer(pid) and pid > 0 ->
+        pid
+
+      _ ->
+        Process.sleep(100)
+        assert_process_running(command_path, attempts - 1)
     end
   end
 
@@ -166,31 +172,32 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
     flunk("expected process to be running for #{command_path}")
   end
 
-  defp assert_process_stopped(command_path, attempts \\ 50)
+  defp assert_process_stopped(process_pid, label, attempts \\ 50)
 
-  defp assert_process_stopped(command_path, attempts) when attempts > 0 do
-    if process_running?(command_path) do
+  defp assert_process_stopped(process_pid, label, attempts)
+       when is_integer(process_pid) and process_pid > 0 and attempts > 0 do
+    if pid_alive?(process_pid) do
       Process.sleep(100)
-      assert_process_stopped(command_path, attempts - 1)
+      assert_process_stopped(process_pid, label, attempts - 1)
     else
       :ok
     end
   end
 
-  defp assert_process_stopped(command_path, 0) do
-    flunk("expected process to stop for #{command_path}")
+  defp assert_process_stopped(_process_pid, label, 0) do
+    flunk("expected process to stop for #{label}")
   end
 
   defp start_runtime_subprocess!(script) when is_binary(script) do
-    mix = System.find_executable("mix") || flunk("expected mix executable in PATH")
+    elixir = System.find_executable("elixir") || flunk("expected elixir executable in PATH")
 
     port =
-      Port.open({:spawn_executable, mix}, [
+      Port.open({:spawn_executable, elixir}, [
         :binary,
         :exit_status,
         :hide,
         :stderr_to_stdout,
-        args: ["run", "--no-compile", "-e", script]
+        args: ["-S", "mix", "run", "--no-compile", "-e", script]
       ])
 
     os_pid =
@@ -254,18 +261,25 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
     end
   end
 
-  defp process_running?(command_path) do
+  defp process_pid(command_path) do
     command_path
     |> command_path_variants()
-    |> Enum.any?(fn path ->
+    |> Enum.find_value(fn path ->
       case System.cmd("pgrep", ["-fal", path], stderr_to_stdout: true) do
         {output, 0} ->
           output
           |> String.split("\n", trim: true)
-          |> Enum.any?(&String.contains?(&1, path))
+          |> Enum.find_value(fn line ->
+            if String.contains?(line, path) do
+              line
+              |> String.split(~r/\s+/, parts: 2, trim: true)
+              |> List.first()
+              |> parse_positive_integer()
+            end
+          end)
 
         _ ->
-          false
+          nil
       end
     end)
   end
@@ -283,7 +297,7 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
   defp command_path_variants(command_path) when is_binary(command_path) do
     expanded = Path.expand(command_path)
 
-    [expanded]
+    Enum.uniq([expanded | symlink_target_variants(expanded)])
   end
 
   defp kill_os_pid(os_pid, signal) when is_integer(os_pid) and os_pid > 0 do
@@ -296,5 +310,33 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
     :ok
   rescue
     _ -> :ok
+  end
+
+  defp pid_alive?(process_pid) when is_integer(process_pid) and process_pid > 0 do
+    match?({_output, 0}, System.cmd("kill", ["-0", Integer.to_string(process_pid)], stderr_to_stdout: true))
+  end
+
+  defp parse_positive_integer(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {integer, ""} when integer > 0 -> integer
+      _ -> nil
+    end
+  end
+
+  defp symlink_target_variants(path) when is_binary(path) do
+    case File.read_link(path) do
+      {:ok, target} ->
+        resolved =
+          if Path.type(target) == :absolute do
+            target
+          else
+            Path.expand(target, Path.dirname(path))
+          end
+
+        [resolved | symlink_target_variants(resolved)]
+
+      _ ->
+        []
+    end
   end
 end
