@@ -3,6 +3,8 @@ defmodule Cerberus.ExplicitBrowserTest do
 
   import Cerberus
 
+  alias Cerberus.Driver.Browser.Runtime
+
   test "browser session runs as expected" do
     session =
       :browser
@@ -13,11 +15,16 @@ defmodule Cerberus.ExplicitBrowserTest do
     assert session.tab_id
   end
 
-  test "browser session uses the chrome runtime" do
+  test "browser session uses the configured runtime" do
+    expected_runtime =
+      []
+      |> Runtime.browser_name()
+      |> browser_user_agent_fragment()
+
     :browser
     |> session()
     |> Cerberus.Browser.with_evaluate_js("navigator.userAgent", fn user_agent ->
-      assert user_agent =~ "Chrome"
+      assert user_agent =~ expected_runtime
     end)
   end
 
@@ -33,4 +40,7 @@ defmodule Cerberus.ExplicitBrowserTest do
 
     assert elapsed_ms >= 100
   end
+
+  defp browser_user_agent_fragment(:chrome), do: "Chrome"
+  defp browser_user_agent_fragment(:firefox), do: "Firefox"
 end

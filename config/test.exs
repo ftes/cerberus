@@ -3,6 +3,18 @@ import Config
 alias Cerberus.Fixtures.Endpoint
 alias Cerberus.Fixtures.Repo
 
+browser_name =
+  case System.get_env("CERBERUS_BROWSER_NAME") do
+    nil ->
+      :chrome
+
+    value when is_binary(value) ->
+      case value |> String.trim() |> String.downcase() do
+        "chrome" -> :chrome
+        "firefox" -> :firefox
+      end
+  end
+
 config :cerberus, Endpoint,
   server: true,
   http: [port: System.get_env("PORT", "4002")],
@@ -23,6 +35,7 @@ config :cerberus, Repo,
 
 config :cerberus,
   browser: [
+    browser_name: browser_name,
     headless: String.downcase(System.get_env("HEADLESS", "true")) not in ["0", "false", "no", "off"],
     chrome_args: ["--disable-setuid-sandbox", "--disable-dev-shm-usage"]
   ],

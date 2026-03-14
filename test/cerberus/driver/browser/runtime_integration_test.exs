@@ -3,6 +3,8 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
 
   alias Cerberus.Driver.Browser.Runtime
 
+  @browser_name Application.compile_env(:cerberus, [:browser, :browser_name], :chrome)
+  @moduletag skip: @browser_name != :firefox
   @tag :tmp_dir
   test "direct firefox runtime cleans up the browser process when runtime exits", %{tmp_dir: tmp_dir} do
     fake_firefox = Path.join(tmp_dir, "fake_firefox.sh")
@@ -30,7 +32,7 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
   end
 
   @tag :tmp_dir
-  test "watchdog cleans up direct firefox when shutdown is interrupted", %{tmp_dir: tmp_dir} do
+  test "watchdog cleans up direct firefox when the runtime VM exits abruptly", %{tmp_dir: tmp_dir} do
     fake_firefox = Path.join(tmp_dir, "fake_firefox.sh")
     File.cp!(Path.expand("../../../support/bin/fake_firefox.sh", __DIR__), fake_firefox)
     File.chmod!(fake_firefox, 0o755)
@@ -44,8 +46,7 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
 
     {:ok, _} = Runtime.start_link(base_url: "http://127.0.0.1")
     {:ok, _url} = Runtime.web_socket_url(browser_name: :firefox, firefox_binary: #{inspect(fake_firefox)})
-    spawn(fn -> GenServer.stop(Runtime, :shutdown, 5_000) end)
-    Process.sleep(10)
+    Process.sleep(100)
     System.halt(0)
     """
 

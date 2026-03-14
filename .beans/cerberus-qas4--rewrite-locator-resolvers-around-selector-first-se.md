@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-10T08:26:35Z
-updated_at: 2026-03-14T16:48:05Z
+updated_at: 2026-03-14T17:20:40Z
 ---
 
 Rewrite browser and LazyHTML locator resolution from scratch around a selector-first, narrow-resolution model guided by Playwright. Start by removing the temporary live label fast path, then rebuild static and live resolution, broaden browser coverage carefully, and enable parity tests incrementally while keeping complexity minimal.
@@ -59,3 +59,15 @@ Rewrite browser and LazyHTML locator resolution from scratch around a selector-f
 - refactored the new shared round-match helpers to clear Credo and Dialyzer, including removing dead browser assertion-payload visibility fallback and normalizing round-result helpers
 - verified the new Node/JSDOM round-contract runner locally after npm ci and wired GitHub Actions CI to install Node 24 plus npm deps before running mix run bench/run_match_round_contract.exs
 - documented the JS contract runner in docs/browser-tests.md so local setup matches CI expectations
+
+## Notes
+- verified the stable tree again after reverting the lazy-refresh experiments: full suite passed at 631 tests, 0 failures, and the live vs phoenix_test locator_stress benchmark at 1/0/14 was about 8274ms vs 3497ms
+- tried two versions of PhoenixTest-style lazy live click refresh that kept tree snapshots stale until the next operation; both looked promising on raw round time at moments, but both broke the concurrent locator_stress patch/assert_path step because pending live patch state was not integrated robustly enough, so both experiments were reverted
+- takeaway: the next viable direction is a more explicit separation of stale DOM state versus pending patch/navigation state, rather than a partial lazy-refresh shortcut bolted onto the current session model
+
+## Notes
+- ran a cheap benchmark-only PhoenixTest-style live-session experiment behind an env flag that stopped eagerly refreshing the live document after successful actions and instead tried to refresh on the next DOM-dependent operation
+- after fixing two compatibility gaps that the experiment surfaced (trigger-action scanning on nil documents and within/3 requiring a materialized document), the focused live slice passed, but the benchmark regressed badly at 1/0/14 versus the stable baseline
+- control rows were: live churn 2530.396ms, live churn_no_delay 1440.684ms, live locator_stress 8947.378ms, phoenix_test churn 1591.786ms, phoenix_test churn_no_delay 1429.295ms, phoenix_test locator_stress 3907.318ms
+- experimental rows were: live churn 2534.743ms, live churn_no_delay 2211.771ms, live locator_stress 11903.356ms, phoenix_test churn 1705.456ms, phoenix_test churn_no_delay 1589.332ms, phoenix_test locator_stress 3904.882ms
+- conclusion: copying PhoenixTest laziness onto the current Cerberus live session model is not enough and currently makes throughput worse; the remaining gap is more likely in the retry/assertion orchestration and session-state shape than in the mere fact that Cerberus refreshes its live tree eagerly
