@@ -7,10 +7,12 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   alias Cerberus.Driver.Browser.BrowsingContextProcess
   alias Cerberus.Driver.Browser.BrowsingContextSupervisor
   alias Cerberus.Driver.Browser.Runtime
+  alias Cerberus.Driver.Browser.TransientErrors
   alias Cerberus.Driver.Browser.Types
 
   @popup_poll_ms 25
   @call_timeout_padding_ms 5_000
+  @startup_retry_sleep_ms 25
 
   @spec child_spec(keyword()) :: Supervisor.child_spec()
   def child_spec(opts) do
@@ -197,36 +199,10 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     browser_context_defaults =
       Keyword.get(opts, :browser_context_defaults, %{viewport: nil, user_agent: nil, init_scripts: [], popup_mode: :allow})
 
-    with {:ok, browsing_context_supervisor} <- BrowsingContextSupervisor.start_link(),
-         {:ok, user_context_id} <- create_user_context(bidi_opts),
-         :ok <- configure_user_context_defaults(user_context_id, browser_context_defaults, bidi_opts),
-         {:ok, browsing_context_pid} <-
-           start_browsing_context(
-             browsing_context_supervisor,
-             user_context_id,
-             browser_context_defaults,
-             bidi_opts,
-             slow_mo_ms: Runtime.slow_mo_ms(bidi_opts)
-           ) do
-      {:ok, first_tab_id, browsing_contexts} =
-        add_browsing_context(%{}, browsing_context_pid)
+    case initialize_state(owner, owner_ref, bidi_opts, browser_context_defaults, startup_retry_attempts(bidi_opts)) do
+      {:ok, state} ->
+        {:ok, state}
 
-      {:ok,
-       %{
-         owner: owner,
-         owner_ref: owner_ref,
-         base_url: Runtime.base_url(),
-         user_context_id: user_context_id,
-         browsing_context_supervisor: browsing_context_supervisor,
-         browser_context_defaults: browser_context_defaults,
-         bidi_opts: bidi_opts,
-         browsing_contexts: browsing_contexts,
-         active_browsing_context_id: first_tab_id,
-         known_context_ids: MapSet.new([first_tab_id]),
-         popup_waiters: %{},
-         pending_evaluations: %{}
-       }}
-    else
       {:error, reason} ->
         {:stop, reason}
 
@@ -576,6 +552,176 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   end
 
   defp maybe_remove_user_context(_state), do: :ok
+
+  defp initialize_state(owner, owner_ref, bidi_opts, browser_context_defaults, retries_left)
+       when is_pid(owner) and is_reference(owner_ref) and is_list(bidi_opts) and is_integer(retries_left) and
+              retries_left >= 0 do
+    case do_initialize_state(owner, owner_ref, bidi_opts, browser_context_defaults) do
+      {:ok, state} ->
+        {:ok, state}
+
+      {:error, reason, details, cleanup} ->
+        retry_failed_startup(
+          owner,
+          owner_ref,
+          bidi_opts,
+          browser_context_defaults,
+          retries_left,
+          reason,
+          details,
+          cleanup
+        )
+
+      {:error, reason, cleanup} ->
+        cleanup_failed_startup(cleanup)
+        {:error, reason}
+    end
+  end
+
+  defp do_initialize_state(owner, owner_ref, bidi_opts, browser_context_defaults)
+       when is_pid(owner) and is_reference(owner_ref) and is_list(bidi_opts) do
+    cleanup = %{browsing_context_supervisor: nil, user_context_id: nil, bidi_opts: bidi_opts}
+
+    with {:ok, browsing_context_supervisor, cleanup_after_supervisor} <-
+           start_browsing_context_supervisor(cleanup),
+         {:ok, user_context_id, cleanup_after_user_context} <-
+           create_user_context_step(cleanup_after_supervisor),
+         {:ok, browsing_context_pid} <-
+           configure_and_start_initial_browsing_context(
+             cleanup_after_user_context,
+             browsing_context_supervisor,
+             user_context_id,
+             browser_context_defaults,
+             bidi_opts
+           ) do
+      {:ok, first_tab_id, browsing_contexts} =
+        add_browsing_context(%{}, browsing_context_pid)
+
+      {:ok,
+       build_initialized_state(
+         owner,
+         owner_ref,
+         bidi_opts,
+         browser_context_defaults,
+         browsing_context_supervisor,
+         user_context_id,
+         first_tab_id,
+         browsing_contexts
+       )}
+    else
+      {:error, reason, details, cleanup} ->
+        {:error, reason, details, cleanup}
+
+      {:error, reason, cleanup} ->
+        {:error, inspect(reason), cleanup}
+    end
+  end
+
+  defp retry_failed_startup(owner, owner_ref, bidi_opts, browser_context_defaults, retries_left, reason, details, cleanup) do
+    cleanup_failed_startup(cleanup)
+
+    if retries_left > 0 and startup_retryable?(reason, details, bidi_opts) do
+      Process.sleep(@startup_retry_sleep_ms)
+      initialize_state(owner, owner_ref, bidi_opts, browser_context_defaults, retries_left - 1)
+    else
+      {:error, reason, details}
+    end
+  end
+
+  defp start_browsing_context_supervisor(cleanup) when is_map(cleanup) do
+    case BrowsingContextSupervisor.start_link() do
+      {:ok, browsing_context_supervisor} ->
+        {:ok, browsing_context_supervisor, %{cleanup | browsing_context_supervisor: browsing_context_supervisor}}
+
+      {:error, reason} ->
+        {:error, reason, cleanup}
+    end
+  end
+
+  defp create_user_context_step(cleanup) when is_map(cleanup) do
+    case create_user_context(cleanup.bidi_opts) do
+      {:ok, user_context_id} ->
+        {:ok, user_context_id, %{cleanup | user_context_id: user_context_id}}
+
+      {:error, reason, details} ->
+        {:error, reason, details, cleanup}
+    end
+  end
+
+  defp configure_and_start_initial_browsing_context(
+         cleanup,
+         browsing_context_supervisor,
+         user_context_id,
+         browser_context_defaults,
+         bidi_opts
+       ) do
+    with :ok <- configure_user_context_defaults(user_context_id, browser_context_defaults, bidi_opts),
+         {:ok, browsing_context_pid} <-
+           start_browsing_context(
+             browsing_context_supervisor,
+             user_context_id,
+             browser_context_defaults,
+             bidi_opts,
+             slow_mo_ms: Runtime.slow_mo_ms(bidi_opts)
+           ) do
+      {:ok, browsing_context_pid}
+    else
+      {:error, reason, details} ->
+        {:error, reason, details, cleanup}
+
+      {:error, reason} ->
+        {:error, reason, cleanup}
+    end
+  end
+
+  defp build_initialized_state(
+         owner,
+         owner_ref,
+         bidi_opts,
+         browser_context_defaults,
+         browsing_context_supervisor,
+         user_context_id,
+         first_tab_id,
+         browsing_contexts
+       ) do
+    %{
+      owner: owner,
+      owner_ref: owner_ref,
+      base_url: Runtime.base_url(),
+      user_context_id: user_context_id,
+      browsing_context_supervisor: browsing_context_supervisor,
+      browser_context_defaults: browser_context_defaults,
+      bidi_opts: bidi_opts,
+      browsing_contexts: browsing_contexts,
+      active_browsing_context_id: first_tab_id,
+      known_context_ids: MapSet.new([first_tab_id]),
+      popup_waiters: %{},
+      pending_evaluations: %{}
+    }
+  end
+
+  defp cleanup_failed_startup(cleanup) when is_map(cleanup) do
+    _ = maybe_remove_user_context(cleanup)
+
+    if is_pid(cleanup.browsing_context_supervisor) and Process.alive?(cleanup.browsing_context_supervisor) do
+      _ = DynamicSupervisor.stop(cleanup.browsing_context_supervisor)
+    end
+
+    :ok
+  end
+
+  defp startup_retry_attempts(bidi_opts) when is_list(bidi_opts) do
+    Runtime.chrome_startup_retries(bidi_opts)
+  end
+
+  defp startup_retryable?(reason, details, bidi_opts) when is_list(bidi_opts) do
+    TransientErrors.retryable?(reason, details) or transport_closed?(reason, details)
+  end
+
+  defp transport_closed?(reason, details) do
+    payload = "#{inspect(reason)} #{inspect(details)}"
+    String.contains?(payload, "Mint.TransportError") and String.contains?(payload, "reason: :closed")
+  end
 
   defp start_browsing_context(browsing_context_supervisor, user_context_id, defaults, bidi_opts, extra_opts) do
     DynamicSupervisor.start_child(
