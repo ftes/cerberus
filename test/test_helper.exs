@@ -23,7 +23,7 @@ AuthStore.reset!()
 
 ExUnit.after_suite(fn _results ->
   if Cerberus.Profiling.enabled?() do
-    Cerberus.Profiling.dump_summary()
+    Cerberus.Profiling.dump_reports()
   end
 
   case Process.whereis(Cerberus.TestSupportSupervisor) do

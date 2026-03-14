@@ -487,11 +487,7 @@ defmodule Cerberus.Html do
 
   defp scope_target_candidate_matches?(root_node, node, %Locator{} = locator, hidden_nodes) do
     assert_deadline!()
-    opts = locator.opts
-
-    node_matches_within_locator?(root_node, node, locator) and
-      node_matches_locator_filters?(node, opts) and
-      matches_scope_target_state_filters?(root_node, node, hidden_nodes, opts)
+    locator_matches_node?(root_node, node, locator, hidden_nodes)
   end
 
   defp maybe_filter_scope_target_closest_candidates(candidates, _root_node, nil, _hidden_nodes), do: candidates
@@ -596,49 +592,52 @@ defmodule Cerberus.Html do
     end
   end
 
+  defp locator_for_candidate_filter(%Locator{kind: :css, value: value} = locator, query_selector)
+       when is_binary(query_selector) and value == query_selector do
+    %{locator | value: nil}
+  end
+
   defp locator_for_candidate_filter(locator, _query_selector), do: locator
 
-  defp resolve_role_locator(%Locator{kind: :role} = locator) do
-    %{locator | kind: Locator.resolved_kind(locator)}
+  defp locator_matches_node?(root_node, node, %Locator{} = locator, hidden_nodes) do
+    locator_matches_node_kind?(root_node, node, locator, hidden_nodes) and
+      locator_node_matches_common_opts?(root_node, node, locator.opts, hidden_nodes)
   end
 
-  defp resolve_role_locator(locator), do: locator
-
-  defp node_matches_within_locator?(root_node, node, %Locator{kind: :and, value: members}) when is_list(members) do
+  defp locator_matches_node_kind?(root_node, node, %Locator{kind: :and, value: members}, hidden_nodes)
+       when is_list(members) do
     assert_deadline!()
-    Enum.all?(members, &node_matches_within_locator?(root_node, node, &1))
+    Enum.all?(members, &locator_matches_node?(root_node, node, &1, hidden_nodes))
   end
 
-  defp node_matches_within_locator?(root_node, node, %Locator{kind: :or, value: members}) when is_list(members) do
+  defp locator_matches_node_kind?(root_node, node, %Locator{kind: :or, value: members}, hidden_nodes)
+       when is_list(members) do
     assert_deadline!()
-    Enum.any?(members, &node_matches_within_locator?(root_node, node, &1))
+    Enum.any?(members, &locator_matches_node?(root_node, node, &1, hidden_nodes))
   end
 
-  defp node_matches_within_locator?(root_node, node, %Locator{kind: :scope, value: members}) when is_list(members) do
+  defp locator_matches_node_kind?(root_node, node, %Locator{kind: :scope, value: members}, hidden_nodes)
+       when is_list(members) do
     assert_deadline!()
-    node_matches_scope_locator?(root_node, node, members)
+    node_matches_scope_locator?(root_node, node, members, hidden_nodes)
   end
 
-  defp node_matches_within_locator?(root_node, node, %Locator{kind: :not, value: [member]}) do
+  defp locator_matches_node_kind?(root_node, node, %Locator{kind: :not, value: [member]}, hidden_nodes) do
     assert_deadline!()
-    not node_matches_within_locator?(root_node, node, member)
+    not locator_matches_node?(root_node, node, member, hidden_nodes)
   end
 
-  defp node_matches_within_locator?(root_node, node, %Locator{kind: :css, value: value}) do
+  defp locator_matches_node_kind?(root_node, node, %Locator{kind: :css, value: value}, _hidden_nodes) do
     assert_deadline!()
-
-    root_node
-    |> safe_query(value)
-    |> Enum.any?(&same_node?(&1, node))
+    node_matches_selector?(root_node, node, value)
   end
 
-  defp node_matches_within_locator?(root_node, node, %Locator{kind: :label} = locator) do
+  defp locator_matches_node_kind?(root_node, node, %Locator{kind: :label} = locator, _hidden_nodes) do
     assert_deadline!()
-
     form_control_node?(node) and field_label_matches?(root_node, node, locator.value, locator.opts)
   end
 
-  defp node_matches_within_locator?(root_node, node, %Locator{kind: :role} = locator) do
+  defp locator_matches_node_kind?(root_node, node, %Locator{kind: :role} = locator, _hidden_nodes) do
     assert_deadline!()
 
     root_node
@@ -646,50 +645,53 @@ defmodule Cerberus.Html do
     |> Enum.any?(&Query.match_text?(&1, locator.value, locator.opts))
   end
 
-  defp node_matches_within_locator?(root_node, node, %Locator{} = locator) do
+  defp locator_matches_node_kind?(root_node, node, %Locator{} = locator, _hidden_nodes) do
     assert_deadline!()
-    resolved_locator = resolve_role_locator(locator)
-    value = within_locator_match_value(root_node, node, resolved_locator)
-
-    is_binary(value) and Query.match_text?(value, resolved_locator.value, resolved_locator.opts)
+    value = locator_match_value(root_node, node, locator)
+    is_binary(value) and Query.match_text?(value, locator.value, locator.opts)
   end
 
-  defp within_locator_match_value(_root_node, node, %Locator{kind: :text}), do: node_text(node)
-  defp within_locator_match_value(root_node, node, %Locator{kind: :link}), do: link_match_value(root_node, node, :link)
+  defp locator_node_matches_common_opts?(root_node, node, opts, hidden_nodes) when is_list(opts) do
+    node_matches_selector?(root_node, node, selector_opt(opts)) and
+      node_matches_locator_filters?(node, opts) and
+      matches_scope_target_state_filters?(root_node, node, hidden_nodes, opts)
+  end
 
-  defp within_locator_match_value(root_node, node, %Locator{kind: :button}),
-    do: button_match_value(root_node, node, :button)
+  defp locator_match_value(_root_node, node, %Locator{kind: :text}), do: node_text(node)
+  defp locator_match_value(root_node, node, %Locator{kind: :link}), do: link_match_value(root_node, node, :link)
+  defp locator_match_value(root_node, node, %Locator{kind: :button}), do: button_match_value(root_node, node, :button)
 
-  defp within_locator_match_value(root_node, node, %Locator{kind: :label}) do
+  defp locator_match_value(root_node, node, %Locator{kind: :label}) do
     if form_control_node?(node) do
       field_label_for_node(root_node, node)
     end
   end
 
-  defp within_locator_match_value(_root_node, node, %Locator{kind: :placeholder}), do: attr(node, "placeholder") || ""
-  defp within_locator_match_value(_root_node, node, %Locator{kind: :title}), do: attr(node, "title") || ""
-  defp within_locator_match_value(root_node, node, %Locator{kind: :alt}), do: node_alt_text(root_node, node)
-  defp within_locator_match_value(_root_node, node, %Locator{kind: :testid}), do: attr(node, "data-testid") || ""
-  defp within_locator_match_value(_root_node, _node, _locator), do: nil
+  defp locator_match_value(_root_node, node, %Locator{kind: :placeholder}), do: attr(node, "placeholder") || ""
+  defp locator_match_value(_root_node, node, %Locator{kind: :title}), do: attr(node, "title") || ""
+  defp locator_match_value(root_node, node, %Locator{kind: :alt}), do: node_alt_text(root_node, node)
+  defp locator_match_value(_root_node, node, %Locator{kind: :testid}), do: attr(node, "data-testid") || ""
+  defp locator_match_value(_root_node, _node, _locator), do: nil
 
-  defp node_matches_scope_locator?(_root_node, _node, []), do: false
-  defp node_matches_scope_locator?(_root_node, _node, [_single]), do: false
+  defp node_matches_scope_locator?(_root_node, _node, [], _hidden_nodes), do: false
+  defp node_matches_scope_locator?(_root_node, _node, [_single], _hidden_nodes), do: false
 
-  defp node_matches_scope_locator?(root_node, node, members) when is_list(members) do
+  defp node_matches_scope_locator?(root_node, node, members, hidden_nodes) when is_list(members) do
     scope_locator = %Locator{kind: :scope, value: Enum.drop(members, -1), opts: []}
     target_locator = List.last(members)
 
-    node_matches_within_locator?(root_node, node, target_locator) and
-      node_has_scope_chain?(root_node, node, scope_locator)
+    locator_matches_node?(root_node, node, target_locator, hidden_nodes) and
+      node_has_scope_chain?(root_node, node, scope_locator, hidden_nodes)
   end
 
-  defp node_has_scope_chain?(root_node, node, %Locator{kind: :scope, value: members}) when is_list(members) do
+  defp node_has_scope_chain?(root_node, node, %Locator{kind: :scope, value: members}, hidden_nodes)
+       when is_list(members) do
     scope_selector = within_query_selector(%Locator{kind: :scope, value: members, opts: []})
 
     root_node
     |> safe_query(scope_selector)
     |> Enum.any?(fn scope_node ->
-      node_matches_within_locator?(root_node, scope_node, %Locator{kind: :scope, value: members, opts: []}) and
+      locator_matches_node?(root_node, scope_node, %Locator{kind: :scope, value: members, opts: []}, hidden_nodes) and
         strict_descendant?(scope_node, node)
     end)
   end
@@ -1532,6 +1534,7 @@ defmodule Cerberus.Html do
       [
         if(is_binary(id) and id != "", do: ~s([id="#{css_attr_escape(id)}"])),
         if(attr_selector != "", do: "#{tag}#{attr_selector}"),
+        path_selector(node),
         tag
       ]
       |> Enum.filter(&is_binary/1)
@@ -1539,6 +1542,49 @@ defmodule Cerberus.Html do
 
     Enum.find(candidates, &selector_unique?(lazy_html, &1))
   end
+
+  defp path_selector(node), do: path_selector(node, [], 0)
+
+  defp path_selector(_node, segments, depth) when depth >= 64 do
+    segments_to_selector(segments)
+  end
+
+  defp path_selector(node, segments, depth) do
+    tag = node_tag(node)
+
+    if is_binary(tag) and tag != "" do
+      id = attr(node, "id")
+      segment = path_segment(node, tag, id)
+      next_segments = [segment | segments]
+      path_selector_next(node, next_segments, id, depth)
+    else
+      segments_to_selector(segments)
+    end
+  end
+
+  defp path_segment(_node, _tag, id) when is_binary(id) and id != "" do
+    ~s([id="#{css_attr_escape(id)}"])
+  end
+
+  defp path_segment(node, tag, _id) do
+    case List.first(LazyHTML.nth_child(node)) do
+      n when is_integer(n) and n > 0 -> "#{tag}:nth-child(#{n})"
+      _ -> tag
+    end
+  end
+
+  defp path_selector_next(node, next_segments, id, depth) do
+    parent = LazyHTML.parent_node(node)
+
+    cond do
+      parent == node -> segments_to_selector(next_segments)
+      is_binary(id) and id != "" -> segments_to_selector(next_segments)
+      true -> path_selector(parent, next_segments, depth + 1)
+    end
+  end
+
+  defp segments_to_selector([]), do: nil
+  defp segments_to_selector(segments), do: Enum.join(segments, " > ")
 
   defp selector_unique?(lazy_html, selector) do
     lazy_html
@@ -1957,7 +2003,7 @@ defmodule Cerberus.Html do
   end
 
   defp locator_assertion_value(root_node, node, locator) do
-    case within_locator_match_value(root_node, node, locator) do
+    case locator_match_value(root_node, node, locator) do
       value when is_binary(value) and value != "" -> value
       _ -> node_text(node)
     end
@@ -2196,16 +2242,48 @@ defmodule Cerberus.Html do
   defp alt_value(node), do: attr(node, "alt") || ""
 
   defp node_has_locator?(node, %Locator{} = has_locator) do
-    selector = within_query_selector(has_locator)
-    has_locator = locator_without_from(has_locator)
+    if simple_nested_text_locator?(has_locator) do
+      node_has_simple_text_locator?(node, has_locator)
+    else
+      selector = within_query_selector(has_locator)
+      has_locator = locator_without_from(has_locator)
+      hidden_nodes = hidden_nodes_in_root(node)
+
+      selector
+      |> safe_query_in_node(node)
+      |> Enum.any?(fn candidate_node ->
+        locator_matches_node?(node, candidate_node, has_locator, hidden_nodes)
+      end)
+    end
+  end
+
+  defp simple_nested_text_locator?(%Locator{kind: :text, opts: opts}) when is_list(opts) do
+    Enum.all?(opts, fn
+      {:exact, value} when is_boolean(value) -> true
+      _ -> false
+    end)
+  end
+
+  defp simple_nested_text_locator?(_locator), do: false
+
+  defp node_has_simple_text_locator?(node, %Locator{kind: :text, value: expected, opts: opts}) do
+    node
+    |> safe_query("*")
+    |> Enum.any?(fn candidate_node ->
+      assert_deadline!()
+      Query.match_text?(node_text(candidate_node), expected, opts)
+    end)
+  end
+
+  defp node_has_simple_text_locator?(node, locator) do
+    selector = within_query_selector(locator)
+    locator = locator_without_from(locator)
     hidden_nodes = hidden_nodes_in_root(node)
 
     selector
     |> safe_query_in_node(node)
     |> Enum.any?(fn candidate_node ->
-      node_matches_within_locator?(node, candidate_node, has_locator) and
-        node_matches_locator_filters?(candidate_node, has_locator.opts) and
-        matches_scope_target_state_filters?(node, candidate_node, hidden_nodes, has_locator.opts)
+      locator_matches_node?(node, candidate_node, locator, hidden_nodes)
     end)
   end
 

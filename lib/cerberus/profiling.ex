@@ -1,17 +1,17 @@
 defmodule Cerberus.Profiling do
   @moduledoc false
   @profiling_compile_env Application.compile_env(:cerberus, :profiling, false)
-  @profiling_env_values ["1", "true", "yes", "on"]
   @profiling_compiled? @profiling_compile_env or
                          "CERBERUS_PROFILE_COMPILE"
                          |> System.get_env("")
                          |> String.trim()
                          |> String.downcase()
-                         |> Kernel.in(@profiling_env_values)
+                         |> Kernel.in(["1", "true", "yes", "on"])
 
   @table :cerberus_profiling
   @owner_name __MODULE__.Owner
   @env_name "CERBERUS_PROFILE"
+  @output_dir_env "CERBERUS_PROFILE_OUTPUT_DIR"
   @false_values ["", "0", "false", "off", "no"]
   @enabled_override_key {__MODULE__, :enabled_override}
   @context_key {__MODULE__, :context}
@@ -171,6 +171,29 @@ defmodule Cerberus.Profiling do
     :ok
   end
 
+  @spec dump_reports(keyword()) :: :ok
+  def dump_reports(opts \\ []) when is_list(opts) do
+    dump_summary(opts)
+    maybe_write_snapshot_files()
+    :ok
+  end
+
+  @spec write_snapshot(Path.t(), keyword()) :: :ok
+  def write_snapshot(path, opts \\ []) when is_binary(path) and is_list(opts) do
+    payload = %{
+      generated_at: DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.to_iso8601(),
+      group_by: opts |> Keyword.get(:group_by, :bucket) |> json_safe_term(),
+      rows: opts |> snapshot() |> Enum.map(&json_safe_sample/1)
+    }
+
+    path
+    |> Path.dirname()
+    |> File.mkdir_p!()
+
+    File.write!(path, JSON.encode!(payload))
+    :ok
+  end
+
   defp put_sample(bucket, elapsed_us) when is_integer(elapsed_us) and elapsed_us >= 0 do
     _ = ensure_table!()
     key = {current_context(), bucket}
@@ -207,6 +230,40 @@ defmodule Cerberus.Profiling do
 
   defp format_row_prefix(%{context: nil, bucket: bucket}), do: inspect(bucket)
   defp format_row_prefix(%{context: context, bucket: bucket}), do: "#{inspect(context)} #{inspect(bucket)}"
+
+  defp maybe_write_snapshot_files do
+    case System.get_env(@output_dir_env) do
+      nil ->
+        :ok
+
+      "" ->
+        :ok
+
+      output_dir ->
+        write_snapshot(Path.join(output_dir, "profiling-buckets.json"))
+        write_snapshot(Path.join(output_dir, "profiling-context-buckets.json"), group_by: :context_bucket)
+        :ok
+    end
+  end
+
+  defp json_safe_sample(sample) do
+    %{
+      bucket: json_safe_term(sample.bucket),
+      context: json_safe_term(sample.context),
+      count: sample.count,
+      total_us: sample.total_us,
+      avg_us: sample.avg_us
+    }
+  end
+
+  defp json_safe_term(nil), do: nil
+  defp json_safe_term(term) when is_tuple(term), do: term |> Tuple.to_list() |> Enum.map(&json_safe_term/1)
+  defp json_safe_term(term) when is_list(term), do: Enum.map(term, &json_safe_term/1)
+
+  defp json_safe_term(term) when is_map(term),
+    do: Map.new(term, fn {key, value} -> {json_safe_term(key), json_safe_term(value)} end)
+
+  defp json_safe_term(term), do: term
 
   defp ensure_table! do
     ensure_owner!()

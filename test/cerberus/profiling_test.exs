@@ -80,4 +80,47 @@ defmodule Cerberus.ProfilingTest do
              %{context: :second_test, bucket: :sample_bucket, count: 1}
            ] = Enum.sort_by(Profiling.snapshot(group_by: :context_bucket), & &1.context)
   end
+
+  @tag :tmp_dir
+  test "dump_reports/1 writes snapshot artifacts when output dir env is set", %{tmp_dir: tmp_dir} do
+    Profiling.put_enabled_override(true)
+    previous_output_dir = System.get_env("CERBERUS_PROFILE_OUTPUT_DIR")
+    System.put_env("CERBERUS_PROFILE_OUTPUT_DIR", tmp_dir)
+
+    on_exit(fn ->
+      if previous_output_dir do
+        System.put_env("CERBERUS_PROFILE_OUTPUT_DIR", previous_output_dir)
+      else
+        System.delete_env("CERBERUS_PROFILE_OUTPUT_DIR")
+      end
+    end)
+
+    Profiling.with_context({:browser, :test}, fn ->
+      Profiling.measure({:browser_bidi, :roundtrip}, fn -> :ok end)
+    end)
+
+    assert :ok = Profiling.dump_reports(limit: 5)
+
+    bucket_snapshot = Path.join(tmp_dir, "profiling-buckets.json")
+    context_snapshot = Path.join(tmp_dir, "profiling-context-buckets.json")
+
+    assert File.exists?(bucket_snapshot)
+    assert File.exists?(context_snapshot)
+
+    assert {:ok, bucket_payload} = File.read(bucket_snapshot)
+    assert {:ok, bucket_json} = JSON.decode(bucket_payload)
+    assert is_list(bucket_json["rows"])
+
+    assert Enum.any?(bucket_json["rows"], fn row ->
+             row["bucket"] == ["browser_bidi", "roundtrip"]
+           end)
+
+    assert {:ok, context_payload} = File.read(context_snapshot)
+    assert {:ok, context_json} = JSON.decode(context_payload)
+
+    assert Enum.any?(context_json["rows"], fn row ->
+             row["context"] == ["browser", "test"] and
+               row["bucket"] == ["browser_bidi", "roundtrip"]
+           end)
+  end
 end

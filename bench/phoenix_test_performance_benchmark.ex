@@ -1,4 +1,4 @@
-defmodule Cerberus.TestSupport.PhoenixTestPerformanceBenchmark do
+defmodule Cerberus.Bench.PhoenixTestPerformanceBenchmark do
   @moduledoc false
 
   import PhoenixTest
@@ -19,7 +19,7 @@ defmodule Cerberus.TestSupport.PhoenixTestPerformanceBenchmark do
   @churn_flow_proof "candidate-modal-opened>candidate-results-loaded>candidate-chosen>results-loaded>review-opened>filters-patched>done-navigated"
   @locator_stress_flow_proof "candidate-modal-opened>candidate-results-loaded>candidate-chosen>results-loaded>assignment-modal-opened>assignment-chosen>filters-patched>done-navigated"
 
-  @spec run_flow(Plug.Conn.t(), scenario(), keyword()) :: PhoenixTest.Live.t() | PhoenixTest.Static.t()
+  @spec run_flow(Plug.Conn.t(), scenario(), keyword()) :: term()
   def run_flow(conn, scenario \\ :churn, opts \\ []) do
     timeout_ms = Keyword.get(opts, :timeout_ms, 5_000)
 
@@ -54,7 +54,7 @@ defmodule Cerberus.TestSupport.PhoenixTestPerformanceBenchmark do
     |> assert_has("#review-modal", text: @candidate_name, timeout: timeout_ms)
     |> within("#review-modal", &click_button(&1, "Apply filters"))
     |> assert_has("[data-testid='flow-step']", text: "Step: patched", timeout: timeout_ms)
-    |> await_live_patch(timeout_ms, query_scenario)
+    |> maybe_await_live_patch(scenario, timeout_ms, query_scenario)
     |> click_button("Continue workflow")
     |> assert_has("h1", text: "Performance flow complete", timeout: timeout_ms)
     |> assert_path(@done_path)
@@ -124,4 +124,9 @@ defmodule Cerberus.TestSupport.PhoenixTestPerformanceBenchmark do
     end)
     |> assert_has("[data-testid='benchmark-scenario']", text: "Scenario: #{scenario}", timeout: timeout_ms)
   end
+
+  defp maybe_await_live_patch(session, :churn_no_delay, _timeout_ms, _scenario), do: session
+
+  defp maybe_await_live_patch(session, _scenario, timeout_ms, scenario_name),
+    do: await_live_patch(session, timeout_ms, scenario_name)
 end

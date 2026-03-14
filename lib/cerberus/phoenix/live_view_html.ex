@@ -153,17 +153,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   def trigger_action_forms(%LazyHTML{} = html), do: trigger_action_forms_in_doc(html)
 
   defp find_live_clickable_button_in_doc(lazy_html, expected, opts, scope) do
-    query_selector = selector_opt(opts) || "[phx-click]"
-
-    matches =
-      lazy_html
-      |> live_clickable_roots(scope)
-      |> Enum.flat_map(fn root_node ->
-        root_node
-        |> safe_query(query_selector)
-        |> Enum.flat_map(&maybe_live_clickable_match_list(root_node, &1, expected, opts))
-      end)
-      |> Enum.filter(&Query.matches_state_filters?(&1, opts))
+    matches = live_clickable_matches(lazy_html, expected, opts, scope)
 
     case Query.pick_match(matches, opts) do
       {:ok, match} -> {:ok, match}
@@ -172,21 +162,50 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   end
 
   defp find_action_live_clickable_button_in_doc(lazy_html, expected, opts, scope) do
-    matches =
-      lazy_html
-      |> live_clickable_roots(scope)
-      |> Enum.flat_map(fn root_node ->
-        query_selector = selector_opt(opts) || "[phx-click]"
-
-        root_node
-        |> safe_query(query_selector)
-        |> Enum.flat_map(&maybe_live_clickable_match_list(root_node, &1, expected, opts))
-      end)
-      |> Enum.filter(&Query.matches_state_filters?(&1, opts))
+    matches = live_clickable_matches(lazy_html, expected, opts, scope)
 
     case Query.pick_action_match(matches, opts) do
       {:error, "no elements matched locator"} -> {:error, "no button matched locator"}
       other -> other
+    end
+  end
+
+  defp live_clickable_matches(lazy_html, expected, opts, scope) do
+    matches =
+      lazy_html
+      |> do_live_clickable_matches(expected, opts, scope)
+      |> Enum.filter(&Query.matches_state_filters?(&1, opts))
+
+    if matches == [] and role_button_locator?(opts) do
+      fallback_opts =
+        opts
+        |> Keyword.delete(:locator)
+        |> Keyword.put(:match_by, :button)
+
+      lazy_html
+      |> do_live_clickable_matches(expected, fallback_opts, scope)
+      |> Enum.filter(&Query.matches_state_filters?(&1, fallback_opts))
+    else
+      matches
+    end
+  end
+
+  defp do_live_clickable_matches(lazy_html, expected, opts, scope) do
+    query_selector = selector_opt(opts) || "[phx-click]"
+
+    lazy_html
+    |> live_clickable_roots(scope)
+    |> Enum.flat_map(fn root_node ->
+      root_node
+      |> safe_query(query_selector)
+      |> Enum.flat_map(&maybe_live_clickable_match_list(root_node, &1, expected, opts))
+    end)
+  end
+
+  defp role_button_locator?(opts) do
+    case Keyword.get(opts, :locator) do
+      %Locator{kind: :role, opts: locator_opts} -> Keyword.get(locator_opts, :role) == "button"
+      _ -> false
     end
   end
 
@@ -228,22 +247,38 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
 
   defp portal_query_roots(root_node) do
     root_node
-    |> safe_query("template[data-phx-portal]")
-    |> Enum.flat_map(fn template_node ->
-      template_node
-      |> LazyHTML.to_tree()
-      |> List.wrap()
-      |> Enum.flat_map(fn
-        {"template", _attrs, children} when is_list(children) ->
-          children
-          |> Enum.filter(&match?({_, _, _}, &1))
-          |> Enum.map(&LazyHTML.from_tree([&1]))
-
-        _other ->
-          []
-      end)
-    end)
+    |> LazyHTML.to_tree()
+    |> List.wrap()
+    |> Enum.flat_map(&portal_children_from_tree/1)
+    |> Enum.map(&LazyHTML.from_tree([&1]))
   end
+
+  defp portal_children_from_tree({"template", attrs, children}) when is_list(children) do
+    if tree_attr(attrs, "data-phx-portal") in [nil, ""] do
+      Enum.flat_map(children, &portal_children_from_tree/1)
+    else
+      children
+      |> Enum.filter(&match?({_, _, _}, &1))
+      |> Enum.flat_map(&[&1 | portal_children_from_tree(&1)])
+    end
+  end
+
+  defp portal_children_from_tree({_tag, _attrs, children}) when is_list(children) do
+    Enum.flat_map(children, &portal_children_from_tree/1)
+  end
+
+  defp portal_children_from_tree(_other), do: []
+
+  defp tree_attr(attrs, key) when is_map(attrs), do: Map.get(attrs, key)
+
+  defp tree_attr(attrs, key) when is_list(attrs) do
+    case List.keyfind(attrs, key, 0) do
+      {^key, value} -> value
+      _ -> nil
+    end
+  end
+
+  defp tree_attr(_attrs, _key), do: nil
 
   defp live_clickable_locator_match?(root_node, node, %Locator{kind: :and, value: members, opts: opts})
        when is_list(members) do
@@ -296,7 +331,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   defp live_clickable_locator_value(_root_node, node, :text), do: node_text(node)
 
   defp live_clickable_locator_value(_root_node, node, :button) do
-    if button_node?(node), do: node_text(node)
+    if button_node?(node), do: button_text(node)
   end
 
   defp live_clickable_locator_value(_root_node, node, :title), do: attr(node, "title") || ""
@@ -533,7 +568,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   defp role_locator_match_values(root_node, node, %Locator{} = locator) do
     case role_name(locator) do
       role when role in ["button", "menuitem", "tab"] ->
-        accessible_name_sources(root_node, node, &button_node?/1, &node_text/1)
+        accessible_name_sources(root_node, node, &button_node?/1, &button_text/1)
 
       "link" ->
         accessible_name_sources(root_node, node, &link_node?/1, &node_text/1)
@@ -871,7 +906,7 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
 
     %{
       tag: node_tag(node),
-      text: text,
+      text: button_text(node) || text,
       title: attr(node, "title") || "",
       aria_label: attr(node, "aria-label") || "",
       testid: attr(node, "data-testid") || "",
@@ -1149,6 +1184,13 @@ defmodule Cerberus.Phoenix.LiveViewHTML do
   defp link_node?(node), do: node_tag(node) == "a" and is_binary(attr(node, "href"))
 
   defp button_node?(node), do: node_tag(node) == "button"
+
+  defp button_text(node) do
+    case node_tag(node) do
+      "input" -> attr(node, "value") || ""
+      _ -> node_text(node)
+    end
+  end
 
   defp scoped_nodes(lazy_html, nil), do: [lazy_html]
   defp scoped_nodes(lazy_html, ""), do: [lazy_html]

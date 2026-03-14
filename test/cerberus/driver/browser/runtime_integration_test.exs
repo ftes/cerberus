@@ -29,6 +29,36 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
     assert_runtime_restarted(runtime_pid)
   end
 
+  @tag :tmp_dir
+  test "watchdog cleans up direct firefox when shutdown is interrupted", %{tmp_dir: tmp_dir} do
+    fake_firefox = Path.join(tmp_dir, "fake_firefox.sh")
+    File.cp!(Path.expand("../../../support/bin/fake_firefox.sh", __DIR__), fake_firefox)
+    File.chmod!(fake_firefox, 0o755)
+
+    on_exit(fn ->
+      kill_matching_processes(fake_firefox)
+    end)
+
+    script = """
+    alias Cerberus.Driver.Browser.Runtime
+
+    {:ok, _} = Runtime.start_link(base_url: "http://127.0.0.1")
+    {:ok, _url} = Runtime.web_socket_url(browser_name: :firefox, firefox_binary: #{inspect(fake_firefox)})
+    spawn(fn -> GenServer.stop(Runtime, :shutdown, 5_000) end)
+    Process.sleep(10)
+    System.halt(0)
+    """
+
+    assert {_, 0} =
+             System.cmd("mix", ["run", "--no-compile", "-e", script],
+               cd: File.cwd!(),
+               env: [{"MIX_ENV", "test"}],
+               stderr_to_stdout: true
+             )
+
+    assert_process_stopped(fake_firefox)
+  end
+
   defp assert_runtime_restarted(previous_pid, attempts \\ 50)
 
   defp assert_runtime_restarted(previous_pid, attempts) when attempts > 0 do

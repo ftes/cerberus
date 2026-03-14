@@ -24,7 +24,7 @@ defmodule Cerberus.TestSupport.Bootstrap do
   @spec stop!() :: :ok
   def stop! do
     if Cerberus.Profiling.enabled?() do
-      Cerberus.Profiling.dump_summary()
+      Cerberus.Profiling.dump_reports()
     end
 
     case Process.whereis(@test_support_supervisor) do

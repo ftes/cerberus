@@ -267,10 +267,27 @@ defmodule Cerberus.Driver.Browser.Runtime do
   end
 
   defp ensure_firefox_profile_dir(profile_dir_path) do
-    case File.mkdir_p(profile_dir_path) do
-      :ok -> :ok
+    with :ok <- File.mkdir_p(profile_dir_path),
+         :ok <- write_firefox_profile_prefs(profile_dir_path) do
+      :ok
+    else
       {:error, reason} -> {:error, inspect(reason)}
     end
+  end
+
+  @firefox_profile_prefs [
+    ~S[user_pref("app.update.auto", false);],
+    ~S[user_pref("app.update.background.enabled", false);],
+    ~S[user_pref("app.update.enabled", false);],
+    ~S[user_pref("app.update.service.enabled", false);],
+    ~S[user_pref("app.update.silent", false);],
+    ~S[user_pref("app.update.staging.enabled", false);],
+    ~S[user_pref("browser.shell.checkDefaultBrowser", false);]
+  ]
+
+  defp write_firefox_profile_prefs(profile_dir_path) do
+    prefs_path = Path.join(profile_dir_path, "user.js")
+    File.write(prefs_path, Enum.join(@firefox_profile_prefs, "\n") <> "\n")
   end
 
   defp start_direct_firefox_process_session(binary, headless, profile_dir_path, launch_attempts) do
@@ -801,8 +818,6 @@ defmodule Cerberus.Driver.Browser.Runtime do
   defp maybe_delete_session(_, _, _), do: :ok
 
   defp maybe_stop_service(%{managed?: true, process: process} = service) when is_port(process) do
-    maybe_disable_watchdog_marker(service)
-
     os_pid = process_os_pid(process)
     kill_target = local_service_kill_target(os_pid)
 
@@ -816,13 +831,14 @@ defmodule Cerberus.Driver.Browser.Runtime do
     end
 
     maybe_cleanup_profile_dir(service)
+    maybe_disable_watchdog_marker(service)
 
     :ok
   end
 
   defp maybe_stop_service(service) do
-    maybe_disable_watchdog_marker(service)
     maybe_cleanup_profile_dir(service)
+    maybe_disable_watchdog_marker(service)
     :ok
   end
 

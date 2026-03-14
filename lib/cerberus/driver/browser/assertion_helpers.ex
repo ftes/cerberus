@@ -3,14 +3,16 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAssert && window.__cerberusAssert.__version === 12) return;
+    if (window.__cerberusAssert && window.__cerberusAssert.__version === 13) return;
 
     const helper = {};
-    helper.__version = 12;
+    helper.__version = 13;
     helper.now = () =>
       typeof performance !== "undefined" && typeof performance.now === "function"
         ? performance.now()
         : Date.now();
+
+    helper.playwrightBackoffSchedule = () => [20, 50, 100, 100, 500];
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -113,27 +115,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         return Array.from(scopeDocument.querySelectorAll(context.scopeSelector));
       } catch (_error) {
         return [];
-      }
-    };
-
-    helper.selectorForMatchBy = (matchBy) => {
-      switch (matchBy) {
-        case "label":
-          return "label";
-        case "link":
-          return "a[href]";
-        case "button":
-          return "button";
-        case "placeholder":
-          return "input[placeholder],textarea[placeholder],select[placeholder]";
-        case "title":
-          return "[title]";
-        case "alt":
-          return "[alt],img[alt],input[type='image'][alt],[role='img'][alt],button,a[href]";
-        case "testid":
-          return "[data-testid]";
-        default:
-          return null;
       }
     };
 
@@ -571,7 +552,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const normalizeWs = options.normalizeWs !== false;
       const exact = options.exact === true;
       const matchBy = options.matchBy || "text";
-      const prefilterSelector = helper.selectorForMatchBy(matchBy);
       const needsHiddenState = visibility !== "all" || helper.isTextLikeMatchBy(matchBy);
       const roots = helper.resolveRoots(options.scopeSelector || null);
       const matchText = helper.buildTextMatcher(options.expected, exact, normalizeWs);
@@ -580,7 +560,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const context = { altCache: new Map() };
       let matchCount = 0;
 
-      helper.eachCandidateElement(roots, null, prefilterSelector, (element) => {
+      helper.eachCandidateElement(roots, null, null, (element) => {
         const hidden = needsHiddenState ? helper.isHidden(element) : false;
         if (visibility !== "all" && !helper.selectedVisibility(visibility, hidden)) return true;
 
@@ -616,7 +596,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const normalizeWs = options.normalizeWs !== false;
       const exact = options.exact === true;
       const matchBy = options.matchBy || "text";
-      const prefilterSelector = helper.selectorForMatchBy(matchBy);
       const roots = helper.resolveRoots(options.scopeSelector || null);
       const matchText = helper.buildTextMatcher(options.expected, exact, normalizeWs);
       const filters = helper.matchFilters(options);
@@ -626,7 +605,7 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
       const visibleSet = new Set();
       const hiddenSet = new Set();
 
-      helper.eachCandidateElement(roots, null, prefilterSelector, (element) => {
+      helper.eachCandidateElement(roots, null, null, (element) => {
         const hidden = helper.isHidden(element);
         const value = helper.valueForMatch(element, hidden, matchBy, normalizeWs, context);
         if (!value) return true;
@@ -667,7 +646,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
     helper.text = (options) => {
       const timeoutMs = Math.max(0, Number(options.timeoutMs || 0));
-      const pollMs = Math.max(50, Number(options.pollMs || 250));
       const deadline = Date.now() + timeoutMs;
       const initial = helper.textQuick(options);
 
@@ -684,8 +662,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         let dirty = true;
         let pendingCheck = false;
         const cleanupFns = [];
-        const observedRoots = helper.resolveRoots(options.scopeSelector || null);
-
         const finish = (result) => {
           if (resolved) return;
           resolved = true;
@@ -718,42 +694,36 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           }
         };
 
-        try {
-          const observer = new MutationObserver(() => {
-            dirty = true;
-            scheduleCheck();
-          });
-
-          const roots = observedRoots.length > 0 ? observedRoots : [document.documentElement || document.body || document];
-
-          for (const root of roots) {
-            if (!root) continue;
-
-            observer.observe(root, {
-              subtree: true,
-              childList: true,
-              attributes: true,
-              characterData: true
-            });
-          }
-
-          cleanupFns.push(() => observer.disconnect());
-        } catch (_error) {
-          // ignored
-        }
-
         scheduleCheck();
 
-        const intervalRef = setInterval(() => {
-          if (Date.now() >= deadline) {
-            finish(helper.textDiagnostics(options));
-            return;
-          }
+        const backoffDelays = helper.playwrightBackoffSchedule();
+        let timeoutIndex = 0;
+        let pollTimer = null;
 
-          dirty = true;
-          scheduleCheck();
-        }, pollMs);
-        cleanupFns.push(() => clearInterval(intervalRef));
+        const schedulePoll = () => {
+          if (resolved) return;
+
+          const delay = backoffDelays[Math.min(timeoutIndex, backoffDelays.length - 1)];
+          timeoutIndex += 1;
+
+          pollTimer = setTimeout(() => {
+            pollTimer = null;
+
+            if (Date.now() >= deadline) {
+              finish(helper.textDiagnostics(options));
+              return;
+            }
+
+            dirty = true;
+            scheduleCheck();
+            schedulePoll();
+          }, delay);
+        };
+
+        schedulePoll();
+        cleanupFns.push(() => {
+          if (pollTimer !== null) clearTimeout(pollTimer);
+        });
 
         const timeoutRef = setTimeout(() => finish(helper.textDiagnostics(options)), timeoutMs);
         cleanupFns.push(() => clearTimeout(timeoutRef));
@@ -1077,20 +1047,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         return helper.scopeMembersMatch(element, hidden, members, context) && helper.matchesLocatorCommonOpts(element, locator, context);
       }
 
-      const cssAndText = helper.cssAndTextMembers(locator);
-      if (cssAndText) {
-        if (!helper.matchesSelector(element, cssAndText.cssMember.value)) return false;
-
-        const locatorOpts = helper.locatorOpts(cssAndText.textMember);
-        const exact = locatorOpts.exact === true;
-        const normalizeWs = locatorOpts.normalizeWs !== false;
-        const matchText = helper.buildTextMatcher(cssAndText.textMember.expected, exact, normalizeWs);
-        const textValue = hidden ? element.textContent : element.innerText || element.textContent;
-        if (!matchText(textValue || "")) return false;
-
-        return helper.matchesLocatorCommonOpts(element, locator, context);
-      }
-
       if (kind === "and" || kind === "or") {
         const members = Array.isArray(locator.members) ? locator.members : [];
         if (members.length === 0) return false;
@@ -1178,18 +1134,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         const scopeHidden = helper.isHidden(scopeNode);
         return helper.matchesLocator(scopeNode, scopeLocator, scopeHidden, context);
       });
-    };
-
-    helper.cssAndTextMembers = (locator) => {
-      if (!locator || helper.locatorKind(locator) !== "and") return null;
-      const members = Array.isArray(locator.members) ? locator.members : [];
-      if (members.length !== 2) return null;
-
-      const cssMember = members.find((member) => helper.locatorKind(member) === "css");
-      const textMember = members.find((member) => helper.locatorKind(member) === "text");
-
-      if (!cssMember || !textMember || typeof cssMember.value !== "string") return null;
-      return { cssMember, textMember };
     };
 
     helper.scopeCandidateIsClosestForFrom = (candidate, candidates, fromNode) => {
@@ -1409,7 +1353,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
     helper.locator = (options) => {
       const timeoutMs = Math.max(0, Number(options.timeoutMs || 0));
-      const pollMs = Math.max(50, Number(options.pollMs || 250));
       const deadline = Date.now() + timeoutMs;
       const initial = helper.locatorQuick(options);
 
@@ -1459,43 +1402,36 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           }
         };
 
-        try {
-          const observer = new MutationObserver(() => {
-            dirty = true;
-            scheduleCheck();
-          });
-
-          const observedRoots = helper.resolveRoots(options.scopeSelector || null);
-          const roots = observedRoots.length > 0 ? observedRoots : [document.documentElement || document.body || document];
-
-          for (const root of roots) {
-            if (!root) continue;
-
-            observer.observe(root, {
-              subtree: true,
-              childList: true,
-              attributes: true,
-              characterData: true
-            });
-          }
-
-          cleanupFns.push(() => observer.disconnect());
-        } catch (_error) {
-          // ignored
-        }
-
         scheduleCheck();
 
-        const intervalRef = setInterval(() => {
-          if (Date.now() >= deadline) {
-            finish(helper.locatorDiagnostics(options));
-            return;
-          }
+        const backoffDelays = helper.playwrightBackoffSchedule();
+        let timeoutIndex = 0;
+        let pollTimer = null;
 
-          dirty = true;
-          scheduleCheck();
-        }, pollMs);
-        cleanupFns.push(() => clearInterval(intervalRef));
+        const schedulePoll = () => {
+          if (resolved) return;
+
+          const delay = backoffDelays[Math.min(timeoutIndex, backoffDelays.length - 1)];
+          timeoutIndex += 1;
+
+          pollTimer = setTimeout(() => {
+            pollTimer = null;
+
+            if (Date.now() >= deadline) {
+              finish(helper.locatorDiagnostics(options));
+              return;
+            }
+
+            dirty = true;
+            scheduleCheck();
+            schedulePoll();
+          }, delay);
+        };
+
+        schedulePoll();
+        cleanupFns.push(() => {
+          if (pollTimer !== null) clearTimeout(pollTimer);
+        });
 
         const timeoutRef = setTimeout(() => finish(helper.locatorDiagnostics(options)), timeoutMs);
         cleanupFns.push(() => clearTimeout(timeoutRef));
@@ -1557,7 +1493,6 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
     helper.path = (options) => {
       const timeoutMs = Math.max(0, Number(options.timeoutMs || 0));
-      const pollMs = Math.max(50, Number(options.pollMs || 100));
       const deadline = Date.now() + timeoutMs;
       const initial = helper.pathQuick(options);
 
@@ -1603,37 +1538,34 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
           }
         };
 
-        try {
-          const observer = new MutationObserver(() => {
+        const backoffDelays = helper.playwrightBackoffSchedule();
+        let timeoutIndex = 0;
+        let pollTimer = null;
+
+        const schedulePoll = () => {
+          if (resolved) return;
+
+          const delay = backoffDelays[Math.min(timeoutIndex, backoffDelays.length - 1)];
+          timeoutIndex += 1;
+
+          pollTimer = setTimeout(() => {
+            pollTimer = null;
+
+            if (Date.now() >= deadline) {
+              finish(helper.pathQuick(options));
+              return;
+            }
+
             dirty = true;
             scheduleCheck();
-          });
+            schedulePoll();
+          }, delay);
+        };
 
-          const root = document.documentElement || document.body || document;
-          if (root) {
-            observer.observe(root, {
-              subtree: true,
-              childList: true,
-              attributes: true,
-              characterData: true
-            });
-          }
-
-          cleanupFns.push(() => observer.disconnect());
-        } catch (_error) {
-          // ignored
-        }
-
-        const intervalRef = setInterval(() => {
-          if (Date.now() >= deadline) {
-            finish(helper.pathQuick(options));
-            return;
-          }
-
-          dirty = true;
-          scheduleCheck();
-        }, pollMs);
-        cleanupFns.push(() => clearInterval(intervalRef));
+        schedulePoll();
+        cleanupFns.push(() => {
+          if (pollTimer !== null) clearTimeout(pollTimer);
+        });
 
         const timeoutRef = setTimeout(() => finish(helper.pathQuick(options)), timeoutMs);
         cleanupFns.push(() => clearTimeout(timeoutRef));

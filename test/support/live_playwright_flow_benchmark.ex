@@ -2,6 +2,11 @@ defmodule Cerberus.Bench.LivePlaywrightFlow do
   @moduledoc false
 
   @header "runner,browser,scenario,iterations,warmup,concurrency,mean_round_ms,mean_per_flow_ms,median_round_ms,p95_round_ms"
+  defguardp valid_summary_args(iterations, warmup, concurrency, round_samples)
+            when is_integer(iterations) and iterations > 0 and
+                   is_integer(warmup) and warmup >= 0 and
+                   is_integer(concurrency) and concurrency > 0 and
+                   is_list(round_samples)
 
   @type scenario :: :churn | :churn_no_delay | :locator_stress
 
@@ -33,10 +38,7 @@ defmodule Cerberus.Bench.LivePlaywrightFlow do
   @spec summary_row(scenario(), pos_integer(), non_neg_integer(), pos_integer(), [number()]) :: String.t()
   def summary_row(scenario, iterations, warmup, concurrency, round_samples)
       when scenario in [:churn, :churn_no_delay, :locator_stress] and
-             is_integer(iterations) and iterations > 0 and
-             is_integer(warmup) and warmup >= 0 and
-             is_integer(concurrency) and concurrency > 0 and
-             is_list(round_samples) do
+             valid_summary_args(iterations, warmup, concurrency, round_samples) do
     format_row(scenario, iterations, warmup, concurrency, Enum.map(round_samples, &(&1 * 1.0)))
   end
 

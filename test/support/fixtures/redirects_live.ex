@@ -3,6 +3,27 @@ defmodule Cerberus.Fixtures.RedirectsLive do
   use Phoenix.LiveView
 
   alias Phoenix.LiveView.JS
+  alias Phoenix.LiveView.Socket
+
+  defmodule TargetButtonComponent do
+    @moduledoc false
+    use Phoenix.LiveComponent
+
+    @impl true
+    def render(assigns) do
+      ~H"""
+      <section id="target-button-component">
+        <button phx-target={@myself} phx-click="component_ping">Component Ping</button>
+      </section>
+      """
+    end
+
+    @impl true
+    def handle_event("component_ping", _params, %Socket{} = socket) do
+      send(self(), :component_ping)
+      {:noreply, socket}
+    end
+  end
 
   @impl true
   def mount(_params, _session, socket) do
@@ -13,7 +34,7 @@ defmodule Cerberus.Fixtures.RedirectsLive do
         "unset"
       end
 
-    {:ok, assign(socket, details: false, flash_message: nil, timezone: timezone)}
+    {:ok, assign(socket, details: false, flash_message: nil, timezone: timezone, component_ping_count: 0)}
   end
 
   @impl true
@@ -49,6 +70,11 @@ defmodule Cerberus.Fixtures.RedirectsLive do
   end
 
   @impl true
+  def handle_info(:component_ping, %Socket{} = socket) do
+    {:noreply, update(socket, :component_ping_count, &(&1 + 1))}
+  end
+
+  @impl true
   def render(assigns) do
     ~H"""
     <main>
@@ -77,6 +103,9 @@ defmodule Cerberus.Fixtures.RedirectsLive do
         JS Dispatch + Push
       </button>
       <button phx-click={JS.dispatch("change")}>JS Dispatch only</button>
+
+      <.live_component module={TargetButtonComponent} id="target-button-component" />
+      <p id="component-ping-count">component pings: {@component_ping_count}</p>
     </main>
     """
   end

@@ -3,14 +3,16 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAction && window.__cerberusAction.__version === 19) return;
+    if (window.__cerberusAction && window.__cerberusAction.__version === 20) return;
 
     const helper = {};
-    helper.__version = 19;
+    helper.__version = 20;
     helper.now = () =>
       typeof performance !== "undefined" && typeof performance.now === "function"
         ? performance.now()
         : Date.now();
+
+    helper.playwrightBackoffSchedule = () => [20, 50, 100, 100, 500];
 
     helper.normalize = (value, normalizeWs) => {
       const source = (value || "").replace(/\\u00A0/g, " ");
@@ -668,16 +670,11 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       return candidate;
     };
 
-    helper.clickCandidates = (roots, kind, prefilterSelector = null) => {
-      const prefilteredElements =
-        prefilterSelector && prefilterSelector !== "*"
-          ? helper.queryWithinRoots(roots, prefilterSelector)
-          : null;
-
+    helper.clickCandidates = (roots, kind) => {
       const links =
         kind === "button"
           ? []
-          : (prefilteredElements || helper.queryWithinRoots(roots, "a[href]"))
+          : helper.queryWithinRoots(roots, "a[href]")
               .filter((element) => (element.tagName || "").toLowerCase() === "a" && element.hasAttribute("href"))
               .map((element, index) =>
               helper.attachElement(
@@ -706,7 +703,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
       const clickables =
         kind === "any"
-          ? (prefilteredElements || helper.queryWithinRoots(roots, "[phx-click]"))
+          ? helper.queryWithinRoots(roots, "[phx-click]")
               .filter((element) => {
                 const tag = (element.tagName || "").toLowerCase();
                 return element.hasAttribute("phx-click") && tag !== "a" && tag !== "button" && !helper.isButtonLikeInput(element);
@@ -735,7 +732,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
       const labels =
         kind === "any"
-          ? (prefilteredElements || helper.queryWithinRoots(roots, "label"))
+          ? helper.queryWithinRoots(roots, "label")
               .filter((element) => (element.tagName || "").toLowerCase() === "label")
               .map((element, index) =>
               helper.attachElement(
@@ -762,7 +759,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       const buttons =
         kind === "link"
           ? []
-          : (prefilteredElements || helper.queryWithinRoots(roots, helper.buttonSelector))
+          : helper.queryWithinRoots(roots, helper.buttonSelector)
               .filter((element) => helper.isButtonLikeElement(element))
               .map((element, index) =>
               helper.attachElement(
@@ -923,12 +920,9 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       return Array.from(new Set(sources.filter((value) => value !== "")));
     };
 
-    helper.formCandidates = (roots, prefilterSelector = null) => {
+    helper.formCandidates = (roots) => {
       const labels = helper.labelsByFor(roots);
-      const elements =
-        prefilterSelector && prefilterSelector !== "*"
-          ? helper.queryWithinRoots(roots, prefilterSelector)
-          : helper.queryWithinRoots(roots, "input, textarea, select");
+      const elements = helper.queryWithinRoots(roots, "input, textarea, select");
 
       return elements
         .filter((element) => {
@@ -970,12 +964,9 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         });
     };
 
-    helper.fileCandidates = (roots, prefilterSelector = null) => {
+    helper.fileCandidates = (roots) => {
       const labels = helper.labelsByFor(roots);
-      const elements =
-        prefilterSelector && prefilterSelector !== "*"
-          ? helper.queryWithinRoots(roots, prefilterSelector)
-          : helper.queryWithinRoots(roots, "input[type='file']");
+      const elements = helper.queryWithinRoots(roots, "input[type='file']");
 
       return elements
         .filter((element) => (element.tagName || "").toLowerCase() === "input" && (element.getAttribute("type") || "").toLowerCase() === "file")
@@ -1472,18 +1463,6 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       });
     };
 
-    helper.cssAndTextMembers = (locator) => {
-      if (!locator || String(locator.kind || "").toLowerCase() !== "and") return null;
-      const members = Array.isArray(locator.members) ? locator.members : [];
-      if (members.length !== 2) return null;
-
-      const cssMember = members.find((member) => String(member && member.kind || "").toLowerCase() === "css");
-      const textMember = members.find((member) => String(member && member.kind || "").toLowerCase() === "text");
-
-      if (!cssMember || !textMember || typeof cssMember.value !== "string") return null;
-      return { cssMember, textMember };
-    };
-
     helper.matchesLocator = (candidate, locator, op) => {
       if (!locator || typeof locator !== "object") return false;
 
@@ -1503,19 +1482,6 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         const members = Array.isArray(locator.members) ? locator.members : [];
 
         return helper.scopeMembersMatch(candidate, members, op) && helper.matchesLocatorCommonOpts(candidate, locator.opts, op);
-      }
-
-      const cssAndText = helper.cssAndTextMembers(locator);
-      if (cssAndText) {
-        if (!candidate.__el || !helper.matchesSelector(candidate.__el, cssAndText.cssMember.value)) return false;
-
-        const locatorOpts = cssAndText.textMember.opts && typeof cssAndText.textMember.opts === "object" ? cssAndText.textMember.opts : {};
-        const exact = locatorOpts.exact === true;
-        const normalizeWs = locatorOpts.normalizeWs !== false;
-        const matchText = helper.buildTextMatcher(cssAndText.textMember.expected, exact, normalizeWs);
-        if (!matchText(candidate.text || "")) return false;
-
-        return helper.matchesLocatorCommonOpts(candidate, locator.opts, op);
       }
 
       if (kind === "and" || kind === "or") {
@@ -1571,12 +1537,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
     helper.resolveCandidates = (options, roots) => {
       const op = options.op;
-      const locator = options.locator && typeof options.locator === "object" ? options.locator : null;
-      const prefilterSelector = locator ? helper.querySelectorForLocator(locator) : null;
 
       if (op === "click") {
         const kind = options.kind || "any";
-        return helper.clickCandidates(roots, kind, prefilterSelector);
+        return helper.clickCandidates(roots, kind);
       }
 
       if (op === "submit") {
@@ -1584,10 +1548,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       }
 
       if (op === "upload") {
-        return helper.fileCandidates(roots, prefilterSelector);
+        return helper.fileCandidates(roots);
       }
 
-      return helper.formCandidates(roots, prefilterSelector);
+      return helper.formCandidates(roots);
     };
 
     helper.resolveOnce = (options) => {
@@ -1607,16 +1571,9 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       const locatorKind = locator ? helper.locatorKind(locator) : null;
       const useLocatorEngine = !(op !== "click" && op !== "submit" && locatorKind === "text");
       const matchText = helper.buildTextMatcher(options.expected, exact, normalizeWs);
-      const prefilterSelector = locator ? helper.querySelectorForLocator(locator) : null;
-      const prefilterStartedAt = helper.now();
-      const prefilteredCandidates =
-        prefilterSelector && prefilterSelector !== "*"
-          ? candidates.filter((candidate) => candidate && candidate.__el && helper.matchesSelector(candidate.__el, prefilterSelector))
-          : candidates;
-      jsTiming.prefilterCandidatesMs = helper.now() - prefilterStartedAt;
 
       const stateFiltersStartedAt = helper.now();
-      const stateMatched = prefilteredCandidates.filter((candidate) => helper.matchesStateFilters(candidate, options));
+      const stateMatched = candidates.filter((candidate) => helper.matchesStateFilters(candidate, options));
       jsTiming.stateFilterMs = helper.now() - stateFiltersStartedAt;
 
       const matchCandidatesStartedAt = helper.now();
@@ -1707,7 +1664,6 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
     helper.resolveInternal = (options) => {
       const timeoutMs = Math.max(0, Number(options.timeoutMs || 0));
-      const pollMs = Math.max(50, Number(options.pollMs || 100));
       const deadline = Date.now() + timeoutMs;
       const initial = helper.resolveOnce(options);
 
@@ -1753,43 +1709,36 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           }
         };
 
-        try {
-          const observer = new MutationObserver(() => {
-            dirty = true;
-            scheduleCheck();
-          });
-
-          const observedRoots = helper.resolveRoots(options.scopeSelector || null);
-          const roots = observedRoots.length > 0 ? observedRoots : [document.documentElement || document.body || document];
-
-          for (const root of roots) {
-            if (!root) continue;
-
-            observer.observe(root, {
-              subtree: true,
-              childList: true,
-              attributes: true,
-              characterData: true
-            });
-          }
-
-          cleanupFns.push(() => observer.disconnect());
-        } catch (_error) {
-          // ignored
-        }
-
         scheduleCheck();
 
-        const intervalRef = setInterval(() => {
-          if (Date.now() >= deadline) {
-            finish(helper.resolveOnce(options));
-            return;
-          }
+        const backoffDelays = helper.playwrightBackoffSchedule();
+        let timeoutIndex = 0;
+        let pollTimer = null;
 
-          dirty = true;
-          scheduleCheck();
-        }, pollMs);
-        cleanupFns.push(() => clearInterval(intervalRef));
+        const schedulePoll = () => {
+          if (resolved) return;
+
+          const delay = backoffDelays[Math.min(timeoutIndex, backoffDelays.length - 1)];
+          timeoutIndex += 1;
+
+          pollTimer = setTimeout(() => {
+            pollTimer = null;
+
+            if (Date.now() >= deadline) {
+              finish(helper.resolveOnce(options));
+              return;
+            }
+
+            dirty = true;
+            scheduleCheck();
+            schedulePoll();
+          }, delay);
+        };
+
+        schedulePoll();
+        cleanupFns.push(() => {
+          if (pollTimer !== null) clearTimeout(pollTimer);
+        });
 
         const timeoutRef = setTimeout(() => finish(helper.resolveOnce(options)), timeoutMs);
         cleanupFns.push(() => clearTimeout(timeoutRef));

@@ -1,3 +1,6 @@
+Code.require_file("phoenix_test_flow_benchmark.ex", __DIR__)
+Code.require_file("phoenix_test_performance_benchmark.ex", __DIR__)
+
 results_path = System.get_env("CERBERUS_BENCH_RESULTS_PATH") || "tmp/phoenix-test-flow-benchmark.csv"
 
 File.mkdir_p!(Path.dirname(results_path))
@@ -18,7 +21,7 @@ defmodule Cerberus.PhoenixTestPerformanceBenchmarkTest do
     async: true,
     parameterize: Enum.map(1..@concurrency, &%{worker: &1})
 
-  alias Cerberus.TestSupport.PhoenixTestPerformanceBenchmark
+  alias Cerberus.Bench.PhoenixTestPerformanceBenchmark
 
   @scenario (case System.get_env("CERBERUS_BENCH_SCENARIO") do
                "churn_no_delay" -> :churn_no_delay

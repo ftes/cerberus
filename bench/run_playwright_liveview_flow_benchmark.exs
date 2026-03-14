@@ -11,9 +11,12 @@ defmodule Cerberus.Bench.RunPlaywrightLiveViewFlow do
     env = [
       {"BASE_URL", Endpoint.url()},
       {"CHROME", System.fetch_env!("CHROME")},
+      {"FIREFOX", System.get_env("FIREFOX") || ""},
       {"ITERATIONS", Integer.to_string(opts.iterations)},
       {"WARMUP", Integer.to_string(opts.warmup)},
-      {"SCENARIO", opts.scenario}
+      {"SCENARIO", opts.scenario},
+      {"CONCURRENCY", Integer.to_string(opts.concurrency)},
+      {"PLAYWRIGHT_BROWSER", opts.browser}
     ]
 
     {_, exit_code} =
@@ -39,13 +42,15 @@ defmodule Cerberus.Bench.RunPlaywrightLiveViewFlow do
   defp parse_args(args) do
     {parsed, _rest, _invalid} =
       OptionParser.parse(args,
-        strict: [iterations: :integer, warmup: :integer, scenario: :string]
+        strict: [iterations: :integer, warmup: :integer, scenario: :string, concurrency: :integer, browser: :string]
       )
 
     %{
       iterations: parsed[:iterations] || 10,
       warmup: parsed[:warmup] || 2,
-      scenario: parsed[:scenario] || "churn"
+      scenario: parsed[:scenario] || "churn",
+      concurrency: max(parsed[:concurrency] || 1, 1),
+      browser: parsed[:browser] || "chromium"
     }
   end
 end

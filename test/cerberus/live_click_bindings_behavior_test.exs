@@ -30,6 +30,15 @@ defmodule Cerberus.LiveClickBindingsBehaviorTest do
       |> click(role(:button, name: "JS Navigate to Counter", exact: true))
       |> assert_path("/live/counter", query: [foo: "bar"])
     end
+
+    test "click_button uses element-backed live clicks for phx-target component buttons (#{driver})", context do
+      unquote(driver)
+      |> driver_session(context)
+      |> visit("/live/redirects")
+      |> assert_has(text("component pings: 0", exact: true))
+      |> click(role(:button, name: "Component Ping", exact: true))
+      |> assert_has(text("component pings: 1", exact: true))
+    end
   end
 
   test "live JS navigate click updates path through metadata redirect handling" do

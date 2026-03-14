@@ -881,36 +881,44 @@ defmodule Cerberus.Driver.Live do
   defp run_transition_aware_assertion(session, timeout_ms, attempt_fun)
        when is_integer(timeout_ms) and timeout_ms >= 0 and is_function(attempt_fun, 1) do
     deadline = System.monotonic_time(:millisecond) + timeout_ms
-    do_run_transition_aware_assertion(session, deadline, attempt_fun)
+    do_run_transition_aware_assertion(session, deadline, 0, attempt_fun)
   end
 
-  defp do_run_transition_aware_assertion(%Static{} = session, _deadline, attempt_fun) when is_function(attempt_fun, 1) do
+  defp do_run_transition_aware_assertion(%Static{} = session, _deadline, _attempt, attempt_fun)
+       when is_function(attempt_fun, 1) do
     attempt_fun.(session)
   end
 
-  defp do_run_transition_aware_assertion(%__MODULE__{} = session, deadline, attempt_fun)
-       when is_function(attempt_fun, 1) do
+  defp do_run_transition_aware_assertion(%__MODULE__{} = session, deadline, attempt, attempt_fun)
+       when is_integer(attempt) and attempt >= 0 and is_function(attempt_fun, 1) do
     case attempt_fun.(session) do
       {:ok, _updated_session, _observed} = ok ->
         ok
 
       {:error, failed_session, observed, reason} ->
-        maybe_retry_transition_aware_assertion(failed_session, observed, reason, deadline, attempt_fun)
+        maybe_retry_transition_aware_assertion(
+          failed_session,
+          observed,
+          reason,
+          deadline,
+          attempt,
+          attempt_fun
+        )
     end
   end
 
-  defp maybe_retry_transition_aware_assertion(%Static{} = session, observed, reason, _deadline, _attempt_fun) do
+  defp maybe_retry_transition_aware_assertion(%Static{} = session, observed, reason, _deadline, _attempt, _attempt_fun) do
     {:error, session, observed, reason}
   end
 
-  defp maybe_retry_transition_aware_assertion(%__MODULE__{} = session, observed, reason, deadline, attempt_fun)
-       when is_function(attempt_fun, 1) do
+  defp maybe_retry_transition_aware_assertion(%__MODULE__{} = session, observed, reason, deadline, attempt, attempt_fun)
+       when is_integer(attempt) and attempt >= 0 and is_function(attempt_fun, 1) do
     if live_action_time_remaining?(deadline) do
-      baseline_version = live_progress_version(session)
+      baseline_version = session.render_version
 
-      case await_live_action_progress(session, baseline_version, deadline) do
+      case await_or_refresh_live_action_progress(session, baseline_version, deadline, attempt) do
         {:ok, next_session} ->
-          do_run_transition_aware_assertion(next_session, deadline, attempt_fun)
+          do_run_transition_aware_assertion(next_session, deadline, attempt + 1, attempt_fun)
 
         :timeout ->
           {:error, session, observed, reason}
@@ -1014,7 +1022,22 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp click_live_button(session, button, kind) do
-    case click_live_button_via_metadata(session, button) do
+    baseline_version = live_progress_version(session)
+
+    case click_live_button_via_element(session, button, baseline_version) do
+      {:ok, _updated, _observed} = ok ->
+        ok
+
+      {:error, _failed_session, _observed, _reason} = error ->
+        error
+
+      :error ->
+        click_live_button_via_event_or_error(session, button, kind, baseline_version)
+    end
+  end
+
+  defp click_live_button_via_event_or_error(session, button, kind, baseline_version) do
+    case click_live_button_via_event(session, button, baseline_version) do
       {:ok, _updated, _observed} = ok ->
         ok
 
@@ -1026,13 +1049,76 @@ defmodule Cerberus.Driver.Live do
           action: :button,
           clicked: button.text,
           path: session.current_path,
-          result: "metadata dispatch unavailable",
+          result: "element click unavailable",
           transition: session_transition(session)
         }
 
         {:error, session, observed, no_clickable_error(kind)}
     end
   end
+
+  defp click_live_button_via_element(
+         %__MODULE__{view: %View{} = view} = session,
+         %{selector: selector} = button,
+         baseline_version
+       )
+       when is_binary(selector) and selector != "" do
+    result =
+      view
+      |> LiveViewClient.element(scoped_selector(selector, Session.scope(session)))
+      |> LiveViewClient.render_click(%{})
+
+    case result do
+      rendered when is_binary(rendered) ->
+        click_live_button_rendered(session, button, rendered, baseline_version)
+
+      {:error, {reason, %{to: _to} = redirect}} when reason in [:redirect, :live_redirect] ->
+        redirected_result(session, button, redirect, reason)
+
+      _other ->
+        :error
+    end
+  rescue
+    ArgumentError -> :error
+  end
+
+  defp click_live_button_via_element(_session, _button, _baseline_version), do: :error
+
+  defp click_live_button_via_event(
+         %__MODULE__{view: %View{} = view} = session,
+         %{phx_click: phx_click} = button,
+         baseline_version
+       )
+       when is_binary(phx_click) do
+    trimmed = String.trim(phx_click)
+
+    if trimmed != "" and not String.starts_with?(trimmed, "[") do
+      payload = Map.get(button, :phx_values, %{})
+
+      result =
+        view
+        |> maybe_target_live_view(Map.get(button, :phx_target))
+        |> LiveViewClient.render_click(trimmed, payload)
+
+      case result do
+        rendered when is_binary(rendered) ->
+          click_live_button_rendered(session, button, rendered, baseline_version)
+
+        {:error, {reason, %{to: _to} = redirect}} when reason in [:redirect, :live_redirect] ->
+          redirected_result(session, button, redirect, reason)
+
+        _other ->
+          :error
+      end
+    else
+      :error
+    end
+  end
+
+  defp click_live_button_via_event(_session, _button, _baseline_version), do: :error
+
+  defp maybe_target_live_view(%View{} = view, target) when target in [nil, ""], do: view
+  defp maybe_target_live_view(%View{} = view, target), do: LiveViewClient.with_target(view, target)
 
   defp click_live_dispatch_change_button(session, button) do
     form_selector = button[:form_selector]
@@ -1101,99 +1187,23 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp click_live_button_via_metadata(session, button) do
-    case render_live_click_metadata(session, button) do
-      {:rendered, rendered, path_override} when is_binary(rendered) ->
-        click_live_button_rendered(session, button, rendered, :click, path_override)
+  defp click_live_button_error(session, button, failed_session, reason, details) do
+    observed = %{
+      action: :button,
+      clicked: button.text,
+      path: session.current_path,
+      details: details,
+      transition: session_transition(session)
+    }
 
-      {:redirect, redirect, reason} when reason in [:redirect, :live_redirect] ->
-        redirected_result(session, button, redirect, reason)
-
-      {:error, _failed_session, _reason, _details} = error ->
-        error
-
-      :error ->
-        :error
-    end
+    {:error, failed_session, observed, reason}
   end
 
-  defp render_live_click_metadata(session, %{phx_click: phx_click} = button) when is_binary(phx_click) do
-    target = Map.get(button, :phx_target)
-    dom_values = Map.get(button, :phx_values, %{})
-
-    phx_click
-    |> decode_live_click_commands()
-    |> Enum.find_value(:error, fn command ->
-      case run_live_click_command(session, command, target, dom_values) do
-        :skip -> false
-        other -> other
-      end
-    end)
-  end
-
-  defp render_live_click_metadata(_session, _button), do: :error
-
-  defp decode_live_click_commands(value) when is_binary(value) do
-    trimmed = String.trim(value)
-
-    cond do
-      trimmed == "" ->
-        []
-
-      String.starts_with?(trimmed, "[") ->
-        case Jason.decode(trimmed) do
-          {:ok, commands} when is_list(commands) -> commands
-          _ -> []
-        end
-
-      true ->
-        [["push", %{"event" => trimmed}]]
-    end
-  end
-
-  defp run_live_click_command(session, ["push", %{"event" => event} = opts], fallback_target, dom_values)
-       when is_binary(event) and is_map(opts) do
-    payload = Map.merge(dom_values, Map.get(opts, "value", %{}))
-
-    target = Map.get(opts, "target") || fallback_target
-
-    session.view
-    |> maybe_target_live_view(target)
-    |> LiveViewClient.render_click(event, payload)
-    |> normalize_live_click_metadata_result(session.current_path)
-  end
-
-  defp run_live_click_command(session, ["patch", %{"href" => to}], _fallback_target, _dom_values) when is_binary(to) do
-    path = to_request_path(to, session.current_path)
-
-    session.view
-    |> LiveViewClient.render_patch(path)
-    |> normalize_live_click_metadata_result(path)
-  end
-
-  defp run_live_click_command(session, ["navigate", %{"href" => to}], _fallback_target, _dom_values) when is_binary(to) do
-    {:redirect, %{to: to_request_path(to, session.current_path)}, :live_redirect}
-  end
-
-  defp run_live_click_command(_session, _command, _fallback_target, _dom_values), do: :skip
-
-  defp maybe_target_live_view(%View{} = view, target) when target in [nil, ""], do: view
-  defp maybe_target_live_view(%View{} = view, target), do: LiveViewClient.with_target(view, target)
-
-  defp normalize_live_click_metadata_result(rendered, path_override) when is_binary(rendered) do
-    {:rendered, rendered, path_override}
-  end
-
-  defp normalize_live_click_metadata_result({:error, {reason, %{to: to} = redirect}}, _path_override)
-       when reason in [:redirect, :live_redirect] and is_binary(to) do
-    {:redirect, redirect, reason}
-  end
-
-  defp normalize_live_click_metadata_result(_other, _path_override), do: :error
-
-  defp click_live_button_rendered(session, button, rendered, reason, path_override) do
-    case apply_live_rendered_result(session, rendered, reason, path_override) do
+  defp click_live_button_rendered(session, button, rendered, baseline_version) do
+    case apply_live_rendered_result(session, rendered, :click) do
       {:ok, updated, transition} ->
+        updated = maybe_await_delayed_live_progress(updated, baseline_version)
+
         observed = %{
           action: :button,
           clicked: button.text,
@@ -1209,17 +1219,26 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp click_live_button_error(session, button, failed_session, reason, details) do
-    observed = %{
-      action: :button,
-      clicked: button.text,
-      path: session.current_path,
-      details: details,
-      transition: session_transition(session)
-    }
+  defp maybe_await_delayed_live_progress(%__MODULE__{} = session, baseline_version) when is_integer(baseline_version) do
+    Cerberus.Profiling.profile {:live_internal, :post_action_progress_wait} do
+      if live_progress_version(session) == baseline_version do
+        deadline = System.monotonic_time(:millisecond) + 250
 
-    {:error, failed_session, observed, reason}
+        try do
+          case await_or_refresh_live_action_progress(session, baseline_version, deadline, 0) do
+            {:ok, next_session} -> next_session
+            :timeout -> session
+          end
+        rescue
+          ArgumentError -> session
+        end
+      else
+        session
+      end
+    end
   end
+
+  defp maybe_await_delayed_live_progress(session, _baseline_version), do: session
 
   defp click_live_link(session, link) do
     result = maybe_render_click_link(session, link)
@@ -1353,10 +1372,6 @@ defmodule Cerberus.Driver.Live do
     {:ok, update_last_result(updated, :click, observed), observed}
   end
 
-  defp redirected_result(session, clicked, to, reason, action) when is_binary(to) do
-    redirected_result(session, clicked, %{to: to}, reason, action)
-  end
-
   defp scoped_selector(selector, scope) when is_binary(scope) and scope != "", do: "#{scope} #{selector}"
   defp scoped_selector(selector, _scope), do: selector
 
@@ -1390,6 +1405,8 @@ defmodule Cerberus.Driver.Live do
     else
       refresh_live_document!(session, current_version)
     end
+  rescue
+    ArgumentError -> session
   end
 
   defp with_latest_document(session), do: session
@@ -1682,7 +1699,12 @@ defmodule Cerberus.Driver.Live do
         {:ok, LiveViewHTML.enrich_button(session.document, button, Session.scope(session))}
 
       {:error, "no button matched locator"} ->
-        LiveViewHTML.find_action_live_clickable_button(session.document, expected, opts, Session.scope(session))
+        LiveViewHTML.find_action_live_clickable_button(
+          session.document,
+          expected,
+          opts,
+          Session.scope(session)
+        )
 
       {:error, reason} ->
         {:error, reason}
@@ -3078,19 +3100,20 @@ defmodule Cerberus.Driver.Live do
   defp wait_for_live_actionable(session, timeout_ms, finder) when is_function(finder, 1) do
     deadline = System.monotonic_time(:millisecond) + timeout_ms
     session = ensure_live_document(session)
-    do_wait_for_live_actionable(session, deadline, nil, finder)
+    do_wait_for_live_actionable(session, deadline, nil, 0, finder)
   end
 
-  defp do_wait_for_live_actionable(session, deadline, pending_reason, finder) when is_function(finder, 1) do
+  defp do_wait_for_live_actionable(session, deadline, pending_reason, attempt, finder)
+       when is_integer(attempt) and attempt >= 0 and is_function(finder, 1) do
     {resolved_session, result} = finder.(session)
-    baseline_version = live_progress_version(resolved_session)
+    baseline_version = resolved_session.render_version
 
     case result do
       {:ok, candidate} ->
         {:ok, resolved_session, candidate}
 
       {:retry, reason} ->
-        retry_live_actionable(resolved_session, baseline_version, deadline, reason, finder)
+        retry_live_actionable(resolved_session, baseline_version, deadline, attempt, reason, finder)
 
       {:error, reason} when is_nil(pending_reason) ->
         {:error, resolved_session, reason}
@@ -3100,6 +3123,7 @@ defmodule Cerberus.Driver.Live do
           resolved_session,
           baseline_version,
           deadline,
+          attempt,
           pending_reason,
           reason,
           finder
@@ -3115,16 +3139,17 @@ defmodule Cerberus.Driver.Live do
     reason in ["no form field matched locator", "no submit button matched locator", "no button matched locator"]
   end
 
-  defp retry_live_actionable(session, baseline_version, deadline, retry_reason, finder) do
+  defp retry_live_actionable(session, baseline_version, deadline, attempt, retry_reason, finder) do
     with true <- live_action_time_remaining?(deadline),
-         {:ok, progressed_session} <- await_live_action_progress(session, baseline_version, deadline) do
-      do_wait_for_live_actionable(progressed_session, deadline, retry_reason, finder)
+         {:ok, progressed_session} <-
+           await_or_refresh_live_action_progress(session, baseline_version, deadline, attempt) do
+      do_wait_for_live_actionable(progressed_session, deadline, retry_reason, attempt + 1, finder)
     else
       _ -> {:error, session, retry_reason}
     end
   end
 
-  defp maybe_retry_live_actionable(session, baseline_version, deadline, pending_reason, reason, finder) do
+  defp maybe_retry_live_actionable(session, baseline_version, deadline, attempt, pending_reason, reason, finder) do
     cond do
       not live_action_retryable_reason?(reason) ->
         {:error, session, pending_reason}
@@ -3133,9 +3158,15 @@ defmodule Cerberus.Driver.Live do
         {:error, session, pending_reason}
 
       true ->
-        case await_live_action_progress(session, baseline_version, deadline) do
+        case await_or_refresh_live_action_progress(session, baseline_version, deadline, attempt) do
           {:ok, progressed_session} ->
-            do_wait_for_live_actionable(progressed_session, deadline, pending_reason, finder)
+            do_wait_for_live_actionable(
+              progressed_session,
+              deadline,
+              pending_reason,
+              attempt + 1,
+              finder
+            )
 
           :timeout ->
             {:error, session, pending_reason}
@@ -3145,30 +3176,96 @@ defmodule Cerberus.Driver.Live do
 
   defp await_live_action_progress(%__MODULE__{view: view} = session, baseline_version, deadline)
        when is_integer(baseline_version) do
-    remaining = max(deadline - System.monotonic_time(:millisecond), 0)
+    Cerberus.Profiling.profile {:live_internal, :await_progress} do
+      remaining = max(deadline - System.monotonic_time(:millisecond), 0)
 
-    case LiveViewClient.await_progress(view, baseline_version, remaining) do
-      {:ok, {:redirect, %{to: path}}} ->
-        {:ok, follow_redirect(session, path)}
+      case LiveViewClient.await_progress(view, baseline_version, remaining) do
+        {:ok, {:redirect, %{to: path}}} ->
+          {:ok, follow_redirect(session, path)}
 
-      {:ok, {:live_redirect, %{to: path}}} ->
-        {:ok, follow_redirect(session, path)}
+        {:ok, {:live_redirect, %{to: path}}} ->
+          {:ok, follow_redirect(session, path)}
 
-      {:ok, {:patch, %{to: path}}} ->
-        {:ok, refresh_live_progress_session(session, path)}
+        {:ok, {:patch, %{to: path}}} ->
+          {:ok, refresh_live_progress_session(session, path)}
 
-      {:ok, :diff} ->
-        {:ok, refresh_live_progress_session(session, nil)}
+        {:ok, :diff} ->
+          {:ok, refresh_live_progress_session(session, nil)}
 
-      {:ok, :terminated} ->
-        :timeout
+        {:ok, :terminated} ->
+          :timeout
 
-      :timeout ->
-        :timeout
+        :timeout ->
+          :timeout
+      end
     end
   end
 
   defp await_live_action_progress(session, _baseline_version, _deadline), do: {:ok, session}
+
+  defp await_or_refresh_live_action_progress(%__MODULE__{} = session, baseline_version, deadline, attempt)
+       when is_integer(baseline_version) and is_integer(attempt) and attempt >= 0 do
+    do_await_or_refresh_live_action_progress(session, baseline_version, deadline, attempt)
+  end
+
+  defp await_or_refresh_live_action_progress(session, _baseline_version, _deadline, _attempt), do: {:ok, session}
+
+  @live_retry_backoff_ms [20, 50, 100, 100, 500]
+
+  defp do_await_or_refresh_live_action_progress(%__MODULE__{} = session, baseline_version, deadline, attempt)
+       when is_integer(baseline_version) and is_integer(attempt) and attempt >= 0 do
+    cond do
+      live_progress_version(session) > baseline_version ->
+        {:ok, refresh_live_progress_session(session, nil)}
+
+      navigation = LiveViewClient.receive_navigation(session.view, 0) ->
+        {:ok, refresh_live_navigation_session(session, navigation)}
+
+      not live_action_time_remaining?(deadline) ->
+        :timeout
+
+      true ->
+        sleep_for_live_retry(deadline, attempt)
+        resolve_live_retry_refresh(session, baseline_version, deadline)
+    end
+  end
+
+  defp sleep_for_live_retry(deadline, attempt) when is_integer(attempt) and attempt >= 0 do
+    remaining = max(deadline - System.monotonic_time(:millisecond), 0)
+    Process.sleep(min(live_retry_backoff_ms(attempt), remaining))
+  end
+
+  defp resolve_live_retry_refresh(session, baseline_version, deadline) when is_integer(baseline_version) do
+    refreshed = safe_refresh_live_progress_session(session, nil)
+
+    cond do
+      refreshed.render_version > baseline_version ->
+        {:ok, refreshed}
+
+      refreshed.current_path != session.current_path ->
+        {:ok, refreshed}
+
+      not live_action_time_remaining?(deadline) ->
+        :timeout
+
+      true ->
+        {:ok, refreshed}
+    end
+  end
+
+  defp live_retry_backoff_ms(attempt) when is_integer(attempt) and attempt >= 0 do
+    Enum.at(@live_retry_backoff_ms, attempt, List.last(@live_retry_backoff_ms))
+  end
+
+  defp refresh_live_navigation_session(session, {:redirect, %{to: path}}), do: follow_redirect(session, path)
+  defp refresh_live_navigation_session(session, {:live_redirect, %{to: path}}), do: follow_redirect(session, path)
+  defp refresh_live_navigation_session(session, {:patch, %{to: path}}), do: refresh_live_progress_session(session, path)
+
+  defp safe_refresh_live_progress_session(%__MODULE__{} = session, path_override) do
+    refresh_live_progress_session(session, path_override)
+  rescue
+    ArgumentError -> session
+  end
 
   defp refresh_live_progress_session(%__MODULE__{} = session, path_override) do
     current_path = LiveViewClient.current_path(session.view, session.current_path)
@@ -3450,8 +3547,11 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp resolve_live_change_result(session, rendered, target) when is_binary(rendered) do
+    baseline_version = live_progress_version(session)
+
     case apply_live_rendered_result(session, rendered, :fill_in) do
       {:ok, updated, transition} ->
+        updated = maybe_await_delayed_live_progress(updated, baseline_version)
         {:ok, updated, %{triggered: true, target: target, transition: transition}}
 
       {:error, failed_session, reason, details} ->
@@ -3498,9 +3598,14 @@ defmodule Cerberus.Driver.Live do
     path = path_override || maybe_live_patch_path(session.view, session.current_path)
 
     refreshed =
-      session
-      |> refresh_live_document!()
-      |> Map.put(:current_path, path || session.current_path)
+      try do
+        session
+        |> refresh_live_document!()
+        |> Map.put(:current_path, path || session.current_path)
+      rescue
+        ArgumentError ->
+          Map.put(session, :current_path, path || session.current_path)
+      end
 
     case maybe_follow_trigger_action(refreshed) do
       :no_trigger ->

@@ -11,6 +11,7 @@ const FIREFOX = process.env.FIREFOX;
 const PLAYWRIGHT_BROWSER = process.env.PLAYWRIGHT_BROWSER || "chromium";
 const ITERATIONS = parseInt(process.env.ITERATIONS || "10", 10);
 const WARMUP = parseInt(process.env.WARMUP || "2", 10);
+const CONCURRENCY = Math.max(parseInt(process.env.CONCURRENCY || "1", 10), 1);
 const SCENARIO = process.env.SCENARIO || "churn";
 const FLOW_PATH = "/phoenix_test/playwright/live/performance";
 const DONE_PATH = "/phoenix_test/playwright/live/performance/done";
@@ -28,6 +29,10 @@ const ASSIGNMENT_WINDOW = "window-3";
 const ASSIGNMENT_SKILL = "skill-runes";
 const ASSIGNMENT_BATCH = "batch-orchid";
 const ASSIGNMENT_OWNER = "owner-wizard-prime";
+const CHURN_FLOW_PROOF =
+  "candidate-modal-opened>candidate-results-loaded>candidate-chosen>results-loaded>review-opened>filters-patched>done-navigated";
+const LOCATOR_STRESS_FLOW_PROOF =
+  "candidate-modal-opened>candidate-results-loaded>candidate-chosen>results-loaded>assignment-modal-opened>assignment-chosen>filters-patched>done-navigated";
 
 function percentile(samples, pct) {
   if (samples.length === 0) return 0;
@@ -42,6 +47,27 @@ function summarize(samples) {
     medianMs: percentile(samples, 0.5),
     p95Ms: percentile(samples, 0.95)
   };
+}
+
+async function buildWorkers(browser, concurrency) {
+  const workers = [];
+
+  for (let index = 0; index < concurrency; index += 1) {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    workers.push({ context, page });
+  }
+
+  return workers;
+}
+
+async function closeWorkers(workers) {
+  await Promise.all(
+    workers.map(async ({ page, context }) => {
+      await page.close();
+      await context.close();
+    })
+  );
 }
 
 function findManagedChromeExecutable() {
@@ -97,9 +123,21 @@ async function waitForExactText(page, selector, text) {
   );
 }
 
+async function waitForPathAndQuery(page, pathname, expectedParams) {
+  await page.waitForURL((url) => {
+    if (url.pathname !== pathname) return false;
+
+    return Object.entries(expectedParams).every(([key, value]) => url.searchParams.get(key) === value);
+  });
+}
+
 function scenarioFlowPath() {
   if (SCENARIO === "locator_stress") {
     return `${FLOW_PATH}?scenario=locator_stress`;
+  }
+
+  if (SCENARIO === "churn_no_delay") {
+    return `${FLOW_PATH}?scenario=churn_no_delay`;
   }
 
   return FLOW_PATH;
@@ -120,6 +158,7 @@ async function chooseCandidate(page) {
 }
 
 async function runChurnFlow(page) {
+  const queryScenario = SCENARIO === "churn_no_delay" ? "churn_no_delay" : "churn";
   await page.getByRole("button", { name: "Load heavy results", exact: true }).click();
   const targetCard = page
     .locator('article[data-card-kind="result"][data-slot="120"]')
@@ -132,10 +171,16 @@ async function runChurnFlow(page) {
   await reviewDialog.waitFor();
   await reviewDialog.getByText(CANDIDATE_NAME, { exact: true }).waitFor();
   await reviewDialog.getByRole("button", { name: "Apply filters", exact: true }).click();
-  await page.waitForURL(`${BASE_URL}${FLOW_PATH}?step=patched&candidate=${CANDIDATE_ID}&scenario=churn`);
+  await waitForPathAndQuery(page, FLOW_PATH, {
+    step: "patched",
+    candidate: CANDIDATE_ID,
+    scenario: queryScenario
+  });
   await page.getByRole("button", { name: "Continue workflow", exact: true }).click();
-  await page.waitForURL(`${BASE_URL}${DONE_PATH}?candidate=${CANDIDATE_ID}`);
+  await waitForPathAndQuery(page, DONE_PATH, { candidate: CANDIDATE_ID });
   await page.getByRole("heading", { name: "Performance flow complete", exact: true }).waitFor();
+  await page.getByText(`Flow proof: ${CHURN_FLOW_PROOF}`, { exact: true }).waitFor();
+  await page.getByText("Flow events: 7", { exact: true }).waitFor();
 }
 
 async function runLocatorStressFlow(page) {
@@ -177,13 +222,21 @@ async function runLocatorStressFlow(page) {
   await assignmentRow.getByRole("button", { name: "Select", exact: true }).click();
   await page.getByText(`Selected assignment: ${ASSIGNMENT_NAME}`, { exact: true }).waitFor();
   await page.getByRole("button", { name: "Apply locator filters", exact: true }).click();
-  await page.waitForURL(
-    `${BASE_URL}${FLOW_PATH}?step=patched&candidate=${CANDIDATE_ID}&scenario=locator_stress&assignment=${ASSIGNMENT_ID}`
-  );
+  await waitForPathAndQuery(page, FLOW_PATH, {
+    step: "patched",
+    candidate: CANDIDATE_ID,
+    scenario: "locator_stress",
+    assignment: ASSIGNMENT_ID
+  });
   await page.getByRole("button", { name: "Continue workflow", exact: true }).click();
-  await page.waitForURL(`${BASE_URL}${DONE_PATH}?candidate=${CANDIDATE_ID}&assignment=${ASSIGNMENT_ID}`);
+  await waitForPathAndQuery(page, DONE_PATH, {
+    candidate: CANDIDATE_ID,
+    assignment: ASSIGNMENT_ID
+  });
   await page.getByRole("heading", { name: "Performance flow complete", exact: true }).waitFor();
   await page.getByText(`Assignment carried forward: ${ASSIGNMENT_ID}`, { exact: true }).waitFor();
+  await page.getByText(`Flow proof: ${LOCATOR_STRESS_FLOW_PROOF}`, { exact: true }).waitFor();
+  await page.getByText("Flow events: 8", { exact: true }).waitFor();
 }
 
 async function runFlow(page) {
@@ -232,38 +285,46 @@ async function runFlow(page) {
   }
 
   const browser = await browserType.launch(launchOptions);
-
-  const page = await browser.newPage();
   const samples = [];
+  let workers = [];
 
   try {
-    for (let index = 0; index < WARMUP + ITERATIONS; index += 1) {
-      const started = process.hrtime.bigint();
-      await runFlow(page);
-      const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+    workers = await buildWorkers(browser, CONCURRENCY);
 
-      if (index >= WARMUP) {
-        samples.push(elapsedMs);
+    try {
+      for (let index = 0; index < WARMUP + ITERATIONS; index += 1) {
+        const started = process.hrtime.bigint();
+        await Promise.all(workers.map(({ page }) => runFlow(page)));
+        const elapsedRoundMs = Number(process.hrtime.bigint() - started) / 1e6;
+
+        if (index >= WARMUP) {
+          samples.push(elapsedRoundMs);
+        }
       }
+
+      const metrics = summarize(samples);
+
+      console.log(
+        "runner,browser,scenario,iterations,warmup,concurrency,mean_round_ms,mean_per_flow_ms,median_round_ms,p95_round_ms"
+      );
+      console.log(
+        [
+          "playwright",
+          PLAYWRIGHT_BROWSER,
+          SCENARIO,
+          ITERATIONS,
+          WARMUP,
+          CONCURRENCY,
+          metrics.meanMs.toFixed(3),
+          (metrics.meanMs / CONCURRENCY).toFixed(3),
+          metrics.medianMs.toFixed(3),
+          metrics.p95Ms.toFixed(3)
+        ].join(",")
+      );
+    } finally {
+      await closeWorkers(workers);
     }
-
-    const metrics = summarize(samples);
-
-    console.log("runner,browser,scenario,iterations,warmup,mean_ms,median_ms,p95_ms");
-    console.log(
-      [
-        "playwright",
-        PLAYWRIGHT_BROWSER,
-        SCENARIO,
-        ITERATIONS,
-        WARMUP,
-        metrics.meanMs.toFixed(3),
-        metrics.medianMs.toFixed(3),
-        metrics.p95Ms.toFixed(3)
-      ].join(",")
-    );
   } finally {
-    await page.close();
     await browser.close();
   }
 })().catch((error) => {

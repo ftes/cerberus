@@ -79,6 +79,14 @@ defmodule Cerberus.Phoenix.LiveViewClient do
   end
 
   @spec html_tree(view() | element()) :: {:ok, html_tree()} | :error
+  def html_tree(%View{} = view) do
+    sync_with_root(view)
+    {tree, _static_path} = html(view)
+    {:ok, tree}
+  catch
+    :exit, _ -> :error
+  end
+
   def html_tree(view_or_element) do
     {tree, _static_path} = html(view_or_element)
     {:ok, tree}
@@ -287,6 +295,9 @@ defmodule Cerberus.Phoenix.LiveViewClient do
   defp call(view_or_element, tuple) do
     GenServer.call(proxy_pid(view_or_element), tuple, :infinity)
   catch
+    :exit, {:shutdown, {kind, opts}} when kind in [:redirect, :live_redirect] ->
+      {:error, {kind, opts}}
+
     :exit, {{:shutdown, {kind, opts}}, _} when kind in [:redirect, :live_redirect] ->
       {:error, {kind, opts}}
 
@@ -334,4 +345,8 @@ defmodule Cerberus.Phoenix.LiveViewClient do
 
   defp proxy_pid(%{proxy: {_ref, _topic, pid}}), do: pid
   defp proxy_topic(%{proxy: {_ref, topic, _pid}}), do: topic
+
+  defp sync_with_root(%View{} = view) do
+    GenServer.call(proxy_pid(view), {:sync_with_root, proxy_topic(view)})
+  end
 end
