@@ -148,7 +148,7 @@ defmodule Cerberus.Query do
     cond do
       is_integer(Keyword.get(opts, :count)) -> Keyword.fetch!(opts, :count)
       is_integer(Keyword.get(opts, :max)) -> Keyword.fetch!(opts, :max)
-      is_tuple(Keyword.get(opts, :between)) -> elem(Keyword.fetch!(opts, :between), 1)
+      not is_nil(Keyword.get(opts, :between)) -> elem(normalize_between_opt(Keyword.fetch!(opts, :between)), 1)
       true -> nil
     end
   end
@@ -289,13 +289,18 @@ defmodule Cerberus.Query do
 
   defp check_between_opt(_match_count, nil), do: :ok
 
-  defp check_between_opt(match_count, {min, max}) do
+  defp check_between_opt(match_count, between) do
+    {min, max} = normalize_between_opt(between)
+
     if match_count >= min and match_count <= max do
       :ok
     else
       {:error, "expected matched element count between #{min} and #{max}, got #{match_count}"}
     end
   end
+
+  defp normalize_between_opt({min, max}), do: {min, max}
+  defp normalize_between_opt(%Range{first: min, last: max}), do: {min, max}
 
   @spec matches_state_filters?(map(), keyword()) :: boolean()
   def matches_state_filters?(candidate, opts) when is_map(candidate) and is_list(opts) do

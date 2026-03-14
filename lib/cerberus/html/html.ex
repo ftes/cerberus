@@ -1,6 +1,7 @@
 defmodule Cerberus.Html do
   @moduledoc false
 
+  alias Cerberus.Driver.CandidateScope
   alias Cerberus.Locator
   alias Cerberus.Options
   alias Cerberus.Profiling
@@ -12,6 +13,22 @@ defmodule Cerberus.Html do
   @assertion_deadline_throw :cerberus_assertion_deadline_exceeded
 
   @type document :: LazyHTML.t()
+  @type assertion_round_result :: %{
+          required(:ok) => boolean(),
+          required(:reason) => String.t(),
+          required(:match_count) => non_neg_integer(),
+          required(:matched) => [String.t()],
+          required(:candidate_values) => [String.t()]
+        }
+  @type action_round_result :: %{
+          required(:ok) => boolean(),
+          required(:reason) => String.t(),
+          required(:match_count) => non_neg_integer(),
+          required(:matched) => [String.t()],
+          required(:candidate_values) => [String.t()],
+          optional(:target_selector) => String.t(),
+          optional(:target_kind) => String.t()
+        }
 
   @spec parse(String.t()) :: {:ok, document()} | :error
   def parse(html) when is_binary(html) do
@@ -112,6 +129,56 @@ defmodule Cerberus.Html do
     collect_locator_assertion_match_count_in_doc(lazy_html, locator, visibility, opts, mode, scope)
   end
 
+  @spec resolve_assertion_round(document(), Locator.t(), true | false | :any, keyword(), String.t() | nil) ::
+          assertion_round_result()
+  def resolve_assertion_round(%LazyHTML{} = lazy_html, %Locator{} = locator, visibility, opts, scope \\ nil) do
+    trace? = Keyword.get(opts, :trace, false)
+    mode = Keyword.get(opts, :mode, :assert)
+
+    match_count = locator_assertion_match_count(lazy_html, locator, visibility, opts, mode, scope)
+    matched = maybe_assertion_round_matched_values(trace?, lazy_html, locator, visibility, scope)
+    ok = Query.assertion_count_outcome(match_count, opts, mode) == :ok
+
+    %{
+      ok: ok,
+      reason: assertion_round_reason(ok, mode),
+      match_count: match_count,
+      matched: matched,
+      candidate_values: assertion_round_candidate_values(trace?, ok, matched, lazy_html, locator, visibility, scope)
+    }
+  end
+
+  @spec resolve_action_round(document(), :click | :fill_in | :submit, String.t() | Regex.t(), keyword(), String.t() | nil) ::
+          action_round_result()
+  def resolve_action_round(%LazyHTML{} = lazy_html, op, expected, opts, scope \\ nil)
+      when op in [:click, :fill_in, :submit] and (is_binary(expected) or is_struct(expected, Regex)) do
+    trace? = Keyword.get(opts, :trace, false)
+    {matches, reason, target_kind} = action_round_matches(lazy_html, op, expected, opts, scope)
+    match_count = length(matches)
+
+    case Query.pick_action_match(matches, opts) do
+      {:ok, match} ->
+        %{
+          ok: true,
+          reason: "matched",
+          match_count: match_count,
+          matched: action_round_matched_values([match], op, opts),
+          candidate_values: [],
+          target_selector: Map.get(match, :selector),
+          target_kind: target_kind
+        }
+
+      {:error, query_reason} ->
+        %{
+          ok: false,
+          reason: normalize_action_round_reason(query_reason, reason),
+          match_count: match_count,
+          matched: [],
+          candidate_values: maybe_action_round_candidate_values(trace?, matches, lazy_html, op, target_kind, opts, scope)
+        }
+    end
+  end
+
   @spec node_matches_locator_filters?(term(), Options.locator_filter_opts()) :: boolean()
   def node_matches_locator_filters?(node, opts) when is_list(opts) do
     matches_nested_filter?(node, Keyword.get(opts, :has), true) and
@@ -123,26 +190,163 @@ defmodule Cerberus.Html do
     not node_hidden_in_root?(hidden_nodes_in_root(root_node), node)
   end
 
-  @spec fragment_matches_locator_filters?(document(), Options.locator_filter_opts()) :: boolean()
-  def fragment_matches_locator_filters?(%LazyHTML{} = fragment_document, opts) when is_list(opts) do
-    if Keyword.has_key?(opts, :has) or Keyword.has_key?(opts, :has_not) do
-      fragment_matches_locator_filters_in_doc?(fragment_document, opts)
+  defp assertion_round_reason(true, _mode), do: "matched"
+  defp assertion_round_reason(false, :assert), do: "expected locator not found"
+  defp assertion_round_reason(false, :refute), do: "unexpected matching locator found"
+
+  defp maybe_assertion_round_matched_values(true, lazy_html, locator, visibility, scope) do
+    locator_assertion_values(lazy_html, locator, visibility, scope)
+  end
+
+  defp maybe_assertion_round_matched_values(false, _lazy_html, _locator, _visibility, _scope), do: []
+
+  defp assertion_round_candidate_values(false, _ok, _matched, _lazy_html, _locator, _visibility, _scope), do: []
+  defp assertion_round_candidate_values(_trace?, true, _matched, _lazy_html, _locator, _visibility, _scope), do: []
+
+  defp assertion_round_candidate_values(_trace?, false, matched, _lazy_html, _locator, _visibility, _scope)
+       when matched != [], do: []
+
+  defp assertion_round_candidate_values(_trace?, false, [], lazy_html, locator, visibility, scope) do
+    case CandidateScope.locator_scope_selector(locator) do
+      selector when is_binary(selector) ->
+        lazy_html
+        |> scoped_nodes(scope)
+        |> Enum.flat_map(fn root_node ->
+          hidden_nodes = hidden_nodes_in_root(root_node)
+
+          root_node
+          |> safe_query(selector)
+          |> Enum.flat_map(&locator_assertion_values_for_node(root_node, hidden_nodes, &1, locator, visibility))
+        end)
+        |> Enum.uniq()
+
+      _other ->
+        []
+    end
+  end
+
+  defp action_round_matches(lazy_html, :click, expected, opts, scope) do
+    kind = Keyword.get(opts, :kind, :any)
+
+    matches =
+      case kind do
+        :link ->
+          action_link_matches(lazy_html, expected, opts, scope)
+
+        :button ->
+          action_button_matches(lazy_html, expected, opts, scope)
+
+        _other ->
+          action_link_matches(lazy_html, expected, opts, scope) ++ action_button_matches(lazy_html, expected, opts, scope)
+      end
+
+    reason =
+      case kind do
+        :link -> "no link matched locator"
+        :button -> "no button matched locator"
+        _other -> "no clickable element matched locator"
+      end
+
+    {matches, reason, Atom.to_string(kind)}
+  end
+
+  defp action_round_matches(lazy_html, :fill_in, expected, opts, scope) do
+    {action_form_field_matches(lazy_html, expected, opts, scope), "no form field matched locator", "field"}
+  end
+
+  defp action_round_matches(lazy_html, :submit, expected, opts, scope) do
+    {action_submit_matches(lazy_html, expected, opts, scope), "no submit button matched locator", "submit"}
+  end
+
+  defp action_round_matched_values(matches, op, opts) do
+    matches
+    |> Enum.map(&action_round_match_value(&1, op, opts))
+    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Enum.uniq()
+  end
+
+  defp action_round_match_value(match, :fill_in, _opts), do: Map.get(match, :label)
+
+  defp action_round_match_value(match, :submit, opts),
+    do: action_round_match_value(match, :click, Keyword.put_new(opts, :kind, :button))
+
+  defp action_round_match_value(match, :click, opts) do
+    match_by = Keyword.get(opts, :match_by, :text)
+    kind = Keyword.get(opts, :kind, :any)
+
+    case {kind, match_by} do
+      {:link, :text} -> Map.get(match, :text)
+      {:button, :text} -> Map.get(match, :text)
+      {:any, :text} -> Map.get(match, :text)
+      {_kind, :label} -> Map.get(match, :label)
+      {_kind, :title} -> Map.get(match, :title)
+      {_kind, :testid} -> Map.get(match, :testid)
+      {_kind, :alt} -> Map.get(match, :alt)
+      {_kind, :placeholder} -> Map.get(match, :placeholder)
+      _other -> Map.get(match, :text) || Map.get(match, :label)
+    end
+  end
+
+  defp maybe_action_round_candidate_values(false, _matches, _lazy_html, _op, _target_kind, _opts, _scope), do: []
+
+  defp maybe_action_round_candidate_values(true, matches, lazy_html, op, target_kind, opts, scope) do
+    values = action_round_matched_values(matches, op, opts)
+
+    if values == [] do
+      action_round_fallback_candidate_values(lazy_html, op, target_kind, opts, scope)
     else
-      true
+      values
     end
   end
 
-  defp fragment_matches_locator_filters_in_doc?(fragment_document, opts) do
-    root_node =
-      fragment_document
-      |> LazyHTML.to_tree()
-      |> List.first()
+  defp action_round_fallback_candidate_values(lazy_html, :fill_in, _target_kind, opts, scope) do
+    match_by = Keyword.get(opts, :match_by, :label)
+    assertion_values(lazy_html, match_by, :any, scope)
+  end
 
-    case root_node do
-      root_node when not is_nil(root_node) -> node_matches_locator_filters?(root_node, opts)
-      _ -> false
+  defp action_round_fallback_candidate_values(lazy_html, :submit, _target_kind, opts, scope) do
+    match_by =
+      case Keyword.get(opts, :match_by, :text) do
+        :text -> :button
+        other -> other
+      end
+
+    assertion_values(lazy_html, match_by, :any, scope)
+  end
+
+  defp action_round_fallback_candidate_values(lazy_html, :click, target_kind, opts, scope) do
+    match_by = Keyword.get(opts, :match_by, :text)
+
+    case {Keyword.get(opts, :locator), target_kind, match_by} do
+      {%Locator{} = locator, _kind, :text} ->
+        case CandidateScope.locator_scope_selector(locator) do
+          selector when is_binary(selector) ->
+            assertion_values(lazy_html, :text, :any, CandidateScope.merge_scope(selector, scope))
+
+          _other ->
+            action_round_click_fallback_values(lazy_html, target_kind, match_by, scope)
+        end
+
+      _other ->
+        action_round_click_fallback_values(lazy_html, target_kind, match_by, scope)
     end
   end
+
+  defp action_round_click_fallback_values(lazy_html, "link", :text, scope),
+    do: assertion_values(lazy_html, :link, :any, scope)
+
+  defp action_round_click_fallback_values(lazy_html, "button", :text, scope),
+    do: assertion_values(lazy_html, :button, :any, scope)
+
+  defp action_round_click_fallback_values(lazy_html, "any", :text, scope) do
+    assertion_values(lazy_html, :link, :any, scope) ++ assertion_values(lazy_html, :button, :any, scope)
+  end
+
+  defp action_round_click_fallback_values(lazy_html, _kind, match_by, scope),
+    do: assertion_values(lazy_html, match_by, :any, scope)
+
+  defp normalize_action_round_reason("no elements matched locator", fallback_reason), do: fallback_reason
+  defp normalize_action_round_reason(query_reason, _fallback_reason), do: query_reason
 
   @spec find_link(document(), String.t() | Regex.t(), Options.locator_filter_opts(), String.t() | nil) ::
           {:ok,
@@ -277,21 +481,7 @@ defmodule Cerberus.Html do
   end
 
   defp find_action_link_in_doc(lazy_html, expected, opts, scope) do
-    case_result =
-      case locator_opt(opts) do
-        %Locator{} = locator ->
-          lazy_html
-          |> scoped_nodes(scope)
-          |> Enum.flat_map(&find_link_in_root_by_locator(&1, lazy_html, locator, opts))
-
-        nil ->
-          lazy_html
-          |> scoped_nodes(scope)
-          |> Enum.flat_map(&find_link_in_root(&1, lazy_html, expected, opts))
-      end
-
-    matches = Enum.filter(case_result, &Query.matches_state_filters?(&1, opts))
-
+    matches = action_link_matches(lazy_html, expected, opts, scope)
     action_pick_result(matches, opts, "no link matched locator")
   end
 
@@ -314,21 +504,7 @@ defmodule Cerberus.Html do
   end
 
   defp find_action_button_in_doc(lazy_html, expected, opts, scope) do
-    case_result =
-      case locator_opt(opts) do
-        %Locator{} = locator ->
-          lazy_html
-          |> scoped_nodes(scope)
-          |> Enum.flat_map(&find_button_in_root_by_locator(&1, lazy_html, locator, opts))
-
-        nil ->
-          lazy_html
-          |> scoped_nodes(scope)
-          |> Enum.flat_map(&find_button_in_root(&1, lazy_html, expected, opts))
-      end
-
-    matches = Enum.filter(case_result, &Query.matches_state_filters?(&1, opts))
-
+    matches = action_button_matches(lazy_html, expected, opts, scope)
     action_pick_result(matches, opts, "no button matched locator")
   end
 
@@ -355,24 +531,7 @@ defmodule Cerberus.Html do
   end
 
   defp find_action_form_field_in_doc(lazy_html, expected, opts, scope) do
-    case_result =
-      case locator_opt(opts) do
-        %Locator{} = locator ->
-          lazy_html
-          |> scoped_nodes(scope)
-          |> Enum.flat_map(&find_form_field_in_root_by_locator(&1, locator, opts))
-
-        nil ->
-          lazy_html
-          |> scoped_nodes(scope)
-          |> Enum.flat_map(&find_form_field_in_root(&1, expected, opts))
-      end
-
-    matches =
-      case_result
-      |> Enum.filter(&Query.matches_state_filters?(&1, opts))
-      |> Enum.map(&sanitize_form_field_match/1)
-
+    matches = action_form_field_matches(lazy_html, expected, opts, scope)
     action_pick_result(matches, opts, "no form field matched locator")
   end
 
@@ -396,6 +555,71 @@ defmodule Cerberus.Html do
   end
 
   defp find_action_submit_button_in_doc(lazy_html, expected, opts, scope) do
+    matches = action_submit_matches(lazy_html, expected, opts, scope)
+    action_pick_result(matches, opts, "no submit button matched locator")
+  end
+
+  defp action_pick_result(matches, opts, no_match_reason) do
+    case Query.pick_action_match(matches, opts) do
+      {:error, "no elements matched locator"} -> {:error, no_match_reason}
+      other -> other
+    end
+  end
+
+  defp action_link_matches(lazy_html, expected, opts, scope) do
+    case_result =
+      case locator_opt(opts) do
+        %Locator{} = locator ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_link_in_root_by_locator(&1, lazy_html, locator, opts))
+
+        nil ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_link_in_root(&1, lazy_html, expected, opts))
+      end
+
+    Enum.filter(case_result, &Query.matches_state_filters?(&1, opts))
+  end
+
+  defp action_button_matches(lazy_html, expected, opts, scope) do
+    case_result =
+      case locator_opt(opts) do
+        %Locator{} = locator ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_button_in_root_by_locator(&1, lazy_html, locator, opts))
+
+        nil ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_button_in_root(&1, lazy_html, expected, opts))
+      end
+
+    Enum.filter(case_result, &Query.matches_state_filters?(&1, opts))
+  end
+
+  defp action_form_field_matches(lazy_html, expected, opts, scope) do
+    case_result =
+      case locator_opt(opts) do
+        %Locator{} = locator ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_form_field_in_root_by_locator(&1, locator, opts))
+
+        nil ->
+          lazy_html
+          |> scoped_nodes(scope)
+          |> Enum.flat_map(&find_form_field_in_root(&1, expected, opts))
+      end
+
+    case_result
+    |> Enum.filter(&Query.matches_state_filters?(&1, opts))
+    |> Enum.map(&sanitize_form_field_match/1)
+  end
+
+  defp action_submit_matches(lazy_html, expected, opts, scope) do
     case_result =
       case locator_opt(opts) do
         %Locator{} = locator ->
@@ -409,16 +633,7 @@ defmodule Cerberus.Html do
           |> Enum.flat_map(&find_submit_button_in_root(&1, expected, opts))
       end
 
-    matches = Enum.filter(case_result, &Query.matches_state_filters?(&1, opts))
-
-    action_pick_result(matches, opts, "no submit button matched locator")
-  end
-
-  defp action_pick_result(matches, opts, no_match_reason) do
-    case Query.pick_action_match(matches, opts) do
-      {:error, "no elements matched locator"} -> {:error, no_match_reason}
-      other -> other
-    end
+    Enum.filter(case_result, &Query.matches_state_filters?(&1, opts))
   end
 
   defp select_values_in_doc(lazy_html, field, option, opts, scope) do
@@ -2193,6 +2408,7 @@ defmodule Cerberus.Html do
 
   defp role_name(%Locator{opts: opts}) do
     case Keyword.get(opts, :role) do
+      value when is_atom(value) -> Atom.to_string(value)
       value when is_binary(value) and value != "" -> value
       _ -> nil
     end

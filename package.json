@@ -3,9 +3,11 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "bench:playwright-liveview-flow": "node bench/playwright_liveview_flow_benchmark.js"
+    "bench:playwright-liveview-flow": "node bench/playwright_liveview_flow_benchmark.js",
+    "bench:match-round-contract": "node bench/browser_match_round_runner.js"
   },
   "devDependencies": {
+    "jsdom": "20.0.3",
     "playwright": "1.58.2"
   }
 }

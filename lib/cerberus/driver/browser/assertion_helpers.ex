@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAssert && window.__cerberusAssert.__version === 13) return;
+    if (window.__cerberusAssert && window.__cerberusAssert.__version === 14) return;
 
     const helper = {};
-    helper.__version = 13;
+    helper.__version = 14;
     helper.now = () =>
       typeof performance !== "undefined" && typeof performance.now === "function"
         ? performance.now()
@@ -1348,6 +1348,23 @@ defmodule Cerberus.Driver.Browser.AssertionHelpers do
         texts: values,
         matched: values,
         jsTiming
+      };
+    };
+
+    helper.resolveAssertionRound = (options) => {
+      const result = options && options.trace === true
+        ? helper.locatorDiagnostics(options)
+        : helper.locatorQuick(options);
+
+      if (!result || typeof result !== "object") return result;
+
+      return {
+        ...result,
+        reason: result.ok === true
+          ? "matched"
+          : (String(options && options.mode || "assert") === "assert"
+              ? "expected locator not found"
+              : "unexpected matching locator found")
       };
     };
 

@@ -3,10 +3,10 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
 
   @preload_script """
   ;(() => {
-    if (window.__cerberusAction && window.__cerberusAction.__version === 20) return;
+    if (window.__cerberusAction && window.__cerberusAction.__version === 21) return;
 
     const helper = {};
-    helper.__version = 20;
+    helper.__version = 21;
     helper.now = () =>
       typeof performance !== "undefined" && typeof performance.now === "function"
         ? performance.now()
@@ -1660,6 +1660,56 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         path: window.location.pathname + window.location.search,
         jsTiming
       };
+    };
+
+    helper.resolveActionRound = (options) => helper.normalizeResolvedActionRound(helper.resolveOnce(options), options);
+
+    helper.resolveActionRoundReason = (resolved, options) => {
+      if (resolved && resolved.ok === true) return "matched";
+
+      const rawReason = resolved && typeof resolved.reason === "string" ? resolved.reason : "no elements matched locator";
+      if (rawReason !== "no elements matched locator") return rawReason;
+
+      return helper.noActionMatchReason(options);
+    };
+
+    helper.noActionMatchReason = (options) => {
+      const op = String(options && options.op || "");
+      const kind = String(options && options.kind || "any");
+
+      if (op === "fill_in") return "no form field matched locator";
+      if (op === "submit") return "no submit button matched locator";
+      if (op === "click" && kind === "link") return "no link matched locator";
+      if (op === "click" && kind === "button") return "no button matched locator";
+      return "no clickable element matched locator";
+    };
+
+    helper.normalizeResolvedActionRound = (resolved, options) => {
+      if (!resolved || typeof resolved !== "object") return resolved;
+
+      const normalized = {
+        ok: resolved.ok === true,
+        reason: helper.resolveActionRoundReason(resolved, options),
+        matchCount: Number.isInteger(resolved.matchCount) ? resolved.matchCount : 0,
+        path: typeof resolved.path === "string" ? resolved.path : helper.currentPath(),
+        jsTiming: resolved.jsTiming && typeof resolved.jsTiming === "object" ? resolved.jsTiming : {}
+      };
+
+      if (resolved.ok === true && resolved.target) {
+        normalized.target = {
+          ...resolved.target,
+          selector:
+            resolved.target.selector ||
+            (resolved.target.__el ? helper.uniqueSelector(resolved.target.__el) : null)
+        };
+      }
+
+      if (options && options.trace === true) {
+        if (Array.isArray(resolved.candidateValues)) normalized.candidateValues = resolved.candidateValues;
+        if (Number.isInteger(resolved.candidateCount)) normalized.candidateCount = resolved.candidateCount;
+      }
+
+      return normalized;
     };
 
     helper.resolveInternal = (options) => {

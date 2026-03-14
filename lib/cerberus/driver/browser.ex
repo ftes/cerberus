@@ -7,6 +7,7 @@ defmodule Cerberus.Driver.Browser do
   alias Cerberus.Driver.Browser.Config
   alias Cerberus.Driver.Browser.Expressions
   alias Cerberus.Driver.Browser.Extensions
+  alias Cerberus.Driver.Browser.MatchRoundPayload
   alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.TransientErrors
   alias Cerberus.Driver.Browser.UserContextProcess
@@ -740,32 +741,33 @@ defmodule Cerberus.Driver.Browser do
   defp build_action_payload(state, op, expected, opts, timeout_ms, extra_payload)
        when is_list(opts) and is_integer(timeout_ms) and timeout_ms >= 0 and is_map(extra_payload) do
     {between_min, between_max} = between_bounds(opts)
+    round_payload = MatchRoundPayload.action(op, expected, opts)
 
     Map.merge(
       %{
-        op: Atom.to_string(op),
+        op: round_payload.op,
         scopeSelector: action_scope_selector(state, opts),
-        locator: action_locator_payload(opts),
-        expected: text_expectation_payload(expected),
-        exact: Keyword.get(opts, :exact, false),
-        normalizeWs: Keyword.get(opts, :normalize_ws, true),
+        locator: round_payload.locator,
+        expected: round_payload.expected,
+        exact: round_payload.exact,
+        normalizeWs: round_payload.normalizeWs,
         force: Keyword.get(opts, :force, false),
-        matchBy: action_match_by(opts, op),
-        kind: action_kind(opts, op),
-        count: Keyword.get(opts, :count),
-        min: Keyword.get(opts, :min),
-        max: Keyword.get(opts, :max),
+        matchBy: round_payload.matchBy,
+        kind: round_payload.kind,
+        count: round_payload.count,
+        min: round_payload.min,
+        max: round_payload.max,
         betweenMin: between_min,
         betweenMax: between_max,
-        first: Keyword.get(opts, :first, false),
-        last: Keyword.get(opts, :last, false),
-        nth: Keyword.get(opts, :nth),
-        index: Keyword.get(opts, :index),
-        checked: Keyword.get(opts, :checked),
-        disabled: Keyword.get(opts, :disabled),
-        selected: Keyword.get(opts, :selected),
-        readonly: Keyword.get(opts, :readonly),
-        visible: Keyword.get(opts, :visible),
+        first: round_payload.first,
+        last: round_payload.last,
+        nth: round_payload.nth,
+        index: round_payload.index,
+        checked: round_payload.checked,
+        disabled: round_payload.disabled,
+        selected: round_payload.selected,
+        readonly: round_payload.readonly,
+        visible: round_payload.visible,
         readyTimeoutMs: timeout_ms,
         timeoutMs: timeout_ms,
         pollMs: 50
@@ -793,72 +795,6 @@ defmodule Cerberus.Driver.Browser do
   defp no_action_target_error(:submit, _opts), do: "no submit button matched locator"
   defp no_action_target_error(:upload, _opts), do: "no file input matched locator"
   defp no_action_target_error(_op, _opts), do: "no form field matched locator"
-
-  defp action_match_by(opts, op) do
-    default =
-      if op in [:click, :submit] do
-        :text
-      else
-        :label
-      end
-
-    opts
-    |> Keyword.get(:match_by, default)
-    |> Atom.to_string()
-  end
-
-  defp action_kind(opts, :click), do: opts |> Keyword.get(:kind, :any) |> Atom.to_string()
-  defp action_kind(_opts, _op), do: nil
-
-  defp action_locator_payload(opts) do
-    case Keyword.get(opts, :locator) do
-      %Locator{} = locator -> locator_payload(locator)
-      _ -> nil
-    end
-  end
-
-  defp locator_payload(%Locator{kind: kind, value: members, opts: opts}) when kind in [:scope, :and, :or, :not] do
-    %{
-      kind: Atom.to_string(kind),
-      members: Enum.map(members, &locator_payload/1),
-      opts: locator_opts_payload(opts)
-    }
-  end
-
-  defp locator_payload(%Locator{kind: :css, value: selector, opts: opts}) do
-    %{
-      kind: "css",
-      value: selector,
-      opts: locator_opts_payload(opts)
-    }
-  end
-
-  defp locator_payload(%Locator{kind: kind, value: expected, opts: opts}) do
-    %{
-      kind: Atom.to_string(kind),
-      expected: text_expectation_payload(expected),
-      opts: locator_opts_payload(opts)
-    }
-  end
-
-  defp locator_opts_payload(opts) when is_list(opts) do
-    %{
-      role: Keyword.get(opts, :role),
-      exact: Keyword.get(opts, :exact),
-      normalizeWs: Keyword.get(opts, :normalize_ws),
-      has: nested_locator_payload(Keyword.get(opts, :has)),
-      has_not: nested_locator_payload(Keyword.get(opts, :has_not)),
-      from: nested_locator_payload(Keyword.get(opts, :from)),
-      checked: Keyword.get(opts, :checked),
-      disabled: Keyword.get(opts, :disabled),
-      selected: Keyword.get(opts, :selected),
-      readonly: Keyword.get(opts, :readonly),
-      visible: Keyword.get(opts, :visible)
-    }
-  end
-
-  defp nested_locator_payload(%Locator{} = locator), do: locator_payload(locator)
-  defp nested_locator_payload(_other), do: nil
 
   defp inspect_failure_prefix(op) when op in [:click], do: "failed to inspect clickable elements"
   defp inspect_failure_prefix(op) when op in [:submit], do: "failed to inspect submit controls"
@@ -1611,16 +1547,17 @@ defmodule Cerberus.Driver.Browser do
 
   defp build_locator_assertion_payload(state, locator, visible, match_opts, timeout_ms, mode) do
     {between_min, between_max} = between_bounds(match_opts)
+    round_payload = MatchRoundPayload.assertion(locator, Keyword.put(match_opts, :mode, mode))
 
     %{
       scopeSelector: Session.scope(state),
-      locator: locator_payload(locator),
-      visibility: visibility_mode(visible),
+      locator: round_payload.locator,
+      visibility: round_payload.visibility || visibility_mode(visible),
       timeoutMs: timeout_ms,
-      mode: Atom.to_string(mode),
-      count: Keyword.get(match_opts, :count),
-      min: Keyword.get(match_opts, :min),
-      max: Keyword.get(match_opts, :max),
+      mode: round_payload.mode,
+      count: round_payload.count,
+      min: round_payload.min,
+      max: round_payload.max,
       betweenMin: between_min,
       betweenMax: between_max,
       pollMs: 50
