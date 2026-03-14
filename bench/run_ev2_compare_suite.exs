@@ -42,7 +42,9 @@ defmodule Cerberus.Bench.RunEv2CompareSuite do
           out: :string,
           max_cases: :integer,
           timeout_sec: :integer,
-          search: :string
+          search: :string,
+          node_bin: :string,
+          use_nix: :boolean
         ]
       )
 
@@ -52,7 +54,9 @@ defmodule Cerberus.Bench.RunEv2CompareSuite do
       out: parsed[:out],
       max_cases: max(parsed[:max_cases] || 4, 1),
       timeout_sec: max(parsed[:timeout_sec] || @default_timeout_sec, 1),
-      search: parsed[:search]
+      search: parsed[:search],
+      node_bin: parsed[:node_bin] || default_node_bin(),
+      use_nix: parsed[:use_nix] || auto_use_nix?(parsed[:root] || @default_root)
     }
   end
 
@@ -119,7 +123,8 @@ defmodule Cerberus.Bench.RunEv2CompareSuite do
       Integer.to_string(opts.max_cases)
     ]
 
-    result = run_command(opts.root, command, opts.timeout_sec * 1000)
+    env = build_env(opts)
+    result = run_command(opts.root, command, env, opts.timeout_sec * 1000, opts.use_nix)
 
     finished = System.monotonic_time(:millisecond)
     wall_seconds = (finished - started) / 1000
@@ -143,8 +148,13 @@ defmodule Cerberus.Bench.RunEv2CompareSuite do
     end
   end
 
-  defp run_command(root, command, timeout_ms) do
-    executable = System.find_executable("mix") || raise("could not find mix executable")
+  defp run_command(root, command, env, timeout_ms, use_nix) do
+    {executable, args} =
+      if use_nix do
+        {System.find_executable("nix") || raise("could not find nix executable"), ["develop", ".", "-c", "mix" | command]}
+      else
+        {System.find_executable("mix") || raise("could not find mix executable"), command}
+      end
 
     port =
       Port.open({:spawn_executable, executable}, [
@@ -152,7 +162,8 @@ defmodule Cerberus.Bench.RunEv2CompareSuite do
         :exit_status,
         :stderr_to_stdout,
         {:cd, root},
-        {:args, command}
+        {:env, env},
+        {:args, args}
       ])
 
     deadline = System.monotonic_time(:millisecond) + timeout_ms
@@ -177,6 +188,33 @@ defmodule Cerberus.Bench.RunEv2CompareSuite do
 
   defp chunks_to_binary(chunks) do
     chunks |> Enum.reverse() |> IO.iodata_to_binary()
+  end
+
+  defp build_env(opts) do
+    path_entries =
+      Enum.reject([opts.node_bin, Path.join(opts.root, "tmp/test-bin"), System.get_env("PATH", "")], &(&1 in [nil, ""]))
+
+    path = Enum.join(path_entries, ":")
+
+    [
+      {~c"PATH", String.to_charlist(path)},
+      {~c"PORT", Integer.to_charlist(unique_port())}
+    ]
+  end
+
+  defp unique_port do
+    4000 + rem(System.unique_integer([:positive, :monotonic]), 1000)
+  end
+
+  defp default_node_bin do
+    case "/Users/ftes/src/cerberus/tmp/node-v*/bin" |> Path.wildcard() |> Enum.sort() |> List.last() do
+      nil -> nil
+      path -> path
+    end
+  end
+
+  defp auto_use_nix?(root) do
+    File.exists?(Path.join(root, "flake.nix")) and not is_nil(System.find_executable("nix"))
   end
 
   defp summarize_completed_run(lane, file, output, exit_status, wall_seconds) do

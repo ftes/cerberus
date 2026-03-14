@@ -164,13 +164,34 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       return helper.liveConnected();
     };
 
-    helper.needsAwaitReady = (options, result, prePath) => {
+    helper.formSubmitsLive = (formSelector) => {
+      if (typeof formSelector !== "string" || formSelector === "") return false;
+      if (typeof document.querySelector !== "function") return false;
+
+      try {
+        const form = document.querySelector(formSelector);
+        return !!(
+          form &&
+          typeof form.hasAttribute === "function" &&
+          (form.hasAttribute("phx-submit") || form.hasAttribute("data-phx-submit"))
+        );
+      } catch (_error) {
+        return false;
+      }
+    };
+
+    helper.awaitReadyMeta = (options, result, prePath) => {
       const op = options && options.op ? options.op : "click";
       const path = result && typeof result.path === "string" ? result.path : helper.currentPath();
       const pathChanged = typeof prePath === "string" && prePath !== path;
       const target = result && result.target && typeof result.target === "object" ? result.target : null;
       const submitsForm = !!(target && typeof target.formSelector === "string" && target.formSelector !== "");
-      const submitsLive = !!(result && result.submitsLive === true);
+      const submitButton =
+        !!(target && target.kind === "button" && typeof target.type === "string" && target.type === "submit");
+      const submitsLive =
+        !!(result && result.submitsLive === true) ||
+        (submitsForm && submitButton && helper.formSubmitsLive(target.formSelector));
+      const submitsNonLiveForm = submitsForm && submitButton && !submitsLive;
       const linkNavigates =
         !!(
           op === "click" &&
@@ -188,12 +209,13 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           ((target.kind === "link" && typeof target.dataMethod === "string" && target.dataMethod !== "") ||
             (target.kind === "button" && typeof target.dataMethod === "string" && target.dataMethod !== ""))
         );
+      const navigationCapable = pathChanged || submitsNonLiveForm || linkNavigates || dataMethodNavigates;
+      const awaitReadyGraceMs = navigationCapable && !pathChanged ? 200 : 0;
 
-      if (op === "submit") {
-        return !submitsLive && (submitsForm || pathChanged);
-      }
-
-      return op === "click" && (pathChanged || linkNavigates || dataMethodNavigates);
+      return {
+        needsAwaitReady: navigationCapable,
+        awaitReadyGraceMs
+      };
     };
 
     helper.dispatchInputChange = (field) => {
@@ -2128,7 +2150,9 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         performResolvedMs += now() - performStartedAt;
 
         if (result && result.ok === true) {
-          result.needsAwaitReady = helper.needsAwaitReady(options, result, prePath);
+          const awaitReadyMeta = helper.awaitReadyMeta(options, result, prePath);
+          result.needsAwaitReady = awaitReadyMeta.needsAwaitReady === true;
+          result.awaitReadyGraceMs = Number(awaitReadyMeta.awaitReadyGraceMs || 0);
           break;
         }
 

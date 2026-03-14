@@ -946,7 +946,7 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp await_action_navigation(session, state, result, opts, fallback_observed, on_success) do
-    maybe_sleep_for_navigation_settle(state)
+    maybe_sleep_for_navigation_settle(result)
 
     case await_driver_ready(state, action_timeout_ms(state, opts)) do
       {:ok, ready_state, readiness} ->
@@ -981,7 +981,11 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp maybe_sleep_for_navigation_settle(_state), do: :ok
+  defp maybe_sleep_for_navigation_settle(%{"awaitReadyGraceMs" => grace_ms}) when is_integer(grace_ms) and grace_ms > 0 do
+    Process.sleep(grace_ms)
+  end
+
+  defp maybe_sleep_for_navigation_settle(_result), do: :ok
 
   defp action_navigation_observed?(%{"needsAwaitReady" => value}) when is_boolean(value), do: value
   defp action_navigation_observed?(_result), do: false

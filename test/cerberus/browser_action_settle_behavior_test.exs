@@ -165,6 +165,40 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> assert_path("/live/counter")
   end
 
+  test "browser click on non-live submit buttons awaits slow form navigation", context do
+    :browser
+    |> SharedBrowserSession.driver_session(context)
+    |> visit("/owner-form")
+    |> fill_in(~l"Name"l, "Aragorn")
+    |> click(role(:button, name: "Save Owner Form Slow Redirect", exact: true))
+    |> assert_path(~r|/owner-form/result|, exact: false, timeout: 0)
+    |> assert_has(~l"name: Aragorn"e, timeout: 0)
+    |> then(fn updated ->
+      readiness = last_readiness(updated)
+      assert is_map(readiness)
+      refute readiness["skippedAwaitReady"] == true
+      assert readiness["reason"] == "settled"
+      updated
+    end)
+  end
+
+  test "browser click on deferred non-live submit buttons awaits delayed navigation", context do
+    :browser
+    |> SharedBrowserSession.driver_session(context)
+    |> visit("/browser/action-settle/deferred-submit")
+    |> fill_in(~l"Name"l, "Aragorn")
+    |> click(role(:button, name: "Deferred Submit", exact: true))
+    |> assert_path(~r|/owner-form/result|, exact: false, timeout: 0)
+    |> assert_has(~l"name: Aragorn"e, timeout: 0)
+    |> then(fn updated ->
+      readiness = last_readiness(updated)
+      assert is_map(readiness)
+      refute readiness["skippedAwaitReady"] == true
+      assert readiness["reason"] == "settled"
+      updated
+    end)
+  end
+
   defp last_readiness(session) do
     UserContextProcess.last_readiness(session.user_context_pid, session.tab_id)
   end

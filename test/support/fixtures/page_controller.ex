@@ -1171,7 +1171,58 @@ defmodule Cerberus.Fixtures.PageController do
           >
             Save Owner Form Redirect
           </button>
+          <button
+            type="submit"
+            form="owner-form"
+            formaction="/owner-form/slow-redirect"
+            name="form-button"
+            value="save-owner-form-slow-redirect"
+          >
+            Save Owner Form Slow Redirect
+          </button>
         </main>
+      </body>
+    </html>
+    """)
+  end
+
+  def deferred_submit_form(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Deferred Submit Fixture</title>
+      </head>
+      <body>
+        <main>
+          <form id="deferred-submit-form" action="/owner-form/slow-redirect" method="get">
+            <label for="deferred_submit_name">Name</label>
+            <input id="deferred_submit_name" name="name" type="text" value="" />
+            <button id="deferred-submit-button" type="submit" name="form-button" value="deferred-submit">
+              Deferred Submit
+            </button>
+          </form>
+        </main>
+        <script>
+          (() => {
+            const form = document.getElementById("deferred-submit-form");
+            const button = document.getElementById("deferred-submit-button");
+
+            if (!form || !button) return;
+
+            button.addEventListener("click", (event) => {
+              event.preventDefault();
+              window.setTimeout(() => {
+                if (typeof form.requestSubmit === "function") {
+                  form.requestSubmit(button);
+                } else {
+                  form.submit();
+                }
+              }, 150);
+            });
+          })();
+        </script>
       </body>
     </html>
     """)
@@ -1207,6 +1258,11 @@ defmodule Cerberus.Fixtures.PageController do
     path = "/owner-form/result"
     destination = if query == "", do: path, else: path <> "?" <> query
     redirect(conn, to: destination)
+  end
+
+  def owner_form_slow_redirect(conn, params) do
+    Process.sleep(250)
+    owner_form_redirect(conn, params)
   end
 
   def checkbox_array(conn, _params) do

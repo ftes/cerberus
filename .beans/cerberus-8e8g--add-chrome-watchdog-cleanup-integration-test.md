@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-14T19:04:36Z
-updated_at: 2026-03-14T20:25:03Z
+updated_at: 2026-03-14T21:49:08Z
 ---
 
 Cover abrupt runtime VM exit for the Chrome runtime path, asserting both chromedriver and chrome are cleaned up by the shared watchdog, and rerun focused runtime integration coverage.
@@ -36,3 +36,6 @@ Cover abrupt runtime VM exit for the Chrome runtime path, asserting both chromed
 - after forcing child watchdog subprocesses to run in MIX_ENV=test, the full Chrome lane moved past the earlier startup crash and the focused runtime integration file passed in both Chrome and Firefox
 - a subsequent full Chrome run still failed elsewhere, now in test/cerberus/timeout_defaults_test.exs with a browser-driver init Mint.TransportError closed during full-suite load; a focused rerun of that file passed
 - the full Firefox lane passed locally with 639 tests, 0 failures, 1 skipped
+
+## Notes
+- current local process scan shows no obvious dangling Cerberus-managed browser processes: no chromedriver, no Google Chrome for Testing, no cerberus-browser-runtime-watchdog, and no fake_firefox or firefox process; only unrelated Brave and user Chrome crashpad handlers are present
