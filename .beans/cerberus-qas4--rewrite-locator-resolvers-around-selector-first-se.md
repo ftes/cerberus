@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-10T08:26:35Z
-updated_at: 2026-03-14T17:20:40Z
+updated_at: 2026-03-14T18:18:59Z
 ---
 
 Rewrite browser and LazyHTML locator resolution from scratch around a selector-first, narrow-resolution model guided by Playwright. Start by removing the temporary live label fast path, then rebuild static and live resolution, broaden browser coverage carefully, and enable parity tests incrementally while keeping complexity minimal.
@@ -71,3 +71,17 @@ Rewrite browser and LazyHTML locator resolution from scratch around a selector-f
 - control rows were: live churn 2530.396ms, live churn_no_delay 1440.684ms, live locator_stress 8947.378ms, phoenix_test churn 1591.786ms, phoenix_test churn_no_delay 1429.295ms, phoenix_test locator_stress 3907.318ms
 - experimental rows were: live churn 2534.743ms, live churn_no_delay 2211.771ms, live locator_stress 11903.356ms, phoenix_test churn 1705.456ms, phoenix_test churn_no_delay 1589.332ms, phoenix_test locator_stress 3904.882ms
 - conclusion: copying PhoenixTest laziness onto the current Cerberus live session model is not enough and currently makes throughput worse; the remaining gap is more likely in the retry/assertion orchestration and session-state shape than in the mere fact that Cerberus refreshes its live tree eagerly
+
+## Notes
+- compared EV2 non-browser original vs Cerberus pairs under the same warm local shape using max-cases 1 and the existing google-chrome-stable shim on PATH so test helper booted cleanly
+- export_live pair was effectively tied: original 1.5s ExUnit / 3.78s wall for 10 tests, Cerberus 1.4s ExUnit / 3.51s wall for 10 tests
+- project_settings_live notifications was materially slower under Cerberus but not catastrophic: original 2.5s ExUnit / 4.57s wall for 18 tests, Cerberus 4.3s ExUnit / 6.59s wall for 18 tests, about 1.7x slower on test runtime
+- offer_live offer_new showed a similar moderate gap: original 2.9s ExUnit / 6.01s wall for 14 tests, Cerberus 4.0s ExUnit / 6.77s wall for 14 tests, about 1.4x slower on test runtime
+- takeaway from EV2 non-browser so far: Cerberus live/static is not at parity, but it is close enough on simple pages and only moderately slower on heavier LiveViews; that makes further deep live-model work look lower ROI than browser work unless a specific EV2 non-browser flow becomes a top complaint
+
+## Notes
+- added Cerberus reproducing coverage for live current_path patch handling in test/cerberus/current_path_test.exs, including EV2-style phx-change push_patch query/select flows plus low-level LiveViewClient patch-emission checks
+- the actual fix was in the live driver, not the proxy: after successful live click/fill_in/submit results, Cerberus now gives delayed navigation a slightly wider 500ms settle window when the current_path is still unchanged, which lets late patch messages update session.current_path without reviving the earlier broken assert_path sync experiment
+- verification in Cerberus: current_path_test plus path_scope_behavior_test and live_click_bindings_behavior_test are green, and the full Cerberus suite passed at 637 tests, 0 failures, 2 skipped
+- verification in EV2: the previously failing non-browser path regressions now pass directly in test/ev2_web/admin/pages/queries_live/index_cerberus_test.exs and test/ev2_web/live/calendar_live/index_cerberus_test.exs under max-cases 1
+- rerunning the full EV2 compare.copy lane no longer points at those live/path failures; the first remaining visible failure is back in the browser lane (generate_timecards_browser_cerberus_test readiness timeout), while the overall alias still behaves like a long/noisy suite that can sit for a long time after surfacing failures

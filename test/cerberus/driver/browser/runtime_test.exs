@@ -75,10 +75,15 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
   end
 
   describe "browser_name/1" do
-    test "defaults to chrome and supports explicit firefox selection" do
-      assert Runtime.browser_name([]) == :chrome
+    test "falls back to configured browser name and supports explicit selection" do
+      configured_browser_name =
+        :cerberus
+        |> Application.get_env(:browser, [])
+        |> Keyword.get(:browser_name, :chrome)
+
+      assert Runtime.browser_name([]) == configured_browser_name
       assert Runtime.browser_name(browser_name: :firefox) == :firefox
-      assert Runtime.browser_name(browser: [browser_name: :firefox]) == :firefox
+      assert Runtime.browser_name(browser_name: :chrome) == :chrome
     end
   end
 
@@ -114,7 +119,7 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
 
   describe "webdriver_session_payload/2" do
     test "remote payload does not require local browser binary" do
-      payload = Runtime.webdriver_session_payload([chrome_args: ["--remote-flag"]], false)
+      payload = Runtime.webdriver_session_payload([browser_name: :chrome, chrome_args: ["--remote-flag"]], false)
       always_match = payload["capabilities"]["alwaysMatch"]
       chrome_opts = always_match["goog:chromeOptions"]
 
@@ -129,7 +134,7 @@ defmodule Cerberus.Driver.Browser.RuntimeTest do
       chrome_path = Path.join(tmp_dir, "cerberus-fake-chrome")
       File.write!(chrome_path, "")
 
-      payload = Runtime.webdriver_session_payload([chrome_binary: chrome_path], true)
+      payload = Runtime.webdriver_session_payload([browser_name: :chrome, chrome_binary: chrome_path], true)
       chrome_opts = payload["capabilities"]["alwaysMatch"]["goog:chromeOptions"]
 
       assert chrome_opts["binary"] == chrome_path

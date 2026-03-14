@@ -406,13 +406,13 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   end
 
   def handle_call(:last_readiness, _from, state) do
-    {:reply, BrowsingContextProcess.last_readiness(active_browsing_context_pid!(state)), state}
+    {:reply, last_readiness_safe(active_browsing_context_pid!(state)), state}
   end
 
   def handle_call({:last_readiness_tab, tab_id}, _from, state) do
     case browsing_context_pid(state, tab_id) do
       {:ok, pid} ->
-        {:reply, BrowsingContextProcess.last_readiness(pid), state}
+        {:reply, last_readiness_safe(pid), state}
 
       {:error, _reason, _details} ->
         {:reply, %{}, state}
@@ -958,5 +958,12 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
     :exit, reason ->
       {:error, "browser readiness call failed", %{"reason" => inspect(reason)}}
+  end
+
+  defp last_readiness_safe(pid) when is_pid(pid) do
+    BrowsingContextProcess.last_readiness(pid)
+  catch
+    :exit, _reason ->
+      %{}
   end
 end

@@ -848,11 +848,13 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
   defp perform_keyboard_actions(%Browser{} = session, actions, timeout_ms)
        when is_list(actions) and is_integer(timeout_ms) do
+    keyboard_id = "cerberus-keyboard-#{System.unique_integer([:positive])}"
+
     params = %{
       "context" => session.tab_id,
       "actions" => [
         %{
-          "id" => "cerberus-keyboard",
+          "id" => keyboard_id,
           "type" => "key",
           "actions" => actions
         }
@@ -861,11 +863,17 @@ defmodule Cerberus.Driver.Browser.Extensions do
 
     case BiDi.command("input.performActions", params, Keyword.put(bidi_opts(session), :timeout, max(timeout_ms, 1))) do
       {:ok, _payload} ->
+        _ = release_keyboard_actions(session, timeout_ms)
         :ok
 
       {:error, reason, details} ->
         {:error, reason, details}
     end
+  end
+
+  defp release_keyboard_actions(%Browser{} = session, timeout_ms) when is_integer(timeout_ms) do
+    params = %{"context" => session.tab_id}
+    BiDi.command("input.releaseActions", params, Keyword.put(bidi_opts(session), :timeout, max(timeout_ms, 1)))
   end
 
   defp type_actions(text) when is_binary(text) do

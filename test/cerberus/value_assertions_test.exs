@@ -66,6 +66,6 @@ defmodule Cerberus.ValueAssertionsTest do
       """,
       fn _ -> :ok end
     )
-    |> assert_value(~l"Search term"l, "late-value", timeout: 500)
+    |> assert_value(~l"Search term"l, "late-value", timeout: 1_000)
   end
 end

@@ -112,6 +112,19 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.IndexLive do
       </select>
     </form>
 
+    <form id="patch-query-form" phx-change="patch-query-on-change">
+      <label for="patch-query">Patch query</label>
+      <input id="patch-query" name="patch_query" />
+    </form>
+
+    <form id="patch-unit-form" phx-change="patch-unit-on-change">
+      <label for="patch-unit">Patch unit</label>
+      <select id="patch-unit" name="patch_unit">
+        <option value="alpha" selected>Alpha</option>
+        <option value="beta">Beta</option>
+      </select>
+    </form>
+
     <div :if={@form_saved} id="form-data">
       <%= for {key, value} <- @form_data do %>
         {render_input_data(key, value)}
@@ -807,6 +820,25 @@ defmodule Cerberus.Fixtures.PhoenixTestPlaywright.IndexLive do
     |> assign(:form_saved, true)
     |> assign(:form_data, form_data)
     |> then(&{:noreply, &1})
+  end
+
+  def handle_event("patch-query-on-change", %{"patch_query" => query}, socket) do
+    patch =
+      URI.encode_query(%{
+        "sql" => query
+      })
+
+    {:noreply, push_patch(socket, to: "/phoenix_test/playwright/live/index?#{patch}")}
+  end
+
+  def handle_event("patch-unit-on-change", %{"patch_unit" => unit}, socket) do
+    patch =
+      URI.encode_query(%{
+        "unit" => unit,
+        "we_date" => "2023-04-23"
+      })
+
+    {:noreply, push_patch(socket, to: "/phoenix_test/playwright/live/index?#{patch}")}
   end
 
   def handle_event("select-pet", %{"value" => value}, socket) do

@@ -946,6 +946,7 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def assert_path(%__MODULE__{} = session, expected, opts) when is_binary(expected) or is_struct(expected, Regex) do
+    session = sync_live_current_path(session)
     observed = build_path_observed(session, expected, opts)
 
     if observed.path_match? and observed.query_match? do
@@ -957,6 +958,7 @@ defmodule Cerberus.Driver.Live do
 
   @impl true
   def refute_path(%__MODULE__{} = session, expected, opts) when is_binary(expected) or is_struct(expected, Regex) do
+    session = sync_live_current_path(session)
     observed = build_path_observed(session, expected, opts)
 
     if observed.path_match? and observed.query_match? do
@@ -981,6 +983,17 @@ defmodule Cerberus.Driver.Live do
       query_match?: Cerberus.Path.query_matches?(actual_path, Keyword.get(opts, :query))
     }
   end
+
+  defp sync_live_current_path(%__MODULE__{view: %View{} = view} = session) do
+    fallback_path = maybe_live_patch_path(view, session.current_path)
+    current_path = fallback_path || LiveViewClient.current_path(view, fallback_path) || session.current_path
+
+    %{session | current_path: current_path}
+  rescue
+    ArgumentError -> session
+  end
+
+  defp sync_live_current_path(session), do: session
 
   defp run_path_assertion_once(%__MODULE__{} = session, expected, driver_opts, op)
        when op in [:assert_path, :refute_path] do
@@ -1201,7 +1214,7 @@ defmodule Cerberus.Driver.Live do
   defp click_live_button_rendered(session, button, rendered, baseline_version) do
     case apply_live_rendered_result(session, rendered, :click) do
       {:ok, updated, transition} ->
-        updated = maybe_await_delayed_live_progress(updated, baseline_version)
+        updated = maybe_await_delayed_live_progress(updated, baseline_version, session.current_path)
 
         observed = %{
           action: :button,
@@ -1217,8 +1230,11 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp maybe_await_delayed_live_progress(%__MODULE__{} = session, baseline_version) when is_integer(baseline_version) do
+  defp maybe_await_delayed_live_progress(%__MODULE__{} = session, baseline_version, baseline_path)
+       when is_integer(baseline_version) do
     Cerberus.Profiling.profile {:live_internal, :post_action_progress_wait} do
+      session = maybe_await_delayed_live_navigation(session, baseline_path)
+
       if live_progress_version(session) == baseline_version do
         deadline = System.monotonic_time(:millisecond) + 250
 
@@ -1236,7 +1252,35 @@ defmodule Cerberus.Driver.Live do
     end
   end
 
-  defp maybe_await_delayed_live_progress(session, _baseline_version), do: session
+  defp maybe_await_delayed_live_progress(session, _baseline_version, _baseline_path), do: session
+
+  defp maybe_await_delayed_live_navigation(%__MODULE__{view: %View{}} = session, baseline_path)
+       when is_binary(baseline_path) and baseline_path != "" do
+    if session.current_path == baseline_path do
+      deadline = System.monotonic_time(:millisecond) + 500
+      do_await_delayed_live_navigation(session, deadline, 0)
+    else
+      session
+    end
+  end
+
+  defp maybe_await_delayed_live_navigation(session, _baseline_path), do: session
+
+  defp do_await_delayed_live_navigation(%__MODULE__{} = session, deadline, attempt)
+       when is_integer(attempt) and attempt >= 0 do
+    case LiveViewClient.receive_navigation(session.view, 0) do
+      nil ->
+        if live_action_time_remaining?(deadline) do
+          sleep_for_live_retry(deadline, attempt)
+          do_await_delayed_live_navigation(session, deadline, attempt + 1)
+        else
+          session
+        end
+
+      navigation ->
+        refresh_live_navigation_session(session, navigation)
+    end
+  end
 
   defp click_live_link(session, link) do
     result = maybe_render_click_link(session, link)
@@ -2444,8 +2488,12 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp resolve_live_submit_result(session, rendered, button, submitted_params) when is_binary(rendered) do
+    baseline_version = live_progress_version(session)
+
     case apply_live_rendered_result(session, rendered, :submit) do
       {:ok, updated, transition} ->
+        updated = maybe_await_delayed_live_progress(updated, baseline_version, session.current_path)
+
         observed = %{
           action: :submit,
           clicked: button.text,
@@ -3263,11 +3311,12 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp refresh_live_progress_session(%__MODULE__{} = session, path_override) do
-    current_path = LiveViewClient.current_path(session.view, session.current_path)
+    fallback_path = maybe_live_patch_path(session.view, session.current_path)
+    current_path = LiveViewClient.current_path(session.view, fallback_path)
 
     session
     |> refresh_live_document!()
-    |> Map.put(:current_path, path_override || current_path || session.current_path)
+    |> Map.put(:current_path, path_override || fallback_path || current_path || session.current_path)
   end
 
   defp live_progress_version(%__MODULE__{view: view}), do: LiveViewClient.render_version(view)
@@ -3546,7 +3595,7 @@ defmodule Cerberus.Driver.Live do
 
     case apply_live_rendered_result(session, rendered, :fill_in) do
       {:ok, updated, transition} ->
-        updated = maybe_await_delayed_live_progress(updated, baseline_version)
+        updated = maybe_await_delayed_live_progress(updated, baseline_version, session.current_path)
         {:ok, updated, %{triggered: true, target: target, transition: transition}}
 
       {:error, failed_session, reason, details} ->

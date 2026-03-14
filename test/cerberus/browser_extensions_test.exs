@@ -9,7 +9,7 @@ defmodule Cerberus.BrowserExtensionsTest do
   alias Cerberus.Fixtures.Endpoint
   alias ExUnit.AssertionError
 
-  setup_all do
+  setup do
     {:ok, browser_session: session(:browser)}
   end
 

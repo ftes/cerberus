@@ -187,7 +187,7 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     timeout_ms = normalize_positive_integer(Keyword.get(opts, :timeout_ms), @default_ready_timeout_ms)
     quiet_ms = normalize_positive_integer(Keyword.get(opts, :quiet_ms), @default_ready_quiet_ms)
 
-    case evaluate_readiness(state.id, timeout_ms, quiet_ms, state.bidi_opts) do
+    case evaluate_readiness_safe(state.id, timeout_ms, quiet_ms, state.bidi_opts) do
       {:ok, %{"ok" => true} = readiness} ->
         readiness = Map.put_new(readiness, "lastBidiEvent", state.last_bidi_event)
         {:reply, {:ok, readiness}, %{state | last_readiness: readiness}}
@@ -404,6 +404,16 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     end
   end
 
+  defp evaluate_readiness_safe(context_id, timeout_ms, quiet_ms, bidi_opts) do
+    evaluate_readiness(context_id, timeout_ms, quiet_ms, bidi_opts)
+  catch
+    :exit, {:timeout, {GenServer, :call, _call_args}} ->
+      {:error, "browser readiness timeout", %{"reason" => "script.evaluate timeout"}}
+
+    :exit, reason ->
+      {:error, "browser readiness call failed", %{"reason" => inspect(reason)}}
+  end
+
   defp decode_remote_json(%{"result" => %{"type" => "string", "value" => payload}}) when is_binary(payload) do
     case JSON.decode(payload) do
       {:ok, json} -> {:ok, json}
@@ -461,15 +471,34 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
     Enum.find(download_events, &download_event_match?(&1, expected_filename))
   end
 
-  defp download_event_match?(
-         %{"method" => "browsingContext.downloadWillBegin", "suggestedFilename" => filename},
-         expected_filename
-       )
-       when is_binary(filename) and is_binary(expected_filename) do
-    filename == expected_filename
+  defp download_event_match?(%{"method" => method, "suggestedFilename" => filename}, expected_filename)
+       when method in @download_events and is_binary(filename) and is_binary(expected_filename) do
+    filename_matches_expected_download?(filename, expected_filename)
   end
 
   defp download_event_match?(_event, _expected_filename), do: false
+
+  defp filename_matches_expected_download?(filename, expected_filename)
+       when is_binary(filename) and is_binary(expected_filename) do
+    filename == expected_filename or firefox_duplicate_download_name?(filename, expected_filename)
+  end
+
+  defp firefox_duplicate_download_name?(filename, expected_filename)
+       when is_binary(filename) and is_binary(expected_filename) do
+    extname = Path.extname(expected_filename)
+    rootname = Path.rootname(expected_filename, extname)
+
+    case {rootname, extname} do
+      {"", _extname} ->
+        false
+
+      {rootname, ""} ->
+        Regex.match?(~r/^#{Regex.escape(rootname)}\(\d+\)$/, filename)
+
+      {rootname, extname} ->
+        Regex.match?(~r/^#{Regex.escape(rootname)}\(\d+\)#{Regex.escape(extname)}$/, filename)
+    end
+  end
 
   defp resolve_download_waiters(%{download_waiters: waiters} = state, event)
        when map_size(waiters) == 0 or not is_map(event) do

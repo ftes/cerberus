@@ -11,7 +11,7 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
     File.cp!(Path.expand("../../../support/bin/fake_firefox.sh", __DIR__), fake_firefox)
     File.chmod!(fake_firefox, 0o755)
 
-    runtime_pid = Process.whereis(Runtime)
+    runtime_pid = restart_runtime!()
     runtime_ref = Process.monitor(runtime_pid)
 
     on_exit(fn ->
@@ -58,6 +58,35 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
              )
 
     assert_process_stopped(fake_firefox)
+  end
+
+  defp restart_runtime! do
+    previous_pid = Process.whereis(Runtime)
+
+    if is_pid(previous_pid) do
+      runtime_ref = Process.monitor(previous_pid)
+      GenServer.stop(Runtime, :shutdown, 5_000)
+      assert_receive {:DOWN, ^runtime_ref, :process, ^previous_pid, :shutdown}, 5_000
+    end
+
+    wait_for_runtime_pid(previous_pid)
+  end
+
+  defp wait_for_runtime_pid(previous_pid, attempts \\ 50)
+
+  defp wait_for_runtime_pid(previous_pid, attempts) when attempts > 0 do
+    case Process.whereis(Runtime) do
+      pid when is_pid(pid) and pid != previous_pid ->
+        pid
+
+      _ ->
+        Process.sleep(100)
+        wait_for_runtime_pid(previous_pid, attempts - 1)
+    end
+  end
+
+  defp wait_for_runtime_pid(previous_pid, 0) do
+    flunk("expected #{inspect(Runtime)} to restart after #{inspect(previous_pid)} exited")
   end
 
   defp assert_runtime_restarted(previous_pid, attempts \\ 50)
