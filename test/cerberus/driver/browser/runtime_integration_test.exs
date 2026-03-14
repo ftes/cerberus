@@ -328,16 +328,10 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
 
   defp descendant_process_pid(root_pid, command_path)
        when is_integer(root_pid) and root_pid > 0 and is_binary(command_path) do
-    command_path
-    |> command_path_variants()
-    |> then(fn variants ->
-      Enum.find_value(descendant_pids(root_pid), fn pid ->
-        command = process_command(pid)
+    variants = command_path_variants(command_path)
 
-        if is_binary(command) and Enum.any?(variants, &String.contains?(command, &1)) do
-          pid
-        end
-      end)
+    Enum.find_value(descendant_pids(root_pid), fn pid ->
+      if descendant_command_matches?(pid, variants), do: pid
     end)
   end
 
@@ -387,6 +381,19 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
     end
   end
 
+  defp descendant_command_matches?(process_pid, variants)
+       when is_integer(process_pid) and process_pid > 0 and is_list(variants) do
+    process_pid
+    |> process_command()
+    |> command_matches_any_variant?(variants)
+  end
+
+  defp command_matches_any_variant?(command, variants) when is_binary(command) and is_list(variants) do
+    Enum.any?(variants, &String.contains?(command, &1))
+  end
+
+  defp command_matches_any_variant?(_command, _variants), do: false
+
   defp process_pid(command_path) do
     command_path
     |> command_path_variants()
@@ -395,19 +402,21 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
         {output, 0} ->
           output
           |> String.split("\n", trim: true)
-          |> Enum.find_value(fn line ->
-            if String.contains?(line, path) do
-              line
-              |> String.split(~r/\s+/, parts: 2, trim: true)
-              |> List.first()
-              |> parse_positive_integer()
-            end
-          end)
+          |> Enum.find_value(&parse_matching_process_pid(&1, path))
 
         _ ->
           nil
       end
     end)
+  end
+
+  defp parse_matching_process_pid(line, path) when is_binary(line) and is_binary(path) do
+    if String.contains?(line, path) do
+      line
+      |> String.split(~r/\s+/, parts: 2, trim: true)
+      |> List.first()
+      |> parse_positive_integer()
+    end
   end
 
   defp kill_matching_processes(command_path) do
