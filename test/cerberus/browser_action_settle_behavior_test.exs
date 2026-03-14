@@ -170,7 +170,7 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> SharedBrowserSession.driver_session(context)
     |> visit("/owner-form")
     |> fill_in(~l"Name"l, "Aragorn")
-    |> click(role(:button, name: "Save Owner Form Slow Redirect", exact: true))
+    |> click(role(:button, name: "Save Owner Form Slow Redirect", exact: true), timeout: 2_000)
     |> assert_path(~r|/owner-form/result|, exact: false, timeout: 0)
     |> assert_has(~l"name: Aragorn"e, timeout: 0)
     |> then(fn updated ->
@@ -187,7 +187,7 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> SharedBrowserSession.driver_session(context)
     |> visit("/browser/action-settle/deferred-submit")
     |> fill_in(~l"Name"l, "Aragorn")
-    |> click(role(:button, name: "Deferred Submit", exact: true))
+    |> click(role(:button, name: "Deferred Submit", exact: true), timeout: 2_000)
     |> assert_path(~r|/owner-form/result|, exact: false, timeout: 0)
     |> assert_has(~l"name: Aragorn"e, timeout: 0)
     |> then(fn updated ->

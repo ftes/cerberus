@@ -569,17 +569,10 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
   defp remove_user_context(_, _), do: :ok
 
-  defp maybe_remove_user_context(%{owner: owner, user_context_id: user_context_id, bidi_opts: bidi_opts})
-       when is_pid(owner) do
-    if Process.alive?(owner) do
-      try do
-        remove_user_context(user_context_id, bidi_opts)
-      catch
-        :exit, _reason -> :ok
-      end
-    else
-      :ok
-    end
+  defp maybe_remove_user_context(%{user_context_id: user_context_id, bidi_opts: bidi_opts}) do
+    remove_user_context(user_context_id, bidi_opts)
+  catch
+    :exit, _reason -> :ok
   end
 
   defp maybe_remove_user_context(_state), do: :ok

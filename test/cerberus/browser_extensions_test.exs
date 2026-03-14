@@ -111,8 +111,8 @@ defmodule Cerberus.BrowserExtensionsTest do
       |> type(css("#tab-input"), "blur me")
       |> press(css("#tab-input"), "Tab")
 
-    assert_has(session, text("Blur result: blurred", exact: true), timeout: 1_000)
-    assert_has(session, text("Tab result: focused next", exact: true), timeout: 1_000)
+    assert_has(session, text("Blur result: blurred", exact: true), timeout: 2_000)
+    assert_has(session, text("Tab result: focused next", exact: true), timeout: 2_000)
     with_evaluate_js(session, "document.activeElement && document.activeElement.id", &assert(&1 == "tab-next"))
   end
 

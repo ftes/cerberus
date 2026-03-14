@@ -2156,6 +2156,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
         performResolvedMs += now() - performStartedAt;
 
         if (result && result.ok === true) {
+          result.prePath = prePath;
           const awaitReadyMeta = helper.awaitReadyMeta(options, result, prePath);
           result.needsAwaitReady = awaitReadyMeta.needsAwaitReady === true;
           result.awaitReadyGraceMs = Number(awaitReadyMeta.awaitReadyGraceMs || 0);

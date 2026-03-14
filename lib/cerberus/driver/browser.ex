@@ -947,8 +947,10 @@ defmodule Cerberus.Driver.Browser do
 
   defp await_action_navigation(session, state, result, opts, fallback_observed, on_success) do
     maybe_sleep_for_navigation_settle(result)
+    started_at_ms = System.monotonic_time(:millisecond)
+    timeout_ms = action_timeout_ms(state, opts)
 
-    case await_driver_ready(state, action_timeout_ms(state, opts)) do
+    case await_action_navigation_ready(state, result, started_at_ms, timeout_ms) do
       {:ok, ready_state, readiness} ->
         on_success.({ready_state, readiness})
 
@@ -964,6 +966,41 @@ defmodule Cerberus.Driver.Browser do
         )
     end
   end
+
+  defp await_action_navigation_ready(state, result, started_at_ms, timeout_ms)
+       when is_integer(started_at_ms) and is_integer(timeout_ms) and timeout_ms > 0 do
+    remaining_timeout_ms = remaining_budget_ms(started_at_ms, timeout_ms)
+
+    case await_driver_ready(state, remaining_timeout_ms) do
+      {:ok, ready_state, readiness} ->
+        if delayed_navigation_still_pending?(result, readiness) and remaining_timeout_ms > 0 do
+          Process.sleep(min(50, remaining_timeout_ms))
+          await_action_navigation_ready(state, result, started_at_ms, timeout_ms)
+        else
+          {:ok, ready_state, readiness}
+        end
+
+      error ->
+        error
+    end
+  end
+
+  defp await_action_navigation_ready(state, _result, _started_at_ms, timeout_ms)
+       when is_integer(timeout_ms) and timeout_ms <= 0 do
+    await_driver_ready(state, timeout_ms)
+  end
+
+  defp delayed_navigation_still_pending?(result, readiness) when is_map(result) and is_map(readiness) do
+    case {Map.get(result, "prePath"), Map.get(readiness, "path")} do
+      {pre_path, ready_path} when is_binary(pre_path) and is_binary(ready_path) ->
+        Map.get(result, "needsAwaitReady") == true and pre_path == ready_path
+
+      _ ->
+        false
+    end
+  end
+
+  defp delayed_navigation_still_pending?(_result, _readiness), do: false
 
   defp maybe_recover_navigated_action_error(session, state, result, fallback_observed, on_success, reason, readiness) do
     action = Map.get(fallback_observed, :action)
