@@ -214,7 +214,7 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
       const awaitReadyGraceMs =
         navigationCapable && !pathChanged
           ? delayedNavigationCapable
-            ? 500
+            ? 100
             : 200
           : 0;
 

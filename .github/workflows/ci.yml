@@ -77,9 +77,6 @@ jobs:
       - name: Install npm deps
         run: npm ci
 
-      - name: Run JS round contract
-        run: mix run bench/run_match_round_contract.exs
-
       - name: Run precommit
         run: mix precommit
 

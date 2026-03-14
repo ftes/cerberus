@@ -609,11 +609,11 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
          browsing_contexts
        )}
     else
-      {:error, reason, details, cleanup} ->
-        {:error, reason, details, cleanup}
+      {:error, reason, details, failed_cleanup} ->
+        {:error, reason, details, failed_cleanup}
 
-      {:error, reason, cleanup} ->
-        {:error, inspect(reason), cleanup}
+      {:error, reason, failed_cleanup} ->
+        {:error, inspect(reason), failed_cleanup}
     end
   end
 

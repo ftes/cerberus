@@ -224,10 +224,10 @@ The JSDOM round-contract runner checks the browser helper scripts against the sh
 
 ```bash
 npm ci
-mix run bench/run_match_round_contract.exs
+mix test test/cerberus/match_round_contract_test.exs
 ```
 
-CI installs the npm dependencies and runs this script explicitly so the Node/JSDOM contract stays covered alongside the Elixir suite.
+CI installs the npm dependencies before `mix test`, so this Node/JSDOM contract now runs as part of the normal ExUnit suite instead of a separate script step.
 
 ## Benchmark Matrix
 

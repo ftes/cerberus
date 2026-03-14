@@ -621,4 +621,18 @@ defmodule Cerberus.MatchRoundContractTest do
     assert results |> Map.keys() |> Enum.sort() == @expected_results |> Map.keys() |> Enum.sort()
     assert results == @expected_results
   end
+
+  test "node jsdom one-round assertion and action cases match html results" do
+    html_results =
+      Map.new(MatchRoundContract.cases(), fn contract_case ->
+        {contract_case.id, MatchRoundContract.html_round(contract_case)}
+      end)
+
+    browser_results =
+      Map.new(MatchRoundContract.cases(), fn contract_case ->
+        {contract_case.id, MatchRoundContract.browser_round(contract_case)}
+      end)
+
+    assert browser_results == html_results
+  end
 end
