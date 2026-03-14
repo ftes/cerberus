@@ -210,7 +210,13 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
             (target.kind === "button" && typeof target.dataMethod === "string" && target.dataMethod !== ""))
         );
       const navigationCapable = pathChanged || submitsNonLiveForm || linkNavigates || dataMethodNavigates;
-      const awaitReadyGraceMs = navigationCapable && !pathChanged ? 200 : 0;
+      const delayedNavigationCapable = submitsNonLiveForm || dataMethodNavigates;
+      const awaitReadyGraceMs =
+        navigationCapable && !pathChanged
+          ? delayedNavigationCapable
+            ? 500
+            : 200
+          : 0;
 
       return {
         needsAwaitReady: navigationCapable,

@@ -27,7 +27,7 @@ defmodule Cerberus.LiveSelectRegressionTest do
       |> select(~l"Race 2"l, text("Elf"))
       |> select(~l"Race 2"l, text("Dwarf"))
       |> click(role(:button, name: "Save Full Form"))
-      |> assert_has(and_(css("#form-data"), text("[elf, dwarf]", exact: false)))
+      |> assert_has(and_(css("#form-data"), text("[elf, dwarf]", exact: false)), timeout: 1_000)
     end
 
     test "select outside forms dispatches option phx-click events (#{driver})", context do
