@@ -148,8 +148,13 @@ defmodule Cerberus.Html do
     }
   end
 
-  @spec resolve_action_round(document(), :click | :fill_in | :submit, String.t() | Regex.t(), keyword(), String.t() | nil) ::
-          action_round_result()
+  @spec resolve_action_round(
+          document(),
+          :click | :fill_in | :submit,
+          String.t() | Regex.t(),
+          keyword(),
+          String.t() | nil
+        ) :: action_round_result()
   def resolve_action_round(%LazyHTML{} = lazy_html, op, expected, opts, scope \\ nil)
       when op in [:click, :fill_in, :submit] and (is_binary(expected) or is_struct(expected, Regex)) do
     trace? = Keyword.get(opts, :trace, false)
@@ -169,12 +174,15 @@ defmodule Cerberus.Html do
         }
 
       {:error, query_reason} ->
+        candidate_values =
+          maybe_action_round_candidate_values(trace?, matches, lazy_html, op, target_kind, opts, scope)
+
         %{
           ok: false,
           reason: normalize_action_round_reason(query_reason, reason),
           match_count: match_count,
           matched: [],
-          candidate_values: maybe_action_round_candidate_values(trace?, matches, lazy_html, op, target_kind, opts, scope)
+          candidate_values: candidate_values
         }
     end
   end
@@ -227,27 +235,7 @@ defmodule Cerberus.Html do
 
   defp action_round_matches(lazy_html, :click, expected, opts, scope) do
     kind = Keyword.get(opts, :kind, :any)
-
-    matches =
-      case kind do
-        :link ->
-          action_link_matches(lazy_html, expected, opts, scope)
-
-        :button ->
-          action_button_matches(lazy_html, expected, opts, scope)
-
-        _other ->
-          action_link_matches(lazy_html, expected, opts, scope) ++ action_button_matches(lazy_html, expected, opts, scope)
-      end
-
-    reason =
-      case kind do
-        :link -> "no link matched locator"
-        :button -> "no button matched locator"
-        _other -> "no clickable element matched locator"
-      end
-
-    {matches, reason, Atom.to_string(kind)}
+    {click_action_matches(lazy_html, expected, opts, scope, kind), click_action_reason(kind), Atom.to_string(kind)}
   end
 
   defp action_round_matches(lazy_html, :fill_in, expected, opts, scope) do
@@ -271,21 +259,33 @@ defmodule Cerberus.Html do
     do: action_round_match_value(match, :click, Keyword.put_new(opts, :kind, :button))
 
   defp action_round_match_value(match, :click, opts) do
-    match_by = Keyword.get(opts, :match_by, :text)
-    kind = Keyword.get(opts, :kind, :any)
-
-    case {kind, match_by} do
-      {:link, :text} -> Map.get(match, :text)
-      {:button, :text} -> Map.get(match, :text)
-      {:any, :text} -> Map.get(match, :text)
-      {_kind, :label} -> Map.get(match, :label)
-      {_kind, :title} -> Map.get(match, :title)
-      {_kind, :testid} -> Map.get(match, :testid)
-      {_kind, :alt} -> Map.get(match, :alt)
-      {_kind, :placeholder} -> Map.get(match, :placeholder)
+    case Keyword.get(opts, :match_by, :text) do
+      :text -> Map.get(match, :text)
+      :label -> Map.get(match, :label)
+      :title -> Map.get(match, :title)
+      :testid -> Map.get(match, :testid)
+      :alt -> Map.get(match, :alt)
+      :placeholder -> Map.get(match, :placeholder)
       _other -> Map.get(match, :text) || Map.get(match, :label)
     end
   end
+
+  defp click_action_matches(lazy_html, expected, opts, scope, :link) do
+    action_link_matches(lazy_html, expected, opts, scope)
+  end
+
+  defp click_action_matches(lazy_html, expected, opts, scope, :button) do
+    action_button_matches(lazy_html, expected, opts, scope)
+  end
+
+  defp click_action_matches(lazy_html, expected, opts, scope, _kind) do
+    action_link_matches(lazy_html, expected, opts, scope) ++
+      action_button_matches(lazy_html, expected, opts, scope)
+  end
+
+  defp click_action_reason(:link), do: "no link matched locator"
+  defp click_action_reason(:button), do: "no button matched locator"
+  defp click_action_reason(_kind), do: "no clickable element matched locator"
 
   defp maybe_action_round_candidate_values(false, _matches, _lazy_html, _op, _target_kind, _opts, _scope), do: []
 

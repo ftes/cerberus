@@ -1545,14 +1545,14 @@ defmodule Cerberus.Driver.Browser do
     }
   end
 
-  defp build_locator_assertion_payload(state, locator, visible, match_opts, timeout_ms, mode) do
+  defp build_locator_assertion_payload(state, locator, _visible, match_opts, timeout_ms, mode) do
     {between_min, between_max} = between_bounds(match_opts)
     round_payload = MatchRoundPayload.assertion(locator, Keyword.put(match_opts, :mode, mode))
 
     %{
       scopeSelector: Session.scope(state),
       locator: round_payload.locator,
-      visibility: round_payload.visibility || visibility_mode(visible),
+      visibility: round_payload.visibility,
       timeoutMs: timeout_ms,
       mode: round_payload.mode,
       count: round_payload.count,

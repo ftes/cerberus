@@ -1141,7 +1141,6 @@ defmodule Cerberus.Driver.Live do
             path: changed_session.current_path,
             phx_change: change.triggered,
             target: change.target,
-            texts: Html.texts(changed_session.document, :any, Session.scope(changed_session)),
             transition: change.transition
           }
 
@@ -1208,7 +1207,6 @@ defmodule Cerberus.Driver.Live do
           action: :button,
           clicked: button.text,
           path: updated.current_path,
-          texts: Html.texts(updated.document, :any, Session.scope(updated)),
           transition: transition
         }
 
@@ -1255,7 +1253,6 @@ defmodule Cerberus.Driver.Live do
           action: :link,
           clicked: link.text,
           path: path,
-          texts: Html.texts(updated.document, :any, Session.scope(updated)),
           transition: transition
         }
 
@@ -1288,7 +1285,6 @@ defmodule Cerberus.Driver.Live do
       action: :link,
       path: updated.current_path,
       clicked: link.text,
-      texts: Html.texts(updated.document, :any, Session.scope(updated)),
       transition: transition
     }
 
@@ -1365,7 +1361,6 @@ defmodule Cerberus.Driver.Live do
       action: action,
       clicked: clicked.text,
       path: updated.current_path,
-      texts: Html.texts(updated.document, :any, Session.scope(updated)),
       transition: transition
     }
 

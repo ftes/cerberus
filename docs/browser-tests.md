@@ -218,6 +218,17 @@ After install, Cerberus automatically discovers local managed-runtime binaries v
 - `tmp/chrome-current`
 - `tmp/chromedriver-current`
 
+## JS Contract Runner
+
+The JSDOM round-contract runner checks the browser helper scripts against the shared LazyHTML matcher:
+
+```bash
+npm ci
+mix run bench/run_match_round_contract.exs
+```
+
+CI installs the npm dependencies and runs this script explicitly so the Node/JSDOM contract stays covered alongside the Elixir suite.
+
 ## Benchmark Matrix
 
 Run the combined Cerberus-vs-Playwright browser benchmark matrix with:

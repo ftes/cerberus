@@ -42,7 +42,10 @@ defmodule Cerberus.LivePerformanceBenchmarkTest do
 
     [conn: conn, timeout_ms: 20_000]
     |> session()
-    |> PlaywrightPerformanceBenchmark.run_cerberus_flow(@scenario, timeout_ms: 20_000)
+    |> PlaywrightPerformanceBenchmark.run_cerberus_flow(@scenario,
+      timeout_ms: 20_000,
+      step_trace_metadata: %{runner: "live", scenario: @scenario, worker: worker}
+    )
 
     finished = System.monotonic_time(:microsecond)
 

@@ -703,35 +703,33 @@ defmodule Cerberus.TestSupport.MatchRoundContract do
     }
   end
 
+  @spec browser_round(contract_case()) :: map()
+  def browser_round(contract_case) do
+    input_path = browser_input_path(contract_case.id)
+    File.write!(input_path, JSON.encode!(browser_input(contract_case)))
+
+    try do
+      {raw_browser, 0} =
+        System.cmd(node_executable!(), [browser_runner_path(), input_path], cd: File.cwd!())
+
+      raw_browser
+      |> JSON.decode!()
+      |> normalize_round_result(Map.take(contract_case, [:kind, :op]))
+    after
+      File.rm(input_path)
+    end
+  end
+
   @spec normalize_round_result(map(), %{kind: :assertion} | %{kind: :action, op: atom()}) :: map()
   def normalize_round_result(result, %{kind: :assertion}) when is_map(result) do
-    %{
-      ok: result[:ok] == true or result["ok"] == true,
-      reason: result[:reason] || result["reason"] || "",
-      match_count: result[:match_count] || result["match_count"] || result[:matchCount] || result["matchCount"] || 0,
-      matched: normalize_values(result[:matched] || result["matched"] || []),
-      candidate_values:
-        normalize_values(
-          result[:candidate_values] || result["candidate_values"] || result[:candidateValues] || result["candidateValues"] ||
-            []
-        )
-    }
+    normalize_common_round_result(result)
   end
 
   def normalize_round_result(result, %{kind: :action, op: op}) when is_map(result) do
-    %{
-      ok: result[:ok] == true or result["ok"] == true,
-      reason: result[:reason] || result["reason"] || "",
-      match_count: result[:match_count] || result["match_count"] || result[:matchCount] || result["matchCount"] || 0,
-      matched: normalize_values(result[:matched] || result["matched"] || []),
-      candidate_values:
-        normalize_values(
-          result[:candidate_values] || result["candidate_values"] || result[:candidateValues] || result["candidateValues"] ||
-            []
-        ),
-      target_selector: normalize_selector(result, op),
-      target_kind: normalize_target_kind(result, op)
-    }
+    result
+    |> normalize_common_round_result()
+    |> Map.put(:target_selector, normalize_selector(result, op))
+    |> Map.put(:target_kind, normalize_target_kind(result, op))
   end
 
   defp normalize_values(values) when is_list(values) do
@@ -751,24 +749,24 @@ defmodule Cerberus.TestSupport.MatchRoundContract do
   defp normalize_selector(_result, :submit), do: nil
 
   defp normalize_selector(result, _op) when is_map(result) do
-    case result[:target_selector] || result["target_selector"] || result[:targetSelector] || result["targetSelector"] do
+    case round_value(result, [:target_selector, "targetSelector"]) do
       selector when is_binary(selector) and selector != "" -> :present
       _other -> nil
     end
   end
 
   defp normalize_target_kind(result, :submit) when is_map(result) do
-    if result[:ok] == true or result["ok"] == true, do: "submit"
+    if round_ok?(result), do: "submit"
   end
 
   defp normalize_target_kind(result, _op) when is_map(result) do
-    result[:target_kind] || result["target_kind"] || result[:targetKind] || result["targetKind"]
+    round_value(result, [:target_kind, "targetKind"])
   end
 
   defp contract_payload(payload) when is_map(payload) do
     case Map.pop(payload, :between) do
-      {nil, nil} ->
-        payload
+      {nil, rest} ->
+        rest
 
       {between, rest} ->
         {between_min, between_max} = between_bounds(between)
@@ -777,6 +775,57 @@ defmodule Cerberus.TestSupport.MatchRoundContract do
         |> Map.put(:betweenMin, between_min)
         |> Map.put(:betweenMax, between_max)
     end
+  end
+
+  defp normalize_common_round_result(result) do
+    %{
+      ok: round_ok?(result),
+      reason: round_reason(result),
+      match_count: round_match_count(result),
+      matched: round_values(result, [:matched]),
+      candidate_values: round_values(result, [:candidate_values, "candidateValues"])
+    }
+  end
+
+  defp round_ok?(result), do: round_value(result, [:ok]) == true
+
+  defp round_reason(result) do
+    round_value(result, [:reason]) || ""
+  end
+
+  defp round_match_count(result) do
+    round_value(result, [:match_count, "matchCount"]) || 0
+  end
+
+  defp round_values(result, keys) do
+    result
+    |> round_value(keys)
+    |> Kernel.||([])
+    |> normalize_values()
+  end
+
+  defp round_value(result, keys) when is_map(result) and is_list(keys) do
+    Enum.find_value(keys, fn
+      key when is_atom(key) ->
+        Map.get(result, key) || Map.get(result, Atom.to_string(key))
+
+      key ->
+        Map.get(result, key)
+    end)
+  end
+
+  defp browser_input_path(case_id) do
+    dir = Path.join(System.tmp_dir!(), "cerberus-match-round")
+    File.mkdir_p!(dir)
+    Path.join(dir, "#{case_id}-#{System.unique_integer([:positive])}.json")
+  end
+
+  defp browser_runner_path do
+    Path.expand("../../bench/browser_match_round_runner.js", __DIR__)
+  end
+
+  defp node_executable! do
+    System.find_executable("node") || raise "node executable not found"
   end
 
   defp between_bounds({min, max}), do: {min, max}

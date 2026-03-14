@@ -44,6 +44,13 @@ jobs:
           version-file: .tool-versions
           version-type: strict
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
       - name: Cache deps and build
         uses: actions/cache@v5
         with:
@@ -66,6 +73,12 @@ jobs:
 
       - name: Install deps
         run: mix deps.get
+
+      - name: Install npm deps
+        run: npm ci
+
+      - name: Run JS round contract
+        run: mix run bench/run_match_round_contract.exs
 
       - name: Run precommit
         run: mix precommit

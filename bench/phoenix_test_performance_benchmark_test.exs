@@ -41,7 +41,11 @@ defmodule Cerberus.PhoenixTestPerformanceBenchmarkTest do
   test "phoenix test benchmark worker", %{conn: conn, worker: worker} do
     started = System.monotonic_time(:microsecond)
 
-    _session = PhoenixTestPerformanceBenchmark.run_flow(conn, @scenario, timeout_ms: 20_000)
+    _session =
+      PhoenixTestPerformanceBenchmark.run_flow(conn, @scenario,
+        timeout_ms: 20_000,
+        step_trace_metadata: %{runner: "phoenix_test", scenario: @scenario, worker: worker}
+      )
 
     finished = System.monotonic_time(:microsecond)
 
