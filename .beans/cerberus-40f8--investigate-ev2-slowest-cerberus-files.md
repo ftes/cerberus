@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-14T21:21:45Z
-updated_at: 2026-03-14T21:34:47Z
+updated_at: 2026-03-14T22:08:12Z
 ---
 
 Use the new EV2 compare harness to take the slowest Cerberus files one by one, form a concrete hypothesis, reproduce the slowdown in Cerberus where possible, fix it, and verify the improvement back in ev2-copy.
@@ -23,3 +23,7 @@ Use the new EV2 compare harness to take the slowest Cerberus files one by one, f
 - Reproduced a browser delayed-submit navigation gap in Cerberus with a focused browser settle test.
 - Fixed browser post-action await classification so deferred non-live submit-button clicks get a small grace window before readiness.
 - Verified the Cerberus repro and cut EV2 document_controller_cerberus_test from about 107s per file to 19.4s at --max-cases 4.
+
+- Reduced the EV2 project-show live submit hotspot by removing eager live post-submit settle for successful phx-submit flows.
+- Cerberus live submit benchmark dropped from about 2181ms to 88ms.
+- EV2 admin/pages/projects_live/show_cerberus_test line 18 dropped from about 1.0s to 0.4s; full file now runs in 1.8s at --max-cases 1.

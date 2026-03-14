@@ -2492,12 +2492,8 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp resolve_live_submit_result(session, rendered, button, submitted_params) when is_binary(rendered) do
-    baseline_version = live_progress_version(session)
-
     case apply_live_rendered_result(session, rendered, :submit) do
       {:ok, updated, transition} ->
-        updated = maybe_await_delayed_live_progress(updated, baseline_version, session.current_path)
-
         observed = %{
           action: :submit,
           clicked: button.text,
