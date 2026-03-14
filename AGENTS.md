@@ -22,7 +22,7 @@ Keep a log of what you did to present when you're done.
 - Cerberus is unreleased. Don't preserve backwards compatability. KISS. Don't warn about legacy arguments or functions. Always remove and change with a clean cut.
 - Codex: Run real-browser tests outside the Codex sandbox (escalated permissions), since Chrome startup can fail inside the sandbox.
 - If public API/behavior/examples changed, update docs in the same change (`README.md`, relevant guides, moduledocs).
-- Current browser policy: run Chrome only. Ignore Firefox and websocket lanes locally and in CI unless explicitly requested.
+- Current browser policy: run Chrome and Firefox locally and in CI unless explicitly requested otherwise.
 - If in doubt about static/live driver behavior, check PhoenixTest static and live driver implementations for reference patterns.
 - Live driver rule: when a connected LiveView tree is available, use that tree and build `LazyHTML` from it. Do not parse returned live HTML strings for normal live session snapshots. Only parse HTML strings on true static/fallback paths where no live tree is available.
 - If in doubt about browser driver behavior, use Cuprite as the primary implementation reference; use Playwright JS as the secondary reference.

@@ -1,14 +1,25 @@
 defmodule Cerberus.BrowserIframeLimitationsTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import Cerberus
   import Cerberus.Browser
 
-  test "cross-origin iframe DOM access is blocked by same-origin policy" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/iframe/cross-origin")
+  alias Cerberus.TestSupport.SharedBrowserSession
+
+  setup_all do
+    {owner_pid, browser_session} = SharedBrowserSession.start!()
+
+    on_exit(fn ->
+      SharedBrowserSession.stop(owner_pid)
+    end)
+
+    {:ok, browser_session: browser_session}
+  end
+
+  test "cross-origin iframe DOM access is blocked by same-origin policy", %{
+    browser_session: browser_session
+  } do
+    session = visit(browser_session, "/browser/iframe/cross-origin")
 
     with_evaluate_js(
       session,
@@ -41,11 +52,10 @@ defmodule Cerberus.BrowserIframeLimitationsTest do
     )
   end
 
-  test "unguarded cross-origin iframe DOM access raises browser evaluate error" do
-    session =
-      :browser
-      |> session()
-      |> visit("/browser/iframe/cross-origin")
+  test "unguarded cross-origin iframe DOM access raises browser evaluate error", %{
+    browser_session: browser_session
+  } do
+    session = visit(browser_session, "/browser/iframe/cross-origin")
 
     error =
       assert_raise ArgumentError, fn ->
@@ -64,9 +74,10 @@ defmodule Cerberus.BrowserIframeLimitationsTest do
     assert error.message =~ "browser evaluate_js failed:"
   end
 
-  test "within locator scopes browser operations into same-origin iframe document" do
-    :browser
-    |> session()
+  test "within locator scopes browser operations into same-origin iframe document", %{
+    browser_session: browser_session
+  } do
+    browser_session
     |> visit("/browser/iframe/same-origin")
     |> within(css("#same-origin-frame"), fn frame_scope ->
       frame_scope
@@ -79,11 +90,12 @@ defmodule Cerberus.BrowserIframeLimitationsTest do
     |> assert_has(text("Outside iframe marker", exact: true))
   end
 
-  test "within locator rejects cross-origin iframe root switching" do
+  test "within locator rejects cross-origin iframe root switching", %{
+    browser_session: browser_session
+  } do
     error =
       assert_raise ExUnit.AssertionError, fn ->
-        :browser
-        |> session()
+        browser_session
         |> visit("/browser/iframe/cross-origin")
         |> within(css("#cross-origin-frame"), fn frame_scope ->
           frame_scope

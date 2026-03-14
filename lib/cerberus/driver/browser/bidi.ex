@@ -244,6 +244,12 @@ defmodule Cerberus.Driver.Browser.BiDi do
     end)
   end
 
+  defp stringify_map_keys(map) when is_struct(map) do
+    map
+    |> Map.from_struct()
+    |> stringify_map_keys()
+  end
+
   defp stringify_map_keys(map) when is_map(map) do
     Map.new(map, fn
       {key, value} when is_atom(key) -> {Atom.to_string(key), stringify_value(value)}
@@ -251,6 +257,7 @@ defmodule Cerberus.Driver.Browser.BiDi do
     end)
   end
 
+  defp stringify_value(value) when is_struct(value), do: stringify_map_keys(value)
   defp stringify_value(value) when is_map(value), do: stringify_map_keys(value)
   defp stringify_value(value) when is_list(value), do: Enum.map(value, &stringify_value/1)
   defp stringify_value(value), do: value
