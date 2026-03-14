@@ -1233,18 +1233,22 @@ defmodule Cerberus.Driver.Live do
   defp maybe_await_delayed_live_progress(%__MODULE__{} = session, baseline_version, baseline_path)
        when is_integer(baseline_version) do
     Cerberus.Profiling.profile {:live_internal, :post_action_progress_wait} do
-      session = maybe_await_delayed_live_navigation(session, baseline_path)
-
       if live_progress_version(session) == baseline_version do
-        deadline = System.monotonic_time(:millisecond) + 250
+        session = maybe_await_delayed_live_navigation(session, baseline_path)
 
-        try do
-          case await_or_refresh_live_action_progress(session, baseline_version, deadline, 0) do
-            {:ok, next_session} -> next_session
-            :timeout -> session
+        if live_progress_version(session) == baseline_version do
+          deadline = System.monotonic_time(:millisecond) + 250
+
+          try do
+            case await_or_refresh_live_action_progress(session, baseline_version, deadline, 0) do
+              {:ok, next_session} -> next_session
+              :timeout -> session
+            end
+          rescue
+            ArgumentError -> session
           end
-        rescue
-          ArgumentError -> session
+        else
+          session
         end
       else
         session
@@ -3591,11 +3595,8 @@ defmodule Cerberus.Driver.Live do
   end
 
   defp resolve_live_change_result(session, rendered, target) when is_binary(rendered) do
-    baseline_version = live_progress_version(session)
-
     case apply_live_rendered_result(session, rendered, :fill_in) do
       {:ok, updated, transition} ->
-        updated = maybe_await_delayed_live_progress(updated, baseline_version, session.current_path)
         {:ok, updated, %{triggered: true, target: target, transition: transition}}
 
       {:error, failed_session, reason, details} ->

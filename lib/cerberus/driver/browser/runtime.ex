@@ -912,6 +912,22 @@ defmodule Cerberus.Driver.Browser.Runtime do
     RUNTIME_PID="$2"
     SERVICE_PID="$3"
 
+    process_group_id() {
+      PROCESS_PID="$1"
+      ps -o pgid= -p "$PROCESS_PID" 2>/dev/null | tr -d '[:space:]'
+    }
+
+    signal_process_group() {
+      PROCESS_PID="$1"
+      SIGNAL_NAME="$2"
+      PROCESS_GROUP_ID="$(process_group_id "$PROCESS_PID")"
+      WATCHDOG_GROUP_ID="$(process_group_id "$$")"
+
+      if [ -n "$PROCESS_GROUP_ID" ] && [ "$PROCESS_GROUP_ID" != "$WATCHDOG_GROUP_ID" ]; then
+        kill "-$SIGNAL_NAME" "-$PROCESS_GROUP_ID" 2>/dev/null || true
+      fi
+    }
+
     kill_tree() {
       PARENT_PID="$1"
       SIGNAL_NAME="$2"
@@ -925,15 +941,23 @@ defmodule Cerberus.Driver.Browser.Runtime do
       kill "-$SIGNAL_NAME" "$PARENT_PID" 2>/dev/null || true
     }
 
+    signal_service() {
+      TARGET_PID="$1"
+      SIGNAL_NAME="$2"
+
+      signal_process_group "$TARGET_PID" "$SIGNAL_NAME"
+      kill_tree "$TARGET_PID" "$SIGNAL_NAME"
+    }
+
     while [ -f "$MARKER_PATH" ]; do
       if kill -0 "$RUNTIME_PID" 2>/dev/null; then
         sleep 0.1
         continue
       fi
 
-      kill_tree "$SERVICE_PID" TERM
+      signal_service "$SERVICE_PID" TERM
       sleep 0.2
-      kill_tree "$SERVICE_PID" KILL
+      signal_service "$SERVICE_PID" KILL
 
       break
     done

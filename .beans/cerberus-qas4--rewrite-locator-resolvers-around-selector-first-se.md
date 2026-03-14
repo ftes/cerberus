@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-10T08:26:35Z
-updated_at: 2026-03-14T18:38:33Z
+updated_at: 2026-03-14T20:12:06Z
 ---
 
 Rewrite browser and LazyHTML locator resolution from scratch around a selector-first, narrow-resolution model guided by Playwright. Start by removing the temporary live label fast path, then rebuild static and live resolution, broaden browser coverage carefully, and enable parity tests incrementally while keeping complexity minimal.
@@ -91,3 +91,14 @@ Rewrite browser and LazyHTML locator resolution from scratch around a selector-f
 - fixed the browser readiness watcher in lib/cerberus/driver/browser/browsing_context_process.ex so once a live page is connected and a quiet timer is already armed, repeated dom-mutation events no longer keep restarting the settle window; disconnected-to-connected transitions still arm readiness correctly
 - verification in Cerberus: browser_action_settle_behavior_test, browser_timeout_assertions_test, browser_test, and the full Cerberus suite all passed after the change (637 tests, 0 failures, 2 skipped)
 - verification in EV2: the previously failing generate_timecards_browser_cerberus_test file now passes directly under max-cases 1; rerunning the full compare.copy alias no longer fails quickly on the old browser readiness timeout and instead returns to the longer slow/noisy suite behavior
+
+## Notes
+- profiled EV2 offer_new Cerberus single test after forcing the EV2 path dependency to compile with CERBERUS_PROFILE_COMPILE=1; the dominant bucket was {:live_internal, :post_action_progress_wait} at about 6.4s total across 12 ordinary live form actions, while form-field resolution stayed around 1ms per action and assertions were tiny
+- added a focused Cerberus-side reproducer flow on /live/controls in test/support/live_form_action_benchmark.ex plus a normal test in test/cerberus/live_form_action_benchmark_flow_test.exs and a dedicated bench/live_form_action_benchmark_test.exs row
+- the new Cerberus reproducer benchmark lands at about 6405ms for one 12-action live form-change loop, and profiling it shows the same shape as EV2: {:live_internal, :post_action_progress_wait} about 6270ms total and each select/fill_in/choose around 525ms, so the EV2 slowdown is now cleanly reproduced inside Cerberus without EV2
+
+## Notes
+- narrowed the live performance fix to ordinary change-driven actions only: resolve_live_change_result no longer calls maybe_await_delayed_live_progress after a successful live render_change result, while click and submit keep the existing settle behavior
+- current_path_test, select_choose_behavior_test, and the new live_form_action_benchmark_flow_test all stayed green with that cut, so delayed push_patch assertions still work through the assertion/path retry machinery rather than eager post-action waiting
+- the focused Cerberus reproducer benchmark in bench/live_form_action_benchmark_test.exs dropped from about 6405ms for one 12-action live form loop to about 90ms, confirming the fixed ~500ms/action tax was removed
+- EV2 results improved dramatically under the same max-cases 4 shape: offer_new_cerberus_test dropped from about 24.3s ExUnit runtime to 2.3s, and notifications_cerberus_test dropped from about 23.6s to 6.4s; the single profiled offer_new test at line 150 fell from about 7.5s to 1.0s

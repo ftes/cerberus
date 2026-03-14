@@ -52,6 +52,11 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
           chromedriver_binary: #{inspect(chromedriver_binary)}
         )
 
+      runtime_state = :sys.get_state(Runtime)
+      service_process = runtime_state.runtime_sessions.chrome.service.process
+      {:os_pid, chromedriver_pid} = Port.info(service_process, :os_pid)
+
+      IO.puts("CHROMEDRIVER_PID=" <> Integer.to_string(chromedriver_pid))
       IO.puts("RUNTIME_READY")
       Process.sleep(:infinity)
       """)
@@ -63,10 +68,10 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
       close_port_safe(port)
     end)
 
-    await_runtime_ready!(port)
+    output = await_runtime_ready!(port)
 
-    chromedriver_pid = assert_process_running(chromedriver_binary)
-    chrome_pid = assert_process_running(chrome_binary)
+    chromedriver_pid = parse_labeled_pid!(output, "CHROMEDRIVER_PID")
+    chrome_pid = assert_descendant_process_running(chromedriver_pid, chrome_binary)
 
     kill_os_pid(os_pid, "KILL")
     await_subprocess_exit!(port)
@@ -188,16 +193,35 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
     flunk("expected process to stop for #{label}")
   end
 
+  defp assert_descendant_process_running(root_pid, command_path, attempts \\ 50)
+
+  defp assert_descendant_process_running(root_pid, command_path, attempts)
+       when is_integer(root_pid) and root_pid > 0 and attempts > 0 do
+    case descendant_process_pid(root_pid, command_path) do
+      pid when is_integer(pid) and pid > 0 ->
+        pid
+
+      _ ->
+        Process.sleep(100)
+        assert_descendant_process_running(root_pid, command_path, attempts - 1)
+    end
+  end
+
+  defp assert_descendant_process_running(root_pid, command_path, 0) do
+    flunk("expected descendant process to be running for #{command_path} under #{root_pid}")
+  end
+
   defp start_runtime_subprocess!(script) when is_binary(script) do
+    env = System.find_executable("env") || flunk("expected env executable in PATH")
     elixir = System.find_executable("elixir") || flunk("expected elixir executable in PATH")
 
     port =
-      Port.open({:spawn_executable, elixir}, [
+      Port.open({:spawn_executable, env}, [
         :binary,
         :exit_status,
         :hide,
         :stderr_to_stdout,
-        args: ["-S", "mix", "run", "--no-compile", "-e", script]
+        args: ["MIX_ENV=test", elixir, "-S", "mix", "run", "--no-compile", "-e", script]
       ])
 
     os_pid =
@@ -222,7 +246,7 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
         output = output <> data
 
         if String.contains?(output, "RUNTIME_READY") do
-          :ok
+          output
         else
           do_await_runtime_ready(port, output, deadline)
         end
@@ -287,6 +311,80 @@ defmodule Cerberus.Driver.Browser.RuntimeIntegrationTest do
 
   defp stable_binary_path(name) when is_binary(name) do
     Path.expand(Path.join("tmp", name))
+  end
+
+  defp parse_labeled_pid!(output, label) when is_binary(output) and is_binary(label) do
+    pattern = ~r/#{Regex.escape(label)}=(\d+)/
+
+    case Regex.run(pattern, output) do
+      [_, pid] ->
+        parse_positive_integer(pid) ||
+          flunk("expected #{label} to be a positive integer in #{inspect(output)}")
+
+      _ ->
+        flunk("expected #{label} in subprocess output: #{inspect(output)}")
+    end
+  end
+
+  defp descendant_process_pid(root_pid, command_path)
+       when is_integer(root_pid) and root_pid > 0 and is_binary(command_path) do
+    command_path
+    |> command_path_variants()
+    |> then(fn variants ->
+      Enum.find_value(descendant_pids(root_pid), fn pid ->
+        command = process_command(pid)
+
+        if is_binary(command) and Enum.any?(variants, &String.contains?(command, &1)) do
+          pid
+        end
+      end)
+    end)
+  end
+
+  defp descendant_pids(root_pid) when is_integer(root_pid) and root_pid > 0 do
+    root_pid
+    |> collect_descendant_pids(MapSet.new())
+    |> MapSet.to_list()
+  end
+
+  defp collect_descendant_pids(root_pid, seen) when is_integer(root_pid) and root_pid > 0 do
+    root_pid
+    |> child_pids()
+    |> Enum.reduce(seen, fn child_pid, acc ->
+      if MapSet.member?(acc, child_pid) do
+        acc
+      else
+        collect_descendant_pids(child_pid, MapSet.put(acc, child_pid))
+      end
+    end)
+  end
+
+  defp child_pids(parent_pid) when is_integer(parent_pid) and parent_pid > 0 do
+    case System.cmd("pgrep", ["-P", Integer.to_string(parent_pid)], stderr_to_stdout: true) do
+      {output, 0} ->
+        output
+        |> String.split("\n", trim: true)
+        |> Enum.map(&parse_positive_integer/1)
+        |> Enum.reject(&is_nil/1)
+
+      _ ->
+        []
+    end
+  end
+
+  defp process_command(process_pid) when is_integer(process_pid) and process_pid > 0 do
+    case System.cmd("ps", ["-p", Integer.to_string(process_pid), "-o", "command="], stderr_to_stdout: true) do
+      {output, 0} ->
+        output
+        |> String.trim()
+        |> case do
+          "" -> nil
+          command -> command
+        end
+
+      _ ->
+        nil
+    end
   end
 
   defp process_pid(command_path) do
