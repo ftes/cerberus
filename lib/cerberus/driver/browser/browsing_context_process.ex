@@ -631,7 +631,7 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
             if (currentState === "connected") {
               note(sourceSignal);
-              if (!inFlight) scheduleQuiet();
+              if (!inFlight && (sourceSignal !== "dom-mutation" || quietTimer === null)) scheduleQuiet();
               return;
             }
 

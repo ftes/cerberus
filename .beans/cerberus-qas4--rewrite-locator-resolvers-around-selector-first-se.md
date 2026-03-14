@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-10T08:26:35Z
-updated_at: 2026-03-14T18:18:59Z
+updated_at: 2026-03-14T18:38:33Z
 ---
 
 Rewrite browser and LazyHTML locator resolution from scratch around a selector-first, narrow-resolution model guided by Playwright. Start by removing the temporary live label fast path, then rebuild static and live resolution, broaden browser coverage carefully, and enable parity tests incrementally while keeping complexity minimal.
@@ -85,3 +85,9 @@ Rewrite browser and LazyHTML locator resolution from scratch around a selector-f
 - verification in Cerberus: current_path_test plus path_scope_behavior_test and live_click_bindings_behavior_test are green, and the full Cerberus suite passed at 637 tests, 0 failures, 2 skipped
 - verification in EV2: the previously failing non-browser path regressions now pass directly in test/ev2_web/admin/pages/queries_live/index_cerberus_test.exs and test/ev2_web/live/calendar_live/index_cerberus_test.exs under max-cases 1
 - rerunning the full EV2 compare.copy lane no longer points at those live/path failures; the first remaining visible failure is back in the browser lane (generate_timecards_browser_cerberus_test readiness timeout), while the overall alias still behaves like a long/noisy suite that can sit for a long time after surfacing failures
+
+## Notes
+- added a browser-side reproducer by flipping the existing busy-live-root readiness case in test/cerberus/browser_action_settle_behavior_test.exs: ongoing mutation churn under a connected live root should no longer block browser visit readiness forever
+- fixed the browser readiness watcher in lib/cerberus/driver/browser/browsing_context_process.ex so once a live page is connected and a quiet timer is already armed, repeated dom-mutation events no longer keep restarting the settle window; disconnected-to-connected transitions still arm readiness correctly
+- verification in Cerberus: browser_action_settle_behavior_test, browser_timeout_assertions_test, browser_test, and the full Cerberus suite all passed after the change (637 tests, 0 failures, 2 skipped)
+- verification in EV2: the previously failing generate_timecards_browser_cerberus_test file now passes directly under max-cases 1; rerunning the full compare.copy alias no longer fails quickly on the old browser readiness timeout and instead returns to the longer slow/noisy suite behavior

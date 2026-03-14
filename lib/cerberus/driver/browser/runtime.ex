@@ -912,23 +912,28 @@ defmodule Cerberus.Driver.Browser.Runtime do
     RUNTIME_PID="$2"
     SERVICE_PID="$3"
 
+    kill_tree() {
+      PARENT_PID="$1"
+      SIGNAL_NAME="$2"
+
+      CHILD_PIDS="$(ps -o pid= --ppid "$PARENT_PID" 2>/dev/null)"
+
+      for CHILD_PID in $CHILD_PIDS; do
+        kill_tree "$CHILD_PID" "$SIGNAL_NAME"
+      done
+
+      kill "-$SIGNAL_NAME" "$PARENT_PID" 2>/dev/null || true
+    }
+
     while [ -f "$MARKER_PATH" ]; do
       if kill -0 "$RUNTIME_PID" 2>/dev/null; then
-        sleep 1
+        sleep 0.1
         continue
       fi
 
-      PGID="$(ps -o pgid= -p "$SERVICE_PID" 2>/dev/null | tr -d '[:space:]')"
-
-      if [ -n "$PGID" ]; then
-        kill -TERM -- "-$PGID" 2>/dev/null || true
-        sleep 1
-        kill -KILL -- "-$PGID" 2>/dev/null || true
-      else
-        kill -TERM "$SERVICE_PID" 2>/dev/null || true
-        sleep 1
-        kill -KILL "$SERVICE_PID" 2>/dev/null || true
-      fi
+      kill_tree "$SERVICE_PID" TERM
+      sleep 0.2
+      kill_tree "$SERVICE_PID" KILL
 
       break
     done
