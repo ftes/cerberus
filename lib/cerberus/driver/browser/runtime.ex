@@ -113,6 +113,11 @@ defmodule Cerberus.Driver.Browser.Runtime do
     GenServer.call(__MODULE__, {:debugger_address, opts}, 20_000)
   end
 
+  @spec reset_session(keyword()) :: :ok
+  def reset_session(opts \\ []) when is_list(opts) do
+    GenServer.call(__MODULE__, {:reset_session, opts}, 20_000)
+  end
+
   @impl true
   def init(opts) do
     Process.flag(:trap_exit, true)
@@ -160,6 +165,13 @@ defmodule Cerberus.Driver.Browser.Runtime do
       {:error, reason, state} ->
         {:reply, {:error, reason}, state}
     end
+  end
+
+  def handle_call({:reset_session, opts}, _from, state) do
+    browser_name = browser_name(merge_runtime_opts(state.opts, opts))
+    {runtime_session, runtime_sessions} = Map.pop(state.runtime_sessions, browser_name)
+    maybe_stop_runtime_session(runtime_session, opts)
+    {:reply, :ok, %{state | runtime_sessions: runtime_sessions}}
   end
 
   @impl true

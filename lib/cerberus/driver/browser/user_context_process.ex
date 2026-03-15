@@ -9,6 +9,7 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.TransientErrors
   alias Cerberus.Driver.Browser.Types
+  alias Cerberus.Profiling
 
   @popup_poll_ms 25
   @call_timeout_padding_ms 5_000
@@ -260,18 +261,18 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     end
   end
 
-  def handle_call({:evaluate, expression, timeout_ms, started_us}, from, state) do
+  def handle_call({:evaluate, expression, timeout_ms, started_us}, _from, state) do
     record_transport_delay(:user_context_queue, started_us)
     pid = active_browsing_context_pid!(state)
-    {:noreply, start_pending_evaluation(state, pid, expression, timeout_ms, from)}
+    {:reply, dispatch_evaluate(pid, expression, timeout_ms), state}
   end
 
-  def handle_call({:evaluate_tab, tab_id, expression, timeout_ms, started_us}, from, state) do
+  def handle_call({:evaluate_tab, tab_id, expression, timeout_ms, started_us}, _from, state) do
     record_transport_delay(:user_context_queue, started_us)
 
     case browsing_context_pid(state, tab_id) do
       {:ok, pid} ->
-        {:noreply, start_pending_evaluation(state, pid, expression, timeout_ms, from)}
+        {:reply, dispatch_evaluate(pid, expression, timeout_ms), state}
 
       {:error, reason, details} ->
         {:reply, {:error, reason, details}, state}
@@ -480,32 +481,13 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
     {:stop, :normal, state}
   end
 
-  def handle_info({ref, result}, state) when is_reference(ref) do
-    case Map.pop(state.pending_evaluations, ref) do
-      {nil, _pending_evaluations} ->
-        {:noreply, state}
-
-      {from, pending_evaluations} ->
-        Process.demonitor(ref, [:flush])
-        GenServer.reply(from, result)
-        {:noreply, %{state | pending_evaluations: pending_evaluations}}
-    end
-  end
-
   def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
-    case Map.pop(state.pending_evaluations, ref) do
-      {from, pending_evaluations} when not is_nil(from) ->
-        GenServer.reply(from, {:error, "evaluate task crashed", %{reason: Exception.format_exit(reason)}})
-        {:noreply, %{state | pending_evaluations: pending_evaluations}}
+    case pop_browsing_context_by_ref(state.browsing_contexts, ref) do
+      {:ok, down_tab_id, browsing_contexts} ->
+        handle_browsing_context_down(state, browsing_contexts, down_tab_id, reason)
 
-      {nil, _pending_evaluations} ->
-        case pop_browsing_context_by_ref(state.browsing_contexts, ref) do
-          {:ok, down_tab_id, browsing_contexts} ->
-            handle_browsing_context_down(state, browsing_contexts, down_tab_id, reason)
-
-          :error ->
-            {:noreply, state}
-        end
+      :error ->
+        {:noreply, state}
     end
   end
 
@@ -665,23 +647,27 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   end
 
   defp start_browsing_context_supervisor(cleanup) when is_map(cleanup) do
-    case BrowsingContextSupervisor.start_link() do
-      {:ok, browsing_context_supervisor} ->
-        {:ok, browsing_context_supervisor, %{cleanup | browsing_context_supervisor: browsing_context_supervisor}}
+    Profiling.measure({:driver_session, :browser, :start_browsing_context_supervisor}, fn ->
+      case BrowsingContextSupervisor.start_link() do
+        {:ok, browsing_context_supervisor} ->
+          {:ok, browsing_context_supervisor, %{cleanup | browsing_context_supervisor: browsing_context_supervisor}}
 
-      {:error, reason} ->
-        {:error, reason, cleanup}
-    end
+        {:error, reason} ->
+          {:error, reason, cleanup}
+      end
+    end)
   end
 
   defp create_user_context_step(cleanup) when is_map(cleanup) do
-    case create_user_context(cleanup.bidi_opts) do
-      {:ok, user_context_id} ->
-        {:ok, user_context_id, %{cleanup | user_context_id: user_context_id}}
+    Profiling.measure({:driver_session, :browser, :create_user_context}, fn ->
+      case create_user_context(cleanup.bidi_opts) do
+        {:ok, user_context_id} ->
+          {:ok, user_context_id, %{cleanup | user_context_id: user_context_id}}
 
-      {:error, reason, details} ->
-        {:error, reason, details, cleanup}
-    end
+        {:error, reason, details} ->
+          {:error, reason, details, cleanup}
+      end
+    end)
   end
 
   defp configure_and_start_initial_browsing_context(
@@ -691,23 +677,25 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
          browser_context_defaults,
          bidi_opts
        ) do
-    with :ok <- configure_user_context_defaults(user_context_id, browser_context_defaults, bidi_opts),
-         {:ok, browsing_context_pid} <-
-           start_browsing_context(
-             browsing_context_supervisor,
-             user_context_id,
-             browser_context_defaults,
-             bidi_opts,
-             slow_mo_ms: Runtime.slow_mo_ms(bidi_opts)
-           ) do
-      {:ok, browsing_context_pid}
-    else
-      {:error, reason, details} ->
-        {:error, reason, details, cleanup}
+    Profiling.measure({:driver_session, :browser, :start_initial_browsing_context}, fn ->
+      with :ok <- configure_user_context_defaults(user_context_id, browser_context_defaults, bidi_opts),
+           {:ok, browsing_context_pid} <-
+             start_browsing_context(
+               browsing_context_supervisor,
+               user_context_id,
+               browser_context_defaults,
+               bidi_opts,
+               slow_mo_ms: Runtime.slow_mo_ms(bidi_opts)
+             ) do
+        {:ok, browsing_context_pid}
+      else
+        {:error, reason, details} ->
+          {:error, reason, details, cleanup}
 
-      {:error, reason} ->
-        {:error, reason, cleanup}
-    end
+        {:error, reason} ->
+          {:error, reason, cleanup}
+      end
+    end)
   end
 
   defp build_initialized_state(
@@ -731,8 +719,7 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
       browsing_contexts: browsing_contexts,
       active_browsing_context_id: first_tab_id,
       known_context_ids: MapSet.new([first_tab_id]),
-      popup_waiters: %{},
-      pending_evaluations: %{}
+      popup_waiters: %{}
     }
   end
 
@@ -832,28 +819,20 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   end
 
   defp record_transport_delay(bucket, started_us) when is_atom(bucket) and is_integer(started_us) do
-    Cerberus.Profiling.record_us(
+    Profiling.record_us(
       {:browser_transport, bucket},
       max(System.monotonic_time(:microsecond) - started_us, 0)
     )
   end
 
-  defp start_pending_evaluation(state, pid, expression, timeout_ms, from)
-       when is_map(state) and is_pid(pid) and is_binary(expression) and is_integer(timeout_ms) do
-    task =
-      Task.async(fn ->
-        try do
-          Cerberus.Profiling.measure({:browser_transport, :user_context_dispatch}, fn ->
-            BrowsingContextProcess.evaluate(pid, expression, timeout_ms)
-          end)
-        catch
-          :exit, reason ->
-            {:error, "evaluate task crashed", %{reason: Exception.format_exit(reason)}}
-        end
-      end)
-
-    Process.unlink(task.pid)
-    %{state | pending_evaluations: Map.put(state.pending_evaluations, task.ref, from)}
+  defp dispatch_evaluate(pid, expression, timeout_ms)
+       when is_pid(pid) and is_binary(expression) and is_integer(timeout_ms) do
+    Profiling.measure({:browser_transport, :user_context_dispatch}, fn ->
+      BrowsingContextProcess.evaluate(pid, expression, timeout_ms)
+    end)
+  catch
+    :exit, reason ->
+      {:error, "evaluate task crashed", %{reason: Exception.format_exit(reason)}}
   end
 
   defp set_user_agent_override(user_context_id, user_agent, bidi_opts) do
@@ -893,9 +872,11 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   end
 
   defp configure_user_context_defaults(user_context_id, defaults, bidi_opts) do
-    with :ok <- maybe_set_user_agent(user_context_id, defaults.user_agent, bidi_opts) do
-      maybe_add_init_scripts(user_context_id, defaults.init_scripts, bidi_opts)
-    end
+    Profiling.measure({:driver_session, :browser, :configure_user_context_defaults}, fn ->
+      with :ok <- maybe_set_user_agent(user_context_id, defaults.user_agent, bidi_opts) do
+        maybe_add_init_scripts(user_context_id, defaults.init_scripts, bidi_opts)
+      end
+    end)
   end
 
   defp maybe_set_user_agent(_user_context_id, nil, _bidi_opts), do: :ok

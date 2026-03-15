@@ -91,6 +91,20 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     |> assert_has(text("Busy Live Root", exact: true), timeout: 0)
   end
 
+  test "browser visit treats connected-root churn as ready even when page-loading-start never stops", context do
+    :browser
+    |> SharedBrowserSession.driver_session(context)
+    |> visit("/browser/readiness/busy-live-root-inflight")
+    |> then(fn updated ->
+      readiness = last_readiness(updated)
+      assert is_map(readiness)
+      assert readiness["reason"] == "settled"
+      assert readiness["lastLiveState"] == "connected"
+      updated
+    end)
+    |> assert_has(text("Busy Live Root Inflight", exact: true), timeout: 0)
+  end
+
   test "browser click on live non-navigation actions does not force post-action readiness", context do
     session =
       :browser
@@ -151,6 +165,24 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
     end)
   end
 
+  test "browser click on live submit buttons does not force post-action readiness", context do
+    session =
+      :browser
+      |> SharedBrowserSession.driver_session(context)
+      |> visit("/live/form-sync")
+      |> fill_in(~l"Nickname (submit only)"l, "Aragorn")
+
+    readiness = last_readiness(session)
+
+    session
+    |> click(role(:button, name: "Save No Change", exact: true))
+    |> assert_has(text("no-change submitted: Aragorn", exact: true))
+    |> then(fn updated ->
+      assert last_readiness(updated) == readiness
+      updated
+    end)
+  end
+
   test "browser click that navigates can still await when navigation is already observed", context do
     :browser
     |> SharedBrowserSession.driver_session(context)
@@ -195,6 +227,39 @@ defmodule Cerberus.BrowserActionSettleBehaviorTest do
       assert is_map(readiness)
       refute readiness["skippedAwaitReady"] == true
       assert readiness["reason"] == "settled"
+      updated
+    end)
+  end
+
+  test "browser click on same-path non-live submit buttons does not keep waiting after navigation happened", context do
+    :browser
+    |> SharedBrowserSession.driver_session(context)
+    |> visit("/browser/action-settle/same-path-submit")
+    |> fill_in(~l"Name"l, "Aragorn")
+    |> click(role(:button, name: "Submit Same Path", exact: true), timeout: 2_000)
+    |> assert_has(text("submitted: Aragorn", exact: true), timeout: 0)
+    |> then(fn updated ->
+      readiness = last_readiness(updated)
+      assert is_map(readiness)
+      refute readiness["skippedAwaitReady"] == true
+      assert readiness["reason"] == "settled"
+      updated
+    end)
+  end
+
+  test "browser click on non-live submit buttons can redirect into live routes", context do
+    :browser
+    |> SharedBrowserSession.driver_session(context)
+    |> visit("/owner-form")
+    |> fill_in(~l"Name"l, "Aragorn")
+    |> click(role(:button, name: "Save Owner Form Live Redirect", exact: true), timeout: 2_000)
+    |> assert_path("/browser/readiness/mixed-live-roots", timeout: 0)
+    |> then(fn updated ->
+      readiness = last_readiness(updated)
+      assert is_map(readiness)
+      refute readiness["skippedAwaitReady"] == true
+      assert readiness["reason"] == "settled"
+      assert readiness["lastLiveState"] == "connected"
       updated
     end)
   end

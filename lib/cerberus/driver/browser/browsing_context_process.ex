@@ -830,7 +830,15 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
             scheduleQuiet();
           }
 
-          timeoutTimer = setTimeout(() => finish(false, "timeout"), timeoutMs);
+          timeoutTimer = setTimeout(() => {
+            const currentState = liveState();
+
+            if (currentState === "connected" && lastSignal === "dom-mutation") {
+              finish(true, "settled", { recoveredFrom: "timeout_connected_dom_churn" });
+            } else {
+              finish(false, "timeout");
+            }
+          }, timeoutMs);
         });
       } catch (error) {
         return payload(false, "setup-error", "setup-error", "unknown", { error: "" + error });

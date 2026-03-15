@@ -946,6 +946,7 @@ defmodule Cerberus.Driver.Browser do
   defp finalize_action_result(session, state, result, opts, fallback_observed, on_success)
        when is_map(result) and is_list(opts) and is_map(fallback_observed) and is_function(on_success, 1) do
     if action_navigation_observed?(result) do
+      maybe_record_action_navigation_profile(fallback_observed, result)
       await_action_navigation(session, state, result, opts, fallback_observed, on_success)
     else
       readiness = skipped_action_readiness(result)
@@ -954,11 +955,11 @@ defmodule Cerberus.Driver.Browser do
   end
 
   defp await_action_navigation(session, state, result, opts, fallback_observed, on_success) do
-    maybe_await_navigation_signal(state, result)
+    navigation_signal = maybe_await_navigation_signal(state, result)
     started_at_ms = System.monotonic_time(:millisecond)
     timeout_ms = action_timeout_ms(state, opts)
 
-    case await_action_navigation_ready(state, result, started_at_ms, timeout_ms) do
+    case await_action_navigation_ready(state, result, navigation_signal, started_at_ms, timeout_ms) do
       {:ok, ready_state, readiness} ->
         on_success.({ready_state, readiness})
 
@@ -975,15 +976,15 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp await_action_navigation_ready(state, result, started_at_ms, timeout_ms)
+  defp await_action_navigation_ready(state, result, navigation_signal, started_at_ms, timeout_ms)
        when is_integer(started_at_ms) and is_integer(timeout_ms) and timeout_ms > 0 do
     remaining_timeout_ms = remaining_budget_ms(started_at_ms, timeout_ms)
 
     case await_driver_ready(state, remaining_timeout_ms) do
       {:ok, ready_state, readiness} ->
-        if delayed_navigation_still_pending?(result, readiness) and remaining_timeout_ms > 0 do
+        if delayed_navigation_still_pending?(result, readiness, navigation_signal) and remaining_timeout_ms > 0 do
           Process.sleep(min(50, remaining_timeout_ms))
-          await_action_navigation_ready(state, result, started_at_ms, timeout_ms)
+          await_action_navigation_ready(state, result, navigation_signal, started_at_ms, timeout_ms)
         else
           {:ok, ready_state, readiness}
         end
@@ -993,12 +994,17 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp await_action_navigation_ready(state, _result, _started_at_ms, timeout_ms)
+  defp await_action_navigation_ready(state, _result, _navigation_signal, _started_at_ms, timeout_ms)
        when is_integer(timeout_ms) and timeout_ms <= 0 do
     await_driver_ready(state, timeout_ms)
   end
 
-  defp delayed_navigation_still_pending?(result, readiness) when is_map(result) and is_map(readiness) do
+  defp delayed_navigation_still_pending?(_result, _readiness, navigation_signal) when is_map(navigation_signal) do
+    false
+  end
+
+  defp delayed_navigation_still_pending?(result, readiness, _navigation_signal)
+       when is_map(result) and is_map(readiness) do
     case {Map.get(result, "prePath"), Map.get(readiness, "path")} do
       {pre_path, ready_path} when is_binary(pre_path) and is_binary(ready_path) ->
         Map.get(result, "needsAwaitReady") == true and pre_path == ready_path
@@ -1008,7 +1014,7 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  defp delayed_navigation_still_pending?(_result, _readiness), do: false
+  defp delayed_navigation_still_pending?(_result, _readiness, _navigation_signal), do: false
 
   defp maybe_recover_navigated_action_error(session, state, result, fallback_observed, on_success, reason, readiness) do
     action = Map.get(fallback_observed, :action)
@@ -1026,38 +1032,110 @@ defmodule Cerberus.Driver.Browser do
     end
   end
 
-  @navigation_signal_methods [
-    "browsingContext.navigationStarted",
-    "browsingContext.domContentLoaded",
-    "browsingContext.load"
-  ]
+  @navigation_start_signal_methods ["browsingContext.navigationStarted"]
+  @navigation_stable_signal_methods ["browsingContext.domContentLoaded", "browsingContext.load"]
+  @navigation_signal_methods @navigation_start_signal_methods ++ @navigation_stable_signal_methods
 
   defp maybe_await_navigation_signal(state, %{"awaitReadyGraceMs" => grace_ms} = result)
        when is_integer(grace_ms) and grace_ms > 0 do
     baseline_event = Map.get(result, "preActionBidiEvent")
-
-    case UserContextProcess.await_bidi_event(
-           state.user_context_pid,
-           @navigation_signal_methods,
-           baseline_event,
-           grace_ms,
-           state.tab_id
-         ) do
-      {:ok, _event} ->
-        :ok
-
-      {:error, :timeout, _last_event} ->
-        :ok
-
-      {:error, _reason, _details} ->
-        :ok
-    end
+    wait_for_navigation_signal(state, baseline_event, grace_ms)
   end
 
   defp maybe_await_navigation_signal(_state, _result), do: :ok
 
+  defp wait_for_navigation_signal(state, baseline_event, grace_ms) when is_integer(grace_ms) and grace_ms > 0 do
+    started_at_ms = System.monotonic_time(:millisecond)
+
+    case await_bidi_event(state, @navigation_signal_methods, baseline_event, grace_ms) do
+      {:ok, %{"method" => method} = event} when method in @navigation_stable_signal_methods ->
+        event
+
+      {:ok, %{"method" => method} = event} when method in @navigation_start_signal_methods ->
+        remaining_timeout_ms = remaining_budget_ms(started_at_ms, grace_ms)
+        await_stable_navigation_signal(state, event, remaining_timeout_ms)
+
+      _ ->
+        nil
+    end
+  end
+
+  defp wait_for_navigation_signal(_state, _baseline_event, _grace_ms), do: nil
+
+  defp await_stable_navigation_signal(_state, event, remaining_timeout_ms) when remaining_timeout_ms <= 0 do
+    event
+  end
+
+  defp await_stable_navigation_signal(state, event, remaining_timeout_ms) do
+    case await_bidi_event(state, @navigation_stable_signal_methods, event, remaining_timeout_ms) do
+      {:ok, stable_event} -> stable_event
+      _ -> event
+    end
+  end
+
+  defp await_bidi_event(state, methods, baseline_event, timeout_ms)
+       when is_list(methods) and is_integer(timeout_ms) and timeout_ms > 0 do
+    UserContextProcess.await_bidi_event(
+      state.user_context_pid,
+      methods,
+      baseline_event,
+      timeout_ms,
+      state.tab_id
+    )
+  end
+
   defp action_navigation_observed?(%{"needsAwaitReady" => value}) when is_boolean(value), do: value
   defp action_navigation_observed?(_result), do: false
+
+  defp maybe_record_action_navigation_profile(%{action: action}, result) when is_atom(action) and is_map(result) do
+    Profiling.record_us({:browser_action, action, navigation_profile_reason(result)}, 1)
+  end
+
+  defp maybe_record_action_navigation_profile(_observed, _result), do: :ok
+
+  defp navigation_profile_reason(result) when is_map(result) do
+    cond do
+      action_path_changed?(result) -> :path_changed
+      live_submit_navigation?(result) -> :submit_live
+      non_live_submit_navigation?(result) -> :submit_non_live
+      data_method_navigation?(result) -> :data_method
+      link_navigation?(result) -> :link
+      true -> :other
+    end
+  end
+
+  defp live_submit_navigation?(result) when is_map(result) do
+    submit_navigation_target?(Map.get(result, "target", %{})) and Map.get(result, "submitsLive") == true
+  end
+
+  defp non_live_submit_navigation?(result) when is_map(result) do
+    submit_navigation_target?(Map.get(result, "target", %{})) and Map.get(result, "submitsLive") != true
+  end
+
+  defp data_method_navigation?(result) when is_map(result) do
+    target = Map.get(result, "target", %{})
+    is_binary(Map.get(target, "dataMethod")) and Map.get(target, "dataMethod") != ""
+  end
+
+  defp link_navigation?(result) when is_map(result) do
+    Map.get(Map.get(result, "target", %{}), "kind") == "link"
+  end
+
+  defp submit_navigation_target?(target) when is_map(target) do
+    Map.get(target, "kind") == "button" and Map.get(target, "type") == "submit" and
+      present_string?(Map.get(target, "formSelector"))
+  end
+
+  defp submit_navigation_target?(_target), do: false
+
+  defp action_path_changed?(result) when is_map(result) do
+    pre_path = Map.get(result, "prePath")
+    path = Map.get(result, "path")
+    is_binary(pre_path) and is_binary(path) and pre_path != path
+  end
+
+  defp present_string?(value) when is_binary(value), do: value != ""
+  defp present_string?(_value), do: false
 
   defp skipped_action_readiness(result) when is_map(result) do
     %{

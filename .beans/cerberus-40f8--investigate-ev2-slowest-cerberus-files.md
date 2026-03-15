@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-14T21:21:45Z
-updated_at: 2026-03-14T22:34:37Z
+updated_at: 2026-03-14T23:42:07Z
 ---
 
 Use the new EV2 compare harness to take the slowest Cerberus files one by one, form a concrete hypothesis, reproduce the slowdown in Cerberus where possible, fix it, and verify the improvement back in ev2-copy.
@@ -16,7 +16,7 @@ Use the new EV2 compare harness to take the slowest Cerberus files one by one, f
 - [x] Profile a representative slow test in document_controller_cerberus_test
 - [ ] Reproduce the browser submit-button navigation slowdown in Cerberus
 - [ ] Simplify browser post-action navigation handling while fixing the slowdown
-- [ ] Verify the fix in the Cerberus suite and back in ev2-copy
+- [x] Verify the fix in the Cerberus suite and back in ev2-copy
 
 ## Progress notes
 
@@ -37,3 +37,8 @@ Added Cerberus repro coverage in test/cerberus/browser_user_context_cleanup_test
 Verification:
 - PORT=5121 mix test test/cerberus/browser_user_context_cleanup_test.exs test/cerberus/timeout_defaults_test.exs test/cerberus/playwright_performance_benchmark_test.exs --seed 0 -> 21 tests, 0 failures
 - PORT=5123 mix test --seed 616534 -> 643 tests, 0 failures, 2 skipped
+
+- Reproduced a second browser bug in Cerberus where same-path form navigations kept looping in delayed_navigation_still_pending?/2 even after a real navigation completed.
+- Added a Cerberus browser repro for same-path submit navigation and fixed Browser.await_action_navigation_ready to stop looping when a real BiDi navigation signal was observed.
+- The EV2 my_offer_controller_integration_cerberus test dropped from about 6.4s to 2.5s, with browser await_ready calls falling from 42 to 4.
+- Full Cerberus suite is green again at PORT=5180 mix test --seed 616534 (649 tests, 0 failures, 2 skipped).

@@ -6,6 +6,7 @@ defmodule Cerberus.Driver.Browser.BiDi do
   alias Bibbidi.Connection
   alias Bibbidi.Session, as: BibbidiSession
   alias Cerberus.Driver.Browser.Runtime
+  alias Cerberus.Driver.Browser.TransientErrors
   alias Cerberus.Driver.Browser.Types
 
   @default_command_timeout_ms 10_000
@@ -18,6 +19,7 @@ defmodule Cerberus.Driver.Browser.BiDi do
   ]
 
   @type state :: %{
+          browser_name: Types.browser_name() | nil,
           connection: pid() | nil,
           connection_ref: reference() | nil,
           subscribers: %{optional(pid()) => reference()}
@@ -63,7 +65,11 @@ defmodule Cerberus.Driver.Browser.BiDi do
 
     case GenServer.call(pid, {:connection, opts}, timeout + 1_000 + slow_mo_ms) do
       {:ok, connection} ->
-        command_response(connection, method, params, timeout)
+        maybe_reset_after_transport_close(
+          command_response(connection, method, params, timeout),
+          pid,
+          opts
+        )
 
       {:error, reason} ->
         {:error, reason, %{}}
@@ -87,7 +93,7 @@ defmodule Cerberus.Driver.Browser.BiDi do
 
   @impl true
   def init(_opts) do
-    {:ok, %{connection: nil, connection_ref: nil, subscribers: %{}}}
+    {:ok, %{browser_name: nil, connection: nil, connection_ref: nil, subscribers: %{}}}
   end
 
   @impl true
@@ -109,6 +115,10 @@ defmodule Cerberus.Driver.Browser.BiDi do
     end
   end
 
+  def handle_call({:reset_connection, opts}, _from, state) do
+    {:reply, :ok, reset_transport(state, opts)}
+  end
+
   def handle_call(_message, _from, state) do
     {:reply, {:error, "unsupported bidi request", %{}}, state}
   end
@@ -121,6 +131,7 @@ defmodule Cerberus.Driver.Browser.BiDi do
   end
 
   def handle_info({:DOWN, ref, :process, pid, reason}, %{connection_ref: ref, connection: pid} = state) do
+    state = reset_transport(state)
     {:stop, {:bidi_connection_down, reason}, %{state | connection: nil, connection_ref: nil}}
   end
 
@@ -147,27 +158,59 @@ defmodule Cerberus.Driver.Browser.BiDi do
     :ok
   end
 
-  defp ensure_connected(%{connection: pid} = state, _opts) when is_pid(pid) do
-    if Process.alive?(pid) do
+  defp ensure_connected(%{browser_name: browser_name, connection: pid} = state, opts) when is_pid(pid) do
+    requested_browser_name = Runtime.browser_name(opts)
+
+    if browser_name == requested_browser_name and Process.alive?(pid) do
       {:ok, pid, state}
     else
-      {:error, "bidi connection is not alive", %{state | connection: nil, connection_ref: nil}}
+      ensure_connected(reset_transport(state, opts), opts)
     end
   end
 
   defp ensure_connected(state, opts) do
+    browser_name = Runtime.browser_name(opts)
+
     with {:ok, web_socket_url} <- Runtime.web_socket_url(opts),
          {:ok, connection} <- Connection.start_link(url: web_socket_url),
          :ok <- maybe_start_direct_firefox_session(connection, opts),
          :ok <- subscribe_connection_events(connection) do
       Process.unlink(connection)
       connection_ref = Process.monitor(connection)
-      {:ok, connection, %{state | connection: connection, connection_ref: connection_ref}}
+      {:ok, connection, %{state | connection: connection, connection_ref: connection_ref, browser_name: browser_name}}
     else
       {:error, reason} ->
         {:error, inspect(reason), state}
     end
   end
+
+  defp maybe_reset_after_transport_close({:error, reason, details} = error, pid, opts) do
+    if TransientErrors.transport_closed?(reason, details) do
+      _ = GenServer.call(pid, {:reset_connection, opts})
+    end
+
+    error
+  end
+
+  defp maybe_reset_after_transport_close(result, _pid, _opts), do: result
+
+  defp reset_transport(state, opts \\ []) do
+    maybe_close_connection(state.connection)
+    _ = Runtime.reset_session(runtime_reset_opts(state, opts))
+
+    %{
+      state
+      | browser_name: nil,
+        connection: nil,
+        connection_ref: nil
+    }
+  end
+
+  defp runtime_reset_opts(%{browser_name: browser_name}, opts) when is_atom(browser_name) and is_list(opts) do
+    Keyword.put_new(opts, :browser_name, browser_name)
+  end
+
+  defp runtime_reset_opts(_state, opts), do: opts
 
   defp subscribe_connection_events(connection) when is_pid(connection) do
     Enum.reduce_while(@event_methods, :ok, fn method, :ok ->

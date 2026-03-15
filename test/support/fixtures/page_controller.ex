@@ -831,6 +831,51 @@ defmodule Cerberus.Fixtures.PageController do
     """)
   end
 
+  def busy_live_root_inflight(conn, _params) do
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Busy Live Root Inflight</title>
+        <script>
+          (() => {
+            let ticks = 0;
+
+            const start = () => {
+              const target = document.getElementById("busy-live-root-inflight-ticks");
+              if (!target) return;
+
+              window.dispatchEvent(new CustomEvent("phx:page-loading-start"));
+
+              setInterval(() => {
+                window.dispatchEvent(new CustomEvent("phx:page-loading-start"));
+                ticks += 1;
+                target.textContent = String(ticks);
+              }, 5);
+            };
+
+            if (document.readyState === "loading") {
+              document.addEventListener("DOMContentLoaded", start, { once: true });
+            } else {
+              start();
+            }
+          })();
+        </script>
+      </head>
+      <body>
+        <main>
+          <div data-phx-session="busy-root" id="busy-root" class="phx-connected">
+            connected root
+          </div>
+          <h1>Busy Live Root Inflight</h1>
+          <p id="busy-live-root-inflight-ticks">0</p>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
   def long_action_budget(conn, _params) do
     html(conn, """
     <!doctype html>
@@ -1174,6 +1219,15 @@ defmodule Cerberus.Fixtures.PageController do
           <button
             type="submit"
             form="owner-form"
+            formaction="/owner-form/live-redirect"
+            name="form-button"
+            value="save-owner-form-live-redirect"
+          >
+            Save Owner Form Live Redirect
+          </button>
+          <button
+            type="submit"
+            form="owner-form"
             formaction="/owner-form/slow-redirect"
             name="form-button"
             value="save-owner-form-slow-redirect"
@@ -1228,6 +1282,35 @@ defmodule Cerberus.Fixtures.PageController do
     """)
   end
 
+  def same_path_submit(conn, params) do
+    params = merged_request_params(conn, params)
+    submitted? = conn.method == "POST" and params["name"] not in [nil, ""]
+    value = params["name"] || ""
+    csrf_token = Plug.CSRFProtection.get_csrf_token()
+
+    html(conn, """
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Same Path Submit</title>
+      </head>
+      <body>
+        <main>
+          <h1>Same Path Submit</h1>
+          <form method="post" action="/browser/action-settle/same-path-submit">
+            <input type="hidden" name="_csrf_token" value="#{Plug.HTML.html_escape(csrf_token)}" />
+            <label for="same-path-submit-name">Name</label>
+            <input id="same-path-submit-name" name="name" value="#{Plug.HTML.html_escape(value)}" />
+            <button type="submit">Submit Same Path</button>
+          </form>
+          <p id="same-path-submit-result">#{if submitted?, do: "submitted: #{Plug.HTML.html_escape(value)}", else: "not submitted"}</p>
+        </main>
+      </body>
+    </html>
+    """)
+  end
+
   def owner_form_result(conn, params) do
     params = merged_request_params(conn, params)
     name = Map.get(params, "name", "")
@@ -1256,6 +1339,14 @@ defmodule Cerberus.Fixtures.PageController do
     params = merged_request_params(conn, params)
     query = URI.encode_query(params)
     path = "/owner-form/result"
+    destination = if query == "", do: path, else: path <> "?" <> query
+    redirect(conn, to: destination)
+  end
+
+  def owner_form_live_redirect(conn, params) do
+    params = merged_request_params(conn, params)
+    query = URI.encode_query(params)
+    path = "/browser/readiness/mixed-live-roots"
     destination = if query == "", do: path, else: path <> "?" <> query
     redirect(conn, to: destination)
   end

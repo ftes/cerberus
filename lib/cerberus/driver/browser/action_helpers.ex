@@ -2111,8 +2111,15 @@ defmodule Cerberus.Driver.Browser.ActionHelpers do
           }
         }
 
+        const liveSubmit =
+          target.kind === "button" &&
+          target.type === "submit" &&
+          element.form &&
+          typeof element.form.hasAttribute === "function" &&
+          (element.form.hasAttribute("phx-submit") || element.form.hasAttribute("data-phx-submit"));
+
         element.click();
-        return { ok: true, target, matchCount, path: helper.currentPath() };
+        return { ok: true, target, matchCount, path: helper.currentPath(), submitsLive: liveSubmit };
       } catch (error) {
         return fail("click_target_failed", { message: String(error && error.message ? error.message : error) });
       }
