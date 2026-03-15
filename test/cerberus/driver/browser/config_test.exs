@@ -3,6 +3,7 @@ defmodule Cerberus.Driver.Browser.ConfigTest do
 
   alias Cerberus.Driver.Browser.ActionHelpers
   alias Cerberus.Driver.Browser.AssertionHelpers
+  alias Cerberus.Driver.Browser.BrowsingContextProcess
   alias Cerberus.Driver.Browser.Config
   alias Cerberus.Driver.Browser.PopupHelpers
 
@@ -105,6 +106,24 @@ defmodule Cerberus.Driver.Browser.ConfigTest do
       assert_raise ArgumentError, ~r/:viewport dimensions must be positive integers/, fn ->
         Config.browser_context_defaults(browser: [viewport: [width: 0, height: 720]])
       end
+    end
+  end
+
+  describe "create_context_timeout_ms/1" do
+    test "uses a larger browsingContext.create timeout floor for firefox" do
+      assert BrowsingContextProcess.create_context_timeout_ms(browser_name: :firefox) == 20_000
+
+      assert BrowsingContextProcess.create_context_timeout_ms(
+               browser_name: :firefox,
+               bidi_command_timeout_ms: 25_000
+             ) == 25_000
+
+      assert BrowsingContextProcess.create_context_timeout_ms(browser_name: :chrome) == 10_000
+
+      assert BrowsingContextProcess.create_context_timeout_ms(
+               browser_name: :chrome,
+               bidi_command_timeout_ms: 12_000
+             ) == 12_000
     end
   end
 end

@@ -4,6 +4,7 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   use GenServer
 
   alias Cerberus.Driver.Browser.BiDi
+  alias Cerberus.Driver.Browser.Runtime
   alias Cerberus.Driver.Browser.TransientErrors
   alias Cerberus.Driver.Browser.Types
 
@@ -19,6 +20,8 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
   @download_events ["browsingContext.downloadWillBegin", "browsingContext.downloadEnd"]
   @download_history_limit 50
   @call_timeout_padding_ms 5_000
+  @default_create_context_timeout_ms 10_000
+  @default_firefox_create_context_timeout_ms 20_000
 
   @spec child_spec(keyword()) :: Supervisor.child_spec()
   def child_spec(opts) do
@@ -389,7 +392,7 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
                "type" => "tab",
                "userContext" => user_context_id
              },
-             bidi_opts
+             Keyword.put(bidi_opts, :timeout, create_context_timeout_ms(bidi_opts))
            ),
          browsing_context_id when is_binary(browsing_context_id) <- result["context"] do
       {:ok, browsing_context_id}
@@ -404,6 +407,22 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
       _ ->
         {:error, "unexpected browsingContext.create response", %{}}
+    end
+  end
+
+  @doc false
+  @spec create_context_timeout_ms(keyword()) :: pos_integer()
+  def create_context_timeout_ms(bidi_opts) when is_list(bidi_opts) do
+    configured_timeout_ms =
+      case Keyword.fetch(bidi_opts, :bidi_command_timeout_ms) do
+        {:ok, timeout_ms} when is_integer(timeout_ms) and timeout_ms > 0 -> timeout_ms
+        _ -> @default_create_context_timeout_ms
+      end
+
+    if Runtime.browser_name(bidi_opts) == :firefox do
+      max(configured_timeout_ms, @default_firefox_create_context_timeout_ms)
+    else
+      configured_timeout_ms
     end
   end
 
