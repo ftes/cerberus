@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-03-14T21:21:45Z
-updated_at: 2026-03-14T23:42:07Z
+updated_at: 2026-03-15T08:15:29Z
 ---
 
 Use the new EV2 compare harness to take the slowest Cerberus files one by one, form a concrete hypothesis, reproduce the slowdown in Cerberus where possible, fix it, and verify the improvement back in ev2-copy.
@@ -42,3 +42,18 @@ Verification:
 - Added a Cerberus browser repro for same-path submit navigation and fixed Browser.await_action_navigation_ready to stop looping when a real BiDi navigation signal was observed.
 - The EV2 my_offer_controller_integration_cerberus test dropped from about 6.4s to 2.5s, with browser await_ready calls falling from 42 to 4.
 - Full Cerberus suite is green again at PORT=5180 mix test --seed 616534 (649 tests, 0 failures, 2 skipped).
+
+- Ran a cheap browser-session reset probe in Cerberus using one real browser session on /browser/extensions.
+- Within the same session shell, clear_cookies + localStorage.clear + sessionStorage.clear + revisit restored the visible state to match a fresh session.
+- Probe timings: new_session about 712ms, reset path about 90ms, fresh session plus visit about 452ms.
+- This suggests pooling could help if the remaining browser-side state can be scrubbed safely, but the probe has not yet covered IndexedDB, service workers, permissions, or download/network state.
+
+- Added Cerberus-only startup profiling sub-buckets for browser session creation: browser.createUserContext, init script installation, browsingContext.create, and initial event subscription.
+- Added bench/browser_session_startup_breakdown.exs to benchmark fresh browser session startup without EV2 app noise.
+- Cerberus-only warm-browser measurement (3 iterations, 1 warmup) showed mean new_session about 350.9ms, with browsingContext.create about 199.7ms, addPreloadScript about 112.4ms, browser.createUserContext about 23.4ms, and session.subscribe about 15.1ms.
+- This suggests the biggest fresh-session costs are initial browsing context creation and preload script installation, not browser.createUserContext itself.
+
+- Combined all browser preload scripts into a single script.addPreloadScript call per fresh browser context.
+- Cerberus startup benchmark improved: mean fresh new_session about 350.9ms -> 316.9ms; addPreloadScript cost about 112.4ms -> 70.9ms; script.addPreloadScript roundtrips dropped from 2 to 1.
+- Warm EV2 construction_rates_cerberus_test did not materially improve (about 10.4s vs about 10.3s before), which indicates the remaining dominant fresh-session cost is browsingContext.create, not preload installation.
+- Full Cerberus suite still passes on seed 616534: 650 tests, 0 failures, 2 skipped.

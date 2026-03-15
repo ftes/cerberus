@@ -120,9 +120,7 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
     with {:ok, browsing_context_id} <- resolve_browsing_context_id(user_context_id, context_id, bidi_opts),
          :ok <- maybe_set_viewport_for_context(context_id, browsing_context_id, viewport, bidi_opts),
-         :ok <- BiDi.subscribe(self(), bidi_opts),
-         {:ok, _} <-
-           BiDi.command("session.subscribe", %{"events" => @bidi_events, "contexts" => [browsing_context_id]}, bidi_opts) do
+         :ok <- subscribe_to_bidi_events(browsing_context_id, bidi_opts) do
       {:ok,
        %{
          id: browsing_context_id,
@@ -385,29 +383,31 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
 
   defp create_browsing_context(user_context_id, bidi_opts, retries_left)
        when is_integer(retries_left) and retries_left >= 0 do
-    with {:ok, result} <-
-           BiDi.command(
-             "browsingContext.create",
-             %{
-               "type" => "tab",
-               "userContext" => user_context_id
-             },
-             Keyword.put(bidi_opts, :timeout, create_context_timeout_ms(bidi_opts))
-           ),
-         browsing_context_id when is_binary(browsing_context_id) <- result["context"] do
-      {:ok, browsing_context_id}
-    else
-      {:error, reason, details} ->
-        if retries_left > 0 and TransientErrors.retryable?(reason, details) do
-          Process.sleep(25)
-          create_browsing_context(user_context_id, bidi_opts, retries_left - 1)
-        else
-          {:error, reason, details}
-        end
+    Cerberus.Profiling.measure({:driver_session, :browser, :browsing_context_create_command}, fn ->
+      with {:ok, result} <-
+             BiDi.command(
+               "browsingContext.create",
+               %{
+                 "type" => "tab",
+                 "userContext" => user_context_id
+               },
+               Keyword.put(bidi_opts, :timeout, create_context_timeout_ms(bidi_opts))
+             ),
+           browsing_context_id when is_binary(browsing_context_id) <- result["context"] do
+        {:ok, browsing_context_id}
+      else
+        {:error, reason, details} ->
+          if retries_left > 0 and TransientErrors.retryable?(reason, details) do
+            Process.sleep(25)
+            create_browsing_context(user_context_id, bidi_opts, retries_left - 1)
+          else
+            {:error, reason, details}
+          end
 
-      _ ->
-        {:error, "unexpected browsingContext.create response", %{}}
-    end
+        _ ->
+          {:error, "unexpected browsingContext.create response", %{}}
+      end
+    end)
   end
 
   @doc false
@@ -435,17 +435,39 @@ defmodule Cerberus.Driver.Browser.BrowsingContextProcess do
       "viewport" => %{"width" => width, "height" => height}
     }
 
-    case BiDi.command("browsingContext.setViewport", params, bidi_opts) do
-      {:ok, _result} ->
-        :ok
+    Cerberus.Profiling.measure({:driver_session, :browser, :set_initial_browsing_context_viewport}, fn ->
+      case BiDi.command("browsingContext.setViewport", params, bidi_opts) do
+        {:ok, _result} ->
+          :ok
 
-      {:error, reason, details} ->
-        {:error, reason, details}
-    end
+        {:error, reason, details} ->
+          {:error, reason, details}
+      end
+    end)
   end
 
   defp maybe_set_viewport(_context_id, viewport, _bidi_opts) do
     {:error, "invalid viewport", %{viewport: inspect(viewport)}}
+  end
+
+  defp subscribe_to_bidi_events(browsing_context_id, bidi_opts) do
+    Cerberus.Profiling.measure({:driver_session, :browser, :subscribe_initial_browsing_context_events}, fn ->
+      with :ok <- BiDi.subscribe(self(), bidi_opts),
+           {:ok, _} <-
+             BiDi.command(
+               "session.subscribe",
+               %{"events" => @bidi_events, "contexts" => [browsing_context_id]},
+               bidi_opts
+             ) do
+        :ok
+      else
+        {:error, reason, details} ->
+          {:error, reason, details}
+
+        {:error, reason} ->
+          {:error, reason, %{}}
+      end
+    end)
   end
 
   defp evaluate_script(context_id, expression, bidi_opts) do

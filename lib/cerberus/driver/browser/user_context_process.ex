@@ -545,16 +545,18 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
   end
 
   defp create_user_context(bidi_opts) do
-    with {:ok, result} <- BiDi.command("browser.createUserContext", %{}, bidi_opts),
-         user_context_id when is_binary(user_context_id) <- result["userContext"] do
-      {:ok, user_context_id}
-    else
-      {:error, reason, details} ->
-        {:error, reason, details}
+    Profiling.measure({:driver_session, :browser, :browser_create_user_context_command}, fn ->
+      with {:ok, result} <- BiDi.command("browser.createUserContext", %{}, bidi_opts),
+           user_context_id when is_binary(user_context_id) <- result["userContext"] do
+        {:ok, user_context_id}
+      else
+        {:error, reason, details} ->
+          {:error, reason, details}
 
-      _ ->
-        {:error, "unexpected browser.createUserContext response", %{}}
-    end
+        _ ->
+          {:error, "unexpected browser.createUserContext response", %{}}
+      end
+    end)
   end
 
   defp remove_user_context(user_context_id, bidi_opts) when is_binary(user_context_id) do
@@ -881,17 +883,17 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
 
   defp maybe_set_user_agent(_user_context_id, nil, _bidi_opts), do: :ok
 
-  defp maybe_set_user_agent(user_context_id, user_agent, bidi_opts),
-    do: set_user_agent_override(user_context_id, user_agent, bidi_opts)
+  defp maybe_set_user_agent(user_context_id, user_agent, bidi_opts) do
+    Profiling.measure({:driver_session, :browser, :set_user_context_user_agent}, fn ->
+      set_user_agent_override(user_context_id, user_agent, bidi_opts)
+    end)
+  end
 
   defp maybe_add_init_scripts(_user_context_id, [], _bidi_opts), do: :ok
 
   defp maybe_add_init_scripts(user_context_id, scripts, bidi_opts) when is_list(scripts) do
-    Enum.reduce_while(scripts, :ok, fn script, :ok ->
-      case add_preload_script(user_context_id, script, bidi_opts) do
-        :ok -> {:cont, :ok}
-        {:error, reason, details} -> {:halt, {:error, reason, details}}
-      end
+    Profiling.measure({:driver_session, :browser, :add_user_context_init_scripts}, fn ->
+      add_preload_script(user_context_id, combined_preload_script(scripts), bidi_opts)
     end)
   end
 
@@ -913,6 +915,10 @@ defmodule Cerberus.Driver.Browser.UserContextProcess do
       #{script}
     }
     """
+  end
+
+  defp combined_preload_script(scripts) when is_list(scripts) do
+    Enum.join(scripts, "\n")
   end
 
   defp refresh_known_context_ids(state) do
