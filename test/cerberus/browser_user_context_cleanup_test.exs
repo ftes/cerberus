@@ -3,10 +3,12 @@ defmodule Cerberus.BrowserUserContextCleanupTest do
 
   import Cerberus
 
+  alias Cerberus.Browser, as: BrowserHelpers
   alias Cerberus.Driver.Browser.BiDi
 
   test "browser user contexts are removed after the owning process exits" do
     parent = self()
+    BrowserHelpers.limit_concurrent_tests()
 
     pid =
       spawn(fn ->

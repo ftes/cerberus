@@ -1,11 +1,14 @@
 defmodule Cerberus.TestSupport.SharedBrowserSession do
   @moduledoc false
 
+  import Cerberus.Browser
+
   @boot_timeout_ms 30_000
   @stop_timeout_ms 5_000
 
   @spec start!(keyword()) :: {pid(), Cerberus.Session.t()}
   def start!(opts \\ []) when is_list(opts) do
+    limit_concurrent_tests()
     parent = self()
 
     owner_pid =

@@ -8,6 +8,7 @@ defmodule CerberusTest do
   alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Live
   alias Cerberus.Driver.Static
+  alias Cerberus.TestSupport.BrowserSessions
   alias ExUnit.AssertionError
 
   test "session constructor defaults to phoenix non-browser sessions" do
@@ -72,7 +73,7 @@ defmodule CerberusTest do
   end
 
   test "browser driver constructs browser sessions" do
-    assert %Browser{} = session(:browser)
+    assert %Browser{} = BrowserSessions.session!()
   end
 
   test "new-session isolation plus open_tab/switch_tab API works for non-browser sessions" do
@@ -101,18 +102,18 @@ defmodule CerberusTest do
   end
 
   test "session constructor returns a browser session" do
-    assert %Browser{} = session(:browser)
+    assert %Browser{} = BrowserSessions.session!()
   end
 
   test "browser session applies init script and viewport defaults across new tabs" do
     session =
-      :browser
-      |> session(
+      [
         browser: [
           viewport: {900, 650},
           init_script: "window.__cerberusInit = 'ready';"
         ]
-      )
+      ]
+      |> BrowserSessions.session!()
       |> visit("/articles")
 
     assert Cerberus.Browser.evaluate_js(session, "window.__cerberusInit") == "ready"
@@ -132,10 +133,7 @@ defmodule CerberusTest do
   end
 
   test "switch_tab rejects mixed browser and non-browser sessions" do
-    browser_tab =
-      :browser
-      |> session()
-      |> visit("/articles")
+    browser_tab = visit(BrowserSessions.session!(), "/articles")
 
     static_tab = visit(session(), "/articles")
 

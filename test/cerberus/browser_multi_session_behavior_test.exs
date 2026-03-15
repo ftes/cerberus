@@ -4,9 +4,10 @@ defmodule Cerberus.BrowserMultiSessionBehaviorTest do
   import Cerberus
 
   alias Cerberus.Driver.Browser.UserContextProcess
+  alias Cerberus.TestSupport.BrowserSessions
 
   setup_all do
-    {:ok, primary: session(:browser), isolated: session(:browser)}
+    {:ok, primary: BrowserSessions.session!(), isolated: BrowserSessions.session!()}
   end
 
   test "browser open_tab/switch_tab/close_tab workflows are deterministic", context do

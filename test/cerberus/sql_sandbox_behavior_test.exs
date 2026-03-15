@@ -8,6 +8,7 @@ defmodule Cerberus.SQLSandboxBehaviorTest do
   alias Cerberus.Driver.Live
   alias Cerberus.Driver.Static
   alias Cerberus.Fixtures.SandboxMessages
+  alias Cerberus.TestSupport.BrowserSessions
 
   setup context do
     {:ok, sandbox_user_agent: user_agent_for_sandbox(Cerberus.Fixtures.Repo, context)}
@@ -50,7 +51,8 @@ defmodule Cerberus.SQLSandboxBehaviorTest do
     "#{prefix}-#{driver_tag(session)}-#{System.unique_integer([:positive, :monotonic])}"
   end
 
-  defp sandbox_session(:browser, context), do: session(:browser, user_agent: context.sandbox_user_agent)
+  defp sandbox_session(:browser, context), do: BrowserSessions.session!(user_agent: context.sandbox_user_agent)
+
   defp sandbox_session(:phoenix, _context), do: session(:phoenix)
 
   defp driver_tag(%Static{}), do: "static"

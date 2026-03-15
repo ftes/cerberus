@@ -4,8 +4,10 @@ defmodule Cerberus.BrowserTimeoutAssertionsTest do
   import Cerberus
   import Cerberus.Browser, only: [with_evaluate_js: 3]
 
+  alias Cerberus.TestSupport.BrowserSessions
+
   setup_all do
-    {:ok, browser_session: session(:browser)}
+    {:ok, browser_session: BrowserSessions.session!()}
   end
 
   test "browser defaults use 500ms assertion timeout and wait for async text", %{browser_session: browser_session} do

@@ -6,6 +6,7 @@ defmodule Cerberus.AutoModeTest do
   alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Live
   alias Cerberus.Driver.Static
+  alias Cerberus.TestSupport.BrowserSessions
 
   test "auto mode starts static and switches to live when navigating to live routes" do
     session()
@@ -46,7 +47,7 @@ defmodule Cerberus.AutoModeTest do
   end
 
   test "browser mode stays browser across live and static navigation transitions" do
-    session = visit(session(:browser), "/articles")
+    session = visit(BrowserSessions.session!(), "/articles")
     assert match?(%Browser{}, session)
 
     session = click(session, ~l"Counter"e)

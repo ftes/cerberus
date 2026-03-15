@@ -3,6 +3,7 @@ defmodule Cerberus.PlaywrightPerformanceBenchmarkTest do
 
   import Cerberus
 
+  alias Cerberus.TestSupport.BrowserSessions
   alias Cerberus.TestSupport.PlaywrightPerformanceBenchmark
 
   setup do
@@ -10,21 +11,19 @@ defmodule Cerberus.PlaywrightPerformanceBenchmarkTest do
   end
 
   test "browser benchmark flow completes on the shared playwright fixture" do
-    :browser
-    |> session()
+    BrowserSessions.session!()
     |> PlaywrightPerformanceBenchmark.run_cerberus_flow()
     |> assert_has(text("Candidate carried forward: wizard-prime", exact: true))
   end
 
   test "browser locator-stress benchmark flow completes on the shared playwright fixture" do
-    :browser
-    |> session()
+    BrowserSessions.session!()
     |> PlaywrightPerformanceBenchmark.run_cerberus_flow(:locator_stress)
     |> assert_has(text("Assignment carried forward: queue-cobalt", exact: true))
   end
 
   test "browser benchmark flow completes concurrently across sessions" do
-    sessions = for _ <- 1..2, do: session(:browser)
+    sessions = for _ <- 1..2, do: BrowserSessions.session!()
 
     sessions
     |> Task.async_stream(
@@ -52,5 +51,5 @@ defmodule Cerberus.PlaywrightPerformanceBenchmarkTest do
   end
 
   defp driver_session(:phoenix, %{conn: conn}), do: session(conn: conn, timeout_ms: 20_000)
-  defp driver_session(:browser, _context), do: session(:browser, timeout_ms: 20_000)
+  defp driver_session(:browser, _context), do: BrowserSessions.session!(timeout_ms: 20_000)
 end

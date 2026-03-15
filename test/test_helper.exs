@@ -2,7 +2,7 @@ alias Cerberus.Fixtures.AuthStore
 alias Cerberus.Fixtures.Endpoint
 alias Cerberus.Fixtures.Repo
 
-ExUnit.start(max_cases: 28)
+ExUnit.start()
 
 {:ok, _} =
   Supervisor.start_link(

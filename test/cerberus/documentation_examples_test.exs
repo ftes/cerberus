@@ -4,6 +4,7 @@ defmodule Cerberus.DocumentationExamplesTest do
   import Cerberus
   import Cerberus.Browser
 
+  alias Cerberus.TestSupport.BrowserSessions
   alias Cerberus.TestSupport.SharedBrowserSession
 
   setup_all do
@@ -98,6 +99,6 @@ defmodule Cerberus.DocumentationExamplesTest do
   end
 
   defp driver_session(driver, context), do: SharedBrowserSession.driver_session(driver, context)
-  defp isolated_driver_session(:browser, _context), do: session(:browser)
+  defp isolated_driver_session(:browser, _context), do: BrowserSessions.session!()
   defp isolated_driver_session(driver, context), do: driver_session(driver, context)
 end

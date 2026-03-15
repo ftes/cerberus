@@ -119,7 +119,7 @@ That task is simple to run in CI setup steps too.
 
 Most tests only need `session(:browser)`; deeper runtime/config details are documented in [Browser Support Policy](docs/browser-support-policy.md).
 
-When browser-backed modules need bounded concurrency, configure `config :cerberus, :browser, max_concurrent_tests: ...` and call `Cerberus.Browser.limit_concurrent_tests/1` from `setup_all`. Most suites can use the defaults with no options. The full pattern is documented in [Browser Tests Guide](docs/browser-tests.md).
+When browser-backed tests need bounded concurrency, configure `config :cerberus, :browser, max_concurrent_tests: ...` and call `Cerberus.Browser.limit_concurrent_tests/1` from `setup`, `setup_all`, or a small test helper before starting browser sessions. The full pattern is documented in [Browser Tests Guide](docs/browser-tests.md).
 
 ## Portal Support
 

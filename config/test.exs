@@ -37,7 +37,8 @@ config :cerberus,
   browser: [
     browser_name: browser_name,
     headless: String.downcase(System.get_env("HEADLESS", "true")) not in ["0", "false", "no", "off"],
-    chrome_args: ["--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+    chrome_args: ["--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    max_concurrent_tests: max(div(System.schedulers_online(), 2), 1)
   ],
   endpoint: Endpoint,
   profiling: String.downcase(System.get_env("CERBERUS_PROFILE_COMPILE", "false")) in ["1", "true", "yes", "on"],

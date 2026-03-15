@@ -6,6 +6,7 @@ defmodule Cerberus.TimeoutDefaultsTest do
   alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Browser.BiDi
   alias Cerberus.Driver.Browser.Runtime
+  alias Cerberus.TestSupport.BrowserSessions
   alias ExUnit.AssertionError
 
   defmodule TimeoutProbe do
@@ -83,7 +84,7 @@ defmodule Cerberus.TimeoutDefaultsTest do
 
     assert session().timeout_ms == 120
     assert :phoenix |> session() |> visit("/live/async_page") |> Map.fetch!(:timeout_ms) == 700
-    assert session(:browser).timeout_ms == 900
+    assert BrowserSessions.session!().timeout_ms == 900
   end
 
   test "driver transitions re-resolve default timeout unless session override was explicit" do

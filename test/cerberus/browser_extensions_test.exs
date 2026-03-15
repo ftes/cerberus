@@ -7,10 +7,11 @@ defmodule Cerberus.BrowserExtensionsTest do
   alias Cerberus.Driver.Browser
   alias Cerberus.Driver.Browser.UserContextProcess
   alias Cerberus.Fixtures.Endpoint
+  alias Cerberus.TestSupport.BrowserSessions
   alias ExUnit.AssertionError
 
   setup do
-    {:ok, browser_session: session(:browser)}
+    BrowserSessions.setup_browser_session()
   end
 
   test "browser-only APIs are explicit unsupported on static and live sessions" do
@@ -432,7 +433,7 @@ defmodule Cerberus.BrowserExtensionsTest do
   end
 
   test "assert_download waits for download emitted after assertion starts", %{browser_session: _browser_session} do
-    session = browser_fixture_session(session(:browser), "/browser/extensions")
+    session = browser_fixture_session(BrowserSessions.session!(), "/browser/extensions")
 
     with_evaluate_js(session, "setTimeout(() => document.getElementById('download-report')?.click(), 30)", fn _ -> :ok end)
 

@@ -27,7 +27,6 @@ defmodule Cerberus.Browser do
           session: boolean()
         }
   @default_test_concurrency_limiter :cerberus_browser_tests
-
   @type limit_concurrent_tests_opt :: {:name, atom()} | {:size, pos_integer()} | {:timeout, timeout()}
   @type limit_concurrent_tests_opts :: [limit_concurrent_tests_opt]
   @type_args_error "Browser.type/4 expects locator, text as a string, and options as a keyword list"
@@ -51,28 +50,19 @@ defmodule Cerberus.Browser do
   @clear_cookies_options_doc NimbleOptions.docs(Options.browser_clear_cookies_schema())
 
   @doc """
-  Limits concurrent browser-backed test modules by blocking in `setup_all` until
-  a shared slot is available.
+  Limits concurrent browser-backed tests by blocking until a shared slot is available.
 
-  Call this from `setup_all` to keep browser-backed modules `async: true` while
-  still capping how many run at once. Cleanup is registered with `on_exit/1`
-  automatically for the current ExUnit setup process.
+  Call this from `setup`, `setup_all`, or a test helper before starting a browser session.
+  Cleanup is registered with `on_exit/1` automatically for the current ExUnit process.
 
-  The first caller for a limiter `:name` fixes its `:size`. Later callers for the
-  same name must use the same size.
+  The first caller for a limiter `:name` fixes its `:size`. Later callers for the same
+  name must use the same size.
 
   ## Options
 
   - `:name` - shared limiter name. Defaults to `#{inspect(@default_test_concurrency_limiter)}`.
-  - `:size` - maximum concurrent holders for that limiter. Defaults to `config :cerberus, :browser, max_concurrent_tests: ...`.
+  - `:size` - maximum concurrent holders for that limiter. Defaults to `config :cerberus, :browser, max_concurrent_tests: ...`, then `max(div(System.schedulers_online(), 2), 1)`.
   - `:timeout` - checkout timeout in milliseconds or `:infinity`. Defaults to `300_000`.
-
-  ## Example
-
-      setup_all do
-        Cerberus.Browser.limit_concurrent_tests()
-        :ok
-      end
   """
   @spec limit_concurrent_tests() :: :ok
   def limit_concurrent_tests, do: limit_concurrent_tests([])
@@ -711,8 +701,7 @@ defmodule Cerberus.Browser do
         size
 
       _other ->
-        raise ArgumentError,
-              "Browser.limit_concurrent_tests/1 requires :size or config :cerberus, :browser, max_concurrent_tests: <positive integer>"
+        max(div(System.schedulers_online(), 2), 1)
     end
   end
 end

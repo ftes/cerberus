@@ -1,11 +1,11 @@
 ---
 # cerberus-hlaq
 title: Increase Firefox browsingContext.create startup tolerance
-status: completed
+status: in-progress
 type: bug
 priority: normal
 created_at: 2026-03-15T06:29:05Z
-updated_at: 2026-03-15T06:31:41Z
+updated_at: 2026-03-15T06:36:36Z
 ---
 
 Investigate Firefox browser session init timeout during browsingContext.create, adjust startup timeout/retry handling if the fixed 10s create-tab timeout is too low, and verify the affected tests.

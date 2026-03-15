@@ -3,8 +3,10 @@ defmodule Cerberus.BrowserTagShowcaseTest do
 
   import Cerberus
 
+  alias Cerberus.TestSupport.BrowserSessions
+
   setup_all do
-    {:ok, browser_session: session(:browser)}
+    {:ok, browser_session: BrowserSessions.session!()}
   end
 
   test "browser session uses default browser lane", %{browser_session: session} do
